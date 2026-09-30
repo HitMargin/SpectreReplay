@@ -25,6 +25,7 @@ namespace SpectreReplay.Ui
         private static GameObject _root;
         private static RectTransform _content;
         private static TMP_Text _pageTitle;
+        private static ScrollRect _scroll;
         private static readonly List<PageDef> Pages = new List<PageDef>();
         private static int _current = -1;
         private static readonly List<LiveText> LiveTexts = new List<LiveText>();
@@ -237,6 +238,33 @@ namespace SpectreReplay.Ui
             scroll.vertical = true;
             scroll.movementType = ScrollRect.MovementType.Clamped;
             scroll.scrollSensitivity = 48f;
+            _scroll = scroll;
+            BuildScrollbar(area, scroll, vh);
+        }
+
+        /// <summary>
+        /// 右侧滚动条。没有它的话，内容比视口高时（渲染页 1054 vs 654）
+        /// 用户根本看不出下面还有东西——只有转了滚轮才知道。
+        /// </summary>
+        private static void BuildScrollbar(RectTransform area, ScrollRect scroll, float viewH)
+        {
+            const float barW = 8f, pad = 6f;
+            var bar = Gfx.Rect(area, "Scrollbar",
+                area.sizeDelta.x - barW - pad, Theme.HeaderH, barW, viewH,
+                new Color(0f, 0f, 0f, 0f), true);
+            // 条体本身不吃射线：挡住内容区的点击就麻烦了
+            bar.GetComponent<Image>().raycastTarget = false;
+
+            var handle = Gfx.Rect(bar, "Handle", 0f, 0f, barW, 80f,
+                new Color(1f, 1f, 1f, 0.22f), false);
+            var sb = bar.gameObject.AddComponent<UnityEngine.UI.Scrollbar>();
+            sb.handleRect = handle;
+            sb.targetGraphic = handle.GetComponent<Image>();
+            sb.direction = UnityEngine.UI.Scrollbar.Direction.BottomToTop;
+            scroll.verticalScrollbar = sb;
+            scroll.verticalScrollbarVisibility =
+                ScrollRect.ScrollbarVisibility.AutoHide;
+            scroll.verticalScrollbarSpacing = 0f;
         }
 
         // ── 切页 ────────────────────────────────────────────────

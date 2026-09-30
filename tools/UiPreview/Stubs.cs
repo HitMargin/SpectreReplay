@@ -335,7 +335,9 @@ namespace UnityEngine.UI
         }
     }
 
-    public class RectMask2D : Component
+    public class Scrollbar : Selectable
+    {        public enum Direction { LeftToRight, RightToLeft, BottomToTop, TopToBottom }        public RectTransform handleRect;        public Direction direction;        public float size, value;    }
+    public class RectMask2D : Component
     {
     }
 
@@ -343,6 +345,7 @@ namespace UnityEngine.UI
     {
         public RectTransform content, viewport;
         public bool horizontal, vertical;
+        public Scrollbar horizontalScrollbar, verticalScrollbar;        public enum ScrollbarVisibility { Permanent, AutoHide, AutoHideAndExpandViewport }        public ScrollbarVisibility horizontalScrollbarVisibility, verticalScrollbarVisibility;        public float horizontalScrollbarSpacing, verticalScrollbarSpacing;
         public MovementType movementType;
         public enum MovementType { Unrestricted, Elastic, Clamped }
         public float scrollSensitivity;
