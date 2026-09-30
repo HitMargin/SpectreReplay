@@ -1,0 +1,395 @@
+// Unity 桩件。目的：把真实的 Gfx.cs / PageBuilder.cs / Theme.cs / Loc.cs
+// 拿到一个控制台程序里跑，从而在不开游戏的情况下得到真实布局。
+//
+// 只实现"真实代码用到的那部分 API"，多一个都没有——桩件一旦比真实 Unity
+// 更宽松，验证就失去意义了。
+using System;
+using System.Collections.Generic;
+
+namespace UnityEngine
+{
+    public struct Vector2
+    {
+        public float x, y;
+        public Vector2(float x, float y) { this.x = x; this.y = y; }
+        public static Vector2 zero => new Vector2(0, 0);
+        public static Vector2 one => new Vector2(1, 1);
+        public override string ToString() => $"({x}, {y})";
+    }
+
+    public struct Color
+    {
+        public float r, g, b, a;
+        public Color(float r, float g, float b) { this.r = r; this.g = g; this.b = b; this.a = 1f; }
+        public Color(float r, float g, float b, float a) { this.r = r; this.g = g; this.b = b; this.a = a; }
+        public static Color white => new Color(1, 1, 1, 1);
+        public static Color black => new Color(0, 0, 0, 1);
+        public static Color clear => new Color(0, 0, 0, 0);
+        public override string ToString()
+            => $"#{Mathf.Round(r * 255):X2}{Mathf.Round(g * 255):X2}{Mathf.Round(b * 255):X2}"
+             + (a >= 0.999f ? "" : $"/{Mathf.Round(a * 255):X2}");
+    }
+
+    public static class Mathf
+    {
+        public static float Clamp(float v, float a, float b) => v < a ? a : (v > b ? b : v);
+        public static float Clamp01(float v) => Clamp(v, 0f, 1f);
+        public static float Round(float v) => (float)Math.Round(v, MidpointRounding.AwayFromZero);
+        public static int RoundToInt(float v) => (int)Round(v);
+        public static int CeilToInt(float v) => (int)Math.Ceiling(v);
+        public static float Max(float a, float b) => a > b ? a : b;
+        public static float Min(float a, float b) => a < b ? a : b;
+        public static float Abs(float a) => a < 0 ? -a : a;
+        // 真实 Unity 有 int 重载；Gfx.cs 的 Clamp(selected, 0, Max(0, len-1)) 会用到
+        public static int Max(int a, int b) => a > b ? a : b;
+        public static int Min(int a, int b) => a < b ? a : b;
+        public static int Clamp(int v, int a, int b) => v < a ? a : (v > b ? b : v);
+        public static int Abs(int a) => a < 0 ? -a : a;
+    }
+
+    public class Object
+    {
+        public string name;
+        public bool activeSelf = true;
+
+        /// <summary>预览是单次构建，没有延迟销毁的必要，直接摘掉即可。</summary>
+        public static void Destroy(Object o)
+        {
+            if (o is GameObject go && go.transform.parent != null)
+            {
+                go.transform.parent.children.Remove(go.transform);
+            }
+        }
+
+        public static void DestroyImmediate(Object o) => Destroy(o);
+
+        public static void DontDestroyOnLoad(Object o) { }
+
+        public static T FindAnyObjectByType<T>() where T : class => null;
+        public void SetActive(bool v) => activeSelf = v;
+    }
+
+    /// <summary>面板的输入轮询挂在它上面；预览不跑帧，只占位。</summary>
+    public class MonoBehaviour : Component
+    {
+    }
+
+    // Canvas 一族：预览不用它们（BuildInto 不建 Canvas），但同一文件里的
+    // Build() 引用了，所以必须存在——否则桩件比真实 Unity 窄，编译不过就
+    // 没法复用同一份 PanelHost 源码。
+    public enum RenderMode { ScreenSpaceOverlay, ScreenSpaceCamera, WorldSpace }
+
+    public class Canvas : Component
+    {
+        public RenderMode renderMode;
+        public int sortingOrder;
+    }
+
+    public class CanvasScaler : Component
+    {
+        public enum ScaleMode { ConstantPixelSize, ScaleWithScreenSize, ConstantPhysicalSize }
+        public enum ScreenMatchMode { MatchWidthOrHeight, Expand, Shrink }
+        public ScaleMode uiScaleMode;
+        public Vector2 referenceResolution;
+        public ScreenMatchMode screenMatchMode;
+        public float matchWidthOrHeight;
+    }
+
+    public class GraphicRaycaster : Component { }
+
+    public static class Screen
+    {
+        public static int width = 1920;
+        public static int height = 1080;
+    }
+
+    public static class Debug
+    {
+        public static void Log(object o) => Console.WriteLine(o);
+        public static void LogWarning(object o) => Console.WriteLine(o);
+    }
+
+    public static class Time
+    {
+        public static float unscaledTime;
+    }
+
+    public static class Input
+    {
+        public static bool GetKeyDown(KeyCode k) => false;
+    }
+
+    public enum KeyCode
+    {
+        Escape = 27,
+        F1 = 282, F2 = 283, F3 = 284, F4 = 285, F5 = 286, F6 = 287,
+        F7 = 288, F8 = 289, F9 = 290, F10 = 291, F11 = 292, F12 = 293,
+    }
+
+    public class Component : Object
+    {
+        public GameObject gameObject;
+        public Transform transform => gameObject?.transform;
+        public RectTransform rectTransform => gameObject?.transform as RectTransform;
+        public T GetComponent<T>() where T : class => gameObject?.GetComponent<T>();
+    }
+
+    public class Transform : Component
+    {
+        public Transform parent;
+        public readonly List<Transform> children = new List<Transform>();
+        public void SetParent(Transform p, bool worldPositionStays) => p?.children.Add(this);
+        public int childCount => children.Count;
+        public Transform GetChild(int i) => children[i];
+        public Transform Find(string n) => null;   // 真实代码只在运行时用
+        public Transform FindDeep(string n)
+        {
+            foreach (var c in children)
+            {
+                if (c.gameObject.name == n) return c;
+                var r = c.FindDeep(n);
+                if (r != null) return r;
+            }
+            return null;
+        }
+    }
+
+    public class RectTransform : Transform
+    {
+        public Vector2 anchorMin, anchorMax, pivot, anchoredPosition, sizeDelta, offsetMin, offsetMax;
+        /// <summary>预览用：解析出的绝对矩形（左上角原点、y 向下）。</summary>
+        public float X, Y, W, H;
+    }
+
+    public class GameObject : Object
+    {
+        public readonly Transform transform;
+        private readonly Dictionary<Type, Component> comps = new Dictionary<Type, Component>();
+
+        public GameObject() : this("GO") { }
+
+        public GameObject(string n, params Type[] types)
+        {
+            name = n;
+            transform = Make(this, new RectTransform());
+            foreach (var t in types) AddComponent(t);
+        }
+
+        private static T Make<T>(GameObject go, T c) where T : Component
+        {
+            c.gameObject = go;
+            c.name = go.name;
+            return c;
+        }
+
+        public T AddComponent<T>() where T : Component, new()
+        {
+            var c = Make(this, new T());
+            comps[typeof(T)] = c;
+            return c;
+        }
+
+        public Component AddComponent(Type t)
+        {
+            var c = (Component)Activator.CreateInstance(t);
+            c.gameObject = this;
+            comps[t] = c;
+            return c;
+        }
+
+        /// <summary>
+        /// 必须像真实 Unity 那样沿**继承链**查找：TMP_Text 是 TextMeshProUGUI
+        /// 的基类，按精确类型查表会让 GetComponent&lt;TMP_Text&gt;() 永远返回 null，
+        /// 于是预览里一个字都读不到——这种桩件比真实 Unity 窄，验证就成了摆设。
+        /// </summary>
+        public T GetComponent<T>() where T : class
+        {
+            foreach (var c in comps.Values)
+            {
+                if (c is T hit) return hit;
+            }
+            return null;
+        }
+    }
+}
+
+namespace UnityEngine.Events
+{
+    public class UnityEvent<T>
+    {
+        private readonly List<Action<T>> _list = new List<Action<T>>();
+        public void AddListener(Action<T> cb) { if (cb != null) _list.Add(cb); }
+        public void Invoke(T v) { foreach (var c in _list) c(v); }
+    }
+
+    /// <summary>Button.onClick 是无参事件，与 UnityEvent&lt;T&gt; 不是一回事。</summary>
+    public class ButtonEvent
+    {
+        private readonly List<Action> _list = new List<Action>();
+        public void AddListener(Action cb) { if (cb != null) _list.Add(cb); }
+        public void Invoke() { foreach (var c in _list) c(); }
+    }
+}
+
+namespace UnityEngine.UI
+{
+    using UnityEngine;
+    using UnityEngine.Events;
+
+    public class Graphic : Component
+    {
+        public Color color = Color.white;
+        public bool raycastTarget = true;
+    }
+
+    public class Image : Graphic { }
+
+    public class MaskableGraphic : Graphic { }
+
+    public struct ColorBlock
+    {
+        public Color normalColor, highlightedColor, pressedColor, selectedColor, disabledColor;
+        public float fadeDuration;
+    }
+
+    public class Selectable : Component
+    {
+        public enum Transition { None, ColorTint }
+        public Graphic targetGraphic;
+        public Transition transition = Transition.ColorTint;
+        public ColorBlock colors;
+    }
+
+    public class Button : Selectable
+    {
+        public UnityEngine.Events.ButtonEvent onClick = new UnityEngine.Events.ButtonEvent();
+    }
+
+    public class Toggle : Selectable
+    {
+
+    }
+
+    public class Slider : Selectable
+    {
+        public enum Direction { LeftToRight, RightToLeft }
+        public RectTransform fillRect, handleRect;
+        public Direction direction;
+        public float minValue, maxValue, value;
+        public bool wholeNumbers;
+        public UnityEvent<float> onValueChanged = new UnityEvent<float>();
+
+        /// <summary>轨道宽度。真实 Unity 不需要它，是给桩件定位手柄用的。</summary>
+        internal float trackW;
+
+        /// <summary>
+        /// 真实 Unity 的 Slider 会把 handleRect 挪到 value 对应的位置。
+        /// 桩件不实现的话，预览图里的手柄永远在轨道最左端，看着像控件坏了。
+        /// </summary>
+        public void SetValueWithoutNotify(float v)
+        {
+            value = v;
+            if (handleRect == null || direction != Direction.LeftToRight)
+            {
+                return;
+            }
+            float t = maxValue - minValue < 0.0001f
+                ? 0f
+                : Mathf.Clamp01((v - minValue) / (maxValue - minValue));
+            handleRect.anchoredPosition = new Vector2(
+                handleRect.anchoredPosition.x + t * trackW,
+                handleRect.anchoredPosition.y);
+        }
+    }
+
+    public class RectMask2D : Component
+    {
+    }
+
+    public class ScrollRect : Component
+    {
+        public RectTransform content, viewport;
+        public bool horizontal, vertical;
+        public MovementType movementType;
+        public enum MovementType { Unrestricted, Elastic, Clamped }
+        public float scrollSensitivity;
+    }
+
+    public class ContentSizeFitter : Component
+    {
+        public enum FitMode { Unconstrained, MinSize, PreferredSize }
+        public FitMode horizontalFit, verticalFit;
+    }
+}
+
+namespace TMPro
+{
+    using UnityEngine;
+    using UnityEngine.UI;
+
+    public enum TextAlignmentOptions
+    {
+        TopLeft, Top, TopRight, MidlineLeft, Center, MidlineRight,
+        BottomLeft, Bottom, BottomRight
+    }
+
+    public enum TextWrappingModes { NoWrap, Normal }
+    public enum TextOverflowModes { Overflow, Ellipsis, Masking, ScrollRect, Page, Linked }
+
+    public class TMP_Text : UnityEngine.UI.MaskableGraphic
+    {
+        public float fontSize = 14f;
+        public Color color = Color.white;
+        public bool raycastTarget;
+        public string text = "";
+        public TextAlignmentOptions alignment;
+        public TextWrappingModes textWrappingMode;
+        public TextOverflowModes overflowMode;
+        public TMP_FontAsset font;
+    }
+
+    public class TMP_FontAsset : Object { }
+
+    public class TextMeshProUGUI : TMP_Text { }
+
+    public class TMP_Dropdown : Component
+    {
+        public Graphic targetGraphic;
+        public TMP_Text itemText;
+        public RectTransform template;
+        public UnityEngine.Events.UnityEvent<int> onValueChanged
+            = new UnityEngine.Events.UnityEvent<int>();
+
+        /// <summary>选项文本。真实 Unity 的下拉靠它显示当前选中项。</summary>
+        internal string[] labels;
+
+        public void SetValueWithoutNotify(int v)
+        {
+            if (itemText == null)
+            {
+                return;
+            }
+            itemText.text = labels != null && v >= 0 && v < labels.Length
+                ? labels[v]
+                : string.Empty;
+        }
+    }
+
+    public class TMP_InputField : Component
+    {
+        public enum LineType { SingleLine, MultiLine }
+        public Graphic targetGraphic;
+        public RectTransform textViewport;
+        public TMP_Text textComponent, placeholder;
+        public LineType lineType;
+        public UnityEngine.Events.UnityEvent<string> onValueChanged
+            = new UnityEngine.Events.UnityEvent<string>();
+        public void SetTextWithoutNotify(string v) { }
+    }
+}
+namespace UnityEngine.EventSystems
+{
+    public class EventSystem : MonoBehaviour { }
+    public class StandaloneInputModule : MonoBehaviour { }
+    public class BaseInputModule : MonoBehaviour { }
+}

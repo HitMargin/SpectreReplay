@@ -39,27 +39,29 @@ namespace SpectreReplay.Pages
             {
                 string name = System.IO.Path.GetFileNameWithoutExtension(path);
                 string captured = path;
-                // 一行两枚按钮：行内空间由 PageBuilder 统一算
-                var row = b.BlankRow(300f);
-                Gfx.TextFill(row, "Name", name, Theme.FontSmall, Theme.Text);
-                var nrt = (RectTransform)row.Find("Name");
-                Gfx.Stretch(nrt, Theme.PadX, 0f, 320f, 0f);
-                Gfx.Button(row, row.sizeDelta.x - Theme.PadX - 290f,
-                    (Theme.RowH - Theme.CtlButtonH) * 0.5f, 150f,
-                    Loc.T("playback.replay"), true,
-                    () =>
-                    {
-                        Features.Playback.PlaybackEngine.Load(captured);
-                        PanelHost.Refresh();
-                    });
-                Gfx.Button(row, row.sizeDelta.x - Theme.PadX - 130f,
-                    (Theme.RowH - Theme.CtlButtonH) * 0.5f, 120f,
+                // 一行：文件名 + 回放 + 停止。两个按钮都贴右边，
+                // 第一个的宽度就是文件名要让出的空间——行宽由锚点决定，
+                // 这里只需要给出"控件一共占多宽"。
+                var row = b.BlankRow(150f + 10f + 120f);
+                var nameText = Gfx.TextFill(row, "Name", name, Theme.FontSmall, Theme.Text);
+                Gfx.Stretch((RectTransform)nameText.transform, Theme.PadX, 0f,
+                    150f + 10f + 120f + Theme.PadX + Theme.LabelGap, 0f);
+
+                // 停止按钮贴最右；回放按钮在它左边 130 处（120 宽 + 10 间隙）
+                Gfx.Button(row, (Theme.RowH - Theme.CtlButtonH) * 0.5f, 120f,
                     Loc.T("playback.stop"), false,
                     () =>
                     {
                         Features.Playback.PlaybackEngine.Stop();
                         PanelHost.Refresh();
                     });
+                Gfx.Button(row, (Theme.RowH - Theme.CtlButtonH) * 0.5f, 150f,
+                    Loc.T("playback.replay"), true,
+                    () =>
+                    {
+                        Features.Playback.PlaybackEngine.Load(captured);
+                        PanelHost.Refresh();
+                    }, offsetFromRight: 130f);
             }
         }
 

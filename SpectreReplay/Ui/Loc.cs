@@ -92,7 +92,7 @@ namespace SpectreReplay.Ui
                 { "playback.stop", "Stop" },
                 { "playback.note", "Playback is driven by the recorded key stream." },
                 { "render.mode", "Render mode" },
-                { "render.mode.live", "Record while playing (recommended)" },
+                { "render.mode.live", "Record while playing" },
                 { "render.mode.offline", "Manual offline render" },
                 { "render.fps", "Output FPS" },
                 { "render.width", "Width" },

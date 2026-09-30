@@ -41,6 +41,101 @@ namespace SpectreReplay.Ui
             return rt;
         }
 
+        /// <summary>
+        /// 横向铺满父级、高度给定的矩形。顶边在距父顶 <paramref name="top"/> 处。
+        ///
+        /// 不用 <c>Rect</c> 的原因：<c>Rect</c> 要求调用方给出宽度，而内容容器
+        /// 是横向拉伸的矩形，其 <c>sizeDelta.x</c> **恒为 0**——拿它当行宽，
+        /// 每一行都会是 0 宽，标签框宽算成负数、控件被摆到行外面去。
+        /// 改成锚点拉伸后，宽度由父级决定，不必（也不可能）预先知道。
+        /// </summary>
+        internal static RectTransform RectFillX(Transform parent, string name, float top,
+            float height, Color color, bool raycast)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = new Vector2(0f, 1f);
+            rt.anchorMax = new Vector2(1f, 1f);   // ← 横向拉伸
+            rt.pivot = new Vector2(0f, 1f);
+            rt.sizeDelta = new Vector2(0f, height);
+            rt.anchoredPosition = new Vector2(0f, -top);
+            rt.offsetMin = new Vector2(0f, 0f);
+            rt.offsetMax = new Vector2(0f, 0f);
+            var img = go.AddComponent<Image>();
+            img.color = color;
+            img.raycastTarget = raycast;
+            return rt;
+        }
+
+        /// <summary>
+        /// 贴父级右边缘的矩形（右边留 <c>PadX</c>）。行内控件一律用它，
+        /// 于是控件位置不再依赖"父级有多宽"。
+        /// </summary>
+        internal static RectTransform RectRight(Transform parent, string name, float top,
+            float width, float height, Color color, bool raycast)
+        {
+            var rt = Rect(parent, name, 0f, top, width, height, color, raycast);
+            rt.anchorMin = new Vector2(1f, 1f);
+            rt.anchorMax = new Vector2(1f, 1f);
+            rt.pivot = new Vector2(1f, 1f);
+            rt.anchoredPosition = new Vector2(-Theme.PadX, -top);
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            return rt;
+        }
+
+        /// <summary>
+        /// 可折行的文字，撑满父级。用于说明文案——那种句子本来就长，
+        /// 强行单行会被 Ellipsis 截掉半句（离屏预览实测最长的一条要 1092px，
+        /// 单行框只有 782px）。
+        /// </summary>
+        internal static TMP_Text TextWrap(Transform parent, string name, string text,
+            float size, Color color, float insetX)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+            var rt = (RectTransform)go.transform;
+            Stretch(rt, insetX, 0f, insetX, 0f);
+            var t = go.AddComponent<TextMeshProUGUI>();
+            UiFonts.Apply(t);
+            t.fontSize = size * Theme.TextScale;
+            t.color = color;
+            t.raycastTarget = false;
+            t.text = text;
+            t.alignment = TextAlignmentOptions.MidlineLeft;
+            t.textWrappingMode = TextWrappingModes.Normal;
+            t.overflowMode = TextOverflowModes.Overflow;   // 折行，不截断
+            return t;
+        }
+
+        /// <summary>
+        /// 行内标签：横向拉伸到父级右边距 <paramref name="rightInset"/> 处。
+        /// 宽度同样由父级决定。
+        /// </summary>
+        internal static TMP_Text LabelIn(Transform row, string text, float size, Color color,
+            float rightInset)
+        {
+            var go = new GameObject("Label", typeof(RectTransform));
+            go.transform.SetParent(row, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = new Vector2(0f, 0f);
+            rt.anchorMax = new Vector2(1f, 1f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.offsetMin = new Vector2(Theme.PadX, 0f);
+            rt.offsetMax = new Vector2(-rightInset, 0f);
+            var t = go.AddComponent<TextMeshProUGUI>();
+            UiFonts.Apply(t);
+            t.fontSize = size * Theme.TextScale;
+            t.color = color;
+            t.raycastTarget = false;
+            t.text = text;
+            t.alignment = TextAlignmentOptions.MidlineLeft;
+            t.textWrappingMode = TextWrappingModes.Normal;
+            t.overflowMode = TextOverflowModes.Ellipsis;
+            return t;
+        }
+
         /// <summary>建一段文字。字体由 <see cref="UiFonts"/> 统一注入。</summary>
         internal static TMP_Text Text(Transform parent, string name, float left, float top,
             float width, float height, string content, float size, Color color,
@@ -124,14 +219,18 @@ namespace SpectreReplay.Ui
         /// <summary>
         /// 开关。背景 rect 的 raycastTarget 必须为 true，否则点不动。
         /// </summary>
-        internal static GameObject Toggle(Transform row, float left, float top,
+        internal static GameObject Toggle(Transform row, float top,
             bool value, Action<bool> onChanged)
         {
-            var bg = Rect(row, "Toggle", left, top, Theme.CtlToggleW, Theme.CtlToggleH,
+            const float knobW = 24f;
+            // 轨道：56 宽，旋钮 24，两侧各留 16。开着旋钮靠右、关着靠左。
+            var bg = RectRight(row, "Toggle", top, Theme.CtlToggleW, Theme.CtlToggleH,
                 value ? Theme.Accent : Theme.Control, true);
-            // 轨道用一个小圆角矩形即可；Unity 内置 UI 不带圆角 Sprite，
-            // 用方形 + 一个白色方块旋钮，靠缩进关系读出"开/关"。
-            var knob = Rect(bg, "Knob", 16f, 4f, 24f, 24f, Color.white, false);
+            // 旋钮的初始位置必须跟着 value 走。之前不管开��都摆在左边，
+            // 于是"开"的开关看起来也是关的——图上一眼假。
+            float knobX = value ? 32f : 16f;
+            var knob = Rect(bg, "Knob", knobX, (Theme.CtlToggleH - knobW) * 0.5f,
+                knobW, knobW, Color.white, false);
 
             bool current = value;
             MakeButton(bg.gameObject, Color.white, Color.white, new Color(0.8f, 0.8f, 0.8f, 1f),
@@ -139,19 +238,29 @@ namespace SpectreReplay.Ui
                 {
                     current = !current;
                     bg.GetComponent<Image>().color = current ? Theme.Accent : Theme.Control;
-                    knob.anchoredPosition = new Vector2(current ? 32f : 16f, -4f);
+                    knob.anchoredPosition = new Vector2(
+                        current ? 32f : 16f, -(Theme.CtlToggleH - knobW) * 0.5f);
                     onChanged?.Invoke(current);
                 });
             return bg.gameObject;
         }
 
         // ── 按钮 ────────────────────────────────────────────────
-        internal static Button Button(Transform row, float left, float top, float width,
-            string label, bool primary, Action onClick)
+        /// <summary>
+        /// 行内按钮，贴父级右边缘。<paramref name="offsetFromRight"/> 让它
+        /// 往左挪——一行里放第二枚按钮时用（第一枚是 offset=0 的那个）。
+        /// </summary>
+        internal static Button Button(Transform row, float top, float width,
+            string label, bool primary, Action onClick, float offsetFromRight = 0f)
         {
             var h = Theme.CtlButtonH;
-            var bg = Rect(row, "Button", left, top + (Theme.RowH - h) * 0.5f, width, h,
+            var bg = RectRight(row, "Button", (Theme.RowH - h) * 0.5f, width, h,
                 primary ? Theme.Accent : Theme.Control, true);
+            if (offsetFromRight != 0f)
+            {
+                bg.anchoredPosition = new Vector2(
+                    -Theme.PadX - offsetFromRight, -(Theme.RowH - h) * 0.5f);
+            }
             TextFill(bg, "Text", label, Theme.FontSmall,
                 primary ? Theme.TextOnAccent : Theme.Text, TextAlignmentOptions.Center);
             var btn = MakeButton(bg.gameObject, Color.white,
@@ -160,19 +269,32 @@ namespace SpectreReplay.Ui
         }
 
         // ── 滑条 ────────────────────────────────────────────────
-        internal static UnityEngine.UI.Slider Slider(Transform row, float left, float top, float value,
+        internal static UnityEngine.UI.Slider Slider(Transform row, float top, float value,
             float min, float max, bool integer, Action<float> onChanged,
             Func<float, string> format = null)
         {
-            const float w = Theme.CtlSliderW;
+            const float trackW = Theme.CtlSliderW;
+            const float valueW = 88f;
             float h = Theme.CtlSliderH;
-            var root = Rect(row, "Slider", left, top + (Theme.RowH - h) * 0.5f, w, h,
+            // 槽宽 = 数值 + 间隙 + 轨道。数值**放左边**而不是轨道下方：
+            // 行高只有 56，放下面会掉出这一行、压到下一行的标签上。
+            float slotW = valueW + 14f + trackW;
+            var root = RectRight(row, "Slider", (Theme.RowH - h) * 0.5f, slotW, h,
                 new Color(0f, 0f, 0f, 0f), true);
 
+            Func<float, string> fmt = format ?? (v => integer
+                ? ((int)Mathf.Round(v)).ToString()
+                : v.ToString("0.##"));
+
+            // 数值文本
+            var valueText = Text(root, "Value", 0f, 0f, valueW, h, fmt(value),
+                Theme.FontTiny, Theme.TextMuted, TextAlignmentOptions.MidlineRight);
+
             const float trackH = 6f;
-            Rect(root, "Track", 0f, (h - trackH) * 0.5f, w, trackH, Theme.Track, false);
-            var fill = Rect(root, "Fill", 0f, (h - trackH) * 0.5f, 0f, trackH, Theme.Accent, false);
-            var handle = Rect(root, "Handle", 0f, -3f, 16f, h + 6f, Color.white, false);
+            float tx = valueW + 14f;
+            Rect(root, "Track", tx, (h - trackH) * 0.5f, trackW, trackH, Theme.Track, false);
+            var fill = Rect(root, "Fill", tx, (h - trackH) * 0.5f, 0f, trackH, Theme.Accent, false);
+            var handle = Rect(root, "Handle", tx, (h - 34f) * 0.5f, 8f, 34f, Color.white, false);
 
             var slider = root.gameObject.AddComponent<UnityEngine.UI.Slider>();
             slider.fillRect = fill;
@@ -183,25 +305,23 @@ namespace SpectreReplay.Ui
             slider.maxValue = max;
             slider.wholeNumbers = integer;
             slider.SetValueWithoutNotify(Mathf.Clamp(value, min, max));
-            // fillAmount 必须在设完 value 后再刷一次，否则初始填充是 0
-            slider.fillRect.sizeDelta = new Vector2(w * Normalized(slider.value, min, max), trackH);
-
-            Func<float, string> fmt = format ?? (v => integer
-                ? ((int)Mathf.Round(v)).ToString()
-                : v.ToString("0.##"));
-            Text(root, "Value", 0f, h + 6f, w, 24f, fmt(slider.value), Theme.FontTiny,
-                Theme.TextMuted, TextAlignmentOptions.MidlineRight);
+            // Unity 的 Slider 会把 handleRect 挪到 value 对应的位置，但那是
+            // 它在下一帧布局里做的。为了让**建完的瞬间**手柄就位（以及离线
+            // 预览能画对），这里显式摆一次。
+            {
+                float t = Normalized(slider.value, min, max);
+                float trackX = valueW + 14f;
+                handle.anchoredPosition = new Vector2(trackX + t * trackW - 4f,
+                    handle.anchoredPosition.y);
+                slider.fillRect.sizeDelta = new Vector2(trackW * t, trackH);
+            }
 
             slider.onValueChanged.AddListener(v =>
             {
                 float snapped = integer ? Mathf.Round(v) : v;
                 slider.fillRect.sizeDelta = new Vector2(
-                    w * Normalized(snapped, min, max), trackH);
-                var lbl = root.Find("Value")?.GetComponent<TMP_Text>();
-                if (lbl != null)
-                {
-                    lbl.text = fmt(snapped);
-                }
+                    trackW * Normalized(snapped, min, max), trackH);
+                valueText.text = fmt(snapped);
                 onChanged?.Invoke(snapped);
             });
             return slider;
@@ -211,11 +331,11 @@ namespace SpectreReplay.Ui
             => max - min < 0.0001f ? 0f : Mathf.Clamp01((v - min) / (max - min));
 
         // ── 下拉 ────────────────────────────────────────────────
-        internal static TMP_Dropdown DropDown(Transform row, float left, float top,
+        internal static TMP_Dropdown DropDown(Transform row, float top,
             string[] options, int selected, Action<int> onChanged)
         {
             const float w = Theme.CtlDropW, h = Theme.CtlDropH;
-            var root = Rect(row, "DropDown", left, top + (Theme.RowH - h) * 0.5f, w, h,
+            var root = RectRight(row, "DropDown", (Theme.RowH - h) * 0.5f, w, h,
                 Theme.Control, true);
 
             var label = TextFill(root, "Label", "", Theme.FontSmall, Theme.Text);
@@ -235,16 +355,13 @@ namespace SpectreReplay.Ui
             dropdown.targetGraphic = root.GetComponent<Image>();
             dropdown.itemText = label;
 
-            // 展开层：挂在 root 外面（root 有 Image 挡着，且布局受行约束），
-            // 直接作为 root 的兄弟，锚在 root 正下方。
-            var template = Rect(root.parent, "DropList", left, top + (Theme.RowH - h) * 0.5f + h,
+            // 展开层挂在行的下面（root 本身有 Image 挡着，放它里面会被压住）。
+            // 用 RectRight 与下拉本体对齐——同样不依赖行宽。
+            var template = RectRight(root.parent, "DropList", (Theme.RowH - h) * 0.5f + h,
                 w, 0f, new Color(0.16f, 0.16f, 0.20f, 1f), true);
             template.gameObject.SetActive(false);
-            // ignoreLayout 已无意义（没有布局系统），但保留布局元素不影响
-            var fitter = template.gameObject.AddComponent<ContentSizeFitter>();
-            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             template.sizeDelta = new Vector2(w, 0f);
-            template.pivot = new Vector2(0f, 1f);
+            template.pivot = new Vector2(1f, 1f);
 
             var items = new List<TMP_Text>(options.Length);
             float y = 0f;
@@ -269,18 +386,26 @@ namespace SpectreReplay.Ui
             template.sizeDelta = new Vector2(w, y);
 
             dropdown.template = template;
-            dropdown.SetValueWithoutNotify(Mathf.Clamp(selected, 0,
-                Mathf.Max(0, options.Length - 1)));
-            dropdown.onValueChanged.AddListener(i => onChanged?.Invoke(i));
+            int cur = Mathf.Clamp(selected, 0, Mathf.Max(0, options.Length - 1));
+            dropdown.SetValueWithoutNotify(cur);
+            // **必须在 SetValueWithoutNotify 之后**赋值：它会按内部选项表回填
+            // itemText，先写的话会被它清空（真实 Unity 遍历模板项，桩件直接
+            // 查表——两边都覆盖先前赋的值）。顺序反了下拉框就永远是空的。
+            label.text = options[cur];
+            dropdown.onValueChanged.AddListener(i =>
+            {
+                label.text = options[Mathf.Clamp(i, 0, options.Length - 1)];
+                onChanged?.Invoke(i);
+            });
             return dropdown;
         }
 
         // ── 文本输入 ────────────────────────────────────────────
-        internal static TMP_InputField Input(Transform row, float left, float top,
+        internal static TMP_InputField Input(Transform row, float top,
             string value, string placeholder, Action<string> onChanged)
         {
             const float w = Theme.CtlInputW, h = Theme.CtlInputH;
-            var root = Rect(row, "Input", left, top + (Theme.RowH - h) * 0.5f, w, h,
+            var root = RectRight(row, "Input", (Theme.RowH - h) * 0.5f, w, h,
                 Theme.Control, true);
 
             var textGo = new GameObject("Text", typeof(RectTransform));

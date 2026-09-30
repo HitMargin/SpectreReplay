@@ -47,13 +47,14 @@ namespace SpectreReplay.Ui
         internal const float PadX = 24f;
         internal const float RowH = 56f;
         internal const float RowGap = 4f;
-        internal const float NoteH = 46f;
+        internal const float NoteH = 68f;   // 放得下两行说明文字
         internal const float GroupHeadH = 44f;
 
         internal const float CtlToggleW = 56f;
         internal const float CtlToggleH = 32f;
         internal const float CtlButtonH = 38f;
-        internal const float CtlSliderW = 320f;
+        internal const float CtlSliderW = 320f;      // 只是轨道宽
+        internal const float CtlSliderValueW = 88f;   // 数值段
         internal const float CtlSliderH = 28f;
         internal const float CtlDropW = 300f;
         internal const float CtlDropH = 40f;

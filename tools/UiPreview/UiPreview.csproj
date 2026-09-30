@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    离线预览器：不启动游戏也能看到 UI 长什么样、并检查文字溢出。
+
+    它链接**真实的** SpectreReplay\Ui\Gfx.cs 与 PageBuilder.cs，
+    只把 UnityEngine / TMPro / UnityEngine.UI 换成 Stubs.cs 里的桩件。
+    桩件只实现真实代码用到的那部分 API —— 桩件一旦比真实 Unity 更宽松，
+    这个验证就没有意义了。
+
+    Pages 那一层不链接：它反过来依赖 Features 下的回放/渲染引擎。
+    这里内联一份与 Pages.cs 顺序一致的页面内容；若两者不同步，
+    预览就会与实际不符，所以改页面时两边都要动。
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>UiPreview</AssemblyName>
+    <RootNamespace>UiPreview</RootNamespace>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+    <UseWindowsForms>false</UseWindowsForms>
+    <NoWarn>$(NoWarn);CS0067;CS0414;CS0649</NoWarn>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <Deterministic>false</Deterministic>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 链接真实源码（本目录下的 .cs 由 SDK 默认包含，不要重复列出）-->
+    <Compile Include="..\..\SpectreReplay\Ui\Theme.cs" Link="Real\Theme.cs" />
+    <Compile Include="..\..\SpectreReplay\Ui\Loc.cs" Link="Real\Loc.cs" />
+    <Compile Include="..\..\SpectreReplay\Ui\Gfx.cs" Link="Real\Gfx.cs" />
+    <Compile Include="..\..\SpectreReplay\Ui\PageBuilder.cs" Link="Real\PageBuilder.cs" />
+    <Compile Include="..\..\SpectreReplay\Ui\PanelHost.cs" Link="Real\PanelHost.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

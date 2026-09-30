@@ -32,6 +32,14 @@ namespace SpectreReplay.Ui
         internal static bool IsOpen => _root != null;
         internal static int Hotkey = 290;
 
+        /// <summary>
+        /// 顶部提示里的热键文字。由 <see cref="SetHotkeyHint"/> 从设置注入，
+        /// 面板本身不读配置——这样离线预览不必连上 ConfigStore。
+        /// </summary>
+        internal static string HotkeyHint = "F9 开关界面 · ESC 关闭";
+
+        internal static void SetHotkeyHint(string text) => HotkeyHint = text;
+
         // ── 注册 ────────────────────────────────────────────────
         internal static void Page(string key, string group, string titleKey,
             Action<PageBuilder> build)
@@ -114,12 +122,28 @@ namespace SpectreReplay.Ui
             overlay.offsetMax = Vector2.zero;
             Gfx.MakeButton(overlay.gameObject, Color.white, Color.white, Color.white, Close);
 
-            BuildPanel(root);
-            BuildSidebar(root);
-            BuildPageArea(root);
+            BuildInto(root);
         }
 
-        private static void BuildPanel(RectTransform root)
+        /// <summary>
+        /// 把面板 / 侧栏 / 页面区建到给定根上。
+        ///
+        /// 刻意与 <see cref="Build"/> 分开：不依赖 Canvas 与屏幕尺寸，
+        /// 这样 tools\UiPreview 能离线调用**同一份代码**渲染出真实布局。
+        /// 预览另写一套搭建逻辑的话，几何一旦不同步就验了个假的。
+        /// </summary>
+        internal static RectTransform BuildInto(RectTransform root)
+        {
+            var panel = BuildPanel(root);
+            // 侧栏与页面区挂在**面板**下，不是画布根下。
+            // 挂在根下时它们是对着屏幕中心定位的，只有"面板恰好居中且尺寸不变"
+            // 才对得上——改一下面板尺寸就整块错位，而且从画面上看不出原因。
+            BuildSidebar(panel);
+            BuildPageArea(panel);
+            return _content;
+        }
+
+        private static RectTransform BuildPanel(RectTransform root)
         {
             var panel = Gfx.Rect(root, "Panel", 0f, 0f, Theme.PanelW, Theme.PanelH,
                 Theme.Panel, true);
@@ -128,21 +152,19 @@ namespace SpectreReplay.Ui
             panel.pivot = new Vector2(0.5f, 0.5f);
             panel.sizeDelta = new Vector2(Theme.PanelW, Theme.PanelH);
             panel.anchoredPosition = Vector2.zero;
+            return panel;
         }
 
-        private static void BuildSidebar(RectTransform root)
+        private static void BuildSidebar(RectTransform panel)
         {
-            var side = Gfx.Rect(root, "Sidebar", 0f, 0f, Theme.SidebarW, Theme.PanelH,
+            // 父级是面板，用面板左上角当原点即可，不需要任何居中偏移
+            var side = Gfx.Rect(panel, "Sidebar", 0f, 0f, Theme.SidebarW, Theme.PanelH,
                 Theme.Sidebar, true);
-            side.anchorMin = new Vector2(0.5f, 0.5f);
-            side.anchorMax = new Vector2(0.5f, 0.5f);
-            side.pivot = new Vector2(0.5f, 0.5f);
-            side.anchoredPosition = new Vector2(
-                -(Theme.PanelW - Theme.SidebarW) * 0.5f, 0f);
-            side.sizeDelta = new Vector2(Theme.SidebarW, Theme.PanelH);
 
-            Gfx.Text(side, "Brand", 20f, 18f, Theme.SidebarW - 40f, 40f,
-                Loc.Brand, Theme.FontTitle, Theme.Accent);
+            // 字号 30 时 "Spectre Replay" 要 230px，侧栏只有 220px 可用，
+            // 离线预览量出来的。降到 28。
+            Gfx.Text(side, "Brand", 14f, 20f, Theme.SidebarW - 24f, 36f,
+                Loc.Brand, Theme.FontTitle - 2f, Theme.Accent);
 
             float y = 70f;
             string lastGroup = null;
@@ -170,35 +192,33 @@ namespace SpectreReplay.Ui
             }
         }
 
-        private static void BuildPageArea(RectTransform root)
+        private static void BuildPageArea(RectTransform panel)
         {
-            // 面板居中，坐标原点在面板中心。侧栏占左边 SidebarW，
-            // 页面区必须从「侧栏右边缘」开始：-PanelW/2 + SidebarW。
-            // 之前误写成 +(PanelW - SidebarW)/2 = +415，整块跑到面板外面去了
-            // （pivot 是 (0,0.5)，anchoredPosition.x 就是左边缘）。
-            float pageLeft = -(Theme.PanelW * 0.5f) + Theme.SidebarW;
+            // 父级是面板，原点就是面板左上角：页面区从侧栏右边缘开始，
+            // 即 left = SidebarW。不需要任何居中偏移。
             float pageW = Theme.PanelW - Theme.SidebarW;
-            var area = Gfx.Rect(root, "PageArea", pageLeft, 0f, pageW,
+            var area = Gfx.Rect(panel, "PageArea", Theme.SidebarW, 0f, pageW,
                 Theme.PanelH, new Color(0f, 0f, 0f, 0f), true);
-            area.anchorMin = new Vector2(0.5f, 0.5f);
-            area.anchorMax = new Vector2(0.5f, 0.5f);
-            area.pivot = new Vector2(0f, 0.5f);
-            area.sizeDelta = new Vector2(pageW, Theme.PanelH);
-            area.anchoredPosition = new Vector2(pageLeft, 0f);
 
             var header = Gfx.Rect(area, "Header", 0f, 0f, pageW, Theme.HeaderH,
                 Theme.Header, false);
-            _pageTitle = Gfx.Text(header, "Title", Theme.PadX, 12f, 520f, 32f, "",
+            // 标题与提示别挨着：标题 30px 字的字形下沿会探出 32px 的框，
+            // 框贴框排看着就是两行字撞在一起。留 8px 间隙。
+            _pageTitle = Gfx.Text(header, "Title", Theme.PadX, 8f, 520f, 34f, "",
                 Theme.FontTitle, Theme.Text);
-            Gfx.Text(header, "Hint", Theme.PadX, 44f, 500f, 20f,
-                "F" + (Settings.Hotkey - 281) + " 开关界面 · ESC 关闭",
-                Theme.FontTiny, Theme.TextFaint);
+            Gfx.Text(header, "Hint", Theme.PadX, 46f, 500f, 20f,
+                HotkeyHint, Theme.FontTiny, Theme.TextFaint);
 
             // 滚动：视口固定，内容高度由 PageBuilder 累加后写回 sizeDelta
-            float top = Theme.HeaderH;
             float vh = Theme.PanelH - Theme.HeaderH;
-            var viewport = Gfx.Rect(area, "Viewport", 0f, top,
-                Theme.PanelW - Theme.SidebarW, vh, new Color(0f, 0f, 0f, 0f), true);
+            var viewport = Gfx.Rect(area, "Viewport", 0f, Theme.HeaderH,
+                pageW, vh, new Color(0f, 0f, 0f, 0f), true);
+            // 必须裁剪：内容比视口高（渲染页 1054 vs 654），不裁的话多出来的行
+            // 会直接画到面板外面、盖在游戏画面上——离线预览采样那一带的像素
+            // 拿到的正是背景色。
+            // 用 RectMask2D 而不是 Mask：后者需要带 alpha 的 Sprite 才能按
+            // 图形裁剪，这里只有实心矩形，RectMask2D 够用且不吃图集。
+            viewport.gameObject.AddComponent<RectMask2D>();
 
             var content = new GameObject("Content", typeof(RectTransform));
             content.transform.SetParent(viewport, false);
