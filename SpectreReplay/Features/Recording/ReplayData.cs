@@ -85,9 +85,14 @@ namespace SpectreReplay.Features.Recording
                     WriteStr(w, kv.Key);
                     w.Write(kv.Value);
                 }
-                // MarginTimes 单独把自己的键名也写一遍。
+                // MarginTimes 单独把自己的**项数**也写一遍。
                 // 不靠"写入顺序 == 读取顺序"这种隐式对齐——那需要一份跨方法的
                 // 全局键序表，一旦有第二个文件在读就会串行错位。
+                //
+                // 这里原来只写集合不写计数，读取时却按 marginKinds 循环：
+                // Margins 与 MarginTimes 的项数一般不同，**回放文件会当场错位**，
+                // 读出来不是数据损坏就是直接抛异常。
+                w.Write(data.MarginTimes.Count);
                 foreach (var kv in data.MarginTimes)
                 {
                     WriteStr(w, kv.Key);
@@ -136,7 +141,16 @@ namespace SpectreReplay.Features.Recording
                 {
                     d.Margins[ReadStr(r)] = r.ReadInt32();
                 }
-                for (int i = 0; i < marginKinds; i++)
+                                // 头部只写了一个 marginKinds，读取时两个集合却都按它循环——
+                // 但 Margins 与 MarginTimes 的项数根本不必相等。写入时
+                // 已各自带上自己的计数，这里读自己的那份。
+                int marginTimeKinds = r.ReadInt32();
+                if (marginTimeKinds < 0 || marginTimeKinds > 1_000_000)
+                {
+                    throw new System.IO.InvalidDataException(
+                        string.Format(Ui.Loc.T("render.err.checkpoints"), marginTimeKinds));
+                }
+                for (int i = 0; i < marginTimeKinds; i++)
                 {
                     string name = ReadStr(r);
                     int n = r.ReadInt32();
