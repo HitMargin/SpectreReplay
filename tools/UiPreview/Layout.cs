@@ -47,39 +47,76 @@ namespace UiPreview
         }
 
         /// <summary>
+        /// 把一棵子树整体上移，模拟 ScrollRect 滚到底。
+        ///
+        /// 只动绝对坐标（Y 与 ParentRectTop），不动 Px/Py——那两个是
+        /// "Unity 坐标下的锚点基准"，滚动不改变它们，否则几何会算错。
+        ///
+        /// 为什么需要它：预览从来只渲染第一屏，折叠线以下的行**一次都没被
+        /// 点过**。渲染页有十几行，一半在折叠线以下——那一半的控件
+        /// 布局要是坏了，现在完全没人知道。
+        /// </summary>
+        internal static void ScrollBy(Node n, float dy)
+        {
+            n.Y += dy;
+            n.ParentRectTop += dy;
+            foreach (var k in n.Kids)
+            {
+                ScrollBy(k, dy);
+            }
+        }
+
+        /// <summary>
         /// 命中测试：模拟 GraphicRaycaster，找出点 (x, y) 落在哪个 raycastTarget 上。
         ///
         /// 用户报过"设置菜单点不动"。光看 raycastTarget 标志不够——那只能说明
         /// 元素**愿意**吃射线，还要确认**确实吃到了**：有没有别的元素盖在上面、
         /// 或者命中的是个什么都不做的容器。Unity 的规则是"画家顺序里最后
         /// 绘制（最靠上）且 rect 含该点的那一个"，这里照此实现。
+        ///
+        /// **裁剪必须参与判定。** 视口有 RectMask2D，折叠线以下的行在真机上
+        /// 是被裁掉的、点不到；原先这里不管裁剪，于是屏幕外的控件照样
+        /// "命中"——那等于用假答案盖住了折叠线以下所有行的毛病。
         /// </summary>
         internal static Node HitTest(Node root, float x, float y)
         {
             Node best = null;
             int bestDepth = -1;
-            Collect(root, x, y, 0, ref best, ref bestDepth);
+            float cx0 = 0f, cy0 = 0f, cx1 = float.MaxValue, cy1 = float.MaxValue;
+            Collect(root, x, y, 0, cx0, cy0, cx1, cy1, ref best, ref bestDepth);
             return best;
         }
 
         private static void Collect(Node n, float x, float y, int depth,
+            float clipX0, float clipY0, float clipX1, float clipY1,
             ref Node best, ref int bestDepth)
         {
             bool contains = x >= n.X && x <= n.X + n.W
                          && y >= n.Y && y <= n.Y + n.H;
+            // 整个节点都在裁剪区外 → 它的子树也一样看不见
+            if (n.X > clipX1 || n.X + n.W < clipX0
+                || n.Y > clipY1 || n.Y + n.H < clipY0)
+            {
+                return;
+            }
             if (n.Raycast && contains && depth >= bestDepth)
             {
                 best = n;
                 bestDepth = depth;
             }
-            // 不含该点的子树里不会有命中（子矩形必然在父矩形内或相交）
-            if (!contains && !n.Clips)
+            // 裁剪节点会把自己的 rect 变成对子树的限制
+            float nx0 = clipX0, ny0 = clipY0, nx1 = clipX1, ny1 = clipY1;
+            if (n.Clips)
             {
-                // 仍然要往下走：子件可能被 stretch 到父外（面板居中那类）
+                if (n.X > nx0) nx0 = n.X;
+                if (n.Y > ny0) ny0 = n.Y;
+                if (n.X + n.W < nx1) nx1 = n.X + n.W;
+                if (n.Y + n.H < ny1) ny1 = n.Y + n.H;
             }
             foreach (var k in n.Kids)
             {
-                Collect(k, x, y, depth + 1, ref best, ref bestDepth);
+                Collect(k, x, y, depth + 1, nx0, ny0, nx1, ny1,
+                    ref best, ref bestDepth);
             }
         }
 

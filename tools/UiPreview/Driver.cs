@@ -192,16 +192,28 @@ namespace UiPreview
                 }
                 Report(page, target, n);
             }
-            // 所有开关、按钮、下拉、滑条本体
+            // 所有开关、按钮、下拉、滑条本体——**只测当前能看见的**。
+            // 折叠线以下的控件这时本来就点不到（被 RectMask2D 裁掉），
+            // 拿它们当断言只会得到"没命中任何东西"这种假失败。它们
+            // 由 ScrolledControls 滚到底之后再测一遍。
+            var vp = Find(screen, "Viewport");
             foreach (var kind in new[] { "Toggle", "Button", "DropDown", "Slider", "Input" })
             {
                 foreach (var n in FindAll(screen, kind))
                 {
+                    if (vp != null && !FullyInside(n, vp))
+                    {
+                        continue;
+                    }
                     Report(page, kind, n);
                 }
             }
             NegativeControls(page, screen);
         }
+
+        /// <summary>控件是否完全落在视口内（没被裁掉、看得见）。</summary>
+        private static bool FullyInside(Node n, Node vp)
+            => n.Y >= vp.Y - 0.5f && n.Y + n.H <= vp.Y + vp.H + 0.5f;
 
         /// <summary>
         /// 遮罩必须真的是个"点了会关闭面板"的按钮。
@@ -293,6 +305,44 @@ namespace UiPreview
                     ClickFailures++;
                 }
             }
+
+            ScrolledControls(page, screen, viewport2);
+        }
+
+        /// <summary>
+        /// 滚到底之后，把折叠线以下的控件再点一遍。
+        ///
+        /// 预览一直只渲染第一屏，所以**折叠线以下的控件从来没被测过**。
+        /// 渲染页有十几行，一半在折叠线以下——那一半的布局要是坏了，
+        /// 现在的套件完全发现不了。真实用户会滚下去，所以那里坏了一样算坏。
+        /// </summary>
+        private static void ScrolledControls(string page, Node screen, Node viewport)
+        {
+            var content = Find(screen, "Content");
+            if (viewport == null || content == null)
+            {
+                return;
+            }
+            float overflow = content.H - viewport.H;
+            if (overflow <= 1f)
+            {
+                return;         // 这页不滚动，没什么好测的
+            }
+            Node.ScrollBy(content, -overflow);
+            Console.WriteLine($"    ── {page} 滚到底（下移 {overflow:F0}px）──");
+            foreach (var kind in new[] { "Toggle", "Button", "DropDown", "Slider", "Input" })
+            {
+                foreach (var n in FindAll(screen, kind))
+                {
+                    // 完全在视口外的（还在更下面）这轮仍然测不到，跳过
+                    if (n.Y + n.H < viewport.Y || n.Y > viewport.Y + viewport.H)
+                    {
+                        continue;
+                    }
+                    Report(page, kind + "(滚动后)", n);
+                }
+            }
+            Node.ScrollBy(content, overflow);   // 复位
         }
 
         private static readonly HashSet<string> ControlNames = new HashSet<string>
