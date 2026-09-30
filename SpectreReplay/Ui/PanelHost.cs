@@ -26,6 +26,7 @@ namespace SpectreReplay.Ui
         private static RectTransform _content;
         private static TMP_Text _pageTitle;
         private static ScrollRect _scroll;
+        // ResizeTo 要用：面板高度变了，这几个跟着一起变        private static RectTransform _panel;        private static RectTransform _sidebar;        private static RectTransform _viewport;        private static RectTransform _scrollbar;
         private static readonly List<PageDef> Pages = new List<PageDef>();
         private static int _current = -1;
         private static readonly List<LiveText> LiveTexts = new List<LiveText>();
@@ -147,6 +148,8 @@ namespace SpectreReplay.Ui
         /// </summary>
         internal static RectTransform BuildInto(RectTransform root)
         {
+            // 先离屏量一遍，决定面板该多高，再开始搭
+            PanelHeight = MeasurePanelHeight();
             var panel = BuildPanel(root);
             // 侧栏与页面区挂在**面板**下，不是画布根下。
             // 挂在根下时它们是对着屏幕中心定位的，只有"面板恰好居中且尺寸不变"
@@ -156,23 +159,116 @@ namespace SpectreReplay.Ui
             return _content;
         }
 
+        /// <summary>本次打开时定下的面板高度。侧栏与页面区都按它摆。</summary>
+        private static float PanelHeight = Theme.PanelH;
+
+        /// <summary>
+        /// 量出所有页面里最高的一页，据此决定面板高度。
+        ///
+        /// 取最高页而不是当前页：面板尺寸每切一次就变一次的话，比空一大块
+        /// 更晃。下限 PanelH 免得页面太少时面板缩成一个奇怪的窄条，
+        /// 上限 MaxPanelH 免得长页面把面板顶出屏幕。
+        /// </summary>
+        private static float MeasurePanelHeight()
+        {
+            float max = 0f;
+            for (int i = 0; i < Pages.Count; i++)
+            {
+                PageDef p = Pages[i];
+                try
+                {
+                    float h = PageBuilder.Measure(p.Build, Loc.T(p.TitleKey));
+                    if (h > max) max = h;
+                }
+                catch
+                {
+                    // 量不出来就退回默认高度，不该因为测量失败就不开界面
+                    max = Theme.PanelH;
+                    break;
+                }
+            }
+            return Mathf.Clamp(max + Theme.HeaderH + Theme.ContentPad,
+                Theme.PanelH, Mathf.Min(Theme.MaxPanelH, ScreenCap()));
+        }
+
+        /// <summary>
+        /// 量**当前页**要占多高，据此决定面板高度。
+        ///
+        /// 一开始想的是"取所有页里最高的，这样切页时尺寸不跳"——错了：
+        /// 最高的那页正是需要滚动的那页，按它定高等于面板还是那么高，
+        /// 而短页面照样空一大片；更糟的是它比屏幕还高，标题直接被切掉。
+        /// 改成按当前页算，高度夹在屏幕内。
+        /// </summary>
+        private static float HeightFor(int index)
+        {
+            float need;
+            try
+            {
+                PageDef p = Pages[index];
+                need = PageBuilder.Measure(p.Build, Loc.T(p.TitleKey))
+                    + Theme.HeaderH + Theme.ContentPad;
+            }
+            catch
+            {
+                need = Theme.PanelH;
+            }
+            return Mathf.Clamp(need, Theme.PanelMinH,
+                Mathf.Min(Theme.MaxPanelH, ScreenCap()));
+        }
+
+        /// <summary>面板能占的上限：屏幕高的 88%，留点边。</summary>
+        private static float ScreenCap()
+            => Screen.height > 0 ? Screen.height * 0.88f : Theme.PanelH;
+
+        private static void ResizeTo(int index)
+        {
+            float h = HeightFor(index);
+            if (Mathf.Abs(h - PanelHeight) < 1f)
+            {
+                return;
+            }
+            PanelHeight = h;
+            if (_panel != null)
+            {
+                _panel.sizeDelta = new Vector2(Theme.PanelW, h);
+            }
+            if (_sidebar != null)
+            {
+                ((RectTransform)_sidebar.transform).sizeDelta =
+                    new Vector2(Theme.SidebarW, h);
+            }
+            if (_viewport != null)
+            {
+                ((RectTransform)_viewport.transform).sizeDelta =
+                    new Vector2(Theme.PageAreaW - Theme.PadX * 2f, h - Theme.HeaderH);
+            }
+            if (_scrollbar != null)
+            {
+                var brt = (RectTransform)_scrollbar.transform;
+                brt.anchoredPosition = new Vector2(brt.anchoredPosition.x, -Theme.HeaderH);
+                brt.sizeDelta = new Vector2(8f, h - Theme.HeaderH);
+            }
+        }
+
         private static RectTransform BuildPanel(RectTransform root)
         {
-            var panel = Gfx.Rect(root, "Panel", 0f, 0f, Theme.PanelW, Theme.PanelH,
+            var panel = Gfx.Rect(root, "Panel", 0f, 0f, Theme.PanelW, PanelHeight,
                 Theme.Panel, true);
             panel.anchorMin = new Vector2(0.5f, 0.5f);
             panel.anchorMax = new Vector2(0.5f, 0.5f);
             panel.pivot = new Vector2(0.5f, 0.5f);
-            panel.sizeDelta = new Vector2(Theme.PanelW, Theme.PanelH);
+            panel.sizeDelta = new Vector2(Theme.PanelW, PanelHeight);
             panel.anchoredPosition = Vector2.zero;
+            _panel = panel;
             return panel;
         }
 
         private static void BuildSidebar(RectTransform panel)
         {
             // 父级是面板，用面板左上角当原点即可，不需要任何居中偏移
-            var side = Gfx.Rect(panel, "Sidebar", 0f, 0f, Theme.SidebarW, Theme.PanelH,
+            var side = Gfx.Rect(panel, "Sidebar", 0f, 0f, Theme.SidebarW, PanelHeight,
                 Theme.Sidebar, true);
+            _sidebar = side;
 
             // 字号 30 时 "Spectre Replay" 要 230px，侧栏只有 220px 可用，
             // 离线预览量出来的。降到 28。
@@ -230,7 +326,7 @@ namespace SpectreReplay.Ui
             // 即 left = SidebarW。不需要任何居中偏移。
             float pageW = Theme.PanelW - Theme.SidebarW;
             var area = Gfx.Rect(panel, "PageArea", Theme.SidebarW, 0f, pageW,
-                Theme.PanelH, new Color(0f, 0f, 0f, 0f), true);
+                PanelHeight, new Color(0f, 0f, 0f, 0f), true);
 
             var header = Gfx.Rect(area, "Header", 0f, 0f, pageW, Theme.HeaderH,
                 Theme.Header, false);
@@ -242,7 +338,7 @@ namespace SpectreReplay.Ui
                 HotkeyHint, Theme.FontTiny, Theme.TextFaint);
 
             // 滚动：视口固定，内容高度由 PageBuilder 累加后写回 sizeDelta
-            float vh = Theme.PanelH - Theme.HeaderH;
+            float vh = PanelHeight - Theme.HeaderH;
             var viewport = Gfx.Rect(area, "Viewport", 0f, Theme.HeaderH,
                 pageW, vh, new Color(0f, 0f, 0f, 0f), true);
             // 必须裁剪：内容比视口高（渲染页 1054 vs 654），不裁的话多出来的行
@@ -250,7 +346,7 @@ namespace SpectreReplay.Ui
             // 拿到的正是背景色。
             // 用 RectMask2D 而不是 Mask：后者需要带 alpha 的 Sprite 才能按
             // 图形裁剪，这里只有实心矩形，RectMask2D 够用且不吃图集。
-            viewport.gameObject.AddComponent<RectMask2D>();
+            _viewport = viewport;            viewport.gameObject.AddComponent<RectMask2D>();
 
             var content = new GameObject("Content", typeof(RectTransform));
             content.transform.SetParent(viewport, false);
@@ -280,15 +376,16 @@ namespace SpectreReplay.Ui
         private static void BuildScrollbar(RectTransform area, ScrollRect scroll, float viewH)
         {
             const float barW = 8f, pad = 6f;
-            var bar = Gfx.Rect(area, "Scrollbar",
+            _scrollbar = Gfx.Rect(area, "Scrollbar",
                 area.sizeDelta.x - barW - pad, Theme.HeaderH, barW, viewH,
                 new Color(0f, 0f, 0f, 0f), true);
             // 条体本身不吃射线：挡住内容区的点击就麻烦了
-            bar.GetComponent<Image>().raycastTarget = false;
+            _scrollbar.GetComponent<Image>().raycastTarget = false;
 
-            var handle = Gfx.Rect(bar, "Handle", 0f, 0f, barW, 80f,
+            var handle = Gfx.Rect(_scrollbar, "Handle", 0f, 0f, barW, 80f,
                 new Color(1f, 1f, 1f, 0.22f), false);
-            var sb = bar.gameObject.AddComponent<UnityEngine.UI.Scrollbar>();
+            var sb = _scrollbar.gameObject
+                .AddComponent<UnityEngine.UI.Scrollbar>();
             sb.handleRect = handle;
             sb.targetGraphic = handle.GetComponent<Image>();
             sb.direction = UnityEngine.UI.Scrollbar.Direction.BottomToTop;
@@ -305,6 +402,9 @@ namespace SpectreReplay.Ui
             {
                 return;
             }
+            // 面板高度跟着当前页走：短页面不该在下面空一大片。
+            // 放在最前面，ResizeTo 只改尺寸、不动内容。
+            ResizeTo(index);
             if (_content == null)
             {
                 return;
@@ -336,7 +436,11 @@ namespace SpectreReplay.Ui
                 }
             }
 
-            var pb = new PageBuilder(_content);
+            var pb = new PageBuilder(_content)
+            {
+                // 让页面知道自己的标题，好跳过正文里重复的那个分组标题
+                PageTitle = _pageTitle.text,
+            };
             p.Build?.Invoke(pb);
             _content.sizeDelta = new Vector2(0f, pb.ContentHeight + 24f);
         }

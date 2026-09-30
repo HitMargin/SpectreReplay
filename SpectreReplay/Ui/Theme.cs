@@ -40,7 +40,14 @@ namespace SpectreReplay.Ui
 
         // ── 尺寸 ────────────────────────────────────────────────
         internal const float PanelW = 1080f;
+        /// <summary>面板高度的**下限**。实际高度按最高的那一页量出来。</summary>
         internal const float PanelH = 720f;
+        /// <summary>面板高度下限，免得页面太少时缩成一个奇怪的窄条。</summary>        internal const float PanelMinH = 320f;        /// <summary>面板高度上限，免得长页面把面板顶出屏幕。</summary>
+        internal const float MaxPanelH = 1120f;
+        /// <summary>内容区与面板底边之间留的余量。</summary>
+        internal const float ContentPad = 16f;
+        /// <summary>页面区宽度（侧栏之外的部分）。</summary>
+        internal const float PageAreaW = PanelW - SidebarW;
         internal const float SidebarW = 250f;
         internal const float HeaderH = 66f;
 

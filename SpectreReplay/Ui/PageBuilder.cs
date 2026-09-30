@@ -33,6 +33,36 @@ namespace SpectreReplay.Ui
             _parent = parent;
         }
 
+        /// <summary>
+        /// 离屏量一页要占多高：建到一个**没挂到场景上**的临时容器里跑一遍，
+        /// 量完就拆。
+        ///
+        /// 用来决定面板该多高。原先面板写死 720，于是"关于"这种只有三行的
+        /// 页面下面空掉四百多像素，一眼看过去就是没做完的样子。
+        ///
+        /// 为什么不简单地"按当前页缩放"：那样每切一页面板尺寸就变一次，
+        /// 比空一大块更晃。取**所有页里最高的那页**，一次定死。
+        /// </summary>
+        internal static float Measure(Action<PageBuilder> build, string pageTitle)
+        {
+            var go = new GameObject("Measure", typeof(RectTransform));
+            try
+            {
+                var rt = (RectTransform)go.transform;
+                rt.anchorMin = new Vector2(0f, 1f);
+                rt.anchorMax = new Vector2(1f, 1f);
+                rt.pivot = new Vector2(0.5f, 1f);
+                rt.sizeDelta = new Vector2(Theme.PageAreaW, 0f);
+                var pb = new PageBuilder(rt) { PageTitle = pageTitle };
+                build(pb);
+                return pb.ContentHeight;
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
         private float Next(float h, float gap)
         {
             float top = _y;
@@ -106,9 +136,28 @@ namespace SpectreReplay.Ui
             Gfx.TextWrap(r, "Text", text, Theme.FontSmall, Theme.TextMuted, Theme.PadX);
         }
 
-        /// <summary>分组标题：一条带底色的横条。</summary>
+        /// <summary>页面大标题。顶栏已经显示过一次了，重复出现很难看。</summary>
+        internal string PageTitle = "";
+
+        private bool _groupSeen;
+
+        /// <summary>
+        /// 分组标题：一条带底色的横条。
+        ///
+        /// **整页第一个分组如果标题跟页面标题一样，就不画。** 顶栏已经有
+        /// 一个大大的"录制"，正文再来一条蓝色的"录制"，是肉眼一看就
+        /// 知道不对的重复——四个页面全中招。
+        /// </summary>
         internal void Group(string titleKey)
         {
+            string text = Loc.T(titleKey);
+            if (!_groupSeen && string.Equals(text, PageTitle, StringComparison.Ordinal))
+            {
+                // 不是"跳过这一次"，是这一页根本没有分组结构
+                _groupSeen = true;
+                return;
+            }
+            _groupSeen = true;
             if (_y > 0f)
             {
                 _y += 8f;
@@ -116,7 +165,7 @@ namespace SpectreReplay.Ui
             float top = Next(Theme.GroupHeadH, Theme.RowGap);
             var r = Gfx.RectFillX(_parent, "Group", top, Theme.GroupHeadH,
                 Theme.GroupHead, false);
-            var t = Gfx.TextFill(r, "Text", Loc.T(titleKey), Theme.FontBody, Theme.Accent);
+            var t = Gfx.TextFill(r, "Text", text, Theme.FontBody, Theme.Accent);
             Gfx.Stretch((RectTransform)t.transform, Theme.PadX, 0f, Theme.PadX, 0f);
         }
     }

@@ -416,15 +416,35 @@ namespace UiPreview
                 LineAlignment = StringAlignment.Near,
                 Trimming = StringTrimming.None,
             };
-            using (var b = new SolidBrush(System.Drawing.Color.White))
+            // **必须画在临时图上。** 原来直接往 _g（输出图）画，于是每张
+            // 预览图的左上角都印着 "SELF TEST"——图就废了，没法拿来判断
+            // 界面好不好看。顺带说一句：既然要用眼睛看预览图，任何画到
+            // 输出上的调试痕迹都是致命的。
+            using (var bmp = new System.Drawing.Bitmap(400, 120))
+            using (var g = System.Drawing.Graphics.FromImage(bmp))
             {
-                _g.DrawString("SELF TEST 中文 Test 123", f, b, new PointF(8f, 8f), sf);
-                // 点定位能画、矩形定位画不出——那就用点定位画，省得再被
-                // GDI+ 那个静默失败的组合坑一次。
-                _g.DrawString("SELF TEST 点定位 OK", f, b, new PointF(8f, 46f), sf);
+                g.Clear(System.Drawing.Color.Black);
+                using (var b = new SolidBrush(System.Drawing.Color.White))
+                {
+                    // 点定位能画、矩形定位画不出——那就用点定位画，省得再被
+                    // GDI+ 那个静默失败的组合坑一次。
+                    g.DrawString("SELF TEST 中文 Test 123", f, b, new PointF(8f, 8f), sf);
+                    g.DrawString("SELF TEST 点定位 OK", f, b, new PointF(8f, 46f), sf);
+                }
+                // 真的画出来了吗？数一下非黑像素——GDI+ 出问题时不报错，
+                // 只是什么都不画，光看"没抛异常"是不够的。
+                int lit = 0;
+                for (int y = 0; y < bmp.Height && lit == 0; y += 2)
+                {
+                    for (int x = 0; x < bmp.Width; x += 2)
+                    {
+                        if (bmp.GetPixel(x, y).R > 40) { lit++; break; }
+                    }
+                }
+                var sz = g.MeasureString("SELF TEST", f, int.MaxValue, sf);
+                return $"字体族={f.Name} 测量={sz.Width:F0}x{sz.Height:F0}"
+                    + (lit > 0 ? " 出字 ✓" : " **没画出任何字形**");
             }
-            var sz = _g.MeasureString("SELF TEST", f, int.MaxValue, sf);
-            return $"字体族={f.Name} 测量={sz.Width:F0}x{sz.Height:F0}";
         }
     }
 }

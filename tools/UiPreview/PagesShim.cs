@@ -82,6 +82,15 @@ namespace UiPreview
         {
             b.Group("page.render");
             b.Toggle("render.on", RenderOn, _ => { });
+            // 状态与操作按钮紧跟开关，跟真实页面一致（主操作不能在折叠线以下）
+            b.Group("render.status");
+            var statusRow = b.BlankRow(Theme.RowH);
+            var st = Gfx.TextFill(statusRow, "Status", "", Theme.FontSmall, Theme.TextMuted);
+            Gfx.Stretch((RectTransform)st.transform, Theme.PadX, 0f, Theme.PadX, 0f);
+            b.Button("render.start", true, () => { });
+            b.Button("render.cancel", false, () => { });
+
+            b.Group("render.options");
             b.Drop("render.mode", new[] { Loc.T("render.mode.live"), Loc.T("render.mode.offline") },
                 0, _ => { });
             // live / offline 两种说明都是真实分支，两个键都得在 shim 里出现
@@ -106,12 +115,6 @@ namespace UiPreview
             b.Toggle("render.duplicate_when_late", DupLate, _ => { });
             b.Input("render.outdir", "Mods\\SpectreReplay\\Videos",
                 "Mods\\SpectreReplay\\Videos", _ => { });
-            b.Group("render.status");
-            var sr = b.BlankRow(0f);
-            var st = Gfx.TextFill(sr, "Status", "", Theme.FontSmall, Theme.TextMuted);
-            Gfx.Stretch((RectTransform)st.gameObject.transform, Theme.PadX, 0, Theme.PadX, 0);
-            b.Button("render.start", true, () => { });
-            b.Button("render.cancel", false, () => { });
         }
 
         internal static void BuildAbout(PageBuilder b)

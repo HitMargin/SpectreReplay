@@ -71,6 +71,31 @@ namespace SpectreReplay.Pages
             b.Group("page.render");
             b.Toggle("render.on", Settings.RenderOn,
                 v => Commit(() => Settings.RenderOn = v));
+
+            // 状态与操作按钮放在开关**紧接着**的后面，而不是页面最底下。
+            // 这一页有十几行，面板装不下，最要紧的「开始渲染」被挤到折叠线
+            // 以下——用户得先滚动才找得到主操作。主操作不该藏在下面。
+            b.Group("render.status");
+            // 高度给一个行高：BlankRow(0) 是 0 高，文字被拉成一条空带子，            // 看上去像没做完。空闲时也要显示一个"—"。            var statusRow = b.BlankRow(Theme.RowH);
+            var st = Gfx.TextFill(statusRow, "Status", "", Theme.FontSmall, Theme.TextMuted);
+            Gfx.Stretch((RectTransform)st.transform, Theme.PadX, 0f, Theme.PadX, 0f);
+            PanelHost.RegisterLive(st,
+                () => Features.VideoRender.RenderStatus.Describe());
+
+            b.Button("render.start", true,
+                () =>
+                {
+                    Features.VideoRender.RenderService.StartManual();
+                    PanelHost.Refresh();
+                });
+            b.Button("render.cancel", false,
+                () =>
+                {
+                    Features.VideoRender.RenderService.Cancel();
+                    PanelHost.Refresh();
+                });
+
+            b.Group("render.options");
             b.Drop("render.mode", new[]
             {
                 Loc.T("render.mode.live"),
@@ -114,26 +139,6 @@ namespace SpectreReplay.Pages
                 v => Commit(() => Settings.DuplicateWhenLate = v));
             b.Input("render.outdir", Settings.OutputDir, "Mods\\SpectreReplay\\Videos",
                 v => Commit(() => Settings.OutputDir = v));
-
-            b.Group("render.status");
-            var statusRow = b.BlankRow(0f);
-            var st = Gfx.TextFill(statusRow, "Status", "", Theme.FontSmall, Theme.TextMuted);
-            Gfx.Stretch((RectTransform)st.transform, Theme.PadX, 0f, Theme.PadX, 0f);
-            PanelHost.RegisterLive(st,
-                () => Features.VideoRender.RenderStatus.Describe());
-
-            b.Button("render.start", true,
-                () =>
-                {
-                    Features.VideoRender.RenderService.StartManual();
-                    PanelHost.Refresh();
-                });
-            b.Button("render.cancel", false,
-                () =>
-                {
-                    Features.VideoRender.RenderService.Cancel();
-                    PanelHost.Refresh();
-                });
         }
 
         // ── 关于 ────────────────────────────────────────────────
