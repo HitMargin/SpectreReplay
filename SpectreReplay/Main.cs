@@ -1,3 +1,4 @@
+using UnityEngine;
 using UnityModManagerNet;
 using SpectreReplay.Patching;
 
@@ -36,7 +37,7 @@ namespace SpectreReplay
 
             mod.Logger.Log("[SpectreReplay] 已加载：补丁 "
                 + Patching.PatchLoader.AppliedCount + "/" + Patching.PatchLoader.DeclaredCount
-                + "（界面热键 F" + ((Settings.Hotkey - 288) is int f && f > 0 && f < 12 ? f.ToString() : Settings.Hotkey.ToString()) + "）");
+                + "（界面热键 " + Pages.SettingsPages.KeyName((KeyCode)Settings.Hotkey) + "）");
             IsReady = true;
         }
     }

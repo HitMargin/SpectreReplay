@@ -28,12 +28,25 @@ if (Test-Path (Join-Path $binDir 'SpectreReplay.pdb')) {
 }
 Copy-Item (Join-Path $projDir 'info.json') (Join-Path $modDir 'info.json') -Force
 
-# ffmpeg 是外部程序：只在本模组目录里有才复制，绝不动 Spectre 那份，
-# 免得两个模组的编码器版本不一致导致输出参数对不上。
-$ffmpegSrc = Join-Path $projectRoot 'tools\ffmpeg.exe'
-if (Test-Path $ffmpegSrc) {
-    Copy-Item $ffmpegSrc (Join-Path $modDir 'ffmpeg.exe') -Force
-    Write-Output "部署完成：ffmpeg.exe"
+# ffmpeg 是外部程序，没有它视频渲染会在启动编码器时直接失败。
+# 优先用工程 tools/ 下的那份；没有就从 Spectre 的模组目录**复制**一份过来
+# （只读 Spectre，不改它），免得两个模组引用不同版本导致输出参数对不上。
+$ffmpegPlaced = $false
+$ownFfmpeg = Join-Path $projectRoot 'tools\ffmpeg.exe'
+if (Test-Path $ownFfmpeg) {
+    Copy-Item $ownFfmpeg (Join-Path $modDir 'ffmpeg.exe') -Force
+    $ffmpegPlaced = $true
+    Write-Output "部署完成：ffmpeg.exe（工程内）"
+} else {
+    $spectreFfmpeg = Join-Path $gameRoot 'Mods\Spectre\ffmpeg.exe'
+    if (Test-Path $spectreFfmpeg) {
+        Copy-Item $spectreFfmpeg (Join-Path $modDir 'ffmpeg.exe') -Force
+        $ffmpegPlaced = $true
+        Write-Output "部署完成：ffmpeg.exe（自 Spectre 复制，只读取）"
+    }
+}
+if (-not $ffmpegPlaced) {
+    Write-Warning '未找到 ffmpeg.exe：录制可用、视频渲染会失败。请把 ffmpeg.exe 放到工程 tools\ 下。'
 }
 
 foreach ($d in 'Replays', 'Videos') {

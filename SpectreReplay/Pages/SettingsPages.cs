@@ -227,7 +227,7 @@ namespace SpectreReplay.Pages
 
         /// <summary>键码 → 可读名字。Input.GetKeyName 在这版 Unity 里不可用，
         /// 而设置页只需要把功能键显示出来，自己算更可控。</summary>
-        private static string KeyName(KeyCode k)
+        internal static string KeyName(KeyCode k)
         {
             int n = (int)k;
             if (n >= 282 && n <= 292)   // KeyCode 里 F1..F11 是连续的

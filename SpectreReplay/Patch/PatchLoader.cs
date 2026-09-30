@@ -154,11 +154,14 @@ namespace SpectreReplay.Patching
                     Failures.Add(spec.Attr.MethodName + "（目标不存在）");
                     return;
                 }
-                MethodInfo patch = spec.Owner.GetMethod(spec.Attr.MethodName,
-                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+                // 补丁方法就是**声明了这个特性的那个方法本身**，不是 Attr.MethodName。
+                // Attr.MethodName 是**游戏里被补丁的方法名**（如 "UpdateInput"），
+                // 拿它回本类里找补丁方法必然找不到——之前就是这么写的，
+                // 结果日志里 6 个补丁全部报"补丁方法缺失"，一个功能都没挂上。
+                MethodInfo patch = spec.Patch;
                 if (patch == null)
                 {
-                    Failures.Add(spec.Owner.Name + "." + spec.Attr.MethodName + "（补丁方法缺失）");
+                    Failures.Add(spec.Owner.Name + "（补丁方法缺失）");
                     return;
                 }
                 HarmonyMethod hm = new HarmonyMethod(patch);
@@ -236,6 +239,8 @@ namespace SpectreReplay.Patching
         {
             internal Type Owner;
             internal GamePatchAttribute Attr;
+            /// <summary>声明该特性的方法本身，也就是要挂上去的补丁方法。</summary>
+            internal MethodInfo Patch;
         }
 
         private static List<Spec> _specs;
@@ -257,7 +262,7 @@ namespace SpectreReplay.Patching
                     foreach (GamePatchAttribute a in
                         m.GetCustomAttributes<GamePatchAttribute>())
                     {
-                        list.Add(new Spec { Owner = t, Attr = a });
+                        list.Add(new Spec { Owner = t, Attr = a, Patch = m });
                     }
                 }
             }
