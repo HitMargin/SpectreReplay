@@ -31,7 +31,7 @@ namespace UiPreview
             // 文案完整性：漏一个键，界面上就是空白或原始键名
             int locFail = LocCheck.Run(LocCheck.CollectUsedKeys());
             // 事件系统唯一性：两个并存就是"有时候点得动"
-            int evFail = EventCheck.Run();
+            int evFail = EventCheck.Run();            // 孤儿组件：定义了却从没被 AddComponent 的，永远是 bug            int orphanFail = OrphanCheck.Run(                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));            int cfgFail = ConfigCheck.Run(                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));            PanelHost.Close();
 
             var pages = new (string Key, Action<PageBuilder> Build)[]
             {
@@ -124,6 +124,14 @@ namespace UiPreview
             if (fontFail > 0)
             {
                 Console.WriteLine($"  ✗ 字体回退链有 {fontFail} 处不对");
+            }
+            if (cfgFail > 0)
+            {
+                Console.WriteLine($"  ✗ 配置往返有 {cfgFail} 处对不上");
+            }
+            if (orphanFail > 0)
+            {
+                Console.WriteLine($"  ✗ {orphanFail} 个组件从没被挂上去");
             }
             if (evFail > 0)
             {

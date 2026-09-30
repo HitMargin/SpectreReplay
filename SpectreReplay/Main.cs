@@ -26,6 +26,12 @@ namespace SpectreReplay
             var go = new GameObject("SpectreReplayHost");
             UnityEngine.Object.DontDestroyOnLoad(go);
             go.AddComponent<Ui.PanelHostBehaviour>();
+            // 配置落盘也必须挂上去。ConfigStore.Save() 只把配置标脏，
+            // 真正写文件靠 ConfigFlusher 每帧末尾的 Flush()——**它原来
+            // 从来没被 AddComponent 过**，于是 Save 标了脏却没人写盘，
+            // 用户在界面里改的每个设置重开游戏就丢了。表现是"点得动、
+            // 界面也变、就是不生效"。
+            go.AddComponent<ConfigFlusher>();
             Pages.Pages.RegisterAll();
 
             // 功能门控：设置页改开关后由 Settings.Commit 触发 PatchLoader.Refresh

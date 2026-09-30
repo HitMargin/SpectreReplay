@@ -245,9 +245,20 @@ namespace SpectreReplay
         }
     }
 
-    /// <summary>每帧末尾把标脏的配置落盘。挂在宿主上，没有它就永远不写。</summary>
+    /// <summary>把标脏的配置落盘。挂在宿主上，没有它就永远不写。</summary>
     internal sealed class ConfigFlusher : MonoBehaviour
     {
         private void LateUpdate() => ConfigStore.Flush();
+
+        /// <summary>
+        /// 退出与销毁时再兜一次底。
+        ///
+        /// 只靠 LateUpdate 的话，最后一次改动可能落在"改完立刻关游戏"的
+        /// 那个窗口里没写出去。OnApplicationQuit 在关卡切换/宿主被销毁时
+        /// 不触发，所以 OnDestroy 也要来一遍——重复落盘是幂等的。
+        /// </summary>
+        private void OnApplicationQuit() => ConfigStore.Flush();
+
+        private void OnDestroy() => ConfigStore.Flush();
     }
 }
