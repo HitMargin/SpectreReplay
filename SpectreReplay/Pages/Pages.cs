@@ -159,10 +159,24 @@ namespace SpectreReplay.Pages
         }
 
         // ── 工具 ────────────────────────────────────────────────
+        /// <summary>
+        /// 改一个设置并立即反映到界面上。
+        ///
+        /// 只存盘是不够的：「界面字号」和「界面热键」改的是**已经画出来的**
+        /// 文字与提示，不重画就什么都看不见——用户拖动滑条、面板纹丝不动，
+        /// 得关掉重开才生效。这跟"控件坏了"从外面看一模一样。
+        ///
+        /// 每次都重画整页对连续拖动有点浪费，但拖动只在松手时才提交
+        /// （Slider 走的是 onValueChanged，松手前不会触发），代价可以接受。
+        /// </summary>
         private static void Commit(Action mutate)
         {
             mutate?.Invoke();
             Settings.Commit();
+            if (Ui.PanelHost.IsOpen)
+            {
+                Ui.PanelHost.Refresh();
+            }
         }
 
         /// <summary>回放文件列表，按修改时间倒序。</summary>
