@@ -36,7 +36,80 @@ namespace UiPreview
             fail += Encode("② mkv", ContainerMode.Mkv, ".mkv");
             fail += Encode("③ webm（曾经必然失败）", ContainerMode.Webm, ".webm");
             fail += CodecSanity();
+            fail += NegativeControl();
             return fail;
+        }
+
+        /// <summary>
+        /// 反向对照：**故意**用装不进容器的编码器，断言这套检测确实会红。
+        ///
+        /// 之前验证"webm 修复有效"的办法是去改真实源码、把 bug 放回去跑——
+        /// 那次工具调用被中断，bug 就这么留在文件里了。改真实文件来验证测试
+        /// 本身就是坏习惯：万一忘了还原，代价是真代码出错。
+        /// 反向对照没有这个问题，而且它常驻、每次都跑。
+        /// </summary>
+        private static int NegativeControl()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ffcheck");
+            Directory.CreateDirectory(dir);
+            string outPath = Path.Combine(dir, "negative.webm");
+            if (File.Exists(outPath)) File.Delete(outPath);
+
+            // 手工拼一份"webm + libx264"——也就是修复前 bug 版本产出的参数
+            var psi = new ProcessStartInfo(FfmpegPath)
+            {
+                RedirectStandardInput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            foreach (string a in new[]
+            {
+                "-y", "-f", "rawvideo", "-pixel_format", "bgra",
+                "-video_size", W + "x" + H, "-framerate", "30", "-i", "pipe:0",
+                "-an", "-c:v", "libx264", "-preset", "medium", "-crf", "23",
+                "-pix_fmt", "yuv420p", "-r", "30", "-f", "webm", outPath,
+            })
+            {
+                psi.ArgumentList.Add(a);
+            }
+
+            using (var p = Process.Start(psi))
+            {
+                var err = new System.Text.StringBuilder();
+                using (var done = new System.Threading.ManualResetEventSlim(false))
+                {
+                    p.ErrorDataReceived += (_, e) =>
+                    {
+                        if (e.Data == null) { done.Set(); return; }
+                        lock (err) { err.AppendLine(e.Data); }
+                    };
+                    p.BeginErrorReadLine();
+                    byte[] one = new byte[W * H * 4];
+                    for (int i = 3; i < one.Length; i += 4) one[i] = 255;
+                    for (int f = 0; f < Frames; f++)
+                    {
+                        try
+                        {
+                            p.StandardInput.BaseStream.Write(one, 0, one.Length);
+                        }
+                        catch (IOException) { break; }
+                    }
+                    try { p.StandardInput.Close(); } catch { }
+                    if (!p.WaitForExit(45000)) { try { p.Kill(); } catch { } }
+                    done.Wait(3000);
+                    bool produced = File.Exists(outPath)
+                        && new FileInfo(outPath).Length >= 512;
+                    bool exitedClean = p.HasExited && p.ExitCode == 0;
+                    bool detected = !(produced && exitedClean);
+                    Console.WriteLine($"    {(detected ? "✓" : "✗")} ⑤ 反向对照："
+                        + "故意用装不下容器的编码器，应当被检出"
+                        + $"  → {(detected ? "已检出" : "竟然通过了，检测是假的")}");
+                    if (!detected) return 1;
+                }
+            }
+            if (File.Exists(outPath)) File.Delete(outPath);
+            return 0;
         }
 
         private static int Encode(string label, ContainerMode container, string ext)
@@ -63,37 +136,63 @@ namespace UiPreview
             {
                 using (var p = Process.Start(psi))
                 {
-                    // 喂真帧：BGRA，每帧底色渐变，省得全是黑看不出问题
-                    byte[] frame = new byte[W * H * 4];
-                    for (int f = 0; f < Frames; f++)
+                    // **必须先异步抽干 stderr，再写 stdin。**
+                    // ffmpeg 报错时往 stderr 写，管道缓冲区一旦写满它就停下
+                    // 不再读 stdin，我这边写 stdin 于是永远阻塞——写这个测试
+                    // 时自己就死锁过一次。游戏里的 VideoEncoder 用
+                    // BeginErrorReadLine 正是为了这个。
+                    var err = new System.Text.StringBuilder();
+                    using (var errDone = new System.Threading.ManualResetEventSlim(false))
                     {
-                        for (int i = 0; i < frame.Length; i += 4)
+                        p.ErrorDataReceived += (_, e) =>
                         {
-                            frame[i] = (byte)(f * 20);        // B
-                            frame[i + 1] = (byte)(255 - f * 20); // G
-                            frame[i + 2] = (byte)(f * 10);    // R
-                            frame[i + 3] = 255;                // A
+                            if (e.Data == null) { errDone.Set(); return; }
+                            lock (err) { err.AppendLine(e.Data); }
+                        };
+                        p.BeginErrorReadLine();
+
+                        // 喂真帧：BGRA，每帧底色渐变，省得全是黑看不出问题
+                        byte[] frame = new byte[W * H * 4];
+                        for (int f = 0; f < Frames; f++)
+                        {
+                            for (int i = 0; i < frame.Length; i += 4)
+                            {
+                                frame[i] = (byte)(f * 20);         // B
+                                frame[i + 1] = (byte)(255 - f * 20); // G
+                                frame[i + 2] = (byte)(f * 10);     // R
+                                frame[i + 3] = 255;                // A
+                            }
+                            try
+                            {
+                                p.StandardInput.BaseStream.Write(frame, 0, frame.Length);
+                            }
+                            catch (IOException)
+                            {
+                                // ffmpeg 提前退出（参数非法时就会），下面再判退出码
+                                break;
+                            }
                         }
-                        p.StandardInput.BaseStream.Write(frame, 0, frame.Length);
+                        try { p.StandardInput.Close(); } catch { }
+                        if (!p.WaitForExit(60000))
+                        {
+                            try { p.Kill(); } catch { }
+                            Console.WriteLine($"    ✗ {label,-24} ffmpeg 超时未退出");
+                            return 1;
+                        }
+                        errDone.Wait(5000);
+                        string text;
+                        lock (err) { text = err.ToString(); }
+                        if (p.ExitCode != 0 || !File.Exists(outPath)
+                            || new FileInfo(outPath).Length < 512)
+                        {
+                            Console.WriteLine($"    ✗ {label,-24} 退出码 {p.ExitCode}"
+                                + $"  产物 {Describe(outPath)}");
+                            Console.WriteLine("        ffmpeg: " + Tail(text));
+                            return 1;
+                        }
+                        Console.WriteLine($"    ✓ {label,-24} 产出 {Describe(outPath)}");
+                        return 0;
                     }
-                    p.StandardInput.Close();
-                    string err = p.StandardError.ReadToEnd();
-                    if (!p.WaitForExit(60000))
-                    {
-                        try { p.Kill(); } catch { }
-                        Console.WriteLine($"    ✗ {label,-24} ffmpeg 超时");
-                        return 1;
-                    }
-                    if (p.ExitCode != 0 || !File.Exists(outPath)
-                        || new FileInfo(outPath).Length < 512)
-                    {
-                        Console.WriteLine($"    ✗ {label,-24} 退出码 {p.ExitCode}"
-                            + $"  产物 {Describe(outPath)}");
-                        Console.WriteLine("        ffmpeg: " + Tail(err));
-                        return 1;
-                    }
-                    Console.WriteLine($"    ✓ {label,-24} 产出 {Describe(outPath)}");
-                    return 0;
                 }
             }
             catch (Exception e)
