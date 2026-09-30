@@ -206,7 +206,7 @@ namespace SpectreReplay.Ui
             {
                 PageDef p = Pages[index];
                 need = PageBuilder.Measure(p.Build, Loc.T(p.TitleKey))
-                    + Theme.HeaderH + Theme.ContentPad;
+                    + Theme.HeaderH + Theme.ContentTopPad + Theme.ContentPad;
             }
             catch
             {
@@ -239,14 +239,19 @@ namespace SpectreReplay.Ui
             }
             if (_viewport != null)
             {
-                ((RectTransform)_viewport.transform).sizeDelta =
-                    new Vector2(Theme.PageAreaW - Theme.PadX * 2f, h - Theme.HeaderH);
+                var vrt = (RectTransform)_viewport.transform;
+                vrt.anchoredPosition = new Vector2(0f,
+                    -(Theme.HeaderH + Theme.ContentTopPad));
+                vrt.sizeDelta = new Vector2(Theme.PageAreaW - Theme.PadX * 2f,
+                    h - Theme.HeaderH - Theme.ContentTopPad);
             }
             if (_scrollbar != null)
             {
                 var brt = (RectTransform)_scrollbar.transform;
-                brt.anchoredPosition = new Vector2(brt.anchoredPosition.x, -Theme.HeaderH);
-                brt.sizeDelta = new Vector2(8f, h - Theme.HeaderH);
+                brt.anchoredPosition = new Vector2(brt.anchoredPosition.x,
+                    -(Theme.HeaderH + Theme.ContentTopPad));
+                brt.sizeDelta = new Vector2(8f,
+                    h - Theme.HeaderH - Theme.ContentTopPad);
             }
         }
 
@@ -338,8 +343,11 @@ namespace SpectreReplay.Ui
                 HotkeyHint, Theme.FontTiny, Theme.TextFaint);
 
             // 滚动：视口固定，内容高度由 PageBuilder 累加后写回 sizeDelta
-            float vh = PanelHeight - Theme.HeaderH;
-            var viewport = Gfx.Rect(area, "Viewport", 0f, Theme.HeaderH,
+            // 视口从顶栏下方再留一点开始：**第一行紧贴顶栏底边看着像浮在
+            // 标题上**。回放页第一行是透明背景的说明文字，没这点间距尤其明显。
+            float vTop = Theme.HeaderH + Theme.ContentTopPad;
+            float vh = PanelHeight - vTop;
+            var viewport = Gfx.Rect(area, "Viewport", 0f, vTop,
                 pageW, vh, new Color(0f, 0f, 0f, 0f), true);
             // 必须裁剪：内容比视口高（渲染页 1054 vs 654），不裁的话多出来的行
             // 会直接画到面板外面、盖在游戏画面上——离线预览采样那一带的像素
@@ -366,14 +374,14 @@ namespace SpectreReplay.Ui
             scroll.movementType = ScrollRect.MovementType.Clamped;
             scroll.scrollSensitivity = 48f;
             _scroll = scroll;
-            BuildScrollbar(area, scroll, vh);
+            BuildScrollbar(area, scroll, vh, vTop);
         }
 
         /// <summary>
         /// 右侧滚动条。没有它的话，内容比视口高时（渲染页 1054 vs 654）
         /// 用户根本看不出下面还有东西——只有转了滚轮才知道。
         /// </summary>
-        private static void BuildScrollbar(RectTransform area, ScrollRect scroll, float viewH)
+        private static void BuildScrollbar(RectTransform area, ScrollRect scroll,            float viewH, float top)
         {
             const float barW = 8f, pad = 6f;
             _scrollbar = Gfx.Rect(area, "Scrollbar",
