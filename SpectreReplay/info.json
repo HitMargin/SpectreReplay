@@ -1,0 +1,10 @@
+{
+  "Id": "com.spectre.replay",
+  "DisplayName": "Spectre Replay",
+  "Author": "2228293026",
+  "Version": "0.1.0",
+  "Description": "关卡录制、回放与视频渲染。可边玩边录，不必重跑关卡。独立模组，不依赖 Spectre。",
+  "AssemblyName": "SpectreReplay.dll",
+  "EntryMethod": "SpectreReplay.Main.Load",
+  "MinimumGameVersion": "1.0.0.0"
+}
