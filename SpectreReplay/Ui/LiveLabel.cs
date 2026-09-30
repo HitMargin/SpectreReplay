@@ -16,19 +16,37 @@ namespace SpectreReplay.Ui
         private float _interval = 0.25f;
         private float _next;
 
-        internal static LiveLabel Create(Transform parent, System.Func<string> get, float interval = 0.25f)
+        /// <summary>把一段会变的文字挂成**行内的标签**（右侧），与其它控件同一套模型。</summary>
+        internal static LiveLabel Create(RowRef row, System.Func<string> get,
+            float interval = 0.25f, float width = 420f)
         {
-            var rt = Row.Create(parent, 0f);
-            var t = Row.NewText(rt, "Live", UiSkin.FontBody, UiSkin.TextNormal);
-            t.rectTransform.anchorMin = Vector2.zero;
-            t.rectTransform.anchorMax = Vector2.one;
-            t.rectTransform.offsetMin = new Vector2(UiSkin.PadX, 4f);
-            t.rectTransform.offsetMax = new Vector2(-UiSkin.PadX, -4f);
-            t.alignment = TextAlignmentOptions.MidlineLeft;
+            var slot = Row.Slot(row, width, 30f);
+            var t = Row.NewText(slot, "Live", UiSkin.FontSmall, UiSkin.TextNormal);
+            Row.Stretch(t.rectTransform);
+            return Attach(t, get, interval, TextAlignmentOptions.MidlineRight);
+        }
+
+        /// <summary>占整行的会变文字（不带左侧标签）。</summary>
+        internal static LiveLabel CreateFullRow(Transform parent, System.Func<string> get,
+            float interval = 0.25f)
+        {
+            var row = Row.Create(parent, 40f, new Color(0f, 0f, 0f, 0f));
+            var t = Row.NewText(row.Rect, "Live", UiSkin.FontSmall, UiSkin.TextMuted);
+            var rt = t.rectTransform;
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = new Vector2(UiSkin.PadX, 0f);
+            rt.offsetMax = new Vector2(-UiSkin.PadX, 0f);
+            return Attach(t, get, interval, TextAlignmentOptions.MidlineLeft, row.Rect);
+        }
+
+        private static LiveLabel Attach(TMP_Text t, System.Func<string> get, float interval,
+            TextAlignmentOptions align, Transform host = null)
+        {
+            t.alignment = align;
             t.text = "";
-            rt.gameObject.AddComponent<ContentSizeFitter>().verticalFit =
-                ContentSizeFitter.FitMode.PreferredSize;
-            var ll = rt.gameObject.AddComponent<LiveLabel>();
+            Transform owner = host != null ? host : t.transform;
+            var ll = owner.gameObject.AddComponent<LiveLabel>();
             ll._text = t;
             ll._get = get;
             ll._interval = interval;

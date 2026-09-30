@@ -72,6 +72,10 @@ namespace SpectreReplay
         /// <summary>全局字号缩放。</summary>
         internal static float TextScale = 1f;
 
+        /// <summary>进入关卡时自动打开界面。热键读不到时打开它，就能确认
+        /// 界面本身能不能显示——"键没读到"和"界面没画出来"要分开定位。</summary>
+        internal static bool AutoOpenUi = false;
+
         // ── 路径 ──────────────────────────────────────────────
         /// <summary>模组根目录（dll 所在处）。UM4 把 dll 放在 Mods\&lt;名&gt;\ 下。</summary>
         internal static string RootDir
@@ -172,6 +176,7 @@ namespace SpectreReplay
             Settings.DuplicateWhenLate = GetBool(d, "DuplicateWhenLate", Settings.DuplicateWhenLate);
             Settings.Hotkey = GetInt(d, "Hotkey", Settings.Hotkey);
             Settings.TextScale = GetFloat(d, "TextScale", Settings.TextScale);
+            Settings.AutoOpenUi = GetBool(d, "AutoOpenUi", Settings.AutoOpenUi);
         }
 
         private static bool GetBool(Dictionary<string, object> d, string k, bool def)
@@ -224,6 +229,7 @@ namespace SpectreReplay
                     { "DuplicateWhenLate", Settings.DuplicateWhenLate },
                     { "Hotkey", Settings.Hotkey },
                     { "TextScale", Settings.TextScale },
+                    { "AutoOpenUi", Settings.AutoOpenUi },
                 };
                 string dir = Path.GetDirectoryName(FilePath);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))

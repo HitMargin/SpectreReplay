@@ -57,6 +57,10 @@ namespace SpectreReplay.Ui
                 { "about.note", "SpectreReplay 是独立模组，不依赖 Spectre，两者可同时启用。" },
 
                 { "render.duplicate_when_late", "跟不上时复制上一帧" },
+                { "playback.files", "回放文件" },
+                { "render.on", "启用视频渲染" },
+                { "render.status", "状态" },
+                { "about.autoopen", "进关时自动打开界面" },
                 { "render.state.live", "录制中" },
                 { "render.state.offline", "离线渲染中" },
                 { "render.state.finalizing", "合成中" },
@@ -110,6 +114,10 @@ namespace SpectreReplay.Ui
                 { "about.note", "SpectreReplay is standalone and does not require Spectre; both can be enabled at once." },
 
                 { "render.duplicate_when_late", "Duplicate last frame when behind" },
+                { "playback.files", "Replays" },
+                { "render.on", "Enable video render" },
+                { "render.status", "Status" },
+                { "about.autoopen", "Open panel on level start" },
                 { "render.state.live", "Recording" },
                 { "render.state.offline", "Offline render" },
                 { "render.state.finalizing", "Finalizing" },

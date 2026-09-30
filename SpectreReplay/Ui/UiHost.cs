@@ -94,6 +94,10 @@ namespace SpectreReplay.Ui
 
         private static void Build()
         {
+            // 场景可能刚换过（主菜单 ↔ 关卡是不同场景，RDConstants 也不同）。
+            // 模组加载那一刻场景里未必有 RDConstants，只解析一次就会永远拿不到字体。
+            UiFonts.Invalidate();
+
             _root = new GameObject("SpectreReplayUi", typeof(RectTransform));
             UnityEngine.Object.DontDestroyOnLoad(_root);
             var rootRt = (RectTransform)_root.transform;
@@ -118,8 +122,9 @@ namespace SpectreReplay.Ui
 
             EnsureEventSystem();
 
-            // 全屏遮罩：点击即关。raycastTarget 必须为真才能吃掉点击。
-            var mask = Row.Panel(rootRt, "Mask", new Color(0f, 0f, 0f, 0.55f));
+            // 全屏遮罩：压暗背景、点击即关。alpha 0.55 太浅，游戏画面
+            // 透过来把整个面板衬成灰绿色，看着浑浊。压到 0.78。
+            var mask = Row.Panel(rootRt, "Mask", new Color(0f, 0f, 0f, 0.78f));
             mask.rectTransform.anchorMin = Vector2.zero;
             mask.rectTransform.anchorMax = Vector2.one;
             mask.rectTransform.offsetMin = Vector2.zero;
@@ -133,7 +138,7 @@ namespace SpectreReplay.Ui
             prt.anchorMin = new Vector2(0.5f, 0.5f);
             prt.anchorMax = new Vector2(0.5f, 0.5f);
             prt.pivot = new Vector2(0.5f, 0.5f);
-            prt.sizeDelta = new Vector2(920f, 640f);
+            prt.sizeDelta = new Vector2(1000f, 680f);
 
             BuildSidebar(prt);
             BuildPageArea(prt);
@@ -207,28 +212,35 @@ namespace SpectreReplay.Ui
                 if (entry.Category != lastCat)
                 {
                     lastCat = entry.Category;
-                    var catRow = Row.Create(lrt, 34f);
-                    var ct = Row.NewText(catRow, "Cat", UiSkin.FontSmall, UiSkin.TextDisabled);
-                    ct.rectTransform.anchorMin = Vector2.zero;
-                    ct.rectTransform.anchorMax = Vector2.one;
-                    ct.rectTransform.offsetMin = new Vector2(8f, 0f);
-                    ct.rectTransform.offsetMax = new Vector2(-8f, 0f);
-                    ct.text = Loc.Cat(entry.Category);
+                    var catRow = Row.Create(lrt, 40f, UiSkin.CatBg);
+                    var ct = Row.NewText(catRow.Rect, "Cat", UiSkin.FontSmall, UiSkin.TextMuted);
+                    var crt = ct.rectTransform;
+                    crt.anchorMin = Vector2.zero;
+                    crt.anchorMax = Vector2.one;
+                    crt.offsetMin = new Vector2(12f, 0f);
+                    crt.offsetMax = new Vector2(-8f, 0f);
+                    ct.text = Loc.Cat(entry.Category).ToUpperInvariant();
                     ct.alignment = TextAlignmentOptions.MidlineLeft;
                 }
                 int index = i;
-                var btn = Row.Create(lrt, 40f);
-                var img = btn.gameObject.GetComponent<Image>() ?? btn.gameObject.AddComponent<Image>();
-                img.color = new Color(0f, 0f, 0f, 0f);
-                var b = btn.gameObject.AddComponent<Button>();
-                b.targetGraphic = img;
+                // 按钮要有实际底色——上一版用全透明 Image，未选中时侧栏
+                // 整个是空的，看上去像没有界面。
+                var btn = Row.Create(lrt, 50f, UiSkin.NavIdleBg);
+                var b = btn.Rect.gameObject.AddComponent<Button>();
+                b.targetGraphic = btn.Rect.GetComponent<Image>();
+                var cb = b.colors;
+                cb.normalColor = Color.white;
+                cb.highlightedColor = new Color(1.25f, 1.25f, 1.25f, 1f);
+                cb.selectedColor = Color.white;
+                cb.fadeDuration = 0.06f;
+                b.colors = cb;
                 int captured = index;
                 b.onClick.AddListener(() => Show(captured));
-                var t = Row.NewText(btn, "Text", UiSkin.FontBody, UiSkin.TextNormal);
-                t.rectTransform.anchorMin = Vector2.zero;
-                t.rectTransform.anchorMax = Vector2.one;
-                t.rectTransform.offsetMin = new Vector2(8f, 0f);
-                t.rectTransform.offsetMax = new Vector2(-8f, 0f);
+
+                var t = Row.NewText(btn.Rect, "Text", UiSkin.FontBody, UiSkin.TextNormal);
+                Row.Stretch(t.rectTransform);
+                t.rectTransform.offsetMin = new Vector2(6f, 0f);
+                t.rectTransform.offsetMax = new Vector2(-6f, 0f);
                 t.text = Loc.T(entry.TitleKey);
                 t.alignment = TextAlignmentOptions.MidlineLeft;
                 entry.Button = b;

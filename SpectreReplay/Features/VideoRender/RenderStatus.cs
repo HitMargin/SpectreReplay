@@ -46,8 +46,8 @@ namespace SpectreReplay.Features.VideoRender
                 ? System.Math.Min(1f, (float)FramesDone / FramesTotal)
                 : Progress;
 
-        /// <summary>在页面上挂一个会自己刷新的状态行。</summary>
-        public static void Bind(Transform row) => LiveLabel.Create(row, Describe, 0.2f);
+        /// <summary>在页面上挂一个会自己刷新的状态行（占整行，紧跟标签行下方）。</summary>
+        public static void Bind(Transform parent) => LiveLabel.CreateFullRow(parent, Describe, 0.2f);
 
         public static string Describe()
         {
