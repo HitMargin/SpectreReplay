@@ -101,6 +101,11 @@ namespace UiPreview
                 // 点击测试与语言无关（几何相同），只跑一遍就够
                 if (args.Length > 1 && args[1] == "--click" && zh)
                 {
+                    if (i == 0)
+                    {
+                        // "点空白处关闭"这条只验一次：它与页面无关
+                        CheckOverlayCloses(screen);
+                    }
                     RunClickTests(key, screen);
                 }
                 foreach (var o in r.Overflows)
@@ -186,6 +191,32 @@ namespace UiPreview
         }
 
         /// <summary>
+        /// 遮罩必须真的是个"点了会关闭面板"的按钮。
+        ///
+        /// 命中测试只能证明遮罩**在那儿**，证明不了它**接着回调**——遮罩
+        /// 铺满屏幕、raycastTarget 也为 true，点下去却什么都不会发生，
+        /// 从几何上完全看不出来。
+        /// </summary>
+        private static void CheckOverlayCloses(Node screen)
+        {
+            var overlay = Find(screen, "Overlay");
+            if (overlay == null)
+            {
+                Console.WriteLine("      ✗ 遮罩 点空白关闭  → 找不到 Overlay");
+                ClickFailures++;
+                return;
+            }
+            bool isButton = overlay.IsButton && overlay.Buttons > 0;
+            Console.WriteLine($"      {(isButton ? "✓" : "✗")} 遮罩点了会关闭面板"
+                + $"  → {(overlay.IsButton ? $"Button，{overlay.Buttons} 个回调"
+                    : (overlay.Raycast ? "只是个可点的图，没有回调" : "连射线都不吃"))}");
+            if (!isButton)
+            {
+                ClickFailures++;
+            }
+        }
+
+        /// <summary>
         /// 反向对照。只做正向断言是不够的：万一命中测试无论点什么都返回同一个
         /// 节点，全绿也是假的。所以这里点**不该命中任何控件**的地方，
         /// 确认命中的确实是容器而不是按钮。
@@ -218,6 +249,18 @@ namespace UiPreview
             {
                 CheckNoControl(page, "标题栏",
                     header.X + header.W * 0.5f, header.Y + header.H * 0.5f);
+            }
+
+            // 点面板**外面**必须命中遮罩——遮罩是"点空白处关闭"的按钮。
+            // 这条之前没验过：遮罩要么没接上（点了没反应），要么没铺满
+            // 屏幕（边角点不到），两种都很难靠肉眼发现。
+            var overlay = Find(screen, "Overlay");
+            if (overlay != null)
+            {
+                Check(page, "面板外", 40f, 40f, "Overlay");
+                // 四角都要够得着：遮罩只铺了一部分的话，角落会点不动
+                Check(page, "面板外·右下",
+                    (float)CanvasW - 40f, (float)CanvasH - 40f, "Overlay");
             }
         }
 

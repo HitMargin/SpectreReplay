@@ -126,30 +126,39 @@ namespace SpectreReplay.Ui
             _root.AddComponent<GraphicRaycaster>();
             EnsureEventSystem();
 
-            var overlay = Gfx.Rect(root, "Overlay", 0f, 0f,
-                Screen.width, Screen.height, Theme.Overlay, true);
-            // 遮罩尺寸按屏幕给，并随窗口变化重算
-            overlay.anchorMin = Vector2.zero;
-            overlay.anchorMax = Vector2.one;
-            overlay.pivot = new Vector2(0f, 1f);
-            overlay.offsetMin = Vector2.zero;
-            overlay.offsetMax = Vector2.zero;
-            Gfx.MakeButton(overlay.gameObject, Color.white, Color.white, Color.white, Close);
-
             BuildInto(root);
         }
 
         /// <summary>
-        /// 把面板 / 侧栏 / 页面区建到给定根上。
+        /// 把遮罩 / 面板 / 侧栏 / 页面区建到给定根上。
         ///
         /// 刻意与 <see cref="Build"/> 分开：不依赖 Canvas 与屏幕尺寸，
         /// 这样 tools\UiPreview 能离线调用**同一份代码**渲染出真实布局。
         /// 预览另写一套搭建逻辑的话，几何一旦不同步就验了个假的。
+        ///
+        /// 遮罩也放在这里而不是 Build 里：它是个 UI 元素，不是画布管线的一部分。
+        /// 放在 Build 里的话，离线预览就看不到它——于是"点空白处关闭"这条
+        /// 永远验不了：遮罩没铺满、或者铺满了却没接回调，都是几何上
+        /// 完全看不出来的毛病。
         /// </summary>
         internal static RectTransform BuildInto(RectTransform root)
         {
             // 先离屏量一遍，决定面板该多高，再开始搭
             PanelHeight = MeasurePanelHeight();
+
+            // 遮罩：铺满整个根，点了关闭面板。锚点拉满而不是按屏幕尺寸给，
+            // 这样窗口尺寸变了不用重算——按尺寸给的那个版本在改分辨率后
+            // 边角会点不到。
+            var overlay = Gfx.Rect(root, "Overlay", 0f, 0f, root.sizeDelta.x,
+                root.sizeDelta.y, Theme.Overlay, true);
+            overlay.anchorMin = Vector2.zero;
+            overlay.anchorMax = Vector2.one;
+            overlay.pivot = new Vector2(0f, 1f);
+            overlay.offsetMin = Vector2.zero;
+            overlay.offsetMax = Vector2.zero;
+            Gfx.MakeButton(overlay.gameObject, Color.white, Color.white, Color.white,
+                Close);
+
             var panel = BuildPanel(root);
             // 侧栏与页面区挂在**面板**下，不是画布根下。
             // 挂在根下时它们是对着屏幕中心定位的，只有"面板恰好居中且尺寸不变"
