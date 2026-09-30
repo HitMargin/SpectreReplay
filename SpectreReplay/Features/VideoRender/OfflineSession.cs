@@ -41,8 +41,16 @@ namespace SpectreReplay.Features.VideoRender
         private int _totalFrames;
         private string _outputPath;
         private string _rawVideoPath;
+        private string _audioPath;
         private string _tempDir;
         private bool _cancelled;
+
+        /// <summary>
+        /// 离线渲染的音频。编码器是共享的 -an（视频轨不带声音），
+        /// 所以必须自己录一份再合回去——**之前这里什么都没有**，
+        /// 于是离线渲染出来的视频是彻底无声的，而界面还显示"完成"。
+        /// </summary>
+        private readonly Audio.AudioTrackRecorder _audio = new Audio.AudioTrackRecorder();
 
         internal static bool IsRunning => _instance != null && _instance._capturing;
 
@@ -110,6 +118,15 @@ namespace SpectreReplay.Features.VideoRender
                     (ContainerMode)Settings.Container,
                     _rawVideoPath, Settings.FfmpegPath);
                 _frames.PendingSink = OnFrameReady;
+
+                // 音频：离线渲染重放整首歌，采样源同样是当前歌曲。
+                // 绑不上就只出无声视频，而不是让整场渲染失败。
+                _audioPath = Path.Combine(_tempDir, stem + ".wav");
+                if (!_audio.Bind(LiveSession.CurrentSongSource()))
+                {
+                    UnityEngine.Debug.LogWarning(
+                        "[SpectreReplay] 拿不到歌曲采样，本次将产出无声视频");
+                }
 
                 _fps = Mathf.Max(1, Settings.Fps);
                 // 总帧数 = 回放长度 × 帧率，再加收尾几秒
@@ -186,6 +203,7 @@ namespace SpectreReplay.Features.VideoRender
                 return;
             }
             PinnedSongPosition = _frameIndex / (double)_fps;
+            PushAudioForFrame();
             _frameIndex++;
             if (_frames.Request())
             {
@@ -193,6 +211,27 @@ namespace SpectreReplay.Features.VideoRender
             }
             RenderStatus.FramesDone = _frameIndex;
             RenderStatus.Progress = (float)_frameIndex / _totalFrames;
+        }
+
+        /// <summary>
+        /// 把音频栅格推进到与视频第 _frameIndex 帧对齐。
+        /// 离线渲染是逐帧确定时间轴的，所以这里按帧序号推进即可。
+        /// </summary>
+        private void PushAudioForFrame()
+        {
+            if (!_audio.IsValid)
+            {
+                return;
+            }
+            try
+            {
+                _audio.AdvanceTo(LiveSession.CurrentSongSource(), _frameIndex, Settings.Fps, out _);
+            }
+            catch (Exception ex)
+            {
+                UnityEngine.Debug.LogWarning(
+                    "[SpectreReplay] 离线音频推进失败：" + ex.Message);
+            }
         }
 
         private void OnFrameReady(byte[] pixels, int w, int h)
@@ -230,15 +269,24 @@ namespace SpectreReplay.Features.VideoRender
                         + RenderStatus.LastError);
                     return;
                 }
-                string finalPath = _rawVideoPath;
-                try
+                // 音频落盘 + 合流（跟实时录制同一条路径，见 AudioMux）
+                string finalPath;
+                if (_audio.IsValid && _audio.Save(_audioPath))
                 {
-                    File.Copy(_rawVideoPath, _outputPath, true);
-                    finalPath = _outputPath;
+                    finalPath = AudioMux.Mux(Settings.FfmpegPath, _rawVideoPath,
+                        _audioPath, _outputPath, (ContainerMode)Settings.Container);
                 }
-                catch
+                else
                 {
-                    finalPath = _rawVideoPath;
+                    try
+                    {
+                        File.Copy(_rawVideoPath, _outputPath, true);
+                        finalPath = _outputPath;
+                    }
+                    catch
+                    {
+                        finalPath = _rawVideoPath;
+                    }
                 }
                 if (cancelled)
                 {
@@ -288,6 +336,28 @@ namespace SpectreReplay.Features.VideoRender
             catch
             {
                 // 析构路径不抛
+            }
+            // 删掉中间产物。原先这里什么都不做，于是**每一次离线渲染都在
+            // _tmp 里留下一个原始视频**（现在还多一个 wav）——渲染几十次
+            // 就是几十 GB，而且用户完全不知道那些是什么。成品已经拷出去了，
+            // 中间文件没有留着的理由。
+            foreach (string p in new[] { _rawVideoPath, _audioPath })
+            {
+                if (string.IsNullOrEmpty(p))
+                {
+                    continue;
+                }
+                try
+                {
+                    if (File.Exists(p))
+                    {
+                        File.Delete(p);
+                    }
+                }
+                catch
+                {
+                    // 删不掉就算了，下一轮用的是新文件名
+                }
             }
             if (_instance == this)
             {

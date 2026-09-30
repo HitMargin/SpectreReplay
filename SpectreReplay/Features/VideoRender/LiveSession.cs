@@ -124,72 +124,8 @@ namespace SpectreReplay.Features.VideoRender
         /// 所以这一步是秒级而不是分钟级。
         /// </summary>
         private static string MuxAudio(string video, string audio, string outPath)
-        {
-            try
-            {
-                var psi = new System.Diagnostics.ProcessStartInfo(Settings.FfmpegPath)
-                {
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardError = true,
-                };
-                foreach (string a in FfmpegArgs.BuildMuxArgs(video, audio, outPath,
-                    (ContainerMode)Settings.Container))
-                {
-                    psi.ArgumentList.Add(a);
-                }
-                using (var p = System.Diagnostics.Process.Start(psi))
-                {
-                    // **先异步抽干 stderr，再等退出。**
-                    // 原来写的是 `ReadToEnd()` 之后再 `WaitForExit(180_000)`：
-                    // ReadToEnd 要一直读到流关闭才返回，ffmpeg 一旦卡住它就
-                    // 永远阻塞在那儿——**那 180 秒的看门狗根本轮不到执行**，
-                    // 整个游戏会卡在结算画面上出不来。VideoEncoder 那边用的
-                    // 是 BeginErrorReadLine，这里照它来。
-                    var err = new System.Text.StringBuilder();
-                    using (var errDone = new System.Threading.ManualResetEventSlim(false))
-                    {
-                        p.ErrorDataReceived += (_, e) =>
-                        {
-                            if (e.Data == null) { errDone.Set(); return; }
-                            lock (err) { err.AppendLine(e.Data); }
-                        };
-                        p.BeginErrorReadLine();
-
-                        if (!p.WaitForExit(180_000))
-                        {
-                            try { p.Kill(); } catch { }
-                            UnityEngine.Debug.LogWarning(
-                                "[SpectreReplay] 合流超时，已中止，保留无声视频");
-                        }
-                        else if (p.ExitCode == 0 && System.IO.File.Exists(outPath))
-                        {
-                            return outPath;
-                        }
-                        else
-                        {
-                            string text;
-                            lock (err) { text = err.ToString(); }
-                            UnityEngine.Debug.LogWarning(
-                                "[SpectreReplay] 合流失败，保留无声视频：" + text);
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                UnityEngine.Debug.LogWarning("[SpectreReplay] 合流出错：" + ex.Message);
-            }
-            try
-            {
-                System.IO.File.Copy(video, outPath, true);
-            }
-            catch
-            {
-                // 复制也失败就返回原路径
-            }
-            return System.IO.File.Exists(outPath) ? outPath : video;
-        }
+            => AudioMux.Mux(Settings.FfmpegPath, video, audio, outPath,
+                (ContainerMode)Settings.Container);
 
         private void CleanupTemp()
         {
@@ -253,7 +189,7 @@ namespace SpectreReplay.Features.VideoRender
                 // 而不是让整场录制失败——画面本身是有价值的。
                 _audioPath = System.IO.Path.Combine(_tempDir,
                     System.IO.Path.GetFileNameWithoutExtension(_rawVideoPath) + ".wav");
-                bool audioOk = _audio.Bind(CurrentSongSource());
+                bool audioOk = _audio.Bind(LiveSession.CurrentSongSource());
                 if (!audioOk)
                 {
                     UnityEngine.Debug.LogWarning(
@@ -429,7 +365,7 @@ namespace SpectreReplay.Features.VideoRender
             }
             try
             {
-                _audio.AdvanceTo(CurrentSongSource(), _frameIndex, Settings.Fps, out _);
+                _audio.AdvanceTo(LiveSession.CurrentSongSource(), _frameIndex, Settings.Fps, out _);
             }
             catch (Exception ex)
             {
@@ -437,7 +373,10 @@ namespace SpectreReplay.Features.VideoRender
             }
         }
 
-        private static UnityEngine.AudioSource CurrentSongSource()
+        // 当前歌曲的 AudioSource。由 LiveSession 持有但对 OfflineSession 也开放
+        // ——曾经只有 LiveSession 有这个方法，OfflineSession 想录音频时就得复制
+        // 一份，两份迟早会走偏。
+        internal static UnityEngine.AudioSource CurrentSongSource()
         {
             try
             {
