@@ -74,6 +74,8 @@ namespace SpectreReplay.Ui
             {
                 return;
             }
+            // 每次打开都重取：玩家可能在设置里换过语言
+            Loc.RefreshLanguage();
             UiFonts.Invalidate();
             LiveTexts.Clear();
             Build();
@@ -172,14 +174,19 @@ namespace SpectreReplay.Ui
             for (int i = 0; i < Pages.Count; i++)
             {
                 PageDef p = Pages[i];
+                // 只有一页的分组不画标题。现在每个分组恰好一页，画出来就是
+                // "录制 / 录制" 这种紧挨着的重复——纯噪音，还占掉一行高度。
                 if (p.Group != lastGroup)
                 {
                     lastGroup = p.Group;
-                    var gh = Gfx.Rect(side, "GroupHead", 12f, y,
-                        Theme.SidebarW - 24f, 30f, Theme.GroupHead, false);
-                    Gfx.TextFill(gh, "Text", Loc.Cat(p.Group).ToUpperInvariant(),
-                        Theme.FontTiny, Theme.TextMuted);
-                    y += 30f + 6f;
+                    if (CountGroup(p.Group) > 1)
+                    {
+                        var gh = Gfx.Rect(side, "GroupHead", 12f, y,
+                            Theme.SidebarW - 24f, 30f, Theme.GroupHead, false);
+                        Gfx.TextFill(gh, "Text", Loc.Cat(p.Group).ToUpperInvariant(),
+                            Theme.FontTiny, Theme.TextMuted);
+                        y += 30f + 6f;
+                    }
                 }
                 var bg = Gfx.Rect(side, "Nav" + i, 10f, y, Theme.SidebarW - 20f, Theme.NavH,
                     Theme.NavIdle, true);
@@ -191,6 +198,20 @@ namespace SpectreReplay.Ui
                 p.Label = lbl;
                 y += Theme.NavH + 4f;
             }
+        }
+
+        /// <summary>某分组下有几页。只有一页时不画分组标题（见 BuildSidebar）。</summary>
+        private static int CountGroup(string group)
+        {
+            int n = 0;
+            for (int i = 0; i < Pages.Count; i++)
+            {
+                if (Pages[i].Group == group)
+                {
+                    n++;
+                }
+            }
+            return n;
         }
 
         private static void BuildPageArea(RectTransform panel)

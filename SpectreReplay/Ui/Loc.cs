@@ -1,11 +1,13 @@
+using UnityEngine;
+
 namespace SpectreReplay.Ui
 {
     /// <summary>
-    /// 界面文案的最小实现。
+    /// 界面文案。中文/英文两套，按游戏语言自动选。
     ///
-    /// 与 Spectre 的 LocalizationManager 不同：这里不建 14 语言大表，先把
-    /// 中文/英文两种做实（键缺失时回退到键名本身，便于一眼看出漏了哪条）。
-    /// 后续要补语言只需往 Dictionaries 里加。
+    /// 与 Spectre 的 LocalizationManager 不同：这里不建 14 语言大表，
+    /// 先把两种做实。选不中时回退到另一套，再不中才露出键名——把键名露给
+    /// 玩家是最糟的兜底，只该出现在"真的漏了"的时候。
     /// </summary>
     internal static class Loc
     {
@@ -40,6 +42,14 @@ namespace SpectreReplay.Ui
                 { "render.width", "宽度" },
                 { "render.height", "高度" },
                 { "render.surface", "画面来源" },
+                { "render.codec.auto", "自动" },
+                { "render.codec.fastest", "最快" },
+                { "render.codec.quality", "画质优先" },
+                { "render.codec.cpu", "仅 CPU" },
+                { "render.quality.low", "低" },
+                { "render.quality.standard", "标准" },
+                { "render.quality.high", "高" },
+                { "render.quality.extreme", "极高" },
                 { "render.surface.clean", "纯净相机（不含界面）" },
                 { "render.surface.screen", "游戏画面（含界面）" },
                 { "render.codec", "编码器" },
@@ -98,6 +108,14 @@ namespace SpectreReplay.Ui
                 { "render.width", "Width" },
                 { "render.height", "Height" },
                 { "render.surface", "Frame source" },
+                { "render.codec.auto", "Auto" },
+                { "render.codec.fastest", "Fastest" },
+                { "render.codec.quality", "Quality first" },
+                { "render.codec.cpu", "CPU only" },
+                { "render.quality.low", "Low" },
+                { "render.quality.standard", "Standard" },
+                { "render.quality.high", "High" },
+                { "render.quality.extreme", "Extreme" },
                 { "render.surface.clean", "Clean camera (no UI)" },
                 { "render.surface.screen", "Game screen (with UI)" },
                 { "render.codec", "Encoder" },
@@ -129,21 +147,55 @@ namespace SpectreReplay.Ui
             };
 
         internal static string Cat(string category) => T("cat." + category);
+
+        /// <summary>
+        /// 界面用哪种语言。<see cref="RefreshLanguage"/> 会按游戏当前语言改它。
+        ///
+        /// 之前这里是写死的"英文优先"——不管玩家把游戏设成什么语言，
+        /// 中文玩家看到的都是英文界面。
+        /// </summary>
+        internal static bool UseChinese = true;
+
+        /// <summary>
+        /// 按游戏的语言设置选中文或英文。游戏把语言放在
+        /// <c>RDString.language</c>（public static SystemLanguage）。
+        /// 面板每次打开都调一次：玩家在设置里换语言后，模组界���跟着变。
+        /// </summary>
+        internal static void RefreshLanguage()
+        {
+            try
+            {
+                var l = RDString.language;
+                UseChinese = l == SystemLanguage.Chinese
+                    || l == SystemLanguage.ChineseSimplified
+                    || l == SystemLanguage.ChineseTraditional;
+            }
+            catch
+            {
+                // 游戏还没初始化：保持中文（用户是中文用户）
+                UseChinese = true;
+            }
+        }
+
         internal static string T(string key)
         {
             if (string.IsNullOrEmpty(key))
             {
                 return "";
             }
+            if (UseChinese && Zh.TryGetValue(key, out string zh))
+            {
+                return zh;
+            }
             if (En.TryGetValue(key, out string en))
             {
                 return en;
             }
-            if (Zh.TryGetValue(key, out string zh))
+            if (Zh.TryGetValue(key, out string zh2))
             {
-                return zh;
+                return zh2;      // 另一种语言漏翻时兜底，别把键名露给玩家
             }
-            return key;      // 漏翻时把键名露出来，比空白好排查
+            return key;          // 两种语言都漏了才露键名——那是真漏
         }
     }
 }

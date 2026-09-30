@@ -62,6 +62,21 @@ namespace UnityEngine
         public TMPro.TMP_FontAsset japaneseFontTMPro;
     }
 
+    public enum SystemLanguage
+    {
+        English, Chinese, ChineseSimplified, ChineseTraditional,
+        Japanese, Korean,
+    }
+
+    /// <summary>
+    /// 游戏的语言设置。与真实 RDString.language 同名同类型，
+    /// Loc.RefreshLanguage 直接读它。
+    /// </summary>
+    public static class RDString
+    {
+        public static SystemLanguage language = SystemLanguage.English;
+    }
+
     /// <summary>Resources 加载的开关：模拟"资源在"与"资源不在"。</summary>
     public static class Resources
     {

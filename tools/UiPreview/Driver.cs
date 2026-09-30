@@ -28,6 +28,8 @@ namespace UiPreview
             Directory.CreateDirectory(outDir);
             // 字体回退链先验：它决定界面上有没有字，而字形本身离屏验不了
             int fontFail = FontCheck.Run();
+            // 文案完整性：漏一个键，界面上就是空白或原始键名
+            int locFail = LocCheck.Run(LocCheck.CollectUsedKeys());
 
             var pages = new (string Key, Action<PageBuilder> Build)[]
             {
@@ -42,9 +44,21 @@ namespace UiPreview
             }
 
             int totalOverflow = 0;
-            for (int i = 0; i < pages.Length; i++)
+            // 中英文都要渲染：**中文字宽和英文不一样**，只验一种等于没验。
+            // 玩家把游戏设成中文时看到的就是中文界面。
+            foreach (var zh in new[] { true, false })
             {
+                Loc.UseChinese = zh;
+                string suffix = zh ? ".zh" : ".en";
+                Console.WriteLine(zh ? "  ── 中文 ──" : "  ── 英文 ──");
+                for (int i = 0; i < pages.Length; i++)
+                {
                 var key = pages[i].Key;
+                // 回放页有两种状态（有回放/无回放），两种都画。
+                // 空列表那条分支的行数最少，恰恰是最容易在某次改动里塌掉的。
+                Pages.ReplayCount = key == "playback"
+                    ? (zh ? 2 : 0)
+                    : 2;
 
                 // 虚拟屏幕：锚点全零、轴心全零、偏移为零 —— 就是坐标原点
                 var screenGo = new GameObject("Screen", typeof(RectTransform));
@@ -67,15 +81,14 @@ namespace UiPreview
                     });
 
                 var r = new Renderer((int)CanvasW, (int)CanvasH);
-                if (i == 0)
+                if (i == 0 && zh)
                 {
                     Console.WriteLine("  自检: " + r.SelfTest());
                 }
                 r.Draw(screen);
-                Console.WriteLine($"    DrawText 调用 {r.DrawTextCalls} 次");
-                string path = Path.Combine(outDir, key + ".png");
+                string path = Path.Combine(outDir, key + suffix + ".png");
                 r.Save(path);
-                Console.WriteLine($"  {key,-9} → {path}");
+                Console.WriteLine($"    {key,-9} → {Path.GetFileName(path)}");
                 // 先记住根节点：HitTest 要从根开始走
                 _screen = screen;
                 if (args.Length > 2 && args[1] == "--dump"
@@ -83,7 +96,8 @@ namespace UiPreview
                 {
                     Dump(screen, 0);
                 }
-                if (args.Length > 1 && args[1] == "--click")
+                // 点击测试与语言无关（几何相同），只跑一遍就够
+                if (args.Length > 1 && args[1] == "--click" && zh)
                 {
                     RunClickTests(key, screen);
                 }
@@ -92,7 +106,9 @@ namespace UiPreview
                     Console.WriteLine("      文字溢出 " + o);
                 }
                 totalOverflow += r.Overflows.Count;
+                }
             }
+            Loc.UseChinese = true;
 
             Console.WriteLine();
             Console.WriteLine(totalOverflow == 0
@@ -107,7 +123,12 @@ namespace UiPreview
             {
                 Console.WriteLine($"  ✗ 字体回退链有 {fontFail} 处不对");
             }
-            return totalOverflow == 0 && ClickFailures == 0 && fontFail == 0 ? 0 : 1;
+            if (locFail > 0)
+            {
+                Console.WriteLine($"  ✗ 文案有 {locFail} 处缺漏");
+            }
+            return totalOverflow == 0 && ClickFailures == 0
+                && fontFail == 0 && locFail == 0 ? 0 : 1;
         }
 
         private static int ClickFailures;

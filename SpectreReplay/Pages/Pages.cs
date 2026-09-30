@@ -94,10 +94,19 @@ namespace SpectreReplay.Pages
                 Loc.T("render.surface.clean"),
                 Loc.T("render.surface.screen"),
             }, Settings.Surface, i => Commit(() => Settings.Surface = i));
-            b.Drop("render.codec", new[] { "auto", "fastest", "quality", "CPU" },
-                Settings.Encoder, i => Commit(() => Settings.Encoder = i));
-            b.Drop("render.quality", new[] { "low", "standard", "high", "extreme" },
-                Settings.Quality, i => Commit(() => Settings.Quality = i));
+            // 选项文字走文案表：写死 "auto"/"low" 的话，中文界面里
+            // 会夹着几个英文单词，看着像没做完。格式名（mp4/mkv/webm）
+            // 保持原样——那是实际的文件格式，翻译了反而对不上。
+            b.Drop("render.codec", new[]
+            {
+                Loc.T("render.codec.auto"), Loc.T("render.codec.fastest"),
+                Loc.T("render.codec.quality"), Loc.T("render.codec.cpu"),
+            }, Settings.Encoder, i => Commit(() => Settings.Encoder = i));
+            b.Drop("render.quality", new[]
+            {
+                Loc.T("render.quality.low"), Loc.T("render.quality.standard"),
+                Loc.T("render.quality.high"), Loc.T("render.quality.extreme"),
+            }, Settings.Quality, i => Commit(() => Settings.Quality = i));
             b.Drop("render.format", new[] { "mp4", "mkv", "webm" },
                 Settings.Container, i => Commit(() => Settings.Container = i));
 
