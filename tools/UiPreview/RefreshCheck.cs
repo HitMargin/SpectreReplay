@@ -84,6 +84,20 @@ namespace UiPreview
                         + "  ← 拖动字号滑条面板却纹丝不动");
                     fail++;
                 }
+
+                // 换热键时标题栏的提示必须跟着换。分开改的话，顶栏会一直
+                // 写着旧的键名：用户照着提示按，怎么按都没反应。
+                PanelHost.ApplyHotkey(282 + 4);       // F5
+                string hint = PanelHost.HotkeyHint;
+                bool hintOk = PanelHost.Hotkey == 286
+                    && hint.Contains("F5") && !hint.Contains("F9");
+                Console.WriteLine($"    {(hintOk ? "✓" : "✗")} 换热键后提示与实际一致"
+                    + $"  → 按键 {PanelHost.Hotkey}，提示「{hint}」");
+                if (!hintOk)
+                {
+                    fail++;
+                }
+                PanelHost.ApplyHotkey(290);           // 换回 F9
             }
             finally
             {

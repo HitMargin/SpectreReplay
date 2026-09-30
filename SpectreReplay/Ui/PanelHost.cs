@@ -42,6 +42,31 @@ namespace SpectreReplay.Ui
 
         internal static void SetHotkeyHint(string text) => HotkeyHint = text;
 
+        /// <summary>
+        /// 换热键：把生效的键与标题栏的提示**一起**改。
+        ///
+        /// 之前这两件事是分开放的——设置页改了 Hotkey，顶栏却还写着
+        /// "F9 开关界面 · ESC 关闭"。用户看提示去按 F9，怎么按都没反应，
+        /// 而真正生效的键只有滑条上那个数字告诉他。两处一起改才不会出现
+        /// "提示说的和实际做的不是一个键"。
+        /// </summary>
+        internal static void ApplyHotkey(int keyCode)
+        {
+            Hotkey = keyCode;
+            SetHotkeyHint(string.Format(Loc.T("ui.hint"), KeyName(keyCode)));
+        }
+
+        /// <summary>F1..F12 → "F1".."F12"；别的键退回键名本身。</summary>
+        private static string KeyName(int keyCode)
+        {
+            // KeyCode: F1=282 … F12=293
+            if (keyCode >= 282 && keyCode <= 293)
+            {
+                return "F" + (keyCode - 281);
+            }
+            return ((KeyCode)keyCode).ToString();
+        }
+
         // ── 注册 ────────────────────────────────────────────────
         internal static void Page(string key, string group, string titleKey,
             Action<PageBuilder> build)

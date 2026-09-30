@@ -148,7 +148,9 @@ namespace SpectreReplay.Pages
             b.Slider("about.hotkey", Settings.Hotkey, 282f, 293f, true, v =>
             {
                 Settings.Hotkey = (int)v;
-                PanelHost.Hotkey = Settings.Hotkey;
+                // 热键与标题栏提示一起改：只改 Hotkey 的话，顶栏还写着
+                // "F9 开关界面"，用户照着提示按 F9 怎么都没反应。
+                PanelHost.ApplyHotkey(Settings.Hotkey);
                 Commit(null);
             }, v => KeyName((KeyCode)(int)v));
             b.Slider("about.textscale", Settings.TextScale, 0.7f, 1.6f, false,
