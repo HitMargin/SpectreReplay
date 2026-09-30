@@ -48,13 +48,29 @@ namespace SpectreReplay.Features.Recording
             }
         }
 
+        /// <summary>
+        /// 重开 = 一次尝试结束。
+        ///
+        /// 绑参名这件事踩过坑：Harmony 是**按参数名**把补丁方法的形参对到
+        /// 原方法形参上的，而这个方法真正的形参是
+        /// <c>Start_Rewind(int _currentSeqID = -1)</c>——是"回退到第几个 seqID"，
+        /// 不是"第几个检查点"。之前按 checkpointNum 命名，名字对不上直接抛异常，
+        /// 补丁挂不上（日志里那条 Start_Rewind（Exception））。
+        /// 这里干脆不要形参：重开这件事本身不需要知道回退到哪。
+        /// </summary>
         [GamePatch(typeof(scrController), "Start_Rewind", PatchKind.Postfix, "recording")]
-        private static void RewindPostfix(scrController __instance, int checkpointNum)
+        private static void RewindPostfix()
         {
-            if (checkpointNum == 0)
+            try
             {
-                KeyRecorder.End(false);
+                // 一次尝试 = 一个回放文件。失败后重开就把上一段收尾落盘，
+                // 用户的每次尝试能单独回看，而不是所有尝试挤在一个文件里。
+                KeyRecorder.End(Settings.AutoSave);
                 VideoRender.RenderService.OnLevelEnd();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError("[SpectreReplay] 重开收尾失败：" + ex);
             }
         }
 

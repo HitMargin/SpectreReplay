@@ -102,6 +102,22 @@ namespace SpectreReplay.Ui
             rootRt.offsetMin = Vector2.zero;
             rootRt.offsetMax = Vector2.zero;
 
+            // Canvas 挂在根上——缺了它，整棵 RectTransform 层级根本不会被渲染。
+            // 这不是可选组件：Unity 只渲染挂在 Canvas 下的 Graphic。
+            var canvas = _root.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            // 排序值取高值，确保盖在游戏自己的 UI 之上
+            canvas.sortingOrder = 32760;
+            canvas.pixelPerfect = false;
+            var scaler = _root.AddComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+            scaler.matchWidthOrHeight = 0.5f;
+            _root.AddComponent<GraphicRaycaster>();
+
+            EnsureEventSystem();
+
             // 全屏遮罩：点击即关。raycastTarget 必须为真才能吃掉点击。
             var mask = Row.Panel(rootRt, "Mask", new Color(0f, 0f, 0f, 0.55f));
             mask.rectTransform.anchorMin = Vector2.zero;
@@ -127,6 +143,25 @@ namespace SpectreReplay.Ui
             {
                 Show(0);
             }
+            UnityEngine.Debug.Log("[SpectreReplay] 界面已构建（页面 " + Nav.Count + " 个）");
+        }
+
+        /// <summary>
+        /// UI 要能点，必须有 EventSystem 在场景里。游戏自己通常有一个，
+        /// 但关卡切换/编辑器里未必；没有就自己建一个。
+        /// </summary>
+        private static void EnsureEventSystem()
+        {
+            // 不用 FindObjectOfType：它在这版 Unity 已废弃，且全场景扫描有成本。
+            // 只在 Build 的那一刻调一次，用 FindAny 语义足够。
+            if (UnityEngine.Object.FindAnyObjectByType<UnityEngine.EventSystems.EventSystem>() != null)
+            {
+                return;
+            }
+            var go = new GameObject("SpectreReplayEventSystem",
+                typeof(UnityEngine.EventSystems.EventSystem),
+                typeof(UnityEngine.EventSystems.StandaloneInputModule));
+            UnityEngine.Object.DontDestroyOnLoad(go);
         }
 
         private static void BuildSidebar(RectTransform parent)
@@ -286,6 +321,11 @@ namespace SpectreReplay.Ui
             bool hotkeyDown = UnityEngine.Input.GetKeyDown((KeyCode)UiHost.Hotkey);
             if (hotkeyDown)
             {
+                // 明确记录：否则"按了没反应"分不清是热键没读到还是界面没画出来。
+                // 这两种情况的修法完全不同。
+                UnityEngine.Debug.Log("[SpectreReplay] 收到界面热键 "
+                    + UiHost.Hotkey + "（" + SpectreReplay.Pages.SettingsPages.KeyName(
+                        (KeyCode)UiHost.Hotkey) + "）");
                 UiHost.Toggle();
             }
             if (UiHost.IsOpen && UnityEngine.Input.GetKeyDown(KeyCode.Escape))
