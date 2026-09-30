@@ -28,6 +28,7 @@ namespace UiPreview
         internal float FontSize = 14f;
         internal TextAlignmentOptions Align;
         internal bool IsImage, IsButton;
+        /// <summary>挂在这个节点上的 Button 数量。命中它才算点得动。</summary>        internal int Buttons;
         /// <summary>RectMask2D：子树要按本节点的矩形裁剪。预览必须实现，
         /// 否则超出视口的内容会被画到面板外，半透明白底压着背景色混成一片
         /// 怪色，看着像配色坏了，其实是没有裁剪。</summary>
@@ -45,6 +46,54 @@ namespace UiPreview
             return false;
         }
 
+        /// <summary>
+        /// 命中测试：模拟 GraphicRaycaster，找出点 (x, y) 落在哪个 raycastTarget 上。
+        ///
+        /// 用户报过"设置菜单点不动"。光看 raycastTarget 标志不够——那只能说明
+        /// 元素**愿意**吃射线，还要确认**确实吃到了**：有没有别的元素盖在上面、
+        /// 或者命中的是个什么都不做的容器。Unity 的规则是"画家顺序里最后
+        /// 绘制（最靠上）且 rect 含该点的那一个"，这里照此实现。
+        /// </summary>
+        internal static Node HitTest(Node root, float x, float y)
+        {
+            Node best = null;
+            int bestDepth = -1;
+            Collect(root, x, y, 0, ref best, ref bestDepth);
+            return best;
+        }
+
+        private static void Collect(Node n, float x, float y, int depth,
+            ref Node best, ref int bestDepth)
+        {
+            bool contains = x >= n.X && x <= n.X + n.W
+                         && y >= n.Y && y <= n.Y + n.H;
+            if (n.Raycast && contains && depth >= bestDepth)
+            {
+                best = n;
+                bestDepth = depth;
+            }
+            // 不含该点的子树里不会有命中（子矩形必然在父矩形内或相交）
+            if (!contains && !n.Clips)
+            {
+                // 仍然要往下走：子件可能被 stretch 到父外（面板居中那类）
+            }
+            foreach (var k in n.Kids)
+            {
+                Collect(k, x, y, depth + 1, ref best, ref bestDepth);
+            }
+        }
+
+        /// <summary>节点路径，如 "Panel/Sidebar/Nav0"。</summary>
+        internal static string Path(Node n)
+        {
+            var parts = new List<string>();
+            for (var c = n; c != null && c.Go != null; c = c.Parent)
+            {
+                parts.Insert(0, c.Go.name);
+            }
+            return string.Join("/", parts);
+        }
+
         internal static Node Walk(Transform t, Node parent)
         {
             var n = new Node { Parent = parent, Go = t.gameObject };
@@ -59,6 +108,7 @@ namespace UiPreview
             {
                 n.IsButton = true;
             }
+            n.Buttons = 1;
             n.Clips = t.gameObject.GetComponent<UnityEngine.UI.RectMask2D>() != null;
             var tmp = t.gameObject.GetComponent<TMP_Text>();
             if (tmp != null)

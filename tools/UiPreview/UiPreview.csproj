@@ -34,6 +34,7 @@
     <Compile Include="..\..\SpectreReplay\Ui\Gfx.cs" Link="Real\Gfx.cs" />
     <Compile Include="..\..\SpectreReplay\Ui\PageBuilder.cs" Link="Real\PageBuilder.cs" />
     <Compile Include="..\..\SpectreReplay\Ui\PanelHost.cs" Link="Real\PanelHost.cs" />
+    <Compile Include="..\..\SpectreReplay\Ui\UiFonts.cs" Link="Real\UiFonts.cs" />
   </ItemGroup>
 
   <ItemGroup>

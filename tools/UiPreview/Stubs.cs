@@ -47,6 +47,39 @@ namespace UnityEngine
         public static int Abs(int a) => a < 0 ? -a : a;
     }
 
+    /// <summary>
+    /// 游戏的常量资源（ScriptableObject）。UiFonts 从这里取中日韩字体。
+    /// 桩件做成可赋值，才能把字体回退链的每条分支都跑一遍。
+    /// </summary>
+    public class RDConstants
+    {
+        public static RDConstants data;
+
+        public TMPro.TMP_FontAsset latinFontTMPro;
+        public TMPro.TMP_FontAsset chineseFontTMPro;
+        public TMPro.TMP_FontAsset chineseFontTMProDuplicate;
+        public TMPro.TMP_FontAsset koreanFontTMPro;
+        public TMPro.TMP_FontAsset japaneseFontTMPro;
+    }
+
+    /// <summary>Resources 加载的开关：模拟"资源在"与"资源不在"。</summary>
+    public static class Resources
+    {
+        /// <summary>SourceHanSans 资源是否存在。</summary>
+        public static bool HasSourceHanSans = true;
+
+        public static T Load<T>(string path) where T : Object
+        {
+            if (typeof(T).Name == "TMP_FontAsset" && path.StartsWith("SourceHanSans"))
+            {
+                return HasSourceHanSans
+                    ? (T)(Object)new TMPro.TMP_FontAsset { name = "SourceHanSans" }
+                    : null;
+            }
+            return null;
+        }
+    }
+
     public class Object
     {
         public string name;
@@ -349,6 +382,11 @@ namespace TMPro
     }
 
     public class TMP_FontAsset : Object { }
+
+    public static class TMP_Settings
+    {
+        public static TMP_FontAsset defaultFontAsset;
+    }
 
     public class TextMeshProUGUI : TMP_Text { }
 
