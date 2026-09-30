@@ -25,6 +25,9 @@ namespace SpectreReplay
             // 功能门控：设置页改开关后由 Settings.Commit 触发 PatchLoader.Refresh
             Patching.FeatureGate.Declare("recording", () => Settings.RecordingOn);
             Patching.FeatureGate.Declare("render", () => Settings.RenderOn);
+            // 回放泵只在真的载入回放时才有意义；常驻挂着会每帧做一次
+            // songposition 读取与游标比较（虽廉价，但没理由付）。
+            Patching.FeatureGate.Declare("playback", () => Features.Playback.PlaybackEngine.IsPlaying);
             Patching.PatchLoader.Register();
 
             // 进关检测常驻（不是补丁，是状态轮询），

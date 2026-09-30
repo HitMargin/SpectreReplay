@@ -26,6 +26,7 @@ namespace SpectreReplay.Features.Recording
         {
             internal long Ticks;
             internal ushort Key;
+            internal int Label;
             internal bool IsPressed;
         }
 
@@ -211,6 +212,7 @@ namespace SpectreReplay.Features.Recording
             {
                 Ticks = ev.GetTimeInTicks(),
                 Key = ev.Key,
+                Label = (int)ev.Label,
                 IsPressed = ev.Type == SkyHook.EventType.KeyPressed,
             };
             lock (Gate)
@@ -274,6 +276,7 @@ namespace SpectreReplay.Features.Recording
                 d.Keys.Add(new ReplayKeyEvent
                 {
                     Key = e.Key,
+                    Label = e.Label,
                     IsPressed = e.IsPressed,
                     SongPosition = pos,
                 });

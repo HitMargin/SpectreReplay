@@ -9,6 +9,15 @@ namespace SpectreReplay.Features.Recording
         /// <summary>Unity 的 KeyCode（ushort 存，兼容旧回放格式）。</summary>
         internal ushort Key;
 
+        /// <summary>
+        /// SkyHook 的 KeyLabel（枚举序号，存 int）。
+        /// 必须一起存：游戏收到事件后会用 <c>new AsyncKeyCode(element.Key, element.Label)</c>
+        /// 构造按键标识，只给 Key 不给 Label 的话标识对不上，判定根本不会触发。
+        /// 两者之间可用 SkyHookKeyMapper.NativeKeyCodeToKeyLabel 互转，
+        /// 但录制时的 Label 才是权威值（同一 KeyCode 在不同布局下 Label 可能不同）。
+        /// </summary>
+        internal int Label;
+
         /// <summary>true = 按下，false = 松开。</summary>
         internal bool IsPressed;
 
@@ -91,6 +100,7 @@ namespace SpectreReplay.Features.Recording
                 foreach (var k in data.Keys)
                 {
                     w.Write(k.Key);
+                    w.Write(k.Label);
                     w.Write(k.IsPressed);
                     w.Write(k.SongPosition);
                 }
@@ -147,6 +157,7 @@ namespace SpectreReplay.Features.Recording
                     d.Keys.Add(new ReplayKeyEvent
                     {
                         Key = r.ReadUInt16(),
+                        Label = r.ReadInt32(),
                         IsPressed = r.ReadBoolean(),
                         SongPosition = r.ReadDouble(),
                     });

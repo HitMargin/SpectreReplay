@@ -43,7 +43,11 @@ namespace SpectreReplay.Features.VideoRender
         private byte[] _lastFrame;          // 复制的来源
         private string _outputPath;
         private string _rawVideoPath;
+        private string _audioPath;
         private string _tempDir;
+
+        // 音频与视频走同一个帧栅格：每产出一帧就补齐这一帧该有的采样数。
+        private readonly Audio.AudioTrackRecorder _audio = new Audio.AudioTrackRecorder();
 
         internal bool IsCapturing => _capturing;
 
@@ -98,11 +102,7 @@ namespace SpectreReplay.Features.VideoRender
                 _encoder?.Finish(3000);
                 _frames?.Dispose();
                 _frames = null;
-                if (!string.IsNullOrEmpty(_rawVideoPath)
-                    && System.IO.File.Exists(_rawVideoPath))
-                {
-                    System.IO.File.Delete(_rawVideoPath);
-                }
+                CleanupTemp();
             }
             catch (Exception ex)
             {
@@ -117,6 +117,79 @@ namespace SpectreReplay.Features.VideoRender
         }
 
         private bool cancelled;
+
+        /// <summary>
+        /// 第二次 ffmpeg：把音频贴到已编码好的视频上。
+        /// <c>-c:v copy</c> 是关键——不重编码画面，只是重新封装，
+        /// 所以这一步是秒级而不是分钟级。
+        /// </summary>
+        private static string MuxAudio(string video, string audio, string outPath)
+        {
+            try
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo(Settings.FfmpegPath)
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardError = true,
+                };
+                foreach (string a in new[]
+                {
+                    "-y", "-i", video, "-i", audio,
+                    "-c:v", "copy",        // 画面直接复制，不重编码
+                    "-c:a", "aac",
+                    "-b:a", "192k",
+                    "-shortest",           // 以最短的流为准，避免尾部空音频
+                    outPath,
+                })
+                {
+                    psi.ArgumentList.Add(a);
+                }
+                using (var p = System.Diagnostics.Process.Start(psi))
+                {
+                    // stderr 必须读走，否则管道满时 ffmpeg 会阻塞
+                    string err = p.StandardError.ReadToEnd();
+                    p.WaitForExit(180_000);
+                    if (p.ExitCode == 0 && System.IO.File.Exists(outPath))
+                    {
+                        return outPath;
+                    }
+                    UnityEngine.Debug.LogWarning(
+                        "[SpectreReplay] 合流失败，保留无声视频：" + err);
+                }
+            }
+            catch (Exception ex)
+            {
+                UnityEngine.Debug.LogWarning("[SpectreReplay] 合流出错：" + ex.Message);
+            }
+            try
+            {
+                System.IO.File.Copy(video, outPath, true);
+            }
+            catch
+            {
+                // 复制也失败就返回原路径
+            }
+            return System.IO.File.Exists(outPath) ? outPath : video;
+        }
+
+        private void CleanupTemp()
+        {
+            foreach (string p in new[] { _rawVideoPath, _audioPath })
+            {
+                try
+                {
+                    if (!string.IsNullOrEmpty(p) && System.IO.File.Exists(p))
+                    {
+                        System.IO.File.Delete(p);
+                    }
+                }
+                catch
+                {
+                    // 临时文件删不掉不影响成品
+                }
+            }
+        }
 
         // ── 录制 ────────────────────────────────────────────────
         private void StartCapture()
@@ -157,6 +230,17 @@ namespace SpectreReplay.Features.VideoRender
                     _rawVideoPath, Settings.FfmpegPath);
 
                 _frames.PendingSink = OnFrameReady;
+
+                // 音频：绑到当前正在播的歌曲。绑不上就只出无声视频，
+                // 而不是让整场录制失败——画面本身是有价值的。
+                _audioPath = System.IO.Path.Combine(_tempDir,
+                    System.IO.Path.GetFileNameWithoutExtension(_rawVideoPath) + ".wav");
+                bool audioOk = _audio.Bind(CurrentSongSource());
+                if (!audioOk)
+                {
+                    UnityEngine.Debug.LogWarning(
+                        "[SpectreReplay] 拿不到歌曲采样，本次将产出无声视频");
+                }
 
                 _clock.Restart();
                 _startWall = Now();
@@ -208,10 +292,32 @@ namespace SpectreReplay.Features.VideoRender
                     Debug.LogError("[SpectreReplay] 编码失败：" + RenderStatus.LastError);
                     return;
                 }
+
+                // 音频落盘 + 合流。合流走第二次 ffmpeg，-c:v copy 不重编码，
+                // 只是把音轨贴到已有的视频流上——几秒钟的事。
+                string finalPath = _rawVideoPath;
+                if (_audio.IsValid && _audio.Save(_audioPath))
+                {
+                    finalPath = MuxAudio(_rawVideoPath, _audioPath, _outputPath);
+                }
+                else
+                {
+                    // 没音频时直接用裸视频改名，不留 _final 这种中间名
+                    try
+                    {
+                        System.IO.File.Copy(_rawVideoPath, _outputPath, true);
+                    }
+                    catch
+                    {
+                        finalPath = _rawVideoPath;
+                    }
+                }
+                CleanupTemp();
+
                 RenderStatus.Current = RenderStatus.State.Done;
-                RenderStatus.LastOutput = _outputPath;
+                RenderStatus.LastOutput = finalPath;
                 RenderStatus.FramesDone = _frameIndex;
-                Debug.Log("[SpectreReplay] 录制完成：" + _outputPath
+                Debug.Log("[SpectreReplay] 录制完成：" + finalPath
                     + "（" + _frameIndex + " 帧，补 " + _duplicated + " 帧，跳 " + _skipped + " 帧，"
                     + (int)_clock.Elapsed.TotalSeconds + "s）");
             }
@@ -263,11 +369,13 @@ namespace SpectreReplay.Features.VideoRender
                 _encoder.Submit(copy);
                 _duplicated++;
                 _frameIndex++;
+                PushAudioForFrame();
             }
             else
             {
                 _skipped++;
                 _frameIndex++;   // 帧序号照走，音画栅格才不会错位
+                PushAudioForFrame();
             }
             UpdateStatus();
         }
@@ -287,7 +395,40 @@ namespace SpectreReplay.Features.VideoRender
             _lastFrame = pixels;
             _encoder.Submit(pixels);
             _frameIndex++;
+            PushAudioForFrame();
             UpdateStatus();
+        }
+
+        /// <summary>
+        /// 把音频栅格推进到与视频第 frameIndex 帧对齐。
+        /// 视频补帧/跳帧时这一步同样会走——帧序号连续，音频才连续。
+        /// </summary>
+        private void PushAudioForFrame()
+        {
+            if (!_audio.IsValid)
+            {
+                return;
+            }
+            try
+            {
+                _audio.AdvanceTo(CurrentSongSource(), _frameIndex, Settings.Fps, out _);
+            }
+            catch (Exception ex)
+            {
+                UnityEngine.Debug.LogWarning("[SpectreReplay] 音频推进失败：" + ex.Message);
+            }
+        }
+
+        private static UnityEngine.AudioSource CurrentSongSource()
+        {
+            try
+            {
+                return scrConductor.instance?.song;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private int _poolFrameSize;

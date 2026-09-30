@@ -34,7 +34,45 @@ namespace SpectreReplay.Features.VideoRender
             }
             else
             {
-                OfflineSession.Start();
+                // 离线模式需要一个回放文件：取最近那一个。
+                // 离线渲染的前提本来就已经在关卡里，再让用户去挑文件是多余的一步。
+                string recent = LatestReplay();
+                if (string.IsNullOrEmpty(recent))
+                {
+                    RenderStatus.Current = RenderStatus.State.Failed;
+                    RenderStatus.LastError = "没有可用的回放文件";
+                    return;
+                }
+                OfflineSession.Start(recent);
+            }
+        }
+
+        /// <summary>按修改时间取最新的 .srp；找不到返回空串。</summary>
+        internal static string LatestReplay()
+        {
+            try
+            {
+                string dir = Settings.ReplayDir;
+                if (!System.IO.Directory.Exists(dir))
+                {
+                    return "";
+                }
+                string best = null;
+                long bestTime = long.MinValue;
+                foreach (string f in System.IO.Directory.GetFiles(dir, "*.srp"))
+                {
+                    long t = System.IO.File.GetLastWriteTimeUtc(f).Ticks;
+                    if (t > bestTime)
+                    {
+                        bestTime = t;
+                        best = f;
+                    }
+                }
+                return best ?? "";
+            }
+            catch
+            {
+                return "";
             }
         }
 
@@ -77,12 +115,5 @@ namespace SpectreReplay.Features.VideoRender
                     : RenderStatus.State.Offline)
                 : RenderStatus.State.Idle;
         }
-    }
-
-    /// <summary>离线会话（重跑回放逐帧捕获）。本轮先落占位。</summary>
-    internal static class OfflineSession
-    {
-        internal static void Start() { }
-        internal static void Cancel() { }
     }
 }

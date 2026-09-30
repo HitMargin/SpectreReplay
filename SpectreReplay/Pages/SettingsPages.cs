@@ -48,15 +48,61 @@ namespace SpectreReplay.Pages
         {
             Controls.SectionTitle(content, Loc.T("page.playback"));
             Controls.Note(content, Loc.T("playback.note"));
-            var row = Row.Create(content);
-            Controls.Button(row, Loc.T("playback.replay"), () =>
+
+            // 当前状态
+            var stateRow = Row.Create(content);
+            Row.Label(stateRow, Loc.T("playback.current"), 0.5f);
+            Ui.LiveLabel.Create(stateRow,
+                () => Features.Playback.PlaybackEngine.Describe(), 0.3f);
+
+            // 回放文件列表（最新在前）
+            var files = ReplayList();
+            if (files.Count == 0)
             {
-                Features.Playback.PlaybackEngine.TryStart();
-            }, primary: true, width: 200f);
-            Controls.Button(row, Loc.T("playback.stop"), () =>
+                Controls.Note(content, Loc.T("playback.empty"));
+            }
+            else
             {
-                Features.Playback.PlaybackEngine.Stop();
-            }, width: 160f);
+                foreach (string f in files)
+                {
+                    var row = Row.Create(content);
+                    string path = f;
+                    Controls.Button(row, System.IO.Path.GetFileNameWithoutExtension(path), () =>
+                    {
+                        Features.Playback.PlaybackEngine.Load(path);
+                        UiHost.Refresh();
+                    }, width: 420f);
+                    Controls.Button(row, Loc.T("playback.stop"), () =>
+                    {
+                        Features.Playback.PlaybackEngine.Stop();
+                        UiHost.Refresh();
+                    }, width: 140f);
+                }
+            }
+        }
+
+        /// <summary>回放文件列表，按修改时间倒序。</summary>
+        private static System.Collections.Generic.List<string> ReplayList()
+        {
+            var list = new System.Collections.Generic.List<string>();
+            try
+            {
+                string dir = Settings.ReplayDir;
+                if (!System.IO.Directory.Exists(dir))
+                {
+                    return list;
+                }
+                var files = System.IO.Directory.GetFiles(dir, "*.srp");
+                System.Array.Sort(files, (a, b) =>
+                    System.IO.File.GetLastWriteTimeUtc(b).CompareTo(
+                        System.IO.File.GetLastWriteTimeUtc(a)));
+                list.AddRange(files);
+            }
+            catch
+            {
+                // 目录不可读就当作没有回放
+            }
+            return list;
         }
 
         internal static void BuildRender(Transform content)
