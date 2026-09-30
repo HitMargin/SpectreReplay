@@ -19,9 +19,12 @@ namespace SpectreReplay
         {
             mod = modEntry;
             ConfigStore.Load();
-            Ui.UiHost.Hotkey = Settings.Hotkey;
-            Ui.UiHost.Install();
-            Pages.SettingsPages.RegisterAll();
+            Ui.PanelHost.Hotkey = Settings.Hotkey;
+            // 常驻输入轮询：热键开关面板、ESC 关闭、驱动会变文字
+            var go = new GameObject("SpectreReplayHost");
+            UnityEngine.Object.DontDestroyOnLoad(go);
+            go.AddComponent<Ui.PanelHostBehaviour>();
+            Pages.Pages.RegisterAll();
 
             // 功能门控：设置页改开关后由 Settings.Commit 触发 PatchLoader.Refresh
             Patching.FeatureGate.Declare("recording", () => Settings.RecordingOn);
@@ -37,7 +40,7 @@ namespace SpectreReplay
 
             mod.Logger.Log("[SpectreReplay] 已加载：补丁 "
                 + Patching.PatchLoader.AppliedCount + "/" + Patching.PatchLoader.DeclaredCount
-                + "（界面热键 " + Pages.SettingsPages.KeyName((KeyCode)Settings.Hotkey) + "）");
+                + "（界面热键 " + Pages.Pages.KeyName((KeyCode)Settings.Hotkey) + "）");
             IsReady = true;
         }
     }

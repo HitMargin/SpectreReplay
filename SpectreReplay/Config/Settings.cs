@@ -113,7 +113,7 @@ namespace SpectreReplay
         /// <summary>改完任一项后调用：落盘 + 通知补丁层重挂。</summary>
         internal static void Commit()
         {
-            Ui.UiSkin.TextScale = TextScale;
+            Ui.Theme.TextScale = TextScale;
             ConfigStore.Save();
             Patching.PatchLoader.Refresh();
         }
@@ -154,7 +154,7 @@ namespace SpectreReplay
             {
                 Debug.LogWarning("[SpectreReplay] 读取配置失败，改用默认值：" + ex.Message);
             }
-            Ui.UiSkin.TextScale = Settings.TextScale;
+            Ui.Theme.TextScale = Settings.TextScale;
         }
 
         private static void Apply(Dictionary<string, object> d)
