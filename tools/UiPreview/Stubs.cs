@@ -267,7 +267,20 @@ namespace UnityEngine
         {
             var c = Make(this, new T());
             comps[typeof(T)] = c;
+            RegisterSpecial(c);
             return c;
+        }
+
+        /// <summary>
+        /// 真实 Unity 里 EventSystem 一被挂上就会成为 <c>EventSystem.current</c>。
+        /// 桩件不模拟这一点的话，"场景里到底有没有事件系统"这条永远验不了。
+        /// </summary>
+        private static void RegisterSpecial(Component c)
+        {
+            if (c is EventSystems.EventSystem es)
+            {
+                EventSystems.EventSystem.current = es;
+            }
         }
 
         public Component AddComponent(Type t)
@@ -275,6 +288,7 @@ namespace UnityEngine
             var c = (Component)Activator.CreateInstance(t);
             c.gameObject = this;
             comps[t] = c;
+            RegisterSpecial(c);
             return c;
         }
 
@@ -482,7 +496,12 @@ namespace TMPro
 }
 namespace UnityEngine.EventSystems
 {
-    public class EventSystem : MonoBehaviour { }
+    public class EventSystem : MonoBehaviour
+    {
+        /// <summary>引擎维护的"当前事件系统"。真实 Unity 同一时刻只允许一个。</summary>
+        public static EventSystem current;
+    }
+
     public class StandaloneInputModule : MonoBehaviour { }
     public class BaseInputModule : MonoBehaviour { }
 }

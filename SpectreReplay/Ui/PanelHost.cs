@@ -77,6 +77,8 @@ namespace SpectreReplay.Ui
             // 每次打开都重取：玩家可能在设置里换过语言
             Loc.RefreshLanguage();
             UiFonts.Invalidate();
+            // 换过场景之后，游戏的 EventSystem 可能这时候才到位
+            EnsureEventSystem();
             LiveTexts.Clear();
             Build();
             Show(0);
@@ -93,6 +95,14 @@ namespace SpectreReplay.Ui
             _pageTitle = null;
             _current = -1;
             LiveTexts.Clear();
+            // 面板不开的时候不需要输入派发，把自己建的那个 EventSystem 拆掉。
+            // 留着它的话，下一个场景的游戏 EventSystem 一到位就会撞车
+            // （Unity 报 "There can be only one active Event System"）。
+            if (_ownEventSystem != null)
+            {
+                UnityEngine.Object.Destroy(_ownEventSystem);
+                _ownEventSystem = null;
+            }
         }
 
         // ── 构建 ────────────────────────────────────────────────
@@ -357,17 +367,50 @@ namespace SpectreReplay.Ui
             }
         }
 
+        /// <summary>
+        /// 保证场景里有且只有一个可用的 EventSystem。
+        ///
+        /// 游戏的 EventSystem 是**场景/预制体里的对象**（ADOBase 里是序列化字段，
+        /// 没有代码创建它），而本面板是 DontDestroyOnLoad 的常驻对象。两者的
+        /// 生命周期对不上，于是有两个坑：
+        ///
+        ///   · 面板先开、游戏的 EventSystem 后到 → 场景里出现**两个**
+        ///     EventSystem，Unity 会报 "There can be only one active Event System"，
+        ///     之后谁处理输入就不确定了，表现为"有时候点得动有时候点不动"。
+        ///   · 游戏那个被禁用或换场景销毁 → 面板还活着但没有派发者，全部点不动。
+        ///
+        /// 所以这里以 <c>EventSystem.current</c>（引擎自己维护的当前实例）为
+        /// 权威，而不是 FindAnyObjectByType（那个只找场景里的激活对象），
+        /// 并且每次开面板都重新判定：游戏有就用游戏的、把自己建的那个拆掉。
+        /// </summary>
         private static void EnsureEventSystem()
         {
-            if (UnityEngine.Object.FindAnyObjectByType<UnityEngine.EventSystems.EventSystem>() != null)
+            var current = UnityEngine.EventSystems.EventSystem.current;
+            if (current != null && !IsOurs(current))
             {
+                // 游戏的事件系统到位了：拆掉我们多余的，避免两个并存
+                if (_ownEventSystem != null)
+                {
+                    UnityEngine.Object.Destroy(_ownEventSystem);
+                    _ownEventSystem = null;
+                }
                 return;
+            }
+            if (_ownEventSystem != null)
+            {
+                return;         // 我们建的那个还在用
             }
             var go = new GameObject("SpectreReplayEventSystem",
                 typeof(UnityEngine.EventSystems.EventSystem),
                 typeof(UnityEngine.EventSystems.StandaloneInputModule));
             UnityEngine.Object.DontDestroyOnLoad(go);
+            _ownEventSystem = go;
         }
+
+        private static GameObject _ownEventSystem;
+
+        private static bool IsOurs(UnityEngine.EventSystems.EventSystem es)
+            => es != null && es.gameObject == _ownEventSystem;
     }
 
     /// <summary>常驻输入轮询：热键开关面板、ESC 关闭、驱动会变文字。</summary>

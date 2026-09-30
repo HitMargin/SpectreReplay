@@ -30,6 +30,8 @@ namespace UiPreview
             int fontFail = FontCheck.Run();
             // 文案完整性：漏一个键，界面上就是空白或原始键名
             int locFail = LocCheck.Run(LocCheck.CollectUsedKeys());
+            // 事件系统唯一性：两个并存就是"有时候点得动"
+            int evFail = EventCheck.Run();
 
             var pages = new (string Key, Action<PageBuilder> Build)[]
             {
@@ -122,6 +124,10 @@ namespace UiPreview
             if (fontFail > 0)
             {
                 Console.WriteLine($"  ✗ 字体回退链有 {fontFail} 处不对");
+            }
+            if (evFail > 0)
+            {
+                Console.WriteLine($"  ✗ EventSystem 有 {evFail} 处不对");
             }
             if (locFail > 0)
             {
