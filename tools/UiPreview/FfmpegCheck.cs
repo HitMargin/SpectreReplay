@@ -37,7 +37,140 @@ namespace UiPreview
             fail += Encode("③ webm（曾经必然失败）", ContainerMode.Webm, ".webm");
             fail += CodecSanity();
             fail += NegativeControl();
+            fail += Mux();
             return fail;
+        }
+
+        /// <summary>
+        /// 合流端到端：先造一个真的无声视频和一条真的 wav，再用真实的合流参数
+        /// 把它们合起来，最后**用 ffprobe 确认产物里真的有音轨**。
+        ///
+        /// 只看"退出码 0"是不够的——ffmpeg 有时会照成功退出、产物却没声音。
+        /// 所以这里要的是"产物里确实有音频流"这个事实。
+        /// </summary>
+        private static int Mux()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ffcheck");
+            Directory.CreateDirectory(dir);
+            int fail = 0;
+
+            // 造素材：1 秒无声视频 + 1 秒 440Hz 的 wav
+            //
+            // 原始视频的编码器必须**跟着容器走**——真实流程里 FfmpegArgs.Build
+            // 选 webm 时本来就会编成 VP9。素材要是拿 H.264 的 mp4 去合进 webm，
+            // `-c:v copy` 直接失败（退出码 -22），那是素材不对，不是被测代码
+            // 的问题。这种"测试自己造错素材"最难发现：断言红了会让人去改
+            // 本来正确的代码。
+            string wav = Path.Combine(dir, "tone.wav");
+            if (Run(FfmpegPath, new[]
+            {
+                "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+                wav,
+            }, 60000) != 0)
+            {
+                Console.WriteLine("    ✗ 造 wav 失败，无法验合流");
+                return 1;
+            }
+
+            foreach (var (label, container, ext) in new[]
+            {
+                ("⑥ mp4 合流", ContainerMode.Mp4, ".mp4"),
+                ("⑦ mkv 合流", ContainerMode.Mkv, ".mkv"),
+                ("⑧ webm 合流（aac 装不下）", ContainerMode.Webm, ".webm"),
+            })
+            {
+                // 素材用该容器对应的编码器，跟真实编码流程一致
+                string codec = ArgOf(FfmpegArgs.Build(W, H, 30, EncoderMode.Auto,
+                    QualityMode.Standard, container, "x" + ext), "-c:v");
+                string rawVideo = Path.Combine(dir, "raw" + ext);
+                if (File.Exists(rawVideo)) File.Delete(rawVideo);
+                if (Run(FfmpegPath, new[]
+                {
+                    "-y", "-f", "lavfi", "-i", "color=c=red:s=64x48:r=30:d=1",
+                    "-c:v", codec ?? "libx264", "-pix_fmt", "yuv420p", rawVideo,
+                }, 60000) != 0 || !File.Exists(rawVideo))
+                {
+                    Console.WriteLine($"    ✗ {label,-30} 造素材失败（codec={codec}）");
+                    fail++;
+                    continue;
+                }
+
+                string outPath = Path.Combine(dir, "muxed" + ext);
+                if (File.Exists(outPath)) File.Delete(outPath);
+                int rc = Run(FfmpegPath, FfmpegArgs.BuildMuxArgs(
+                    rawVideo, wav, outPath, container), 60000);
+                if (rc != 0 || !File.Exists(outPath))
+                {
+                    Console.WriteLine($"    ✗ {label,-30} 退出码 {rc}，无产物");
+                    fail++;
+                    continue;
+                }
+                // 关键：产物里到底有没有音频流
+                bool hasAudio = ProbeHasAudio(outPath);
+                Console.WriteLine($"    {(hasAudio ? "✓" : "✗")} {label,-30}"
+                    + $" 产物 {new FileInfo(outPath).Length:N0} B"
+                    + (hasAudio ? "，含音轨" : "，**没有音轨**"));
+                if (!hasAudio) fail++;
+            }
+            return fail;
+        }
+
+        /// <summary>从参数表里取某个开关后面跟的值。</summary>
+        private static string ArgOf(string[] args, string flag)
+        {
+            for (int i = 0; i < args.Length - 1; i++)
+            {
+                if (args[i] == flag) return args[i + 1];
+            }
+            return null;
+        }
+
+        /// <summary>用 ffmpeg 自己读一遍产物：把流信息打到 stderr，看有没有音频。</summary>
+        private static bool ProbeHasAudio(string path)
+        {
+            var psi = new ProcessStartInfo(FfmpegPath)
+            {
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            psi.ArgumentList.Add("-i");
+            psi.ArgumentList.Add(path);
+            using (var p = Process.Start(psi))
+            {
+                string all = p.StandardOutput.ReadToEnd()
+                    + p.StandardError.ReadToEnd();
+                p.WaitForExit(20000);
+                // "Stream #0:1: Audio: aac" 之类
+                return all.Contains("Audio:");
+            }
+        }
+
+        /// <summary>跑一次 ffmpeg（不喂 stdin），返回退出码。</summary>
+        private static int Run(string exe, string[] args, int timeoutMs)
+        {
+            var psi = new ProcessStartInfo(exe)
+            {
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            foreach (string a in args) psi.ArgumentList.Add(a);
+            using (var p = Process.Start(psi))
+            {
+                using (var done = new System.Threading.ManualResetEventSlim(false))
+                {
+                    p.ErrorDataReceived += (_, __) => { };
+                    p.BeginErrorReadLine();
+                    if (!p.WaitForExit(timeoutMs))
+                    {
+                        try { p.Kill(); } catch { }
+                        return -1;
+                    }
+                }
+                return p.ExitCode;
+            }
         }
 
         /// <summary>

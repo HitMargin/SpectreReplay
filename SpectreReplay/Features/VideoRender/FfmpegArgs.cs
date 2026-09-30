@@ -74,5 +74,29 @@ namespace SpectreReplay.Features.VideoRender
             args.Add(outPath);
             return args.ToArray();
         }
+
+        /// <summary>
+        /// 把落盘的 wav 音轨合进视频。
+        ///
+        /// 容器同样决定音频编码器：WebM 装不下 AAC（只收 Opus/Vorbis）。
+        /// 这跟"WebM 装不下 H.264"是同一类错——而"输出格式"和"视频渲染"
+        /// 这两项在界面上是可以自由组合的，选 webm 的人一定会踩到。
+        /// </summary>
+        internal static string[] BuildMuxArgs(string video, string audio,
+            string outPath, ContainerMode container)
+        {
+            bool webm = container == ContainerMode.Webm;
+            return new[]
+            {
+                "-y",
+                "-i", video,
+                "-i", audio,
+                "-c:v", "copy",        // 画面直接复制，不重编码
+                "-c:a", webm ? "libopus" : "aac",
+                "-b:a", webm ? "128k" : "192k",
+                "-shortest",           // 以最短的流为准，避免尾部空音频
+                outPath,
+            };
+        }
     }
 }

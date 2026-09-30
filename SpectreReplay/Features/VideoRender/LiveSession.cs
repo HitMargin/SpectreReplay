@@ -133,29 +133,47 @@ namespace SpectreReplay.Features.VideoRender
                     CreateNoWindow = true,
                     RedirectStandardError = true,
                 };
-                foreach (string a in new[]
-                {
-                    "-y", "-i", video, "-i", audio,
-                    "-c:v", "copy",        // 画面直接复制，不重编码
-                    "-c:a", "aac",
-                    "-b:a", "192k",
-                    "-shortest",           // 以最短的流为准，避免尾部空音频
-                    outPath,
-                })
+                foreach (string a in FfmpegArgs.BuildMuxArgs(video, audio, outPath,
+                    (ContainerMode)Settings.Container))
                 {
                     psi.ArgumentList.Add(a);
                 }
                 using (var p = System.Diagnostics.Process.Start(psi))
                 {
-                    // stderr 必须读走，否则管道满时 ffmpeg 会阻塞
-                    string err = p.StandardError.ReadToEnd();
-                    p.WaitForExit(180_000);
-                    if (p.ExitCode == 0 && System.IO.File.Exists(outPath))
+                    // **先异步抽干 stderr，再等退出。**
+                    // 原来写的是 `ReadToEnd()` 之后再 `WaitForExit(180_000)`：
+                    // ReadToEnd 要一直读到流关闭才返回，ffmpeg 一旦卡住它就
+                    // 永远阻塞在那儿——**那 180 秒的看门狗根本轮不到执行**，
+                    // 整个游戏会卡在结算画面上出不来。VideoEncoder 那边用的
+                    // 是 BeginErrorReadLine，这里照它来。
+                    var err = new System.Text.StringBuilder();
+                    using (var errDone = new System.Threading.ManualResetEventSlim(false))
                     {
-                        return outPath;
+                        p.ErrorDataReceived += (_, e) =>
+                        {
+                            if (e.Data == null) { errDone.Set(); return; }
+                            lock (err) { err.AppendLine(e.Data); }
+                        };
+                        p.BeginErrorReadLine();
+
+                        if (!p.WaitForExit(180_000))
+                        {
+                            try { p.Kill(); } catch { }
+                            UnityEngine.Debug.LogWarning(
+                                "[SpectreReplay] 合流超时，已中止，保留无声视频");
+                        }
+                        else if (p.ExitCode == 0 && System.IO.File.Exists(outPath))
+                        {
+                            return outPath;
+                        }
+                        else
+                        {
+                            string text;
+                            lock (err) { text = err.ToString(); }
+                            UnityEngine.Debug.LogWarning(
+                                "[SpectreReplay] 合流失败，保留无声视频：" + text);
+                        }
                     }
-                    UnityEngine.Debug.LogWarning(
-                        "[SpectreReplay] 合流失败，保留无声视频：" + err);
                 }
             }
             catch (Exception ex)

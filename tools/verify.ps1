@@ -1,4 +1,8 @@
 ﻿<#
+    注意：**这个文件必须存成 UTF-8 带 BOM**。PowerShell 5.1 按 ANSI 读脚本，
+    没有 BOM 就会把中文读成乱码，连字符串引号都配不上，直接语法错误。
+    而 write/edit 工具写文件时默认不带 BOM——每次改完都得补回来。
+
     一次性跑完所有离线验证，任何一项红就返回非零。
 
     为什么要单独一个闸门：预览器和主项目编译的是**不同的源码集**。
@@ -9,7 +13,8 @@
 #>
 param(
     [switch]$SkipBuild,
-    [switch]$SkipPreview
+    [switch]$SkipPreview,
+    [switch]$SkipDeploy
 )
 
 $ErrorActionPreference = 'Stop'
@@ -60,7 +65,18 @@ Step '部署一致性' {
     $built = Join-Path $root 'SpectreReplay\bin\Release\SpectreReplay.dll'
     $mod = 'D:\Program Files (x86)\Steam\steamapps\common\A Dance of Fire and Ice\Mods\SpectreReplay'
     $live = Join-Path $mod 'SpectreReplay.dll'
-    if (-not (Test-Path $live)) {
+    # 取最后一条**非空**输出：deploy.ps1 结尾是个空行，直接 -Last 1 会拿到
+    # 它，看起来像"部署脚本啥也没干"。这里踩过一次，误以为部署失败。
+    if (-not $SkipDeploy) {
+        $d = & powershell -NoProfile -ExecutionPolicy Bypass `
+            -File (Join-Path $root 'tools\deploy.ps1') -Config Release 2>&1 |
+            Where-Object { $_.ToString().Trim() } | Select-Object -Last 1
+        Write-Host ('  ' + $d)
+    }
+    if (-not (Test-Path $built)) {
+        Write-Host '  ✗ 构建产物不存在' -ForegroundColor Red
+        $script:fail++
+    } elseif (-not (Test-Path $live)) {
         Write-Host '  ✗ 线上 dll 不存在' -ForegroundColor Red
         $script:fail++
     } elseif ((Get-FileHash $built -Algorithm SHA256).Hash -eq (Get-FileHash $live -Algorithm SHA256).Hash) {
