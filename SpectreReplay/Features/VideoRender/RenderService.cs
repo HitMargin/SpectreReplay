@@ -27,7 +27,10 @@ namespace SpectreReplay.Features.VideoRender
                 // 实时模式不是"点一下就开始录"——它在进关时自动开。
                 // 这里手动触发的是"用刚打完的这一次游玩重录"，
                 // 也就是把实时会话重新拉起来，不重跑关卡。
-                LiveSession.BeginManualFromIdle();
+                if (!LiveSession.IsRunning)
+                {
+                    LiveSession.Begin();
+                }
             }
             else
             {
@@ -37,11 +40,13 @@ namespace SpectreReplay.Features.VideoRender
 
         internal static void Cancel()
         {
-            if (!Busy)
+            // 判据用会话本身而不是 Busy 字段：Busy 只在 Begin/End 这条路径上被写，
+            // 而实时会话可能在 Busy 还没被置位时就已经跑起来了（启动失败也会留下状态）。
+            if (LiveSession.IsRunning)
             {
+                LiveSession.Cancel();
                 return;
             }
-            LiveSession.Cancel();
             OfflineSession.Cancel();
         }
 
@@ -72,15 +77,6 @@ namespace SpectreReplay.Features.VideoRender
                     : RenderStatus.State.Offline)
                 : RenderStatus.State.Idle;
         }
-    }
-
-    /// <summary>实时会话（边玩边录）。本轮先落占位，帧管线接入后填实。</summary>
-    internal static class LiveSession
-    {
-        internal static void Begin() { }
-        internal static void BeginManualFromIdle() { }
-        internal static void End() { }
-        internal static void Cancel() { }
     }
 
     /// <summary>离线会话（重跑回放逐帧捕获）。本轮先落占位。</summary>

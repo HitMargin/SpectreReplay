@@ -27,6 +27,10 @@ namespace SpectreReplay
             Patching.FeatureGate.Declare("render", () => Settings.RenderOn);
             Patching.PatchLoader.Register();
 
+            // 进关检测常驻（不是补丁，是状态轮询），
+            // 否则首次进入关卡这条路径在不同版本里没有稳定的钩子。
+            Features.Recording.LevelWatcher.Install();
+
             mod.Logger.Log("[SpectreReplay] 已加载：补丁 "
                 + Patching.PatchLoader.AppliedCount + "/" + Patching.PatchLoader.DeclaredCount
                 + "（界面热键 F" + ((Settings.Hotkey - 288) is int f && f > 0 && f < 12 ? f.ToString() : Settings.Hotkey.ToString()) + "）");
