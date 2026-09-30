@@ -106,18 +106,32 @@ namespace SpectreReplay.Ui
                 // 资源尚未加载
             }
 
-            // 2. Resources 里的 SourceHanSans —— 与 RDString 加载编辑器字体同一条路
-            if (_cjk == null)
+            // 2. 兜底走 Resources。路径来自游戏自己的资源清单
+            //    （StreamingAssets\aa\catalog.json 里 SourceHanSans/* 的实际条目），
+            //    别凭空猜——原先写的 "SourceHanSans/Regular" **根本不存在**，
+            //    实际是 Normal / Light / Medium / Bold 这些字重，CJK 在
+            //    SourceHanSans/ChineseSimplified/ 下面。
+            if (_latin == null)
             {
-                _cjk = Resources.Load<TMP_FontAsset>("SourceHanSans/Regular")
-                    ?? Resources.Load<TMP_FontAsset>("SourceHanSans");
-                if (_cjk != null)
+                _latin = Load("SourceHanSans/Latin/Latin-Normal")
+                    ?? Load("SourceHanSans/Normal");
+                if (_latin != null && from == null)
                 {
-                    from = "Resources/SourceHanSans";
+                    from = "Resources/SourceHanSans/Latin";
                 }
             }
+            if (_cjk == null)
+            {
+                _cjk = Load("SourceHanSans/ChineseSimplified/SourceHanSansSC-Normal")
+                    ?? Load("SourceHanSans/ChineseSimplified/ChineseSimplified-Normal");
+                if (_cjk != null)
+                {
+                    from = "Resources/SourceHanSans/ChineseSimplified";
+                }
+            }
+            _cjk = _cjk ?? _latin;
 
-            _latin = _latin ?? _cjk;
+            ApplyFallbackChain();
             if (Main == null)
             {
                 UnityEngine.Debug.LogWarning(
@@ -128,9 +142,48 @@ namespace SpectreReplay.Ui
             {
                 // 字体来源只能从 Player.log 看，出问题时这是第一现场
                 UnityEngine.Debug.Log("[SpectreReplay] 界面字体来源：" + from
-                    + "（中文=" + _cjk + "）");
+                    + "（中文=" + Name(_cjk) + " 拉丁=" + Name(_latin) + "）");
             }
         }
+
+        /// <summary>
+        /// 把另一套字体挂成回退链。
+        ///
+        /// 与游戏自己的做法一致（见 ADOFAI\DynamicallyOrderedFont.ApplyForLanguage）：
+        /// 设 <c>fallbackFontAssetTable</c>，而不是二选一。界面上中英混排是常态
+        /// ——"60 fps"、"Mods\SpectreReplay\Videos"、"4.5 s" 这些 ASCII 串，
+        /// 挨着中文标签。只挂一个字体的话，缺的那部分字形就是空白方块。
+        /// </summary>
+        private static void ApplyFallbackChain()
+        {
+            if (_cjk == null || _latin == null || _cjk == _latin)
+            {
+                return;
+            }
+            try
+            {
+                _cjk.fallbackFontAssetTable =
+                    new System.Collections.Generic.List<TMP_FontAsset> { _latin };
+            }
+            catch
+            {
+                // 字体资源还没就绪：不影响主字体显示
+            }
+        }
+
+        private static TMP_FontAsset Load(string path)
+        {
+            try
+            {
+                return Resources.Load<TMP_FontAsset>(path);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string Name(TMP_FontAsset f) => f == null ? "(无)" : f.name;
 
         private static TMP_FontAsset Pick(params TMP_FontAsset[] candidates)
         {

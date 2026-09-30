@@ -7,6 +7,7 @@
 // 去场景里找 ScriptableObject，永远找不到，字体一路退化到兜底分支还不报错。
 // 光看代码看不出来——得让三条路径分别命中。
 using System;
+using System.Collections.Generic;
 
 namespace UiPreview
 {
@@ -36,7 +37,8 @@ namespace UiPreview
 
             // ③ RDConstants 为空，只能走 Resources
             UnityEngine.RDConstants.data = null;
-            fail += Probe("③ 退到 Resources/SourceHanSans", "SourceHanSans");
+            fail += Probe("③ 退到 Resources 的 CJK 字体",
+                "SourceHanSans/ChineseSimplified/SourceHanSansSC-Normal");
 
             // ④ 全都没有 —— 必须降级而不是静默留 null
             UnityEngine.Resources.HasSourceHanSans = false;
@@ -61,6 +63,58 @@ namespace UiPreview
             {
                 fail = before;
             }
+
+            // ⑥ 回退链：中英混排是常态（"60 fps" 挨着中文标签），
+            //    只挂一个字体的话缺的那部分就是空白方块。
+            fail += CheckFallbackChain();
+            return fail;
+        }
+
+        /// <summary>
+        /// 验证两件事：
+        ///   · 中文主字体上挂了拉丁回退（照 DynamicallyOrderedFont 的做法）
+        ///   · 兜底路径请求的是**游戏清单里真实存在**的资源名
+        /// </summary>
+        private static int CheckFallbackChain()
+        {
+            int fail = 0;
+            UnityEngine.RDConstants.data = new UnityEngine.RDConstants
+            {
+                chineseFontTMPro = new TMPro.TMP_FontAsset { name = "CJK" },
+                latinFontTMPro = new TMPro.TMP_FontAsset { name = "Latin" },
+            };
+            SpectreReplay.Ui.UiFonts.Invalidate();
+            var main = SpectreReplay.Ui.UiFonts.Main;
+            var chain = main?.fallbackFontAssetTable;
+            bool ok = chain != null && chain.Count == 1 && chain[0].name == "Latin";
+            Console.WriteLine($"    {(ok ? "✓" : "✗")} ⑥ 中文字体挂上拉丁回退链"
+                + $"  → {(chain == null || chain.Count == 0 ? "（空）" : chain[0].name)}");
+            if (!ok) fail++;
+
+            // 只留拉丁（模拟没有 CJK 资源），此时回退链不该重复挂自己
+            UnityEngine.RDConstants.data = new UnityEngine.RDConstants
+            {
+                latinFontTMPro = new TMPro.TMP_FontAsset { name = "Latin" },
+            };
+            SpectreReplay.Ui.UiFonts.Invalidate();
+            var m2 = SpectreReplay.Ui.UiFonts.Main;
+            bool noDup = m2 == null || m2.fallbackFontAssetTable == null
+                || m2.fallbackFontAssetTable.Count == 0
+                || m2.fallbackFontAssetTable[0] != m2;
+            Console.WriteLine($"    {(noDup ? "✓" : "✗")} ⑦ 只有一套字体时不把自身挂成回退");
+            if (!noDup) fail++;
+
+            // RDConstants 拿不到时，请求的路径必须是清单里真实存在的
+            UnityEngine.RDConstants.data = null;
+            UnityEngine.Resources.HasSourceHanSans = true;
+            UnityEngine.Resources.LastPath = null;
+            SpectreReplay.Ui.UiFonts.Invalidate();   // 忘了这行，Resolve 直接被缓存挡回去
+            _ = SpectreReplay.Ui.UiFonts.Main;
+            bool real = UnityEngine.Resources.LastPath != null
+                && UnityEngine.Resources.Exists(UnityEngine.Resources.LastPath);
+            Console.WriteLine($"    {(real ? "✓" : "✗")} ⑧ 兜底路径在游戏清单里真实存在"
+                + $"  → {UnityEngine.Resources.LastPath ?? "(没请求)"}");
+            if (!real) fail++;
             return fail;
         }
 

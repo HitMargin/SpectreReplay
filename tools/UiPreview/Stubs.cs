@@ -77,21 +77,54 @@ namespace UnityEngine
         public static SystemLanguage language = SystemLanguage.English;
     }
 
-    /// <summary>Resources 加载的开关：模拟"资源在"与"资源不在"。</summary>
+    /// <summary>
+    /// Resources 加载的桩。资源路径按**游戏真实清单**判定——清单在
+    /// StreamingAssets\aa\catalog.json 里，只有 SourceHanSans/{Normal,Light,
+    /// Medium,Bold,Heavy,ExtraLight} 与 SourceHanSans/{Latin,ChineseSimplified,
+    /// ChineseTraditional,Japanese,Korean}/*。不存在的路径必须返回 null，
+    /// 否则预览会把"路径写错了"这件事藏起来。
+    /// </summary>
     public static class Resources
     {
         /// <summary>SourceHanSans 资源是否存在。</summary>
         public static bool HasSourceHanSans = true;
 
+        /// <summary>最近一次被请求的路径，便于断言"没去请求不存在的资源"。</summary>
+        public static string LastPath;
+
+        private static readonly string[] Real =
+        {
+            "SourceHanSans/Normal", "SourceHanSans/Light", "SourceHanSans/Medium",
+            "SourceHanSans/Bold", "SourceHanSans/Heavy", "SourceHanSans/ExtraLight",
+            "SourceHanSans/Latin/Latin-Normal",
+            "SourceHanSans/ChineseSimplified/SourceHanSansSC-Normal",
+            "SourceHanSans/ChineseSimplified/ChineseSimplified-Normal",
+            "SourceHanSans/ChineseTraditional/SourceHanSansTC-Normal",
+            "SourceHanSans/Japanese/Japanese-Normal",
+            "SourceHanSans/Korean/Korean-Normal",
+        };
+
+        internal static bool Exists(string path)
+        {
+            foreach (var p in Real)
+            {
+                if (p == path) return true;
+            }
+            return false;
+        }
+
         public static T Load<T>(string path) where T : Object
         {
-            if (typeof(T).Name == "TMP_FontAsset" && path.StartsWith("SourceHanSans"))
+            if (typeof(T).Name != "TMP_FontAsset")
             {
-                return HasSourceHanSans
-                    ? (T)(Object)new TMPro.TMP_FontAsset { name = "SourceHanSans" }
-                    : null;
+                return null;
             }
-            return null;
+            LastPath = path;
+            if (!HasSourceHanSans || !Exists(path))
+            {
+                return null;
+            }
+            return (T)(Object)new TMPro.TMP_FontAsset { name = path };
         }
     }
 
@@ -399,7 +432,11 @@ namespace TMPro
         public TMP_FontAsset font;
     }
 
-    public class TMP_FontAsset : Object { }
+    public class TMP_FontAsset : Object
+    {
+        /// <summary>回退链。真实 TMP 用它给缺字形的字符找替代字体。</summary>
+        public List<TMP_FontAsset> fallbackFontAssetTable;
+    }
 
     public static class TMP_Settings
     {
