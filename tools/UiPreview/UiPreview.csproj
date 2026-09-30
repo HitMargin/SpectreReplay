@@ -39,6 +39,9 @@
          不碰引擎，所以能直接跑——数据格式坏掉的话回放和渲染全都废，
          而这种 bug 只在真机上读到文件时才暴露。 -->
     <Compile Include="..\..\SpectreReplay\Features\Recording\ReplayData.cs" Link="Real\ReplayData.cs" />
+    <!-- ffmpeg 参数拼装也是纯函数：链接真实源码后可以直接调游戏自带的
+         ffmpeg.exe 真跑一遍。参数拼错不会报错，只会静默地不出片。 -->
+    <Compile Include="..\..\SpectreReplay\Features\VideoRender\FfmpegArgs.cs" Link="Real\FfmpegArgs.cs" />
   </ItemGroup>
 
   <ItemGroup>

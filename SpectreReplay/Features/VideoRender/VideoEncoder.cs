@@ -95,47 +95,7 @@ namespace SpectreReplay.Features.VideoRender
 
         private static string[] BuildArgs(int width, int height, int fps,
             EncoderMode encoder, QualityMode quality, ContainerMode container, string outPath)
-        {
-            string codec = encoder == EncoderMode.Cpu ? "libx264" : "libx264";
-            // 预设：最快/质量/纯 CPU 分别对应 x264 的 ultrafast / slow / veryfast + 禁用一切加速
-            string preset =
-                encoder == EncoderMode.Fastest ? "ultrafast" :
-                encoder == EncoderMode.Quality ? "slow" :
-                encoder == EncoderMode.Cpu ? "veryfast" :
-                "medium";
-            string crf =
-                quality == QualityMode.Low ? "28" :
-                quality == QualityMode.Standard ? "23" :
-                quality == QualityMode.High ? "19" : "16";
-
-            
-
-            var args = new System.Collections.Generic.List<string>
-            {
-                "-y",
-                "-f", "rawvideo",
-                "-pixel_format", "bgra",
-                "-video_size", width + "x" + height,
-                "-framerate", fps.ToString(),
-                "-i", "pipe:0",
-                "-an",                       // 音频由单独的混音轨合进来
-                "-c:v", codec,
-                "-preset", preset,
-                "-crf", crf,
-                "-pix_fmt", "yuv420p",
-                "-r", fps.ToString(),
-            };
-            if (container == ContainerMode.Mkv)
-            {
-                args.Add("-f"); args.Add("matroska");
-            }
-            else if (container == ContainerMode.Webm)
-            {
-                args.Add("-f"); args.Add("webm");
-            }
-            args.Add(outPath);
-            return args.ToArray();
-        }
+            => FfmpegArgs.Build(width, height, fps, encoder, quality, container, outPath);
 
         /// <summary>主线程调用：把一帧像素交出去。非阻塞——队列满就丢这一帧。</summary>
         internal void Submit(byte[] pixels)
@@ -238,12 +198,11 @@ namespace SpectreReplay.Features.VideoRender
             }
         }
 
-        internal enum EncoderMode { Auto = 0, Fastest = 1, Quality = 2, Cpu = 3 }
-        internal enum QualityMode { Low = 0, Standard = 1, High = 2, Extreme = 3 }
-        internal enum ContainerMode { Mp4 = 0, Mkv = 1, Webm = 2 }
     }
 
-    /// <summary>帧缓冲池。主线程租、泵线程还，必须加锁。</summary>
+    /// <summary>
+    /// 帧缓冲池。主线程租、泵线程还，必须加锁。
+    /// </summary>
     internal sealed class FrameBufferPool
     {
         private readonly System.Collections.Generic.Stack<byte[]> _free;

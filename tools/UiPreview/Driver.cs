@@ -27,7 +27,7 @@ namespace UiPreview
         {
             Directory.CreateDirectory(outDir);
             // 字体回退链先验：它决定界面上有没有字，而字形本身离屏验不了
-            // 数据格式往返：坏掉的话回放和渲染全废，只有真机读到文件才暴露            int replayFail = ReplayCheck.Run();            int fontFail = FontCheck.Run();
+            // 数据格式往返：坏掉的话回放和渲染全废，只有真机读到文件才暴露            int replayFail = ReplayCheck.Run();            // ffmpeg 参数：静默失败，只能真跑一遍才知道            int ffFail = FfmpegCheck.Run();            int fontFail = FontCheck.Run();
             // 文案完整性：漏一个键，界面上就是空白或原始键名
             int locFail = LocCheck.Run(LocCheck.CollectUsedKeys());
             // 事件系统唯一性：两个并存就是"有时候点得动"
@@ -125,6 +125,7 @@ namespace UiPreview
             {
                 Console.WriteLine($"  ✗ 字体回退链有 {fontFail} 处不对");
             }
+            if (ffFail > 0)            {                Console.WriteLine($"  ✗ ffmpeg 参数有 {ffFail} 处不对");            }
             if (replayFail > 0)            {                Console.WriteLine($"  ✗ 回放文件往返有 {replayFail} 处对不上");            }
             if (hardFail > 0)            {                Console.WriteLine($"  ✗ 有 {hardFail} 处用户可见的中文被写死");            }
             if (cfgFail > 0)

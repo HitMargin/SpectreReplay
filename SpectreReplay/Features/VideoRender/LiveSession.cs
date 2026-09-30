@@ -224,9 +224,9 @@ namespace SpectreReplay.Features.VideoRender
                 _poolFrameSize = _frames.FrameSize;
                 _pool = new FrameBufferPool(_poolFrameSize, null);
                 _encoder = VideoEncoder.Start(_pool, w, h, Settings.Fps,
-                    (VideoEncoder.EncoderMode)Settings.Encoder,
-                    (VideoEncoder.QualityMode)Settings.Quality,
-                    (VideoEncoder.ContainerMode)Settings.Container,
+                    (EncoderMode)Settings.Encoder,
+                    (QualityMode)Settings.Quality,
+                    (ContainerMode)Settings.Container,
                     _rawVideoPath, Settings.FfmpegPath);
 
                 _frames.PendingSink = OnFrameReady;

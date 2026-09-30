@@ -105,9 +105,9 @@ namespace SpectreReplay.Features.VideoRender
                 _outputPath = Path.Combine(Settings.VideoDir, stem + "_final." + ext);
 
                 _encoder = VideoEncoder.Start(_pool, w, h, Settings.Fps,
-                    (VideoEncoder.EncoderMode)Settings.Encoder,
-                    (VideoEncoder.QualityMode)Settings.Quality,
-                    (VideoEncoder.ContainerMode)Settings.Container,
+                    (EncoderMode)Settings.Encoder,
+                    (QualityMode)Settings.Quality,
+                    (ContainerMode)Settings.Container,
                     _rawVideoPath, Settings.FfmpegPath);
                 _frames.PendingSink = OnFrameReady;
 
