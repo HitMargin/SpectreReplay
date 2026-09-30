@@ -58,6 +58,7 @@ namespace SpectreReplay.Ui
 
                 { "render.duplicate_when_late", "跟不上时复制上一帧" },
                 { "playback.files", "回放文件" },
+                { "playback.replay", "回放" },
                 { "render.on", "启用视频渲染" },
                 { "render.status", "状态" },
                 { "about.autoopen", "进关时自动打开界面" },
@@ -115,6 +116,7 @@ namespace SpectreReplay.Ui
 
                 { "render.duplicate_when_late", "Duplicate last frame when behind" },
                 { "playback.files", "Replays" },
+                { "playback.replay", "Replay" },
                 { "render.on", "Enable video render" },
                 { "render.status", "Status" },
                 { "about.autoopen", "Open panel on level start" },
