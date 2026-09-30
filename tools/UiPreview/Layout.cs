@@ -94,8 +94,21 @@ namespace UiPreview
             return string.Join("/", parts);
         }
 
+        /// <summary>
+        /// 把一棵 GameObject 树解析成可绘制/可命中测试的节点树。
+        ///
+        /// **未激活的子树整棵跳过**——真实 Unity 既不渲染它，也不让它
+        /// 吃射线。原先没判 activeSelf，于是下拉的模板（DropList，代码里
+        /// 明确 SetActive(false)）照样进了树：它那几行选项画在界面上，
+        /// 还把下面几行的点击全挡住，测出来"5 处控件被别的东西盖住"。
+        /// 这是桩件比真实 Unity 宽松造成的**假故障**。
+        /// </summary>
         internal static Node Walk(Transform t, Node parent)
         {
+            if (t == null || !t.gameObject.activeSelf)
+            {
+                return null;
+            }
             var n = new Node { Parent = parent, Go = t.gameObject };
             if (t.gameObject.GetComponent<UImage>() != null)
             {

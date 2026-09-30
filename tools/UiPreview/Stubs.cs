@@ -128,17 +128,66 @@ namespace UnityEngine
         }
     }
 
+    /// <summary>对应 UnityEngine.MissingReferenceException：访问已销毁对象。</summary>
+    public class MissingReferenceException : Exception
+    {
+        public MissingReferenceException(string m) : base(m) { }
+    }
+
     public class Object
     {
         public string name;
         public bool activeSelf = true;
 
-        /// <summary>预览是单次构建，没有延迟销毁的必要，直接摘掉即可。</summary>
+        /// <summary>
+        /// 已被销毁。真实 Unity 里访问已销毁对象会抛 MissingReferenceException，
+        /// 而原先的桩件照常返回——于是"销毁后又去取它的字段"这种在真机上
+        /// 必崩的写法，在预览里一路绿灯。把这层补上。
+        /// </summary>
+        public bool destroyed;
+
+        internal void ThrowIfDestroyed()
+        {
+            if (destroyed)
+            {
+                throw new MissingReferenceException(
+                    "对象已被销毁（真机上访问它会抛 MissingReferenceException）");
+            }
+        }
+
+        /// <summary>
+        /// 预览是单次构建，**立即**摘除即可。
+        ///
+        /// 真实 Unity 是推迟到帧末销毁的，于是"销毁旧子节点 + 立刻建新的"
+        /// 那一瞬间，父节点下新旧并存。原桩件不模拟这一点——好处是不会
+        /// 平白多出一堆重复节点，代价是"新旧并存"这类问题验不到。
+        /// 目前逐个查过：Show() 销毁旧子节点后只调 LiveTexts.Clear()，
+        /// 不会再去读 childCount，帧末才销毁也不会碰到。
+        /// </summary>
         public static void Destroy(Object o)
         {
-            if (o is GameObject go && go.transform.parent != null)
+            if (o == null) return;
+            // 真实 Unity 销毁一个 GameObject 会连整棵子树一起销毁。
+            // 只标记顶层的话，子节点的 GetComponent 仍能照常返回——
+            // 于是"销毁整棵面板"在桩件里只毁了一半。
+            if (o is GameObject go)
             {
-                go.transform.parent.children.Remove(go.transform);
+                MarkTree(go.transform);
+                if (go.transform.parent != null)
+                {
+                    go.transform.parent.children.Remove(go.transform);
+                }
+            }
+            o.destroyed = true;
+        }
+
+        private static void MarkTree(Transform t)
+        {
+            if (t == null) return;
+            t.gameObject.destroyed = true;
+            foreach (var c in new List<Transform>(t.children))
+            {
+                MarkTree(c);
             }
         }
 
@@ -218,9 +267,23 @@ namespace UnityEngine
     public class Transform : Component
     {
         public Transform parent;
+
+        /// <summary>
+        /// 原先只 `p?.children.Add(this)`，**从不设置 this.parent**——
+        /// 于是 parent 恒为 null，Destroy 里那句"从父节点摘除"从来没执行过，
+        /// 被销毁的节点一直留在树上。预览照样能出图（节点照样被遍历到，
+        /// 只是内容重复），所以看不出问题；直到给 GetComponent 加上
+        /// 销毁检查，一访问就抛。
+        /// </summary>
         public readonly List<Transform> children = new List<Transform>();
-        public void SetParent(Transform p, bool worldPositionStays) => p?.children.Add(this);
-        public int childCount => children.Count;
+
+        public void SetParent(Transform p, bool worldPositionStays)
+        {
+            parent?.children.Remove(this);
+            parent = p;
+            p?.children.Add(this);
+        }
+        public int childCount { get { ThrowIfDestroyed(); return children.Count; } }
         public Transform GetChild(int i) => children[i];
         public Transform Find(string n) => null;   // 真实代码只在运行时用
         public Transform FindDeep(string n)
@@ -299,6 +362,8 @@ namespace UnityEngine
         /// </summary>
         public T GetComponent<T>() where T : class
         {
+            // 真实 Unity：GameObject 被销毁后再取组件会抛 MissingReferenceException
+            ThrowIfDestroyed();
             foreach (var c in comps.Values)
             {
                 if (c is T hit) return hit;
