@@ -418,8 +418,15 @@ namespace SpectreReplay.Ui
         private static void BuildScrollbar(RectTransform area, ScrollRect scroll,            float viewH, float top)
         {
             const float barW = 8f, pad = 6f;
+            // 这里读 area.sizeDelta.x 是安全的：PageArea 用显式尺寸建的
+            // （锚点固定在左上），**不是横向拉伸的**。一旦哪天把它改成拉伸的，
+            // sizeDelta.x 会恒为 0，滚动条就会跑到屏幕左边去——画面上只
+            // 表现为"滚动条不见了"，不会有任何报错。
+            //
+            // top 传的是 vTop（含内容区上边距），不是 Theme.HeaderH。
+            // 用错的话滚动条会比视口高出一截、往上错开一截。
             _scrollbar = Gfx.Rect(area, "Scrollbar",
-                area.sizeDelta.x - barW - pad, Theme.HeaderH, barW, viewH,
+                area.sizeDelta.x - barW - pad, top, barW, viewH,
                 new Color(0f, 0f, 0f, 0f), true);
             // 条体本身不吃射线：挡住内容区的点击就麻烦了
             _scrollbar.GetComponent<Image>().raycastTarget = false;

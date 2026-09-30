@@ -275,6 +275,24 @@ namespace UiPreview
                 Check(page, "面板外·右下",
                     (float)CanvasW - 40f, (float)CanvasH - 40f, "Overlay");
             }
+
+            // 滚动条必须与视口上下对齐。它是按"顶栏底边"还是"内容区顶边"
+            // 定位的，两种都行但必须一致——这类"参数加了没接上"的错我今天
+            // 真犯过一次：给 BuildScrollbar 传了 top，函数体里还在用
+            // Theme.HeaderH，肉眼看只是高了十来个像素，很难当回事。
+            var viewport2 = Find(screen, "Viewport");
+            var bar = Find(screen, "Scrollbar");
+            if (viewport2 != null && bar != null)
+            {
+                bool aligned = Math.Abs(bar.Y - viewport2.Y) < 1f
+                    && Math.Abs(bar.H - viewport2.H) < 1f;
+                Console.WriteLine($"      {(aligned ? "✓" : "✗")} 滚动条与视口上下对齐"
+                    + $"  → 条 {bar.Y:F0}/{bar.H:F0} 视口 {viewport2.Y:F0}/{viewport2.H:F0}");
+                if (!aligned)
+                {
+                    ClickFailures++;
+                }
+            }
         }
 
         private static readonly HashSet<string> ControlNames = new HashSet<string>
