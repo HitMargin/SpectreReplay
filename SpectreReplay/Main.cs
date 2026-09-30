@@ -20,8 +20,8 @@ namespace SpectreReplay
             mod = modEntry;
             ConfigStore.Load();
             Ui.PanelHost.Hotkey = Settings.Hotkey;
-            Ui.PanelHost.SetHotkeyHint(Pages.Pages.KeyName((KeyCode)Settings.Hotkey)
-                + " 开关界面 · ESC 关闭");
+            Ui.PanelHost.SetHotkeyHint(string.Format(Ui.Loc.T("ui.hint"),
+                Pages.Pages.KeyName((KeyCode)Settings.Hotkey)));
             // 常驻输入轮询：热键开关面板、ESC 关闭、驱动会变文字
             var go = new GameObject("SpectreReplayHost");
             UnityEngine.Object.DontDestroyOnLoad(go);

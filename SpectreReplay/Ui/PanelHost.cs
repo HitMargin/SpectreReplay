@@ -37,7 +37,7 @@ namespace SpectreReplay.Ui
         /// 顶部提示里的热键文字。由 <see cref="SetHotkeyHint"/> 从设置注入，
         /// 面板本身不读配置——这样离线预览不必连上 ConfigStore。
         /// </summary>
-        internal static string HotkeyHint = "F9 开关界面 · ESC 关闭";
+        internal static string HotkeyHint = Loc.T("ui.hint").Replace("{0}", "F9");
 
         internal static void SetHotkeyHint(string text) => HotkeyHint = text;
 

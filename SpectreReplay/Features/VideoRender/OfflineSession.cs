@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using UnityEngine;
 using SpectreReplay.Patching;
+using SpectreReplay.Ui;
 
 namespace SpectreReplay.Features.VideoRender
 {
@@ -62,7 +63,7 @@ namespace SpectreReplay.Features.VideoRender
                 || scrConductor.instance.song == null)
             {
                 RenderStatus.Current = RenderStatus.State.Failed;
-                RenderStatus.LastError = "请先进入关卡再开始离线渲染";
+                RenderStatus.LastError = Loc.T("render.err.need_level");
                 return false;
             }
             if (!Playback.PlaybackEngine.Load(replayPath))
@@ -224,7 +225,7 @@ namespace SpectreReplay.Features.VideoRender
                 if (!ok)
                 {
                     RenderStatus.Current = RenderStatus.State.Failed;
-                    RenderStatus.LastError = _encoder?.Error ?? "编码器未正常退出";
+                    RenderStatus.LastError = _encoder?.Error ?? Ui.Loc.T("render.err.encoder_exit");
                     UnityEngine.Debug.LogError("[SpectreReplay] 离线编码失败："
                         + RenderStatus.LastError);
                     return;

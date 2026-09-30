@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Runtime.Serialization;
 using SkyHook;
 using UnityEngine;
+using SpectreReplay.Ui;
 using SpectreReplay.Patching;
 using SpectreReplay.Features.Recording;
 using Debug = UnityEngine.Debug;
@@ -68,7 +69,7 @@ namespace SpectreReplay.Features.Playback
         {
             if (!CanInject)
             {
-                return "SkyHookEvent 结构不匹配，无法回放";
+                return Loc.T("playback.structure_mismatch");
             }
             if (_data == null)
             {

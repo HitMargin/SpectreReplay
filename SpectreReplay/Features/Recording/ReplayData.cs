@@ -115,13 +115,13 @@ namespace SpectreReplay.Features.Recording
             {
                 if (r.ReadUInt32() != Magic)
                 {
-                    throw new System.IO.InvalidDataException("不是 SpectreReplay 回放文件");
+                    throw new System.IO.InvalidDataException(Ui.Loc.T("replay.err.not_replay"));
                 }
                 int version = r.ReadInt32();
                 if (version > Version)
                 {
                     throw new System.IO.InvalidDataException(
-                        "回放文件版本 " + version + " 高于本版支持的 " + Version);
+                        string.Format(Ui.Loc.T("replay.err.version"), version, Version));
                 }
                 var d = new ReplayData();
                 int keyCount = r.ReadInt32();
@@ -142,7 +142,7 @@ namespace SpectreReplay.Features.Recording
                     int n = r.ReadInt32();
                     if (n < 0 || n > 1_000_000)
                     {
-                        throw new System.IO.InvalidDataException("判定时刻数量异常：" + n);
+                        throw new System.IO.InvalidDataException(string.Format(Ui.Loc.T("render.err.checkpoints"), n));
                     }
                     var list = new List<double>(Math.Min(n, 256));
                     for (int j = 0; j < n; j++)
@@ -181,7 +181,8 @@ namespace SpectreReplay.Features.Recording
             int len = r.ReadInt32();
             if (len < 0 || len > 1024)
             {
-                throw new System.IO.InvalidDataException("字符串长度异常：" + len);
+                throw new System.IO.InvalidDataException(
+                    string.Format(Ui.Loc.T("render.err.str_len"), len));
             }
             return System.Text.Encoding.UTF8.GetString(r.ReadBytes(len));
         }

@@ -78,7 +78,7 @@ namespace SpectreReplay.Features.VideoRender
             _proc = Process.Start(psi);
             if (_proc == null)
             {
-                throw new IOException("无法启动 ffmpeg：" + ffmpegPath);
+                throw new IOException(string.Format(Ui.Loc.T("render.err.ffmpeg_start"), ffmpegPath));
             }
             // ffmpeg 的 stderr 不读会写满管道缓冲区后卡死，必须有人接着读。
             _proc.BeginErrorReadLine();
@@ -208,7 +208,7 @@ namespace SpectreReplay.Features.VideoRender
                 if (_proc != null && !_proc.WaitForExit(timeoutMs))
                 {
                     _proc.Kill();
-                    Error = "ffmpeg 超时未退出";
+                    Error = Ui.Loc.T("render.err.ffmpeg_timeout");
                     return false;
                 }
             }

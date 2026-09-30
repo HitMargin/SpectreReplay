@@ -1,4 +1,5 @@
 using UnityEngine;
+using SpectreReplay.Ui;
 
 namespace SpectreReplay.Features.VideoRender
 {
@@ -40,7 +41,7 @@ namespace SpectreReplay.Features.VideoRender
                 if (string.IsNullOrEmpty(recent))
                 {
                     RenderStatus.Current = RenderStatus.State.Failed;
-                    RenderStatus.LastError = "没有可用的回放文件";
+                    RenderStatus.LastError = Loc.T("render.err.no_replay");
                     return;
                 }
                 OfflineSession.Start(recent);

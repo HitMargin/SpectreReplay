@@ -288,7 +288,7 @@ namespace SpectreReplay.Features.VideoRender
                 if (!ok)
                 {
                     RenderStatus.Current = RenderStatus.State.Failed;
-                    RenderStatus.LastError = _encoder?.Error ?? "编码器未正常退出";
+                    RenderStatus.LastError = _encoder?.Error ?? Ui.Loc.T("render.err.encoder_exit");
                     Debug.LogError("[SpectreReplay] 编码失败：" + RenderStatus.LastError);
                     return;
                 }
