@@ -199,7 +199,15 @@ namespace SpectreReplay.Features.Recording
 
         private static void OnKey(SkyHookEvent ev)
         {
-            if (!_recording || !ReferenceEquals(ev, null))
+            // SkyHookEvent 是**结构体**（值类型），ev 永远不可能是 null。
+            // 这里原来写着 `!ReferenceEquals(ev, null)` —— 该表达式恒为 false，
+            // 于是每次进来都在第一个分支 return，**一个按键都录不进去**。
+            // 现象是：日志里有「开始录制」，通关后 Replays 目录却空��一个文件
+            // （End 判到 Current.IsEmpty 就直接不落盘，不报错、不留痕）。
+            //
+            // 对照 Spectre 的 Features/Replay/AsyncKeyRecorder.cs：它直接从
+            // 队列取出 SkyHookEvent 就用，没有任何 null 检查。
+            if (!_recording)
             {
                 return;
             }

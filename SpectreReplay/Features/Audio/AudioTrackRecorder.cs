@@ -39,6 +39,11 @@ namespace SpectreReplay.Features.Audio
             _clip = null;
             if (source == null)
             {
+                // 三种失败（音源为 null / 取 clip 抛异常 / clip 无采样）以前
+                // 是一模一样的 return false，日志里只有一句"拿不到歌曲采样"，
+                // 三种原因分不开。这里分别记，差一个信息量就少猜一轮。
+                UnityEngine.Debug.Log("[SpectreReplay] 音频：拿不到音源"
+                    + "（song 为 null，通常是录制启动得比歌曲早）");
                 return false;
             }
             AudioClip clip;
@@ -46,12 +51,18 @@ namespace SpectreReplay.Features.Audio
             {
                 clip = source.clip;
             }
-            catch
+            catch (Exception ex)
             {
+                UnityEngine.Debug.Log("[SpectreReplay] 音频：取 clip 抛异常 —— "
+                    + ex.GetType().Name + ": " + ex.Message);
                 return false;
             }
             if (clip == null || clip.samples <= 0 || clip.frequency <= 0)
             {
+                UnityEngine.Debug.Log("[SpectreReplay] 音频：clip 不可用"
+                    + "（clip=" + (clip == null ? "null" : "有")
+                    + " samples=" + (clip == null ? 0 : clip.samples)
+                    + " frequency=" + (clip == null ? 0 : clip.frequency) + "）");
                 return false;
             }
             _clip = clip;
