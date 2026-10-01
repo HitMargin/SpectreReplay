@@ -154,14 +154,14 @@ namespace SpectreReplay.Ui
             {
                 var c = RDConstants.data;
                 if (c == null) return;
-                Add(cands, c.chineseFontTMPro, "RDConstants/中文");
+                Add(cands, c.chineseFontTMPro, "RDConstants/中文", true);
                 // chineseFontTMProDuplicate：同一份资源重复挂了一个字段，
                 // 名字里的 Duplicate 很说明问题——真正的中文字形多半在这儿，
                 // 而 chineseFontTMPro 挂的是那个不含 CJK 的 sourceFont。
-                Add(cands, c.chineseFontTMProDuplicate, "RDConstants/中文副本");
-                Add(cands, c.japaneseFontTMPro, "RDConstants/日文");
-                Add(cands, c.koreanFontTMPro, "RDConstants/韩文");
-                Add(cands, c.latinFontTMPro, "RDConstants/拉丁");
+                Add(cands, c.chineseFontTMProDuplicate, "RDConstants/中文副本", true);
+                Add(cands, c.japaneseFontTMPro, "RDConstants/日文", true);
+                Add(cands, c.koreanFontTMPro, "RDConstants/韩文", true);
+                Add(cands, c.latinFontTMPro, "RDConstants/拉丁", true);
             });
             Add(cands, Load("SourceHanSans/ChineseSimplified/SourceHanSansSC-Normal"),
                 "Resources/SourceHanSansSC-Normal");
@@ -175,12 +175,25 @@ namespace SpectreReplay.Ui
             string probe = Loc.AllText();
             var tried = new System.Text.StringBuilder();
             Candidate best = null;
+            Candidate firstGame = null;
             foreach (var cd in cands)
             {
                 cd.Missing = CountMissing(cd.Font, probe);
                 if (tried.Length > 0) tried.Append("  ");
                 tried.Append(cd.Label).Append("=").Append("缺" + cd.Missing);
-                // 一个字都不缺的立刻就用；否则先记着，最后挑缺得最少的
+                // 记下第一个游戏自己的字体。全都不完整时用它兜底：
+                //
+                // 游戏的 sourceFont（cjkFonts…）字形不全，是因为汉字挂在
+                // 它**回退链**里的语言字体上，而那条链由游戏在运行时维护
+                // （DynamicallyOrderedFont.ApplyForLanguage）。模组加载那一刻
+                // 链可能还没填上，于是实测"缺字"——但它随后就会变得完整。
+                //
+                // 反过来，一个 Resources 字体一旦实测缺字就是**真的**缺，
+                // 不会有人再去补它。所以全都不完整时，宁可用游戏的。
+                if (cd.FromGame && firstGame == null)
+                {
+                    firstGame = cd;
+                }
                 if (cd.Missing == 0)
                 {
                     best = cd;
@@ -191,6 +204,7 @@ namespace SpectreReplay.Ui
                     best = cd;
                 }
             }
+            best ??= firstGame;
             if (best?.Font == null)
             {
                 _cjk = null;
@@ -230,13 +244,22 @@ namespace SpectreReplay.Ui
             internal TMP_FontAsset Font;
             internal string Label;
             internal int Missing = int.MaxValue;
+
+            /// <summary>游戏自己的字体——它的回退链由游戏在运行时填。</summary>
+            internal bool FromGame;
         }
 
-        private static void Add(System.Collections.Generic.List<Candidate> into, TMP_FontAsset f, string label)
+        private static void Add(System.Collections.Generic.List<Candidate> into,
+            TMP_FontAsset f, string label, bool fromGame = false)
         {
             if (f != null)
             {
-                into.Add(new Candidate { Font = f, Label = label });
+                into.Add(new Candidate
+                {
+                    Font = f,
+                    Label = label,
+                    FromGame = fromGame,
+                });
             }
         }
 

@@ -77,6 +77,8 @@ namespace UiPreview
             // ⑧ **不许改游戏字体的回退链。** 模组改 fallbackFontAssetTable
             //    就是在改游戏自己界面用的那份共享状态。
             fail += CheckLeavesFallbackAlone();
+            // ⑨ 全都不完整时优先要游戏自己的字体。
+            fail += CheckPrefersGameFont();
 
             // 原来这里有一条"中文字体应挂上拉丁回退链"的断言。
             // **删掉了**：那个做法本身就是错的。
@@ -102,6 +104,64 @@ namespace UiPreview
             bool ok = m != null && m.name == expect;
             Console.WriteLine($"    {(ok ? "✓" : "✗")} {label,-28} → "
                 + $"{(m == null ? "null" : m.name)}");
+            return ok ? 0 : 1;
+        }
+
+        /// <summary>
+        /// 全都不完整时，必须选游戏自己的字体。
+        ///
+        /// 游戏的 sourceFont（cjkFonts…）实测"缺字"，是因为汉字挂在它
+        /// **回退链**里的语言字体上，而那条链由游戏在运行时填。模组加载
+        /// 那一刻链可能还没填上——**随后它就会变得完整**。
+        ///
+        /// 反过来，一个 Resources 字体一旦实测缺字就是真的缺，不会有人再去
+        /// 补它。所以"缺得最少"这条规则在这种情形下是错的。
+        /// </summary>
+        private static int CheckPrefersGameFont()
+        {
+            UnityEngine.Resources.HasSourceHanSans = true;
+            TMPro.TMP_Settings.defaultFontAsset = null;
+            if (UnityEngine.RDConstants.data == null)
+            {
+                UnityEngine.RDConstants.data = new UnityEngine.RDConstants();
+            }
+
+            var game = new TMPro.TMP_FontAsset { name = "游戏的sourceFont" };
+            foreach (char c in "渲界面设置") game.Missing.Add(c);
+            var res = new TMPro.TMP_FontAsset();
+
+            UnityEngine.RDConstants.data.chineseFontTMPro = game;
+            UnityEngine.RDConstants.data.latinFontTMPro = null;
+            UnityEngine.Resources.Registry.Clear();
+            // **每一个** Resources 路径都要注册：没注册的路径桩件会现造一个
+            // "什么都不缺"的字体，它会以 0 缺字赢掉整轮——那不是游戏的选择
+            // 规则在起作用，是测试没搭全。
+            foreach (var p in new[]
+            {
+                "SourceHanSans/ChineseSimplified/SourceHanSansSC-Normal",
+                "SourceHanSans/ChineseSimplified/ChineseSimplified-Normal",
+                "SourceHanSans/Normal",
+                "SourceHanSans/Latin/Latin-Normal",
+            })
+            {
+                var f = new TMPro.TMP_FontAsset { name = p };
+                foreach (char c in "渲界面设置回放视频录制关于标签热键字号开关")
+                {
+                    f.Missing.Add(c);
+                }
+                UnityEngine.Resources.Registry.Add(f);
+                if (p.EndsWith("SourceHanSansSC-Normal")) res = f;
+            }
+
+            SpectreReplay.Ui.UiFonts.Invalidate();
+            var picked = SpectreReplay.Ui.UiFonts.Main;
+            bool ok = picked == game;
+            Console.WriteLine($"    {(ok ? "✓" : "✗")} 全都不完整时优先游戏字体 "
+                + $"  → 选中「{picked?.name}」");
+
+            UnityEngine.Resources.Registry.Clear();
+            UnityEngine.Resources.HasSourceHanSans = false;
+            SpectreReplay.Ui.UiFonts.Invalidate();
             return ok ? 0 : 1;
         }
 
