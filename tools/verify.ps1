@@ -49,7 +49,11 @@ if (-not $SkipPreview) {
     Step '离线验证套件' {
         Push-Location (Join-Path $root 'tools\UiPreview')
         $outDir = Join-Path $env:TEMP 'uipreview'
-        $out = & dotnet run -c Release -v q -- $outDir --click 2>&1
+        # 必须 --no-incremental：预览器链接的是**外部**文件（Gfx.cs、
+        # PanelHost.cs、UiFonts.cs …），改完还原之后普通的增量构建察觉不到，
+        # 跑出来还是上一次的二进制。已经因此误判过两次"修复没生效"。
+        & dotnet build -c Release -v q --nologo --no-incremental 2>&1 | Out-Null
+        $out = & dotnet run -c Release -v q --no-build -- $outDir --click 2>&1
         Pop-Location
         $lines = $out
         $bad = @($lines | Where-Object { $_ -match '^\s+✗' })
