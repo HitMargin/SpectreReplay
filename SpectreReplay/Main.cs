@@ -142,9 +142,10 @@ namespace SpectreReplay
             // Load 里、失败原因在 Refresh 里（早了一行），两个窗口里
             // 看到的时间顺序是反的，排查时会对不上。缺哪个补丁、为什么缺，
             // 必须一眼能看完——否则只能靠猜。
+            // 界面不再有热键：UMM 窗口由 UMM 自己开（默认 F7），
+            // 模组选中即显示。摘要里也就不必再报一个不存在的键。
             mod.Logger.Log("[SpectreReplay] 已加载：补丁 "
                 + PatchLoader.AppliedCount + "/" + PatchLoader.DeclaredCount
-                + "（界面热键 " + Pages.Pages.KeyName((KeyCode)Settings.Hotkey) + "）"
                 + PatchLoader.FailureReport);
             IsReady = true;
         }

@@ -66,15 +66,15 @@ namespace SpectreReplay
         internal static bool DuplicateWhenLate = true;
 
         // ── 界面 ──────────────────────────────────────────────
-        /// <summary>界面热键键码。默认 F9=290，与 Spectre 的 F8 错开。</summary>
-        internal static int Hotkey = 290;
-
-        /// <summary>全局字号缩放。</summary>
-        internal static float TextScale = 1f;
-
-        /// <summary>进入关卡时自动打开界面。热键读不到时打开它，就能确认
-        /// 界面本身能不能显示——"键没读到"和"界面没画出来"要分开定位。</summary>
-        internal static bool AutoOpenUi = false;
+        // 原先这里有三项：热键、字号缩放、进入关卡自动开界面。
+        // **换成 UMM 自带的 OnGUI 之后全都不起作用了**：UMM 窗口由 UMM 自己
+        // 管（默认 F7），字号由 UMM 的皮肤决定，也没有"自动打开"这回事。
+        //
+        // 留着比删掉更糟——三个滑条摆在那里，拖了纹丝不动，玩家只会
+        // 得出"这个模组的设置全是坏的"。设置项必须和实际行为一一对应。
+        //
+        // 已经在用的旧 Configs.json 里还留着这三个键：读取时忽略未知键
+        // （见 Apply），下次保存就不写了，无需迁移。
 
         // ── 路径 ──────────────────────────────────────────────
         /// <summary>模组根目录（dll 所在处）。UM4 把 dll 放在 Mods\&lt;名&gt;\ 下。</summary>
@@ -175,9 +175,6 @@ namespace SpectreReplay
             Settings.TailSeconds = GetFloat(d, "TailSeconds", Settings.TailSeconds);
             Settings.OutputDir = GetString(d, "OutputDir", Settings.OutputDir);
             Settings.DuplicateWhenLate = GetBool(d, "DuplicateWhenLate", Settings.DuplicateWhenLate);
-            Settings.Hotkey = GetInt(d, "Hotkey", Settings.Hotkey);
-            Settings.TextScale = GetFloat(d, "TextScale", Settings.TextScale);
-            Settings.AutoOpenUi = GetBool(d, "AutoOpenUi", Settings.AutoOpenUi);
         }
 
         private static bool GetBool(Dictionary<string, object> d, string k, bool def)
@@ -228,9 +225,6 @@ namespace SpectreReplay
                     { "TailSeconds", Settings.TailSeconds },
                     { "OutputDir", Settings.OutputDir },
                     { "DuplicateWhenLate", Settings.DuplicateWhenLate },
-                    { "Hotkey", Settings.Hotkey },
-                    { "TextScale", Settings.TextScale },
-                    { "AutoOpenUi", Settings.AutoOpenUi },
                 };
                 string dir = Path.GetDirectoryName(FilePath);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
