@@ -516,6 +516,7 @@ namespace SpectreReplay.Ui
             };
             p.Build?.Invoke(pb);
             _content.sizeDelta = new Vector2(0f, pb.ContentHeight + 24f);
+            indexForLog = index;
             ResetScroll();
         }
 
@@ -541,13 +542,35 @@ namespace SpectreReplay.Ui
                 return;
             }
             _scroll.StopMovement();
-            // 1 = 顶部。ScrollRect 的 verticalNormalizedPosition 1 表示最上。
+
+            // **关键：得先让布局算完。**
+            //
+            // verticalNormalizedPosition 的 setter 内部会调 UpdateBounds()，
+            // 读的是**当前这一刻**的内容与视口矩形。而我们是刚把新的
+            // sizeDelta 写上去就立刻设它，Unity 还没重跑布局——它读到的是
+            // 上一页留下来的陈旧矩形，于是算出一个错的偏移。
+            // 紧接着 Clamped 拿着同一套陈旧边界去纠正，自然纠正不到位。
+            //
+            // 真机上的症状就是这么来的：切到渲染页，内容被抬到视口上方
+            // 一千多像素，屏幕上只剩最后一条说明的一线边。
+            //
+            // 设两遍：第一遍强制布局生效，第二遍用已经算好的边界再校正一次。
+            _content.anchoredPosition = new Vector2(0f, 0f);
+            Canvas.ForceUpdateCanvases();
             _scroll.verticalNormalizedPosition = 1f;
-            if (_content != null)
-            {
-                _content.anchoredPosition = new Vector2(0f, 0f);
-            }
+            Canvas.ForceUpdateCanvases();
+            _scroll.verticalNormalizedPosition = 1f;
+            _content.anchoredPosition = new Vector2(0f, 0f);
+
+            // 把实际算出来的尺寸记进日志：这类问题光看画面猜不出来，
+            // 有这几个数就能直接判断是面板过高、内容过高还是偏移没归零。
+            UnityEngine.Debug.Log(
+                $"[SpectreReplay] 第{indexForLog}页 布局：面板 {_panel.rect.height:F0}"
+                + $" 视口 {_viewport.rect.height:F0} 内容 {_content.rect.height:F0}"
+                + $" 偏移 {_content.anchoredPosition.y:F0}");
         }
+
+        private static int indexForLog;
 
         internal static void Refresh() => Show(_current);
 

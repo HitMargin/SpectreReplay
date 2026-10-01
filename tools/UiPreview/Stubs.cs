@@ -213,6 +213,19 @@ namespace UnityEngine
     {
         public RenderMode renderMode;
         public int sortingOrder;
+
+        /// <summary>
+        /// 真实 Unity 会在这里把整棵 UI 的布局立刻重算一遍。
+        ///
+        /// 桩件里是空实现，但**必须存在**——
+        /// `ScrollRect.verticalNormalizedPosition` 的 setter 内部要先读到
+        /// "已经算好的"内容与视口矩形，否则用的是上一页留下来的陈旧值：
+        /// 内容被抬到视口上方一大截，屏幕上只剩最后一条说明的一线边。
+        ///
+        /// 桩件不该模拟这个行为（那需要完整的矩形推导），但也不该让主项目
+        /// 编译不过。
+        /// </summary>
+        public static void ForceUpdateCanvases() { }
     }
 
     public class CanvasScaler : Component
@@ -311,6 +324,23 @@ namespace UnityEngine
         public Vector2 anchorMin, anchorMax, pivot, anchoredPosition, sizeDelta, offsetMin, offsetMax;
         /// <summary>预览用：解析出的绝对矩形（左上角原点、y 向下）。</summary>
         public float X, Y, W, H;
+
+        /// <summary>
+        /// 真实 RectTransform 的 rect（本地矩形，原点在 pivot）。
+        /// 桩件给个由 sizeDelta 近似出来的值——它不是精确推导（那要完整的
+        /// 锚点计算），但至少让"把布局尺寸记进日志"这类代码编译得过、
+        /// 且给出的数不是 0。
+        /// </summary>
+        public Rect rect => new Rect(0f, 0f, sizeDelta.x, sizeDelta.y);
+    }
+
+    public struct Rect
+    {
+        public float x, y, width, height;
+        public Rect(float x, float y, float w, float h)
+        {
+            this.x = x; this.y = y; width = w; height = h;
+        }
     }
 
     public class GameObject : Object
