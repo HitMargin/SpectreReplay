@@ -35,11 +35,23 @@ namespace SpectreReplay
                 mod = modEntry;
                 // 配置与文案：纯数据读取，不碰场景，Load 期做是安全的。
                 ConfigStore.Load();
-                // 语言要先定下来：顶栏提示、热键名等都是按当前语言现生成的。
-                // 放在 ApplyHotkey 之前，顺序反了就会按默认语言生成。
                 Ui.Loc.RefreshLanguage();
-                Ui.PanelHost.ApplyHotkey(Settings.Hotkey);
-                Pages.Pages.RegisterAll();
+
+                // 界面全部交给 UMM 自带的 OnGUI。**不再自建 Canvas。**
+                //
+                // 之前那套自建 UI（Canvas + EventSystem + ScrollRect + TMP）
+                // 踩的坑一串接一串：与游戏的 EventSystem 撞车、滚动条归位时机、
+                // raycast 标志、裁剪、字体回退……每一个失败方式都长得像
+                // "界面坏了"。UMM 把画布、输入派发、字体、布局全管了，
+                // 这整类问题直接不存在。
+                //
+                // OnGUI 只在玩家打开 UMM 窗口并选中本模组时才会被调用，
+                // 所以"什么时候显示"由 UMM 决定，不需要自己管可见性。
+                modEntry.OnGUI = Ui.OnGui.OnGUI;
+                modEntry.OnShowGUI = Ui.OnGui.OnShow;
+                modEntry.OnHideGUI = Ui.OnGui.OnHide;
+                modEntry.OnSaveGUI = Ui.OnGui.OnHide;
+
                 // 装配在 OnToggle 里做，不在 Load 里做。Spectre 也是这么分的：
                 // Load 只读配置、设回调，重活（Harmony 初始化、补丁挂载、
                 // 建 GameObject）全在模组被启用、游戏场景就绪之后。
@@ -87,21 +99,22 @@ namespace SpectreReplay
                 }
                 return true;
             }
-            Ui.PanelHost.Close();
+            Shutdown();
             return true;
         }
 
         private static void Boot(bool isToggled)
         {
-            // 常驻输入轮询：热键开关面板、ESC 关闭、驱动会变文字
-            var go = new GameObject("SpectreReplayHost");
-            UnityEngine.Object.DontDestroyOnLoad(go);
-            go.AddComponent<Ui.PanelHostBehaviour>();
+            // 常驻对象只挂配置落盘。**不再有面板宿主**——界面全部交给
+            // UMM 的 OnGUI，不需要自己建 Canvas、不需要轮询热键。
+            //
             // 配置落盘也必须挂上去。ConfigStore.Save() 只把配置标脏，
             // 真正写文件靠 ConfigFlusher 每帧末尾的 Flush()——**它原来
             // 从来没被 AddComponent 过**，于是 Save 标了脏却没人写盘，
             // 用户在界面里改的每个设置重开游戏就丢了。表现是"点得动、
             // 界面也变、就是不生效"。
+            var go = new GameObject("SpectreReplayHost");
+            UnityEngine.Object.DontDestroyOnLoad(go);
             go.AddComponent<ConfigFlusher>();
 
             // 功能门控：设置页改开关后由 Settings.Commit 触发 PatchLoader.Refresh
@@ -119,7 +132,7 @@ namespace SpectreReplay
             //
             // 通过 UI 的钩子注入，而不是让 Ui 直接引 PatchLoader：离线预览器
             // 不链接补丁加载器（那要 Harmony 与游戏程序集），引了那边编不过。
-            Ui.PanelHost.PatchFailures = PatchLoader.FailedCount;
+            
 
             // 进关检测常驻（不是补丁，是状态轮询），
             // 否则首次进入关卡这条路径在不同版本里没有稳定的钩子。
@@ -139,13 +152,15 @@ namespace SpectreReplay
         /// <summary>
         /// 模组被关闭时收摊。
         ///
-        /// 卸载补丁交给 PatchLoader 自己：它有 Harmony 实例的引用，
-        /// 而 OnToggle(false) 拿到的 ModEntry 里没有。GameObject 是
-        /// DontDestroyOnLoad 的常驻对象，UMM 不管，得自己关掉面板。
+        /// 不用关面板：UMM 的 OnGUI 是自己管的，画布、窗口、输入派发
+        /// 全归 UMM。原先那句 PanelHost.Close() 是自建面板时代的残留——
+        /// 面板没了，它自然也没了。
+        ///
+        /// 补丁必须卸：PatchLoader 持有 Harmony 实例的引用，
+        /// OnToggle(false) 给的 ModEntry 里拿不到。
         /// </summary>
         private static bool Shutdown()
         {
-            Ui.PanelHost.Close();
             PatchLoader.UnpatchAll();
             IsReady = false;
             return true;

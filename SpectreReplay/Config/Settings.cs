@@ -113,7 +113,9 @@ namespace SpectreReplay
         /// <summary>改完任一项后调用：落盘 + 通知补丁层重挂。</summary>
         internal static void Commit()
         {
-            Ui.Theme.TextScale = TextScale;
+            // 原先这里设 Ui.Theme.TextScale，让自建界面跟着放大字号。
+            // 换成 UMM 自带的 OnGUI 之后，全局字号由 UMM 的皮肤决定，
+            // 这个设置不再有任何作用——留着会让"改了没反应"。
             ConfigStore.Save();
             Patching.PatchLoader.Refresh();
         }
@@ -154,8 +156,7 @@ namespace SpectreReplay
             {
                 Debug.LogWarning("[SpectreReplay] 读取配置失败，改用默认值：" + ex.Message);
             }
-            Ui.Theme.TextScale = Settings.TextScale;
-        }
+            }
 
         private static void Apply(Dictionary<string, object> d)
         {

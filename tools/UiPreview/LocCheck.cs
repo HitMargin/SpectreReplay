@@ -35,48 +35,17 @@ namespace UiPreview
         private static IEnumerable<string> SourceFiles() => new[]
         {
             @"..\..\SpectreReplay\Pages\Pages.cs",
-            @"..\..\SpectreReplay\Ui\PanelHost.cs",
-        };
-
-        /// <summary>预览用的是 PagesShim，它必须与真实 Pages.cs 同步。</summary>
-        private static IEnumerable<string> ShimFiles() => new[]
-        {
-            @"..\..\SpectreReplay\Pages\Pages.cs",
-            "PagesShim.cs",
+            @"..\..\SpectreReplay\Ui\OnGui.cs",
         };
 
         /// <summary>
-        /// 真实页面与预览 shim 的文案键必须一致。
+        /// 扫描页面代码里用到的文案键。
         ///
-        /// 这次就栽在这儿：把下拉选项从写死的 "auto"/"low" 改成走文案表之后，
-        /// 忘了同步 shim，预览里渲染出来的还是旧文案——图上看不出来，
-        /// 因为两条路径都能正常显示字符串。靠人记着同步是不靠谱的。
+        /// 以前这里还要和"预览 shim"对账——预览器内联了一份与 Pages.cs
+        /// 同步的页面内容，改一处忘另一处，预览出来的就跟实际界面不一样，
+        /// 而且图上看不出来。换成 UMM 的 OnGUI 之后**根本没有 shim**：
+        /// 预览器只验数据层，页面代码只有一份，这类"忘了同步"的坑整类消失。
         /// </summary>
-        internal static int CheckShimInSync()
-        {
-            var real = KeysFrom(ShimFiles());
-            var shim = KeysFrom(new[] { "PagesShim.cs" });
-            var onlyReal = new List<string>();
-            var onlyShim = new List<string>();
-            foreach (var k in real) if (!shim.Contains(k)) onlyReal.Add(k);
-            foreach (var k in shim) if (!real.Contains(k)) onlyShim.Add(k);
-            if (onlyReal.Count == 0 && onlyShim.Count == 0)
-            {
-                Console.WriteLine("    ✓ 预览 shim 与真实页面的文案键一致");
-                return 0;
-            }
-            foreach (var k in onlyReal)
-            {
-                Console.WriteLine($"    ✗ 真实页面用了 {k}，预览 shim 没有"
-                    + "  ← 预览渲染的不是实际界面");
-            }
-            foreach (var k in onlyShim)
-            {
-                Console.WriteLine($"    ✗ 预览 shim 多了 {k}，真实页面没有");
-            }
-            return onlyReal.Count + onlyShim.Count;
-        }
-
         private static HashSet<string> KeysFrom(IEnumerable<string> files)
         {
             var set = new HashSet<string>(StringComparer.Ordinal);
@@ -94,7 +63,9 @@ namespace UiPreview
 
         internal static int Run(HashSet<string> used)
         {
-            int syncFail = CheckShimInSync();
+            // 原来这里还有一次「预览 shim 与真实页面的文案键对账」。
+            // 预览器删掉之后那个坑不复存在：页面就是 Pages.cs 本身，
+            // 没有第二份需要同步的副本——曾经栽过的跟头不会再来。
             var zh = Table("Zh");
             var en = Table("En");
             int fail = 0;

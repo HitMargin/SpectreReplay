@@ -1,486 +1,59 @@
-// 离线预览：不启动游戏也能看到 UI 长什么样、并检查文字溢出。
+// 离线验证：不启动游戏也能验的那部分。
 //
-// 它调用的是**真实的** PanelHost.BuildInto / Show / PageBuilder / Gfx，
-// 只把 UnityEngine / TMPro / UnityEngine.UI 换成 Stubs.cs 里的桩件。
-// 桩件只实现真实代码用到的那部分 API —— 桩件一旦比真实 Unity 更宽松，
-// 这个验证就没有意义了（TMP_Text 的 transform、Mathf 的 int 重载
-// 都是这样被补齐的）。
+// **这一整套原本是 UI 预览器**——链接真实的 Gfx/PageBuilder/PanelHost，
+// 把 Unity 换成桩件，离屏渲染四页设置界面、并逐个控件做点击命中测试。
+// 界面改成 UMM 自带的 OnGUI 之后，它整类失效了：
 //
-// 为什么值得存在：这套布局错过的每一次都是离屏就能查出来的毛病
-// （子件被算成 0 高、控件铺满整行、标签框宽为负、页面区跑到面板外）。
-// 自己看图比让人反复开游戏按 F9 靠谱得多。
+//   · GUILayout 是**声明式**的，没有 RectTransform、没有锚点、没有 sizeDelta，
+//     桩件模拟不出 IMGUI 的布局与事件派发；
+//   · 命中测试要回答"这个点被谁吃掉了"，而 GUILayout 的命中由引擎的
+//     控件矩形当场算出来，离屏复刻它等于重写一遍引擎。
+//
+// 所以预览与几何断言整个删掉，不留半吊子替代品——**一个验不了真东西的
+// 检查比没有检查更糟**：它会让人以为界面是对的。
+//
+// 留下的是验**数据层**的部分，与界面怎么画无关：
+//   · ReplayCheck   回放文件格式往返（坏掉的话回放与渲染全废）
+//   · FfmpegCheck   ffmpeg 参数拼装，并真跑一遍
+//   · LocCheck      文案表完整性（漏键 = 界面上露出原始键名）
+//   · HardTextCheck 用户可见的中文有没有被写死
+//
+// 界面本身只能靠游戏里开一次 UMM 窗口看。这是 GUILayout 的代价，
+// 换来的是不用再维护 Canvas/EventSystem/ScrollRect/TMP 那一整套。
 using System;
-using System.Collections.Generic;
-using System.Drawing;
-using System.IO;
-using SpectreReplay.Ui;
-using UnityEngine;
 
 namespace UiPreview
 {
     internal static class Driver
     {
-        // 预览用 1920x1080 画布 —— 与 CanvasScaler 的参考分辨率一致
-        private const float CanvasW = 1920f, CanvasH = 1080f;
-
         internal static int Run(string outDir, string[] args)
         {
-            Directory.CreateDirectory(outDir);
-            // 字体回退链先验：它决定界面上有没有字，而字形本身离屏验不了
-            // 数据格式往返：坏掉的话回放和渲染全废，只有真机读到文件才暴露            int replayFail = ReplayCheck.Run();            // ffmpeg 参数：静默失败，只能真跑一遍才知道            int ffFail = FfmpegCheck.Run();            int fontFail = FontCheck.Run();
-            // 文案完整性：漏一个键，界面上就是空白或原始键名
+            // 数据格式往返：坏掉的话回放和渲染全废，而这种 bug 只在真机
+            // 读到文件时才暴露。
+            int replayFail = ReplayCheck.Run();
+
+            // ffmpeg 参数：拼错不会报错，只会静默地不出片，所以真跑一遍。
+            int ffFail = FfmpegCheck.Run();
+
+            // 文案完整性：漏一个键，界面上就是空白或原始键名。
             int locFail = LocCheck.Run(LocCheck.CollectUsedKeys());
-            // 事件系统唯一性：两个并存就是"有时候点得动"
-            int evFail = EventCheck.Run();            // 孤儿组件：定义了却从没被 AddComponent 的，永远是 bug            int orphanFail = OrphanCheck.Run(                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));            int cfgFail = ConfigCheck.Run(                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));            int hardFail = HardTextCheck.Run(                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));            PanelHost.Close();
 
-            var pages = new (string Key, Action<PageBuilder> Build)[]
-            {
-                ("record", Pages.BuildRecord),
-                ("playback", Pages.BuildPlayback),
-                ("render", Pages.BuildRender),
-                ("about", Pages.BuildAbout),
-            };
-            foreach (var p in pages)
-            {
-                PanelHost.Page(p.Key, p.Key, "page." + p.Key, p.Build);
-            }
-            // 设置改了必须重画，否则"拖滑条没反应"跟"控件坏了"从外面看一样
-            int refreshFail = RefreshCheck.Run();            // 切页后滚动位置：用户实际撞到过，整页内容被推出视口            int scrollFail = ScrollResetCheck.Run();            // 缺字形自检：离线查不出"字在不在"，但能验自检本身会不会报            int glyphFail = MissingGlyphCheck.Run();
+            // 硬编码中文：英文语言的用户会在英文界面里看到夹进来的中文。
+            int hardFail = HardTextCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
 
-            int totalOverflow = 0;            int totalBadCombo = 0;
-            // 中英文都要渲染：**中文字宽和英文不一样**，只验一种等于没验。
-            // 玩家把游戏设成中文时看到的就是中文界面。
-            foreach (var zh in new[] { true, false })
-            {
-                Loc.UseChinese = zh;
-                string suffix = zh ? ".zh" : ".en";
-                Console.WriteLine(zh ? "  ── 中文 ──" : "  ── 英文 ──");
-                for (int i = 0; i < pages.Length; i++)
-                {
-                var key = pages[i].Key;
-                // 回放页有两种状态（有回放/无回放），两种都画。
-                // 空列表那条分支的行数最少，恰恰是最容易在某次改动里塌掉的。
-                Pages.ReplayCount = key == "playback"
-                    ? (zh ? 2 : 0)
-                    : 2;
-
-                // 虚拟屏幕：锚点全零、轴心全零、偏移为零 —— 就是坐标原点
-                var screenGo = new GameObject("Screen", typeof(RectTransform));
-                var sRt = (RectTransform)screenGo.transform;
-                sRt.anchorMin = Vector2.zero;
-                sRt.anchorMax = Vector2.zero;
-                sRt.pivot = Vector2.zero;
-                sRt.anchoredPosition = Vector2.zero;
-                sRt.sizeDelta = new Vector2(CanvasW, CanvasH);
-
-                PanelHost.BuildInto(sRt);
-                PanelHost.Show(i);          // ← 真实代码：建页面内容
-
-                // 根节点的 Unity 坐标就是 (0,0)-(CanvasW,CanvasH)
-                var screen = Node.Walk(screenGo.transform,
-                    new Node
-                    {
-                        X = 0f, Y = 0f, W = CanvasW, H = CanvasH,
-                        Px = 0f, Py = 0f,
-                    });
-
-                var r = new Renderer((int)CanvasW, (int)CanvasH);
-                if (i == 0 && zh)
-                {
-                    Console.WriteLine("  自检: " + r.SelfTest());
-                }
-                r.Draw(screen);
-                string path = Path.Combine(outDir, key + suffix + ".png");
-                r.Save(path);
-                Console.WriteLine($"    {key,-9} → {Path.GetFileName(path)}");
-                // 先记住根节点：HitTest 要从根开始走
-                _screen = screen;
-                if (args.Length > 2 && args[1] == "--dump"
-                    && i == int.Parse(args[2]))
-                {
-                    Dump(screen, 0);
-                }
-                // 点击测试与语言无关（几何相同），只跑一遍就够
-                if (args.Length > 1 && args[1] == "--click" && zh)
-                {
-                    if (i == 0)
-                    {
-                        // "点空白处关闭"这条只验一次：它与页面无关
-                        CheckOverlayCloses(screen);
-                    }
-                    RunClickTests(key, screen);
-                }
-                foreach (var o in r.Overflows)
-                {
-                    Console.WriteLine("      文字溢出 " + o);
-                }
-                totalOverflow += r.Overflows.Count;
-                totalBadCombo += CountBadWrapCombo(screen);
-                }
-            }
-            Loc.UseChinese = true;
-
+            int total = replayFail + ffFail + locFail + hardFail;
             Console.WriteLine();
-            Console.WriteLine(totalOverflow == 0
-                ? "  ✓ 无文字溢出"
-                : $"  ✗ {totalOverflow} 处文字溢出");
-            // Normal + Ellipsis：TMP 的意思是"按框高折行、再截断"。
-            // 单行标签（行标签、标题、按钮文字）配成这个组合，稍微超宽就会
-            // 折成两行——看着像布局坏了。
-            Console.WriteLine(totalBadCombo == 0
-                ? "  ✓ 没有「会折行的单行标签」（Normal + Ellipsis）"
-                : $"  ✗ {totalBadCombo} 处用了 Normal + Ellipsis，"
-                    + "单行文字会折成多行");
-            if (ClickFailures > 0)
-            {
-                Console.WriteLine($"  ✗ {ClickFailures} 处点击点不中"
-                    + "（点得动的控件被别的东西盖住了）");
-            }
-            if (fontFail > 0)
-            {
-                Console.WriteLine($"  ✗ 字体回退链有 {fontFail} 处不对");
-            }
-            if (ffFail > 0)            {                Console.WriteLine($"  ✗ ffmpeg 参数有 {ffFail} 处不对");            }
-            if (replayFail > 0)            {                Console.WriteLine($"  ✗ 回放文件往返有 {replayFail} 处对不上");            }
-            if (hardFail > 0)            {                Console.WriteLine($"  ✗ 有 {hardFail} 处用户可见的中文被写死");            }
-            if (cfgFail > 0)
-            {
-                Console.WriteLine($"  ✗ 配置往返有 {cfgFail} 处对不上");
-            }
-            if (orphanFail > 0)
-            {
-                Console.WriteLine($"  ✗ {orphanFail} 个组件从没被挂上去");
-            }
-            if (evFail > 0)
-            {
-                Console.WriteLine($"  ✗ EventSystem 有 {evFail} 处不对");
-            }
-            if (locFail > 0)
-            {
-                Console.WriteLine($"  ✗ 文案有 {locFail} 处缺漏");
-            }
-            // **每一个计数都必须进返回值。** 原来只检查了 4 个（溢出、点击、
-            // 字体、文案），其余六项虽然会打印出 ✗，却不会让退出码变红——
-            // 闸门会在一堆失败下报"全部通过"。这比没有检查更糟。
-            if (glyphFail > 0)            {                Console.WriteLine($"  ✗ 缺字形自检有 {glyphFail} 处不对");            }            if (scrollFail > 0)            {                Console.WriteLine($"  ✗ 切页后滚动位置没重置（{scrollFail} 处）");            }            if (refreshFail > 0)
-            {
-                Console.WriteLine($"  ✗ 设置改动后没有重画界面（{refreshFail} 处）");
-            }
-            if (totalBadCombo > 0) { totalOverflow += totalBadCombo; }            return totalOverflow == 0 && ClickFailures == 0
-                && fontFail == 0 && locFail == 0
-                && ffFail == 0 && replayFail == 0
-                && evFail == 0 && orphanFail == 0
-                && cfgFail == 0 && hardFail == 0
-                && refreshFail == 0 && scrollFail == 0                && glyphFail == 0 ? 0 : 1;
+            Console.WriteLine(total == 0
+                ? "  全部通过"
+                : $"  {total} 项不通过");
+            return total;
         }
 
-        /// <summary>数一数用错折行组合的文字节点（Normal + Ellipsis）。</summary>
-        private static int CountBadWrapCombo(Node n)
+        /// <summary>进程入口。outDir 保留是为了不改 verify.ps1 的调用方式。</summary>
+        internal static int Main(string[] args)
         {
-            int c = n.BadWrapCombo ? 1 : 0;
-            foreach (var k in n.Kids)
-            {
-                c += CountBadWrapCombo(k);
-            }
-            return c;
-        }
-        private static int ClickFailures;
-
-        /// <summary>
-        /// 代表性点击：每个都点在**应该能点的控件**上，检查命中的是不是它自己。
-        /// 用户报过"设置菜单点不动"——光看 raycastTarget 标志证明不了这点。
-        /// </summary>
-        private static void RunClickTests(string page, Node screen)
-        {
-            Console.WriteLine($"    ── {page} 点击命中 ──");
-            // 名称 → 期望命中路径的末段
-            var expects = new (string Target, string MustEndWith)[]
-            {
-                ("Nav0", "Nav0"),      // 侧栏第一项
-                ("Nav1", "Nav1"),
-                ("Nav3", "Nav3"),
-            };
-            foreach (var (target, suffix) in expects)
-            {
-                var n = Find(screen, target);
-                if (n == null)
-                {
-                    Console.WriteLine($"      ?  找不到 {target}");
-                    continue;
-                }
-                Report(page, target, n);
-            }
-            // 所有开关、按钮、下拉、滑条本体——**只测当前能看见的**。
-            // 折叠线以下的控件这时本来就点不到（被 RectMask2D 裁掉），
-            // 拿它们当断言只会得到"没命中任何东西"这种假失败。它们
-            // 由 ScrolledControls 滚到底之后再测一遍。
-            var vp = Find(screen, "Viewport");
-            foreach (var kind in new[] { "Toggle", "Button", "DropDown", "Slider", "Input" })
-            {
-                foreach (var n in FindAll(screen, kind))
-                {
-                    if (vp != null && !FullyInside(n, vp))
-                    {
-                        continue;
-                    }
-                    Report(page, kind, n);
-                }
-            }
-            NegativeControls(page, screen);
-        }
-
-        /// <summary>控件是否完全落在视口内（没被裁掉、看得见）。</summary>
-        private static bool FullyInside(Node n, Node vp)
-            => n.Y >= vp.Y - 0.5f && n.Y + n.H <= vp.Y + vp.H + 0.5f;
-
-        /// <summary>
-        /// 遮罩必须真的是个"点了会关闭面板"的按钮。
-        ///
-        /// 命中测试只能证明遮罩**在那儿**，证明不了它**接着回调**——遮罩
-        /// 铺满屏幕、raycastTarget 也为 true，点下去却什么都不会发生，
-        /// 从几何上完全看不出来。
-        /// </summary>
-        private static void CheckOverlayCloses(Node screen)
-        {
-            var overlay = Find(screen, "Overlay");
-            if (overlay == null)
-            {
-                Console.WriteLine("      ✗ 遮罩 点空白关闭  → 找不到 Overlay");
-                ClickFailures++;
-                return;
-            }
-            bool isButton = overlay.IsButton && overlay.Buttons > 0;
-            Console.WriteLine($"      {(isButton ? "✓" : "✗")} 遮罩点了会关闭面板"
-                + $"  → {(overlay.IsButton ? $"Button，{overlay.Buttons} 个回调"
-                    : (overlay.Raycast ? "只是个可点的图，没有回调" : "连射线都不吃"))}");
-            if (!isButton)
-            {
-                ClickFailures++;
-            }
-        }
-
-        /// <summary>
-        /// 反向对照。只做正向断言是不够的：万一命中测试无论点什么都返回同一个
-        /// 节点，全绿也是假的。所以这里点**不该命中任何控件**的地方，
-        /// 确认命中的确实是容器而不是按钮。
-        /// </summary>
-        private static void NegativeControls(string page, Node screen)
-        {
-            var viewport = Find(screen, "Viewport");
-            var panel = Find(screen, "Panel");
-            if (viewport == null || panel == null)
-            {
-                return;
-            }
-            // 视口底部那片空白：内容不满一屏时那里什么都没有
-            float x = viewport.X + viewport.W * 0.5f;
-            float y = viewport.Y + viewport.H - 30f;
-            Check(page, "空白处", x, y, "Viewport");
-
-            // 侧栏底部空白：应命中侧栏本身
-            var side = Find(screen, "Sidebar");
-            if (side != null)
-            {
-                Check(page, "侧栏空白", side.X + side.W * 0.5f, side.Y + side.H - 30f,
-                    "Sidebar");
-            }
-
-            // 页面标题栏：Header 故意 raycastTarget=false，所以命中会落到 PageArea。
-            // 该保证的不是"命中 Header"，而是"**不会激活任何控件**"。
-            var header = Find(screen, "Header");
-            if (header != null)
-            {
-                CheckNoControl(page, "标题栏",
-                    header.X + header.W * 0.5f, header.Y + header.H * 0.5f);
-            }
-
-            // 点面板**外面**必须命中遮罩——遮罩是"点空白处关闭"的按钮。
-            // 这条之前没验过：遮罩要么没接上（点了没反应），要么没铺满
-            // 屏幕（边角点不到），两种都很难靠肉眼发现。
-            var overlay = Find(screen, "Overlay");
-            if (overlay != null)
-            {
-                Check(page, "面板外", 40f, 40f, "Overlay");
-                // 四角都要够得着：遮罩只铺了一部分的话，角落会点不动
-                Check(page, "面板外·右下",
-                    (float)CanvasW - 40f, (float)CanvasH - 40f, "Overlay");
-            }
-
-            // 滚动条必须与视口上下对齐。它是按"顶栏底边"还是"内容区顶边"
-            // 定位的，两种都行但必须一致——这类"参数加了没接上"的错我今天
-            // 真犯过一次：给 BuildScrollbar 传了 top，函数体里还在用
-            // Theme.HeaderH，肉眼看只是高了十来个像素，很难当回事。
-            var viewport2 = Find(screen, "Viewport");
-            var bar = Find(screen, "Scrollbar");
-            if (viewport2 != null && bar != null)
-            {
-                bool aligned = Math.Abs(bar.Y - viewport2.Y) < 1f
-                    && Math.Abs(bar.H - viewport2.H) < 1f;
-                Console.WriteLine($"      {(aligned ? "✓" : "✗")} 滚动条与视口上下对齐"
-                    + $"  → 条 {bar.Y:F0}/{bar.H:F0} 视口 {viewport2.Y:F0}/{viewport2.H:F0}");
-                if (!aligned)
-                {
-                    ClickFailures++;
-                }
-            }
-
-            ScrolledControls(page, screen, viewport2);
-        }
-
-        /// <summary>
-        /// 滚到底之后，把折叠线以下的控件再点一遍。
-        ///
-        /// 预览一直只渲染第一屏，所以**折叠线以下的控件从来没被测过**。
-        /// 渲染页有十几行，一半在折叠线以下——那一半的布局要是坏了，
-        /// 现在的套件完全发现不了。真实用户会滚下去，所以那里坏了一样算坏。
-        /// </summary>
-        private static void ScrolledControls(string page, Node screen, Node viewport)
-        {
-            var content = Find(screen, "Content");
-            if (viewport == null || content == null)
-            {
-                return;
-            }
-            float overflow = content.H - viewport.H;
-            if (overflow <= 1f)
-            {
-                return;         // 这页不滚动，没什么好测的
-            }
-            Node.ScrollBy(content, -overflow);
-            Console.WriteLine($"    ── {page} 滚到底（下移 {overflow:F0}px）──");
-            foreach (var kind in new[] { "Toggle", "Button", "DropDown", "Slider", "Input" })
-            {
-                foreach (var n in FindAll(screen, kind))
-                {
-                    // 完全在视口外的（还在更下面）这轮仍然测不到，跳过
-                    if (n.Y + n.H < viewport.Y || n.Y > viewport.Y + viewport.H)
-                    {
-                        continue;
-                    }
-                    Report(page, kind + "(滚动后)", n);
-                }
-            }
-            Node.ScrollBy(content, overflow);   // 复位
-        }
-
-        private static readonly HashSet<string> ControlNames = new HashSet<string>
-        {
-            "Nav0", "Nav1", "Nav2", "Nav3", "Toggle", "Button", "DropDown",
-            "Slider", "Input", "DropList", "Overlay",
-        };
-
-        /// <summary>点这��不该激活任何控件。</summary>
-        private static void CheckNoControl(string page, string what, float x, float y)
-        {
-            var hit = Node.HitTest(_screen, x, y);
-            string got = hit == null ? "(无)" : Node.Path(hit);
-            bool bad = hit != null && ControlNames.Contains(hit.Go.name);
-            if (bad)
-            {
-                Console.WriteLine($"      ✗ {page} {what,-8} ({x:F0},{y:F0}) 命中 {got}"
-                    + "  ← 非交互区域不该激活控件");
-                ClickFailures++;
-            }
-            else
-            {
-                Console.WriteLine($"      ✓ {page} {what,-8} → {got}（无控件被激活）");
-            }
-        }
-
-        private static void Check(string page, string what, float x, float y, string want)
-        {
-            var hit = Node.HitTest(_screen, x, y);
-            string got = hit == null ? "(无)" : Node.Path(hit);
-            bool ok = got.EndsWith("/" + want) || got == want;
-            if (ok)
-            {
-                Console.WriteLine($"      ✓ {page} {what,-8} → {got}");
-            }
-            else
-            {
-                Console.WriteLine($"      ✗ {page} {what,-8} ({x:F0},{y:F0}) 命中 {got}，"
-                    + $"期望 {want}  ← 空白处也有控件在吃点击");
-                ClickFailures++;
-            }
-        }
-
-        private static void Report(string page, string what, Node n)
-        {
-            float cx = n.X + n.W * 0.5f, cy = n.Y + n.H * 0.5f;
-            var hit = Node.HitTest(screenOf(n), cx, cy);
-            if (hit == null)
-            {
-                Console.WriteLine($"      ✗ {page} {what,-8} 中心({cx:F0},{cy:F0}) 没命中任何东西"
-                    + "  ← 控件被 raycastTarget=false 的容器盖住了？");
-                ClickFailures++;
-                return;
-            }
-            bool ok = ReferenceEquals(hit, n) || Node.Path(hit).EndsWith("/" + n.Go.name)
-                || Node.Path(hit) == n.Go.name;
-            if (!ok)
-            {
-                Console.WriteLine($"      ✗ {page} {what,-8} 中心({cx:F0},{cy:F0}) 命中的是 "
-                    + $"{Node.Path(hit)}  ← 有别的东西盖在上面");
-                ClickFailures++;
-            }
-            else
-            {
-                Console.WriteLine($"      ✓ {page} {what,-8} → {Node.Path(hit)}");
-            }
-        }
-
-        private static Node _screen;
-
-        private static Node screenOf(Node n)
-        {
-            for (var c = n; c != null; c = c.Parent)
-            {
-                if (c.Parent == null) return c;
-            }
-            return _screen;
-        }
-
-        private static Node Find(Node n, string name)
-        {
-            if (n.Go != null && n.Go.name == name) return n;
-            foreach (var k in n.Kids)
-            {
-                var r = Find(k, name);
-                if (r != null) return r;
-            }
-            return null;
-        }
-
-        private static List<Node> FindAll(Node n, string name)
-        {
-            var list = new List<Node>();
-            void Walk(Node x)
-            {
-                if (x.Go != null && x.Go.name == name) list.Add(x);
-                foreach (var k in x.Kids) Walk(k);
-            }
-            Walk(n);
-            return list;
-        }
-
-        /// <summary>打印整棵树的实际矩形。眼睛猜布局会骗人，数字不会。</summary>
-        private static void Dump(Node n, int depth)
-        {
-            string txt = n.Text == null ? "" : $"  «{n.Text}»";
-            Console.WriteLine("    " + new string(' ', depth * 2)
-                + $"{n.Go.name,-12} x={n.X,7:F0} y={n.Y,7:F0} w={n.W,6:F0} h={n.H,5:F0}"
-                + (n.Raycast ? " [ray]" : "") + txt);
-            foreach (var k in n.Kids)
-            {
-                Dump(k, depth + 1);
-            }
-        }
-
-        internal static void Main(string[] args)
-        {
-            string outDir = args.Length > 0 ? args[0]
-                : Path.Combine(Path.GetTempPath(), "uipreview");
-            Environment.ExitCode = Run(outDir, args);
+            return Run(args.Length > 0 ? args[0] : "preview", args);
         }
     }
 }

@@ -29,12 +29,7 @@
 
   <ItemGroup>
     <!-- 链接真实源码（本目录下的 .cs 由 SDK 默认包含，不要重复列出）-->
-    <Compile Include="..\..\SpectreReplay\Ui\Theme.cs" Link="Real\Theme.cs" />
     <Compile Include="..\..\SpectreReplay\Ui\Loc.cs" Link="Real\Loc.cs" />
-    <Compile Include="..\..\SpectreReplay\Ui\Gfx.cs" Link="Real\Gfx.cs" />
-    <Compile Include="..\..\SpectreReplay\Ui\PageBuilder.cs" Link="Real\PageBuilder.cs" />
-    <Compile Include="..\..\SpectreReplay\Ui\PanelHost.cs" Link="Real\PanelHost.cs" />
-    <Compile Include="..\..\SpectreReplay\Ui\UiFonts.cs" Link="Real\UiFonts.cs" />
     <!-- 回放文件格式也链接真实源码做往返测试。这个文件只依赖 System，
          不碰引擎，所以能直接跑——数据格式坏掉的话回放和渲染全都废，
          而这种 bug 只在真机上读到文件时才暴露。 -->
