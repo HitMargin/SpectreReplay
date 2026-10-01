@@ -211,14 +211,29 @@ namespace SpectreReplay.Ui
         /// </summary>
         private static void ApplyFallbackChain()
         {
-            if (_cjk == null || _latin == null || _cjk == _latin)
+            if (_cjk == null)
             {
                 return;
             }
             try
             {
-                _cjk.fallbackFontAssetTable =
-                    new System.Collections.Generic.List<TMP_FontAsset> { _latin };
+                // 中文 → 拉丁 → TMP 默认。
+                //
+                // 带上 TMP_Settings.defaultFontAsset 是因为它是**独立的第三个
+                // 来源**：SourceHanSans 取不到、或者它恰好缺某个字时，游戏
+                // 自己的默认字体还可能兜得住。缺字在 TMP 里是静默的——
+                // 画一个空白、不报错——多一个候选就多一次机会。
+                var chain = new System.Collections.Generic.List<TMP_FontAsset>();
+                if (_latin != null && _latin != _cjk)
+                {
+                    chain.Add(_latin);
+                }
+                var dflt = TMP_Settings.defaultFontAsset;
+                if (dflt != null && dflt != _cjk && !chain.Contains(dflt))
+                {
+                    chain.Add(dflt);
+                }
+                _cjk.fallbackFontAssetTable = chain;
             }
             catch
             {
