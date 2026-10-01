@@ -33,7 +33,9 @@ namespace UiPreview
         /// 否则超出视口的内容会被画到面板外，半透明白底压着背景色混成一片
         /// 怪色，看着像配色坏了，其实是没有裁剪。</summary>
         internal bool Clips;
-        internal bool Wrap;    // 折行文字：宽度超框是正常的，要看高度
+        internal bool Wrap;
+        /// <summary>Normal + Ellipsis：TMP 会折行再截断，单行标签不该这么配。</summary>
+        internal bool BadWrapCombo;    // 折行文字：宽度超框是正常的，要看高度
         internal bool Cjk;
 
         private static bool HasCjk(string s)
@@ -173,9 +175,16 @@ namespace UiPreview
                 n.Text = tmp.text;
                 n.FontSize = tmp.fontSize;
                 n.Align = tmp.alignment;
-                // 从真实属性判断，别猜：Overflow + Normal 才是折行
-                n.Wrap = tmp.textWrappingMode == TextWrappingModes.Normal
-                    && tmp.overflowMode == TextOverflowModes.Overflow;
+                // 折行只在 NoWrap=false 且 Overflow=true 时发生。
+                //
+                // **Normal + Ellipsis 不是折行**：TMP 的意思是"按框高折行、
+                // 再截断"。原先这里只看 overflowMode==Overflow，把
+                // Normal+Ellipsis 当成单行，于是那种组合下"标签超宽会
+                // 折成两行"的毛病在预览里永远看不见。
+                n.Wrap = tmp.textWrappingMode != TextWrappingModes.NoWrap;
+                // Normal + Ellipsis 本身就是个该避免的组合，单独记下来给断言用
+                n.BadWrapCombo = tmp.textWrappingMode == TextWrappingModes.Normal
+                    && tmp.overflowMode == TextOverflowModes.Ellipsis;
                 n.Cjk = HasCjk(tmp.text);
             }
             parent.Kids.Add(n);

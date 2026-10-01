@@ -47,7 +47,7 @@ namespace UiPreview
             // 设置改了必须重画，否则"拖滑条没反应"跟"控件坏了"从外面看一样
             int refreshFail = RefreshCheck.Run();            // 切页后滚动位置：用户实际撞到过，整页内容被推出视口            int scrollFail = ScrollResetCheck.Run();
 
-            int totalOverflow = 0;
+            int totalOverflow = 0;            int totalBadCombo = 0;
             // 中英文都要渲染：**中文字宽和英文不一样**，只验一种等于没验。
             // 玩家把游戏设成中文时看到的就是中文界面。
             foreach (var zh in new[] { true, false })
@@ -115,6 +115,7 @@ namespace UiPreview
                     Console.WriteLine("      文字溢出 " + o);
                 }
                 totalOverflow += r.Overflows.Count;
+                totalBadCombo += CountBadWrapCombo(screen);
                 }
             }
             Loc.UseChinese = true;
@@ -123,6 +124,13 @@ namespace UiPreview
             Console.WriteLine(totalOverflow == 0
                 ? "  ✓ 无文字溢出"
                 : $"  ✗ {totalOverflow} 处文字溢出");
+            // Normal + Ellipsis：TMP 的意思是"按框高折行、再截断"。
+            // 单行标签（行标签、标题、按钮文字）配成这个组合，稍微超宽就会
+            // 折成两行——看着像布局坏了。
+            Console.WriteLine(totalBadCombo == 0
+                ? "  ✓ 没有「会折行的单行标签」（Normal + Ellipsis）"
+                : $"  ✗ {totalBadCombo} 处用了 Normal + Ellipsis，"
+                    + "单行文字会折成多行");
             if (ClickFailures > 0)
             {
                 Console.WriteLine($"  ✗ {ClickFailures} 处点击点不中"
@@ -158,7 +166,7 @@ namespace UiPreview
             {
                 Console.WriteLine($"  ✗ 设置改动后没有重画界面（{refreshFail} 处）");
             }
-            return totalOverflow == 0 && ClickFailures == 0
+            if (totalBadCombo > 0) { totalOverflow += totalBadCombo; }            return totalOverflow == 0 && ClickFailures == 0
                 && fontFail == 0 && locFail == 0
                 && ffFail == 0 && replayFail == 0
                 && evFail == 0 && orphanFail == 0
@@ -166,6 +174,16 @@ namespace UiPreview
                 && refreshFail == 0 && scrollFail == 0 ? 0 : 1;
         }
 
+        /// <summary>数一数用错折行组合的文字节点（Normal + Ellipsis）。</summary>
+        private static int CountBadWrapCombo(Node n)
+        {
+            int c = n.BadWrapCombo ? 1 : 0;
+            foreach (var k in n.Kids)
+            {
+                c += CountBadWrapCombo(k);
+            }
+            return c;
+        }
         private static int ClickFailures;
 
         /// <summary>

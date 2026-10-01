@@ -131,7 +131,9 @@ namespace SpectreReplay.Ui
             t.raycastTarget = false;
             t.text = text;
             t.alignment = TextAlignmentOptions.MidlineLeft;
-            t.textWrappingMode = TextWrappingModes.Normal;
+            // 单行截断必须是 NoWrap + Ellipsis。用 Normal 的话 TMP 是
+            // "按框高折行、再截断"——标签稍微超宽就折成两行，看着像坏了。
+            t.textWrappingMode = TextWrappingModes.NoWrap;
             t.overflowMode = TextOverflowModes.Ellipsis;
             return t;
         }
@@ -157,8 +159,9 @@ namespace SpectreReplay.Ui
             t.raycastTarget = false;
             t.text = content;
             t.alignment = align;
-            t.textWrappingMode = TextWrappingModes.Normal;
-            // Ellipsis + 单行：文字再长也只占一行，不会把行撑高。
+            // 单行截断必须是 NoWrap + Ellipsis。用 Normal 的话 TMP 的意思是
+            // "按框高折行、再截断"——文字稍微超宽就折成两行，看着像坏了。
+            t.textWrappingMode = TextWrappingModes.NoWrap;
             t.overflowMode = TextOverflowModes.Ellipsis;
             return t;
         }
@@ -179,7 +182,9 @@ namespace SpectreReplay.Ui
             t.raycastTarget = false;
             t.text = content;
             t.alignment = align;
-            t.textWrappingMode = TextWrappingModes.Normal;
+            // 单行截断必须是 NoWrap + Ellipsis。用 Normal 的话 TMP 是
+            // "按框高折行、再截断"——标签稍微超宽就折成两行，看着像坏了。
+            t.textWrappingMode = TextWrappingModes.NoWrap;
             t.overflowMode = TextOverflowModes.Ellipsis;
             return t;
         }
