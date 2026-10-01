@@ -74,11 +74,35 @@ namespace UiPreview
             //    `cjkFonts-regular-normalized SDF`，它缺界面里 200 多个字，
             //    于是整页看着是空的。现在改成逐个候选验字形，谁真的有就用谁。
             fail += CheckPicksByGlyphs();
+            // ⑧ **不许改游戏字体的回退链。** 模组改 fallbackFontAssetTable
+            //    就是在改游戏自己界面用的那份共享状态。
+            fail += CheckLeavesFallbackAlone();
 
-            // ⑥ 回退链：中英混排是常态（"60 fps" 挨着中文标签），
-            //    只挂一个字体的话缺的那部分就是空白方块。
-            fail += CheckFallbackChain();
+            // 原来这里有一条"中文字体应挂上拉丁回退链"的断言。
+            // **删掉了**：那个做法本身就是错的。
+            //
+            // 游戏把自己的 sourceFont（cjkFonts-regular-normalized SDF，
+            // 自己不含 CJK）的 fallbackFontAssetTable 设成
+            // [选中语言字体, ...其它, ...extra]。模组把这条链改掉，
+            // 等于拆掉了游戏的字体解析链——汉字只在链里的简体中文字体上。
+            //
+            // 中英混排不靠这个解决：选字体时逐个验过字形，挑的是一个
+            // **自己就带全部所需字形**的字体（Source Han Sans SC 里本来
+            // 就有拉丁字母）。
             return fail;
+        }
+
+        /// <summary>
+        /// 每个用例的共同套路：清缓存 → 读 Main → 看是不是期望的那个字体。
+        /// </summary>
+        private static int Probe(string label, string expect)
+        {
+            SpectreReplay.Ui.UiFonts.Invalidate();
+            var m = SpectreReplay.Ui.UiFonts.Main;
+            bool ok = m != null && m.name == expect;
+            Console.WriteLine($"    {(ok ? "✓" : "✗")} {label,-28} → "
+                + $"{(m == null ? "null" : m.name)}");
+            return ok ? 0 : 1;
         }
 
         /// <summary>
@@ -130,69 +154,61 @@ namespace UiPreview
         }
 
         /// <summary>
-        /// 验证两件事：
-        ///   · 中文主字体上挂了拉丁回退（照 DynamicallyOrderedFont 的做法）
-        ///   · 兜底路径请求的是**游戏清单里真实存在**的资源名
+        /// 解析字体**不许改动任何字体的 fallbackFontAssetTable**。
+        ///
+        /// 游戏的做法（ADOFAI\DynamicallyOrderedFont.ApplyForLanguage）是：
+        ///
+        ///     sourceFont.fallbackFontAssetTable = [选中语言字体, ...其它, ...extra];
+        ///
+        /// 也就是说 `cjkFonts-regular-normalized SDF` 是 **sourceFont**，
+        /// 它自己本来就不含 CJK 字形，汉字全在它回退链里的语言字体上。
+        ///
+        /// 模组原先把这条链设成 `[拉丁]`，等于**把游戏的字体解析链拆了**——
+        /// 那正是"整页字都不显示"的成因之一。fallbackFontAssetTable 是
+        /// 资源上的共享全局状态，不是某个文字的私有属性。
         /// </summary>
-        private static int CheckFallbackChain()
+        private static int CheckLeavesFallbackAlone()
         {
-            int fail = 0;
-            UnityEngine.RDConstants.data = new UnityEngine.RDConstants
-            {
-                chineseFontTMPro = new TMPro.TMP_FontAsset { name = "CJK" },
-                latinFontTMPro = new TMPro.TMP_FontAsset { name = "Latin" },
-            };
-            SpectreReplay.Ui.UiFonts.Invalidate();
-            var main = SpectreReplay.Ui.UiFonts.Main;
-            var chain = main?.fallbackFontAssetTable;
-            bool ok = chain != null && chain.Count == 1 && chain[0].name == "Latin";
-            Console.WriteLine($"    {(ok ? "✓" : "✗")} ⑥ 中文字体挂上拉丁回退链"
-                + $"  → {(chain == null || chain.Count == 0 ? "（空）" : chain[0].name)}");
-            if (!ok) fail++;
-
-            // 只留拉丁（模拟没有 CJK 资源），此时回退链不该重复挂自己
-            UnityEngine.RDConstants.data = new UnityEngine.RDConstants
-            {
-                latinFontTMPro = new TMPro.TMP_FontAsset { name = "Latin" },
-            };
-            SpectreReplay.Ui.UiFonts.Invalidate();
-            var m2 = SpectreReplay.Ui.UiFonts.Main;
-            bool noDup = m2 == null || m2.fallbackFontAssetTable == null
-                || m2.fallbackFontAssetTable.Count == 0
-                || m2.fallbackFontAssetTable[0] != m2;
-            Console.WriteLine($"    {(noDup ? "✓" : "✗")} ⑦ 只有一套字体时不把自身挂成回退");
-            if (!noDup) fail++;
-
-            // RDConstants 拿不到时，请求的路径必须是清单里真实存在的
-            UnityEngine.RDConstants.data = null;
             UnityEngine.Resources.HasSourceHanSans = true;
-            UnityEngine.Resources.LastPath = null;
-            SpectreReplay.Ui.UiFonts.Invalidate();   // 忘了这行，Resolve 直接被缓存挡回去
-            _ = SpectreReplay.Ui.UiFonts.Main;
-            bool real = UnityEngine.Resources.LastPath != null
-                && UnityEngine.Resources.Exists(UnityEngine.Resources.LastPath);
-            Console.WriteLine($"    {(real ? "✓" : "✗")} ⑧ 兜底路径在游戏清单里真实存在"
-                + $"  → {UnityEngine.Resources.LastPath ?? "(没请求)"}");
-            if (!real) fail++;
-            return fail;
-        }
-
-        /// <summary>重置缓存后解析一次，看 Main 是不是期望的那个字体。</summary>
-        private static int Probe(string label, string expectName)
-        {
-            SpectreReplay.Ui.UiFonts.Invalidate();
-            var main = SpectreReplay.Ui.UiFonts.Main;
-            string got = main == null ? "(null)" : main.name;
-            bool ok = got == expectName;
-            if (ok)
+            TMPro.TMP_Settings.defaultFontAsset = null;
+            if (UnityEngine.RDConstants.data == null)
             {
-                Console.WriteLine($"    ✓ {label,-34} → {got}");
-                return 0;
+                UnityEngine.RDConstants.data = new UnityEngine.RDConstants();
             }
-            Console.WriteLine($"    ✗ {label,-34} → 得到 {got}，期望 {expectName}"
-                + $"  [桩件状态: RDConstants.data={(UnityEngine.RDConstants.data == null ? "null" : "有")}"
-                + $" SourceHanSans={UnityEngine.Resources.HasSourceHanSans}]");
-            return 1;
+
+            // 给游戏那个 sourceFont 装上一条"本来就该有"的链
+            var baseFont = new TMPro.TMP_FontAsset
+            { name = "sourceFont（游戏的 base font）" };
+            var sc = new TMPro.TMP_FontAsset { name = "简体中文字体" };
+            baseFont.fallbackFontAssetTable =
+                new List<TMPro.TMP_FontAsset> { sc, new TMPro.TMP_FontAsset() };
+
+            UnityEngine.RDConstants.data.chineseFontTMPro = baseFont;
+            UnityEngine.RDConstants.data.latinFontTMPro = null;
+            UnityEngine.Resources.Registry.Clear();
+            UnityEngine.Resources.Registry.Add(
+                new TMPro.TMP_FontAsset
+                {
+                    name = "SourceHanSans/ChineseSimplified/SourceHanSansSC-Normal"
+                });
+
+            int before = baseFont.fallbackFontAssetTable.Count;
+            var firstBefore = baseFont.fallbackFontAssetTable[0];
+            SpectreReplay.Ui.UiFonts.Invalidate();
+            var _ = SpectreReplay.Ui.UiFonts.Main;
+
+            int after = baseFont.fallbackFontAssetTable.Count;
+            bool same = after == before
+                && ReferenceEquals(baseFont.fallbackFontAssetTable[0], firstBefore);
+            Console.WriteLine($"    {(same ? "✓" : "✗")} 不改游戏字体的回退链 "
+                + $"  → 条数 {before}→{after}");
+            if (!same)
+            {
+                Console.WriteLine("        模组把游戏自己的字体解析链改了");
+            }
+            SpectreReplay.Ui.UiFonts.Invalidate();
+            return same ? 0 : 1;
         }
     }
 }
+

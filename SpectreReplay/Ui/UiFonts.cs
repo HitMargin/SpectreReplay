@@ -155,6 +155,10 @@ namespace SpectreReplay.Ui
                 var c = RDConstants.data;
                 if (c == null) return;
                 Add(cands, c.chineseFontTMPro, "RDConstants/中文");
+                // chineseFontTMProDuplicate：同一份资源重复挂了一个字段，
+                // 名字里的 Duplicate 很说明问题——真正的中文字形多半在这儿，
+                // 而 chineseFontTMPro 挂的是那个不含 CJK 的 sourceFont。
+                Add(cands, c.chineseFontTMProDuplicate, "RDConstants/中文副本");
                 Add(cands, c.japaneseFontTMPro, "RDConstants/日文");
                 Add(cands, c.koreanFontTMPro, "RDConstants/韩文");
                 Add(cands, c.latinFontTMPro, "RDConstants/拉丁");
@@ -291,43 +295,31 @@ namespace SpectreReplay.Ui
         }
 
         /// <summary>
-        /// 把另一套字体挂成回退链。
+        /// **什么都不做**——而且这是有意为之。
         ///
-        /// 与游戏自己的做法一致（见 ADOFAI\DynamicallyOrderedFont.ApplyForLanguage）：
-        /// 设 <c>fallbackFontAssetTable</c>，而不是二选一。界面上中英混排是常态
-        /// ——"60 fps"、"Mods\SpectreReplay\Videos"、"4.5 s" 这些 ASCII 串，
-        /// 挨着中文标签。只挂一个字体的话，缺的那部分字形就是空白方块。
+        /// 原先这里把 `_cjk.fallbackFontAssetTable` 设成 `[拉丁, TMP默认]`，
+        /// 注释还写着"与游戏自己的做法一致"。**那句话是错的，而且做法是反的。**
+        ///
+        /// 看游戏自己的代码（ADOFAI\DynamicallyOrderedFont.ApplyForLanguage）：
+        ///
+        ///     sourceFont.fallbackFontAssetTable = [选中语言字体, ...其它, ...extra];
+        ///
+        /// `cjkFonts-regular-normalized SDF` 就是那个 **sourceFont（base font）**——
+        /// 它自己**本来就不含 CJK 字形**，汉字全在它回退链里的
+        /// `simplifiedChineseFont` 上。所以：
+        ///
+        ///   · 拿它当"中文字体"是看错了字段语义
+        ///   · 改它的回退链 = 把游戏的字体解析链整个拆掉
+        ///
+        /// 而 `fallbackFontAssetTable` 是**资源上的共享全局状态**，不是某个
+        /// 文字的私有属性。模组改它 = 改游戏自己界面用的那份。
+        ///
+        /// 现在不碰它：选字体时已经逐个验过字形（见 Resolve），挑的是一个
+        /// **自己就带全部所需字形**的字体，不需要链来补。
         /// </summary>
         private static void ApplyFallbackChain()
         {
-            if (_cjk == null)
-            {
-                return;
-            }
-            try
-            {
-                // 中文 → 拉丁 → TMP 默认。
-                //
-                // 带上 TMP_Settings.defaultFontAsset 是因为它是**独立的第三个
-                // 来源**：SourceHanSans 取不到、或者它恰好缺某个字时，游戏
-                // 自己的默认字体还可能兜得住。缺字在 TMP 里是静默的——
-                // 画一个空白、不报错——多一个候选就多一次机会。
-                var chain = new System.Collections.Generic.List<TMP_FontAsset>();
-                if (_latin != null && _latin != _cjk)
-                {
-                    chain.Add(_latin);
-                }
-                var dflt = TMP_Settings.defaultFontAsset;
-                if (dflt != null && dflt != _cjk && !chain.Contains(dflt))
-                {
-                    chain.Add(dflt);
-                }
-                _cjk.fallbackFontAssetTable = chain;
-            }
-            catch
-            {
-                // 字体资源还没就绪：不影响主字体显示
-            }
+            // 刻意留空。见上面的说明。
         }
 
         private static TMP_FontAsset Load(string path)
