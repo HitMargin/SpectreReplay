@@ -132,7 +132,7 @@ namespace SpectreReplay
             //
             // 通过 UI 的钩子注入，而不是让 Ui 直接引 PatchLoader：离线预览器
             // 不链接补丁加载器（那要 Harmony 与游戏程序集），引了那边编不过。
-            
+            Ui.OnGui.PatchFailures = PatchLoader.FailedCount;
 
             // 进关检测常驻（不是补丁，是状态轮询），
             // 否则首次进入关卡这条路径在不同版本里没有稳定的钩子。

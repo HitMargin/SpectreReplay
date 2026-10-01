@@ -48,6 +48,16 @@ namespace SpectreReplay.Ui
         /// <summary>玩家正在改的文本（可能还没提交）。</summary>
         private static string _textDraft;
 
+        /// <summary>
+        /// 挂失败的补丁数。由 Main 注入。
+        ///
+        /// UI 层不直接引 PatchLoader：编译隔离，也让 OnGui.cs 不依赖
+        /// Harmony。挂不上的补丁 = 对应功能静默消失，而设置页看起来
+        /// 一切正常——必须在设置页顶部明说，否则玩家只会觉得
+        /// "这个开关点了没反应"，去翻日志的不到。
+        /// </summary>
+        internal static int PatchFailures;
+
         private static readonly string[] TabKeys =
         {
             "page.record", "page.playback", "page.render", "page.about",
@@ -89,9 +99,36 @@ namespace SpectreReplay.Ui
             }
 
             GUILayout.Space(4f);
+            DrawPatchWarning();
             DrawTabs();
             GUILayout.Space(8f);
             DrawPage();
+        }
+
+        /// <summary>
+        /// 补丁挂不上时，在设置页顶部说一次。
+        ///
+        /// **这一步不能省。** 挂不上的补丁 = 对应功能静默消失：玩家看到的是
+        /// "某个开关点了没反应"，根本猜不到是补丁没挂上，而原因只在日志里。
+        /// Spectre 专门为这件事做了 ShowApplyFailureSummary，注释写得很直白。
+        ///
+        /// 早先那版是弹一条横幅，跟着自建 Canvas 界面一起删掉了；这里改成
+        /// 常驻在设置页顶部——UMM 的 OnGUI 没有独立的提示层，而设置页是玩家
+        /// 唯一会主动打开的地方，在这里提示比藏在日志里强得多。
+        /// </summary>
+        private static void DrawPatchWarning()
+        {
+            if (PatchFailures <= 0)
+            {
+                return;
+            }
+            Color old = GUI.backgroundColor;
+            // 用醒目的底色：这不是能划过去的信息，玩家必须看见
+            GUI.backgroundColor = new Color(0.78f, 0.24f, 0.24f);
+            GUILayout.Label(
+                Loc.T("ui.patchFailed") + "  (" + PatchFailures + ")",
+                GUILayout.Height(24f));
+            GUI.backgroundColor = old;
         }
 
         // ── 分页 ────────────────────────────────────────────────
