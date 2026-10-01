@@ -38,15 +38,25 @@ namespace SpectreReplay.Ui
         /// </summary>
         private static int _tab;
 
-        /// <summary>
-        /// 文本输入框的当前值。TextField 自己不保存内容——每帧传进去什么
-        /// 就显示什么，所以必须存在这里，并且只在**值真的变了**时写回配置，
-        /// 否则玩家打字打到一半焦点一丢就回滚。
-        /// </summary>
-        private static string _outputDir;
-
         /// <summary>玩家正在改的文本（可能还没提交）。</summary>
         private static string _textDraft;
+
+        /// <summary>
+        /// 当前展开的下拉是第几个行（-1 = 没有）。
+        ///
+        /// 只能存"第几个下拉"，不能存内容或索引：同一帧里可能有几个下拉，
+        /// 闭合一个不能把另一个也关了。
+        /// </summary>
+        private static int _openRow = -1;
+
+        /// <summary>
+        /// 本趟画到第几个下拉了。**必须在每趟开头归零**。
+        ///
+        /// IMGUI 一帧跑好几趟（Layout / Repaint 各一次）。如果让计数器
+        /// 跨趟自增，Repaint 那趟的编号就跟 Layout 对不上，存下来的
+        /// _openRow 永远找不到自己——下拉点开的瞬间就合上，等于点不动。
+        /// </summary>
+        private static int _openSeq;
 
         /// <summary>
         /// 挂失败的补丁数。由 Main 注入。
@@ -72,8 +82,9 @@ namespace SpectreReplay.Ui
         internal static void OnShow(ModEntry modEntry)
         {
             _visible = true;
-            // 每次打开都重取一次：目录里的 .srp 可能刚被录出来。
-            _outputDir = Settings.OutputDir;
+            // 每次打开都重取一次：目录里的 .srp 可能刚被录出来，
+            // 而文本框的草稿上一轮可能还留着玩家没提交完的编辑。
+            _textDraft = Settings.OutputDir;
         }
 
         internal static void OnHide(ModEntry modEntry)
@@ -98,6 +109,10 @@ namespace SpectreReplay.Ui
                 _textDraft = Settings.OutputDir;
             }
 
+            // IMGUI 一帧跑两趟（Layout/Repaint），_openSeq 若跨趟自增，
+            // 下拉存的行号在第二趟就对不上了——点开的瞬间被判定成"别的行"
+            // 直接收起。每趟开头归零，两趟编号才一致。
+            _openSeq = 0;
             GUILayout.Space(4f);
             DrawPatchWarning();
             DrawTabs();
@@ -122,13 +137,60 @@ namespace SpectreReplay.Ui
             {
                 return;
             }
-            Color old = GUI.backgroundColor;
-            // 用醒目的底色：这不是能划过去的信息，玩家必须看见
-            GUI.backgroundColor = new Color(0.78f, 0.24f, 0.24f);
-            GUILayout.Label(
-                Loc.T("ui.patchFailed") + "  (" + PatchFailures + ")",
-                GUILayout.Height(24f));
-            GUI.backgroundColor = old;
+            // **不能用 GUI.backgroundColor 上色**——那只影响 Button/Box 之类
+            // 用背景贴图的控件，Label 是直接画文字的，改了 backgroundColor
+            // 一点变化都没有。之前那版红底警示就这么"生效"着，其实全是
+            // 默认样式，看着跟普通文字没区别。底色走 skin.box，文字走
+            // GUI.color，两个都要设才对。
+            GUIStyle style = WarnStyle();
+            Rect r = GUILayoutUtility.GetRect(
+                LabelW + 420f, 26f, GUILayout.ExpandWidth(false));
+            // 顺序要紧：先设 backgroundColor **再**画 Box。反过来写的话
+            // Box 用的是默认色，红底等于没画——而 Label 那时也已经是默认样式，
+            // 从外面看就是"什么都没变"，完全察觉不到设错了。
+            Color oldColor = GUI.color;
+            Color oldBox = GUI.backgroundColor;
+            GUI.backgroundColor = WarnBoxColor;
+            GUI.Box(r, GUIContent.none, GUI.skin.box);
+            GUI.color = new Color(1f, 0.94f, 0.94f);
+            GUI.Label(new Rect(r.x + 8f, r.y + 3f, r.width - 16f, 20f),
+                Loc.T("ui.patchFailed") + "  (" + PatchFailures + ")", style);
+            GUI.color = oldColor;
+            GUI.backgroundColor = oldBox;
+        }
+
+        private static readonly Color WarnBoxColor = new Color(0.55f, 0.16f, 0.16f, 1f);
+
+        /// <summary>警示文字样式：加粗，保证在 skin.box 上也读得清。</summary>
+        private static GUIStyle _warnStyle;
+        private static GUIStyle WarnStyle()
+        {
+            if (_warnStyle == null)
+            {
+                _warnStyle = new GUIStyle(GUI.skin.label)
+                {
+                    fontStyle = FontStyle.Bold,
+                };
+            }
+            return _warnStyle;
+        }
+
+        /// <summary>
+        /// 分组标题样式。加粗 + 留白，与下面的控件行拉开层次——
+        /// 照 Spectre ��的 FeaturesBase（它用 fontStyle=Bold 的 GUIStyle）做法。
+        /// 纯 Label 的话所有文字一样重，十几行连成一片看不出哪里是块。
+        /// </summary>
+        private static GUIStyle _boldLabel;
+        private static GUIStyle BoldLabel()
+        {
+            if (_boldLabel == null)
+            {
+                _boldLabel = new GUIStyle(GUI.skin.label)
+                {
+                    fontStyle = FontStyle.Bold,
+                };
+            }
+            return _boldLabel;
         }
 
         // ── 分页 ────────────────────────────────────────────────
@@ -211,39 +273,87 @@ namespace SpectreReplay.Ui
             }
         }
 
-        /// <summary>一行下拉。选项是已本地化的文字。</summary>
+        /// <summary>
+        /// 一行下拉。选项是已本地化的文字。
+        ///
+        /// 上一版用 SelectionGrid 当下拉——那是把 4 个选项**竖排全部画出来**，
+        /// 一行占 96px，根本不是下拉。现在是常见做法：点按钮展开列表，
+        /// 选中即收起，点开的那行再点一次也收起。
+        /// </summary>
         internal static void RowDropdown(string labelKey, string[] options, int current,
             Action<int> onChange)
         {
+            int seq = _openSeq++;
             GUILayout.BeginHorizontal();
             GUILayout.Label(Loc.T(labelKey), GUILayout.Width(LabelW));
-            int now = GUILayout.SelectionGrid(current, options, 1,
-                GUILayout.Width(200f), GUILayout.Height(24f));
+            string shown = current >= 0 && current < options.Length
+                ? options[current] : "—";
+            if (GUILayout.Button(shown, GUILayout.Width(200f), GUILayout.Height(24f)))
+            {
+                _openRow = _openRow == seq ? -1 : seq;
+            }
             GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
-            if (now != current)
+
+            if (_openRow != seq)
             {
-                onChange(now);
+                return;
             }
+            // 展开的选项缩进到标签列右边，视觉上属于这一行
+            GUILayout.BeginHorizontal();
+            GUILayout.Space(LabelW);
+            GUILayout.BeginVertical(GUILayout.Width(200f));
+            for (int i = 0; i < options.Length; i++)
+            {
+                // 当前项标出来：选项多的时候光靠位置认不出来
+                string mark = i == current ? "● " : "    ";
+                if (GUILayout.Button(mark + options[i], GUILayout.Height(22f)))
+                {
+                    _openRow = -1;
+                    if (i != current)
+                    {
+                        onChange(i);
+                    }
+                }
+            }
+            GUILayout.EndVertical();
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
         }
 
-        /// <summary>一段说明文字。</summary>
+        /// <summary>
+        /// 一段说明文字（缩进到标签列右边，与上面的控件对齐）。
+        ///
+        /// 不给定死宽度：之前写的是 Width(LabelW+300f)，UMM 窗口宽度随
+        /// 玩家窗口变，一旦窄于那个值，右边的话就被**截断**而不是换行——
+        /// 玩家看到半句话就断了。ExpandWidth 让它跟着窗口宽度走。
+        /// </summary>
         internal static void Note(string labelKey)
         {
-            GUILayout.Label(Loc.T(labelKey), GUILayout.Width(LabelW + 300f));
+            NoteText(Loc.T(labelKey));
         }
 
         /// <summary>一段不带标签键的说明文字（内容已经本地化过了）。</summary>
         internal static void NoteText(string text)
         {
-            GUILayout.Label(text, GUILayout.Width(LabelW + 300f));
+            GUILayout.BeginHorizontal();
+            GUILayout.Space(LabelW);
+            GUILayout.Label(text, GUILayout.ExpandWidth(true));
+            GUILayout.EndHorizontal();
         }
 
-        /// <summary>分组标题。</summary>
+        /// <summary>
+        /// 分组标题。加粗 + 上下留白，跟下面的控件行拉开层次。
+        ///
+        /// 不加粗的话十几行文字一样重，看不出哪里换了一块——这是 IMGUI
+        /// 页面最基本的分组手段。Spectre 也用 fontStyle=Bold 的 GUIStyle
+        /// （见它的 FeaturesBase.OnGUI）。
+        /// </summary>
         internal static void Group(string labelKey)
         {
-            GUILayout.Space(6f);
-            GUILayout.Label(Loc.T(labelKey));
+            GUILayout.Space(8f);
+            GUILayout.Label(Loc.T(labelKey), BoldLabel());
+            GUILayout.Space(2f);
         }
 
         /// <summary>一整行按钮。</summary>

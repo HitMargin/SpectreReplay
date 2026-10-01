@@ -87,6 +87,16 @@ namespace SpectreReplay.Patching
         private static readonly List<HarmonyMethod> _applied = new List<HarmonyMethod>();
         private static readonly List<string> Failures = new List<string>();
 
+        /// <summary>
+        /// 上一次真正挂补丁时的开关签名。用来判断"开关集合变没变"。
+        ///
+        /// **必须有它**：Refresh 会被设置页每改一行就调一次，拖滑条时更是
+        /// 每帧一次。没有它就会 UnpatchAll + 重挂几十遍——拖一下分辨率，
+        /// 正在打的那几帧补丁是空的。
+        /// </summary>
+        private static string _enabledSig = "";
+        private static bool _loadedOnce;
+
         internal static IReadOnlyList<string> ApplyFailures => Failures;
 
         /// <summary>
@@ -117,13 +127,28 @@ namespace SpectreReplay.Patching
             Refresh();
         }
 
-        /// <summary>按当前功能开关状态重挂全部补丁。幂等，可反复调用。</summary>
+        /// <summary>
+        /// 按当前功能开关状态重挂全部补丁。幂等，可反复调用。
+        ///
+        /// **开关集合没变时直接返回。** UnpatchAll + 重挂不是免费的：
+        /// 设置页每改一行都会走到这里，而拖动滑条时是**每帧**一次——
+        /// 拖一下分辨率就会把 6 个补丁卸了挂、挂了卸几十遍，期间游戏
+        /// 正在打的那几帧补丁是空的，表现为拖动时录制短暂失效。
+        /// 真正需要重挂的只有"某个功能开关翻转"这一种情况。
+        /// </summary>
         internal static void Refresh()
         {
             if (!_initialized)
             {
                 return;
             }
+            string sig = EnabledSignature();
+            if (sig == _enabledSig && _loadedOnce)
+            {
+                return;         // 开关集合没变：重挂只会白白抖动
+            }
+            _enabledSig = sig;
+            _loadedOnce = true;
             UnpatchAll();
             Failures.Clear();
             foreach (var spec in Specs)
@@ -144,6 +169,25 @@ namespace SpectreReplay.Patching
                 Debug.Log("[SpectreReplay] 补丁 " + AppliedCount + "/" + DeclaredCount
                     + " 全部挂载");
             }
+        }
+
+        /// <summary>
+        /// 当前所有功能开关的状态，拼成一个可比较的短串。
+        ///
+        /// 比较它就知道"补丁的挂载集合有没有变"。挂载集合只由开关决定，
+        /// 跟其它设置（分辨率、码率……）无关——所以调分辨率根本不该触发
+        /// 重挂，而调"启用录制"必须触发。
+        /// </summary>
+        private static string EnabledSignature()
+        {
+            var sb = new System.Text.StringBuilder(64);
+            foreach (var name in FeatureGate.Names)
+            {
+                sb.Append(name).Append('=')
+                  .Append(FeatureGate.IsEnabled(name) ? '1' : '0')
+                  .Append(';');
+            }
+            return sb.ToString();
         }
 
         /// <summary>
