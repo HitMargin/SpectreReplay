@@ -476,6 +476,20 @@ namespace UnityEngine.UI
         public MovementType movementType;
         public enum MovementType { Unrestricted, Elastic, Clamped }
         public float scrollSensitivity;
+
+        /// <summary>
+        /// 1 = 顶部，0 = 底部。真实 ScrollRect 用它把内容挪到对应位置。
+        ///
+        /// 存着不用它 = 验不出"切页没重置滚动位置"这类问题——那正是
+        /// 用户实际撞上的那个：从渲染页滚到底再切到"关于"，整页内容
+        /// 被推出视口，屏幕上只剩最后一条说明的下半截。
+        /// </summary>
+        public float verticalNormalizedPosition = 1f;
+
+        public float horizontalNormalizedPosition = 1f;
+
+        /// <summary>真实 ScrollRect 有这个方法：立刻停止惯性滑动。</summary>
+        public void StopMovement() { }
     }
 
     public class ContentSizeFitter : Component

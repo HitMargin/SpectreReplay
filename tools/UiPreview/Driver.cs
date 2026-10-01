@@ -45,7 +45,7 @@ namespace UiPreview
                 PanelHost.Page(p.Key, p.Key, "page." + p.Key, p.Build);
             }
             // 设置改了必须重画，否则"拖滑条没反应"跟"控件坏了"从外面看一样
-            int refreshFail = RefreshCheck.Run();
+            int refreshFail = RefreshCheck.Run();            // 切页后滚动位置：用户实际撞到过，整页内容被推出视口            int scrollFail = ScrollResetCheck.Run();
 
             int totalOverflow = 0;
             // 中英文都要渲染：**中文字宽和英文不一样**，只验一种等于没验。
@@ -154,7 +154,7 @@ namespace UiPreview
             // **每一个计数都必须进返回值。** 原来只检查了 4 个（溢出、点击、
             // 字体、文案），其余六项虽然会打印出 ✗，却不会让退出码变红——
             // 闸门会在一堆失败下报"全部通过"。这比没有检查更糟。
-            if (refreshFail > 0)
+            if (scrollFail > 0)            {                Console.WriteLine($"  ✗ 切页后滚动位置没重置（{scrollFail} 处）");            }            if (refreshFail > 0)
             {
                 Console.WriteLine($"  ✗ 设置改动后没有重画界面（{refreshFail} 处）");
             }
@@ -163,7 +163,7 @@ namespace UiPreview
                 && ffFail == 0 && replayFail == 0
                 && evFail == 0 && orphanFail == 0
                 && cfgFail == 0 && hardFail == 0
-                && refreshFail == 0 ? 0 : 1;
+                && refreshFail == 0 && scrollFail == 0 ? 0 : 1;
         }
 
         private static int ClickFailures;

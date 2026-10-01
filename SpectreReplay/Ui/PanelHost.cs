@@ -492,6 +492,37 @@ namespace SpectreReplay.Ui
             };
             p.Build?.Invoke(pb);
             _content.sizeDelta = new Vector2(0f, pb.ContentHeight + 24f);
+            ResetScroll();
+        }
+
+        /// <summary>
+        /// 切页后把滚动位置拨回顶部。
+        ///
+        /// **不重置的话，从渲染页滚到底再切到"关于"，看到的是一整页空白。**
+        /// 原因是 ScrollRect 的偏移是跟着对象走的：渲染页内容 1250 / 视口
+        /// 950，滚到底时内容被抬了约 300px；切到内容只有 344 的"关于"页，
+        /// 那个 300px 的偏移还在，于是整页内容被推到视口外面去了——
+        /// 屏幕上只剩最后一条说明的下半截，再下面全是空的。
+        ///
+        /// 而且每次切页**面板高度也会变**（按当前页量出来的），偏移与
+        /// 视口高度不再匹配，Clamped 也救不回来。
+        ///
+        /// 用 normalizedPosition 而不是直接写 anchoredPosition：前者是
+        /// ScrollRect 自己的语义，后者在布局还没定下来时写会被覆盖。
+        /// </summary>
+        private static void ResetScroll()
+        {
+            if (_scroll == null)
+            {
+                return;
+            }
+            _scroll.StopMovement();
+            // 1 = 顶部。ScrollRect 的 verticalNormalizedPosition 1 表示最上。
+            _scroll.verticalNormalizedPosition = 1f;
+            if (_content != null)
+            {
+                _content.anchoredPosition = new Vector2(0f, 0f);
+            }
         }
 
         internal static void Refresh() => Show(_current);
