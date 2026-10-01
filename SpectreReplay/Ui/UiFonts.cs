@@ -1,3 +1,5 @@
+using System;
+using System.Linq;          // SortedSet.ToArray()——netstandard2.1 里不在 System
 using UnityEngine;
 using TMPro;
 
@@ -71,6 +73,59 @@ namespace SpectreReplay.Ui
             if (Main != null)
             {
                 text.font = Main;
+            }
+        }
+
+        /// <summary>
+        /// 查一段文字里有没有字体不认识的字。
+        ///
+        /// **这是"文字不显示"最常见、也最难自己发现的一种原因。** 游戏
+        /// 只收录了它自己用到的字形（省体积），模组写的字只要有一个不在
+        /// 里面，TMP 就画一个空白——**不报错、不留痕**，界面上就是那句话
+        /// 缺了几个字，或者整行看着比预期短。
+        ///
+        /// 离线预览查不出来：那边用 GDI+ 的微软雅黑，任何汉字都画得出来。
+        /// 真机上也只有 TMP 自己知道答案——好在它有 HasCharacters。
+        ///
+        /// 查出来就记进 Player.log，缺的是哪几个字一目了然，不用猜。
+        /// </summary>
+        internal static void ReportMissing(string what, string text)
+        {
+            var font = Main;
+            if (font == null || string.IsNullOrEmpty(text))
+            {
+                return;
+            }
+            try
+            {
+                // 两个要点，都踩过：
+                //   第二个参数是 **out**（反射显示 List<uint>&，编译器要 out）
+                //   4 参重载返回的是 **uint[]**，不是 List——没 List.Count
+                if (!font.HasCharacters(text, out uint[] missing, true, false)
+                    && missing != null && missing.Length > 0)
+                {
+                    // 去重：TMP 按出现次数给，一个字出现两次就报两遍，
+                    // 日志里会变成"渲渲渲渲"，看不出到底缺了几个字。
+                    var seen = new System.Collections.Generic.SortedSet<char>();
+                    foreach (uint c in missing)
+                    {
+                        if (c < 0x110000u)
+                        {
+                            seen.Add((char)c);
+                        }
+                    }
+                    // 写成一条拼好的字符串：拆成几段的话，硬编码文案检查会
+                    // 把后半截当成"玩家会看到的界面文案"报出来（它确实抓到了）。
+                    UnityEngine.Debug.LogWarning(
+                        $"[SpectreReplay] 字体缺字形：{what} 里没有「"
+                        + $"{new string(seen.ToArray())}」"
+                        + $"这些位置会是空白。字体={font.name}");
+                }
+            }
+            catch (Exception ex)
+            {
+                UnityEngine.Debug.LogWarning(
+                    "[SpectreReplay] 查缺字形失败：" + ex.Message);
             }
         }
 

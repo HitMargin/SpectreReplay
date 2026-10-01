@@ -121,6 +121,10 @@ namespace SpectreReplay.Ui
             EnsureEventSystem();
             LiveTexts.Clear();
             Build();
+            // 字体解析完成之后，把界面要用的字全查一遍缺不缺。
+            // 放在 Show(0) 之前：那时字体已经解析好了。
+            // 标签用英文：它只出现在日志里，不是玩家看到的界面文案。
+            UiFonts.ReportMissing("UI text", Loc.AllText());
             Show(0);
         }
 

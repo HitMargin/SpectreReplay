@@ -221,5 +221,24 @@ namespace SpectreReplay.Ui
             }
             return key;          // 两种语言都漏了才露键名——那是真漏
         }
+
+        /// <summary>
+        /// 当前语言下界面会显示的全部文案，拼成一段。
+        ///
+        /// 用来一次性检查"字体里有没有这些字"。游戏只收录自己用到的字形，
+        /// 模组写的字只要有一个不在里面，TMP 就画空白——不报错、界面上
+        /// 只是那句话缺了几个字。这种毛病靠看是看不出来的。
+        /// </summary>
+        internal static string AllText()
+        {
+            var src = UseChinese ? Zh : En;
+            var sb = new System.Text.StringBuilder(1024);
+            sb.Append(Brand).Append(' ').Append(Hint);
+            foreach (var kv in src)
+            {
+                sb.Append(kv.Key).Append(' ').Append(kv.Value).Append(' ');
+            }
+            return sb.ToString();
+        }
     }
 }

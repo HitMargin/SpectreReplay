@@ -235,8 +235,16 @@ namespace UnityEngine
 
     public static class Debug
     {
-        public static void Log(object o) => Console.WriteLine(o);
-        public static void LogWarning(object o) => Console.WriteLine(o);
+        /// <summary>
+        /// 可替换的日志出口。检查要用它把"某段代码到底报了什么"截获下来
+        /// ——自检类代码的价值恰恰在于它平时不说话，光看最终输出抓不到。
+        ///
+        /// 名字与真实 UnityEngine.Debug 一致（Log / LogWarning / LogError），
+        /// 别改名：桩件跟真实 API 对不上时，编译得过、跑起来才发现。
+        /// </summary>
+        public static Action<object> Log = o => Console.WriteLine(o);
+        public static Action<object> LogWarning = o => Console.WriteLine(o);
+        public static Action<object> LogError = o => Console.WriteLine(o);
     }
 
     public static class Time
@@ -529,6 +537,31 @@ namespace TMPro
     {
         /// <summary>回退链。真实 TMP 用它给缺字形的字符找替代字体。</summary>
         public List<TMP_FontAsset> fallbackFontAssetTable;
+
+        /// <summary>
+        /// 模拟"这个字体里没有这些字"。默认空的＝什么都不缺。
+        /// 设成非空就能验缺字形自检是不是真的会报。
+        /// </summary>
+        public static System.Collections.Generic.HashSet<char> Missing
+            = new System.Collections.Generic.HashSet<char>();
+
+        public bool HasCharacter(int c, bool searchFallbacks = false)
+            => !Missing.Contains((char)c);
+
+        // 真实签名：out 参数，返回 **uint[]**（不是 List）。桩件照抄，
+        // 不然主项目编译不过、预览器却"正常"，两边签名对不上就白验了。
+        public bool HasCharacters(string text,
+            out uint[] missing,
+            bool searchFallbacks = false, bool tryAddCharacter = false)
+        {
+            var list = new System.Collections.Generic.List<uint>();
+            foreach (char c in text)
+            {
+                if (!HasCharacter(c)) list.Add(c);
+            }
+            missing = list.ToArray();
+            return missing.Length == 0;
+        }
     }
 
     public static class TMP_Settings
