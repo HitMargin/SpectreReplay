@@ -50,6 +50,23 @@ namespace SpectreReplay.Features.Playback
         internal static string CurrentPath => _sourcePath;
         internal static string LastError { get; private set; } = "";
 
+        /// <summary>
+        /// 已载入但还没真正开播——等关卡重开时接管。
+        ///
+        /// **这整块之前完全没有，是"点了回放没反应"的根因。**
+        /// 之前 Load 完就以为开始了，可泵每帧读的是当前歌曲位置，
+        /// 而关卡还停在结算画面（位置早就跑完 50 秒），于是游标一次性冲到底、
+        /// 什么都不注入，看起来就是"播了但什么也没发生"。
+        ///
+        /// Spectre 的做法（Features/Replay/Patch_Lifecycle.cs）：把"该不该播"
+        /// 挂在 scrController.Start_Rewind 的 Prefix，"开始播"挂在 Postfix——
+        /// **跟着关卡重开一起走**，位置自然从 0 开始。
+        /// </summary>
+        internal static bool Pending { get; private set; }
+
+        /// <summary>已载入但待重开关卡才开播。</summary>
+        internal static bool IsPending => Pending && _data != null;
+
         /// <summary>回放总长（秒）。未载入时为 0。</summary>
         internal static double ReplayLength => _data == null ? 0.0 : _data.Length;
 
@@ -97,7 +114,10 @@ namespace SpectreReplay.Features.Playback
                 Patching.PatchLoader.Refresh();
                 Debug.Log("[SpectreReplay] 已载入回放：" + path
                     + "（" + _data.Keys.Count + " 按键 / " + _data.Length.ToString("0.0") + "s）");
-                Ui.Status.Say("status.loaded",
+                // 只是"装好了"，还没开播。真正的开始要等关卡重开——
+                // 见 IsPending 的说明（照 Spectre Patch_Lifecycle 的做法）。
+                Pending = true;
+                Ui.Status.Say("status.pending_replay",
                     System.IO.Path.GetFileNameWithoutExtension(path));
                 return true;
             }
@@ -113,6 +133,7 @@ namespace SpectreReplay.Features.Playback
 
         internal static void Stop()
         {
+            Pending = false;
             if (_data == null)
             {
                 return;
@@ -126,12 +147,41 @@ namespace SpectreReplay.Features.Playback
         }
 
         /// <summary>
+        /// 关卡重开后真正开播。由 Start_Rewind 的补丁调用。
+        ///
+        /// 游标必须归零：这时候关卡刚重开，songposition 才回到开头。
+        /// 不归零的话游标还停在"载入后那次冲到的末尾"，看起来就是
+        /// "播了，但一个键都没放"。
+        /// </summary>
+        internal static void Begin()
+        {
+            Pending = false;
+            if (_data == null)
+            {
+                return;
+            }
+            _cursor = 0;
+            _position = 0;
+            Debug.Log("[SpectreReplay] 回放开始：" + _data.Keys.Count
+                + " 按键 / " + _data.Length.ToString("0.0") + "s");
+            Ui.Status.Say("status.playing");
+        }
+
+        /// <summary>放弃待播的回放（用户点了别的关卡或取消）。</summary>
+        internal static void CancelPending()
+        {
+            Pending = false;
+        }
+
+        /// <summary>
         /// 每帧调用。把时间已到的事件注入队列。
         /// 必须早于 scrController.UpdateInput 执行，否则这一帧注入的会等到下一帧。
         /// </summary>
         internal static void Pump()
         {
-            if (_data == null || !CanInject)
+            // 待播（已载入、还没重开关卡）时不注入：关卡还停在结算画面，
+            // 歌曲位置早就跑完整个回放了，这时注入只会把游标一次性冲到底。
+            if (_data == null || Pending || !CanInject)
             {
                 return;
             }

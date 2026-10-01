@@ -189,18 +189,37 @@ namespace SpectreReplay.Features.Recording
             {
                 return;
             }
-            _hookReady = true;
             try
             {
-                // KeyUpdated 是 **静态只读字段**（不是 event 属性），所以不能 `+=`，
-                // 必须取到 UnityEvent 本体再 AddListener。
-                SkyHookManager.KeyUpdated?.AddListener(OnKey);
+                // KeyUpdated 确实是静态字段、类型 UnityEvent<SkyHookEvent>
+                // （反射核实过），所以 AddListener 是对的用法。
+                //
+                // **但原先 _hookReady = true 是在这行之前置位的**，于是：
+                //   · KeyUpdated 为 null 时 `?.` 静默跳过 → 什么都没注册，
+                //     但 _hookReady 已经是 true → **之后再也不会尝试**
+                //   · 而 _hookReady 是 static，跨场景一直活着，
+                //     第一次在资源没就绪的时机调用就永久失效了
+                //
+                // 现象是"几乎录不到按键"（实测 50 秒只录到 1 个），
+                // 而且没有任何报错。现在**注册成功才置位**，并把结果记进日志。
+                var ev = SkyHookManager.KeyUpdated;
+                if (ev == null)
+                {
+                    Debug.LogWarning("[SpectreReplay] SkyHook 的 KeyUpdated 为 null"
+                        + "（资源未就绪），本次先不挂按键采集，下一局会再试");
+                    return;
+                }
+                ev.AddListener(OnKey);
                 // StartHook 是静态方法；isHookActive 是实例属性，要走单例取。
                 var mgr = SkyHookManager.Instance;
                 if (mgr == null || !mgr.isHookActive)
                 {
                     SkyHookManager.StartHook();
                 }
+                // 到这儿才算真的挂上了。
+                _hookReady = true;
+                Debug.Log("[SpectreReplay] SkyHook 按键采集已挂上"
+                    + "（hookActive=" + (SkyHookManager.Instance?.isHookActive ?? false) + "）");
             }
             catch (Exception ex)
             {

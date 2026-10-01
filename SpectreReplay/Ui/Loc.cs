@@ -41,6 +41,11 @@ namespace SpectreReplay.Ui
                 { "playback.empty", "还没有回放文件。打一局关卡就会自动保存。" },
                 { "playback.stop", "停止回放" },
                 { "playback.note", "回放由录制时的按键序列驱动，可用于复盘与练习。" },
+                { "playback.ready", "已装好：{0}——重新开始这关就会自动播放。" },
+                { "playback.armed", "正在播放：{0}" },
+                { "playback.restart", "重开这关并播放" },
+                { "playback.cancel", "取消待播" },
+                { "playback.unusable", "这个回放里有 {0} 个按键，文件多半是空的。重新打一局再试。" },
                 { "render.mode", "渲染模式" },
                 { "render.mode.live", "边玩边录（推荐）" },
                 { "render.mode.offline", "手动离线渲染" },
@@ -79,6 +84,7 @@ namespace SpectreReplay.Ui
                 { "status.idle", "空闲：没在录制，也没在渲染。" },
                 { "status.recording", "正在录制本局按键…" },
                 { "status.playing", "回放进行中…" },
+                { "status.pending_replay", "回放已装好：{0}。重新开始这关（或从关卡列表再进一次）就会自动播放。" },
                 { "status.rendering", "正在渲染…{0}" },
                 { "status.saved", "回放已保存：{0}" },
                 { "status.saved_none", "本局没有录到按键，未保存（这是正常的，空关不会产生回放）。" },
@@ -141,6 +147,11 @@ namespace SpectreReplay.Ui
                 { "playback.empty", "No replays yet. Play a level and one is saved automatically." },
                 { "playback.stop", "Stop" },
                 { "playback.note", "Playback is driven by the recorded key stream." },
+                { "playback.ready", "Ready: {0} — restart this level to play it automatically." },
+                { "playback.armed", "Playing: {0}" },
+                { "playback.restart", "Restart & play" },
+                { "playback.cancel", "Cancel" },
+                { "playback.unusable", "This replay holds {0} keys, so the file is most likely empty. Play the level again and retry." },
                 { "render.mode", "Render mode" },
                 { "render.mode.live", "Record while playing" },
                 { "render.mode.offline", "Manual offline render" },
@@ -173,6 +184,7 @@ namespace SpectreReplay.Ui
                 { "status.idle", "Idle: not recording, not rendering." },
                 { "status.recording", "Recording your keys..." },
                 { "status.playing", "Replay in progress..." },
+                { "status.pending_replay", "Replay loaded: {0}. Restart this level (or re-enter it from the level list) to play it automatically." },
                 { "status.rendering", "Rendering... {0}" },
                 { "status.saved", "Replay saved: {0}" },
                 { "status.saved_none", "No keys were recorded this run, so nothing was saved (normal for an empty level)." },
@@ -258,6 +270,31 @@ namespace SpectreReplay.Ui
                 return zh2;      // 另一种语言漏翻时兜底，别把键名露给玩家
             }
             return key;          // 两种语言都漏了才露键名——那是真漏
+        }
+
+        /// <summary>
+        /// 取文案并填 {0} 之类的占位符。
+        ///
+        /// 直接 string.Format：文案里有 {0} 是我们自己写的，不含用户输入，
+        /// 真出了 FormatException 就退回原文——宁可显示 "{0}"，
+        /// 也不能让整个界面在 OnGUI 里抛异常（UMM 会吞掉异常，
+        /// 玩家的表现是"面板卡住不动"，比报错更难查）。
+        /// </summary>
+        internal static string F(string key, params object[] args)
+        {
+            string t = T(key);
+            if (args == null || args.Length == 0 || t.IndexOf('{') < 0)
+            {
+                return t;
+            }
+            try
+            {
+                return string.Format(t, args);
+            }
+            catch
+            {
+                return t;
+            }
         }
 
         /// <summary>

@@ -1,5 +1,6 @@
 using System;
 using SpectreReplay.Patching;
+using SpectreReplay.Features.Playback;
 using UnityEngine;
 using ADOFAI;
 
@@ -124,6 +125,36 @@ namespace SpectreReplay.Features.Recording
             {
                 // 每帧都跑，不能让异常抛进游戏主循环
                 Debug.LogError("[SpectreReplay] 快捷键处理异常：" + ex);
+            }
+        }
+
+                /// <summary>
+        /// 关卡重开后让回放接管。
+        ///
+        /// **这是"点了回放没反应"的根因所在。** 之前 Load 完就以为开始了，
+        /// 可泵每帧读当前歌曲位置——而关卡还停在结算画面，位置早就跑完整个
+        /// 回放长度，于是游标一次性冲到底、什么都不注入。
+        ///
+        /// 挂点照 Spectre 的 Features/Replay/Patch_Lifecycle.cs：它把
+        /// "开始播"挂在 <c>scrController.Start_Rewind</c> 的 **Postfix** 上，
+        /// **跟着关卡重开一起走**，歌曲位置自然从 0 开始。
+        ///
+        /// 用 Postfix 而不是 Prefix：Prefix 时关卡还没重置完，位置和判定
+        /// 状态都还是旧的。
+        /// </summary>
+        [GamePatch(typeof(scrController), "Start_Rewind", PatchKind.Postfix, "playback")]
+        private static void PlaybackBeginPostfix()
+        {
+            try
+            {
+                if (PlaybackEngine.IsPending)
+                {
+                    PlaybackEngine.Begin();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError("[SpectreReplay] 回放启动失败：" + ex);
             }
         }
 
