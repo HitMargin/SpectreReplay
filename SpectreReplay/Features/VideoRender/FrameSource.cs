@@ -30,6 +30,17 @@ namespace SpectreReplay.Features.VideoRender
         internal int Height => _height;
         internal int FrameSize => _width * _height * 4;
 
+        /// <summary>
+        /// 编码时是否需要上下翻转。
+        ///
+        /// 只有 CleanCamera 需要：渲染纹理原点在左下，视频原点在左上。
+        /// 整屏模式（ReadPixels 抓的是最终合成结果）方向本来就对。
+        ///
+        /// 与 Spectre 的 VideoFrameSource.NeedsRowFlip 同名同义——它的注释
+        /// 写着"纹理行序与视频相反，编码时要翻转 / 方向与视频一致，无需翻转"。
+        /// </summary>
+        internal bool NeedsRowFlip => _surface == FrameSurface.CleanCamera;
+
         internal FrameSource(FrameSurface surface, int width, int height)
         {
             _surface = surface;
@@ -156,8 +167,13 @@ namespace SpectreReplay.Features.VideoRender
             var data = request.GetData<byte>();
             byte[] bytes = new byte[data.Length];
             data.CopyTo(bytes);
-            // 渲染纹理行序与视频相反，要翻转
-            FlipVertical(bytes, _width, _height);
+            // **这里不翻转。** 渲染纹理的行序与视频相反，但翻转交给
+            // ffmpeg 的 `-vf vflip` 做（见 NeedsRowFlip 与 FfmpegArgs）。
+            //
+            // 原先在这里 CPU 侧搬字节翻转，而 WholeScreen 那条路（ReadPixels）
+            // 又不翻——两条路的行为不一致，视频的正反取决于选了哪个模式，
+            // 看起来就是"有时上下颠倒"。Spectre 也是统一交给 ffmpeg：
+            // VideoRenderJob 把 NeedsRowFlip 传给编码器，编码器拼进 -vf。
             PendingSink(bytes, _width, _height);
         }
 

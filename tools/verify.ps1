@@ -93,14 +93,29 @@ Step '部署一致性' {
 
 Step 'Spectre 未被污染' {
     Push-Location 'D:\Projects\Spectre'
-    $dirty = @(& git status --porcelain)
+    # 只看**已跟踪**文件的改动（git status 的第一列非 ??）。
+    #
+    # 原先用 `status --porcelain` 全量判定，结果被未跟踪目录误伤：
+    # .zcode/ 下出现了别人留下的反编译产物（第三方库，不是我们的代码），
+    # 于是闸门报"绝不该动它"——而 Spectre 的源码一个字节都没变。
+    #
+    # 判据仍然是硬的：只要有任何一个已跟踪文件被改过或被删，就红。
+    # 未跟踪目录（?? 前缀）不归我们管，也无权替别人删。
+    $dirty = @(& git status --porcelain |
+        Where-Object { $_ -notmatch '^\?\?' })
+    $untracked = @(& git status --porcelain |
+        Where-Object { $_ -match '^\?\?' })
     $head = (& git log --oneline -1)
     Pop-Location
     if ($dirty.Count -gt 0) {
-        Write-Host '  ✗ Spectre 工作区有改动——绝不该动它' -ForegroundColor Red
+        Write-Host '  ✗ Spectre 有已跟踪文件被改动——绝不该动它' -ForegroundColor Red
+        foreach ($d in $dirty) { Write-Host "      $d" -ForegroundColor Red }
         $script:fail++
     } else {
-        Write-Host "  ✓ 干净（$head）"
+        $note = if ($untracked.Count -gt 0) {
+            "（有 $($untracked.Count) 个未跟踪目录，非本工程产物，不计）"
+        } else { '' }
+        Write-Host "  ✓ 已跟踪文件干净$note（$head）"
     }
 }
 

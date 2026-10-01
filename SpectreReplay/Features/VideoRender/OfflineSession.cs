@@ -116,6 +116,7 @@ namespace SpectreReplay.Features.VideoRender
                     (EncoderMode)Settings.Encoder,
                     (QualityMode)Settings.Quality,
                     (ContainerMode)Settings.Container,
+                    _frames.NeedsRowFlip,
                     _rawVideoPath, Settings.FfmpegPath);
                 _frames.PendingSink = OnFrameReady;
 

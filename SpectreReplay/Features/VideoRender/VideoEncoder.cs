@@ -53,15 +53,17 @@ namespace SpectreReplay.Features.VideoRender
 
         internal static VideoEncoder Start(FrameBufferPool pool, int width, int height,
             int fps, EncoderMode encoder, QualityMode quality, ContainerMode container,
-            string outputPath, string ffmpegPath)
+            bool flipRows, string outputPath, string ffmpegPath)
         {
             var e = new VideoEncoder(pool);
-            e.Launch(width, height, fps, encoder, quality, container, outputPath, ffmpegPath);
+            e.Launch(width, height, fps, encoder, quality, container, flipRows,
+                outputPath, ffmpegPath);
             return e;
         }
 
         private void Launch(int width, int height, int fps, EncoderMode encoder,
-            QualityMode quality, ContainerMode container, string outputPath, string ffmpegPath)
+            QualityMode quality, ContainerMode container, bool flipRows,
+            string outputPath, string ffmpegPath)
         {
             var psi = new ProcessStartInfo(ffmpegPath)
             {
@@ -70,7 +72,7 @@ namespace SpectreReplay.Features.VideoRender
                 UseShellExecute = false,
                 CreateNoWindow = true,
             };
-            foreach (string a in BuildArgs(width, height, fps, encoder, quality, container, outputPath))
+            foreach (string a in BuildArgs(width, height, fps, encoder, quality, container, flipRows, outputPath))
             {
                 psi.ArgumentList.Add(a);
             }
@@ -94,8 +96,10 @@ namespace SpectreReplay.Features.VideoRender
         }
 
         private static string[] BuildArgs(int width, int height, int fps,
-            EncoderMode encoder, QualityMode quality, ContainerMode container, string outPath)
-            => FfmpegArgs.Build(width, height, fps, encoder, quality, container, outPath);
+            EncoderMode encoder, QualityMode quality, ContainerMode container,
+            bool flipRows, string outPath)
+            => FfmpegArgs.Build(width, height, fps, encoder, quality, container,
+                flipRows, outPath);
 
         /// <summary>主线程调用：把一帧像素交出去。非阻塞——队列满就丢这一帧。</summary>
         internal void Submit(byte[] pixels)

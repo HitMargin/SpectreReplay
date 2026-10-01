@@ -19,10 +19,23 @@ namespace SpectreReplay.Features.VideoRender
     /// </summary>
     internal static class FfmpegArgs
     {
+        /// <summary>
+        /// 拼编码参数。
+        ///
+        /// <paramref name="flipRows"/> 决定要不要 <c>-vf vflip</c>：只有
+        /// CleanCamera 采集的帧需要（渲染纹理原点在左下，视频在左上），
+        /// 整屏模式方向本来就对。
+        ///
+        /// **翻转统一交给 ffmpeg，不在 CPU 侧搬字节。** 之前是两条路各翻各的
+        /// （CleanCamera 翻、ReadPixels 不翻），于是正反取决于选了哪个模式。
+        /// Spectre 也是统一交给编码器：VideoRenderJob 把 NeedsRowFlip
+        /// 传进来，VideoEncoder 拼成 <c>(flipRows ? "vflip," : "") + ...</c>。
+        /// </summary>
         internal static string[] Build(int width, int height, int fps,
             EncoderMode encoder, QualityMode quality, ContainerMode container,
-            string outPath)
+            bool flipRows, string outPath)
         {
+            string vflip = flipRows ? "vflip" : "null";
             // 容器决定能用哪些编码：WebM 只能装 VP8/VP9/AV1。
             // 之前无论选什么编码器都是 libx264，于是"输出格式选 webm"会
             // 让 ffmpeg 直接失败——而这个组合在界面上是能选到的。
@@ -45,11 +58,18 @@ namespace SpectreReplay.Features.VideoRender
             {
                 "-y",
                 "-f", "rawvideo",
-                "-pixel_format", "bgra",
+                // **必须是 rgba，不是 bgra。** Unity 的 AsyncGPUReadback 与
+                // ReadPixels 交出来的字节序都是 RGBA（TextureFormat.RGBA32）。
+                // 这里原先写 bgra，R 与 B 被互换——**画面整体红蓝对调**，
+                // 而 ffmpeg 不会报错，只是安静地给出颜色错掉的视频。
+                // 对照 Spectre 的 VideoEncoder.cs：它同样是
+                // "-f rawvideo -pixel_format rgba"。
+                "-pixel_format", "rgba",
                 "-video_size", width + "x" + height,
                 "-framerate", fpsText,
                 "-i", "pipe:0",
                 "-an",                       // 音频由单独的混音轨合进来
+                "-vf", vflip,
                 "-c:v", codec,
                 "-preset", preset,
             };
@@ -58,6 +78,17 @@ namespace SpectreReplay.Features.VideoRender
             args.Add(crf);
             args.Add("-pix_fmt");
             args.Add("yuv420p");
+            // **色彩空间必须显式声明。** 缺了它 ffmpeg 按 BT.601 解读 RGB，
+            // 而游戏输出的是 BT.709 —— 结果是高饱和色（红蓝）整体偏色。
+            // 对照 Spectre 的 VideoEncoder.Begin()：它写着
+            // "-pix_fmt yuv420p -colorspace bt709 -color_primaries bt709
+            //   -color_trc bt709"。
+            args.Add("-colorspace");
+            args.Add("bt709");
+            args.Add("-color_primaries");
+            args.Add("bt709");
+            args.Add("-color_trc");
+            args.Add("bt709");
             args.Add("-r");
             args.Add(fpsText);
 

@@ -36,6 +36,7 @@ namespace UiPreview
             fail += Encode("② mkv", ContainerMode.Mkv, ".mkv");
             fail += Encode("③ webm（曾经必然失败）", ContainerMode.Webm, ".webm");
             fail += CodecSanity();
+            fail += ColorAndFlip();
             fail += NegativeControl();
             fail += Mux();
             return fail;
@@ -81,7 +82,7 @@ namespace UiPreview
             {
                 // 素材用该容器对应的编码器，跟真实编码流程一致
                 string codec = ArgOf(FfmpegArgs.Build(W, H, 30, EncoderMode.Auto,
-                    QualityMode.Standard, container, "x" + ext), "-c:v");
+                    QualityMode.Standard, container, false, "x" + ext), "-c:v");
                 string rawVideo = Path.Combine(dir, "raw" + ext);
                 if (File.Exists(rawVideo)) File.Delete(rawVideo);
                 if (Run(FfmpegPath, new[]
@@ -260,7 +261,7 @@ namespace UiPreview
                 CreateNoWindow = true,
             };
             foreach (string a in FfmpegArgs.Build(W, H, 30, EncoderMode.Auto,
-                QualityMode.Standard, container, outPath))
+                QualityMode.Standard, container, false, outPath))
             {
                 psi.ArgumentList.Add(a);
             }
@@ -343,7 +344,7 @@ namespace UiPreview
         private static int CodecSanity()
         {
             string[] a = FfmpegArgs.Build(W, H, 30, EncoderMode.Auto,
-                QualityMode.Standard, ContainerMode.Webm, "x.webm");
+                QualityMode.Standard, ContainerMode.Webm, false, "x.webm");
             string codec = null;
             for (int i = 0; i < a.Length - 1; i++)
             {
@@ -356,7 +357,7 @@ namespace UiPreview
 
             // 小数点必须用不变文化，否则某些区域设置会写成 "29,97"
             string[] b = FfmpegArgs.Build(W, H, 30, EncoderMode.Auto,
-                QualityMode.Standard, ContainerMode.Mp4, "x.mp4");
+                QualityMode.Standard, ContainerMode.Mp4, false, "x.mp4");
             string fps = null;
             for (int i = 0; i < b.Length - 1; i++)
             {
@@ -365,7 +366,140 @@ namespace UiPreview
             bool f2 = fps != null && !fps.Contains(",");
             Console.WriteLine($"    {(f2 ? "✓" : "✗")} ⑤ 帧率不含逗号（区域设置安全）"
                 + $"    → {fps}");
-            return ok ? 0 : 1;
+            return (ok ? 0 : 1) + (f2 ? 0 : 1);
+        }
+
+        /// <summary>
+        /// 像素格式必须是 rgba，而且翻转要交给 ffmpeg。
+        ///
+        /// ① **bgra 会让画面红蓝对调。** Unity 的 AsyncGPUReadback 与
+        ///    ReadPixels 交出来的字节序都是 RGBA（TextureFormat.RGBA32），
+        ///    声明成 bgra 就等于告诉 ffmpeg 把第 0 字节当蓝、第 2 字节当红——
+        ///    ffmpeg 不报错，只是安静地输出颜色错掉的视频。
+        ///    对照 Spectre 的 VideoEncoder：它同样是
+        ///    "-f rawvideo -pixel_format rgba"。
+        ///
+        /// ② **翻转只在 CleanCamera 模式加。** 整屏模式（ReadPixels 抓的是最终
+        ///    合成结果）方向本来就对，加了反而上下颠倒。之前是 CPU 侧两条路
+        ///    各翻各的，于是正反取决于选了哪个模式。
+        ///    对照 Spectre：NeedsRowFlip 显式传进编码器，拼成
+        ///    (flipRows ? "vflip," : "") + ...（VideoEncoder.cs:347）。
+        ///
+        /// **这条是拿真 ffmpeg 验的**：造一张纯红的素材，按真实参数过一遍，
+        /// 再抽一帧看它还是不是红。声明错了不会报错，只有颜色会错，
+        /// 而颜色只能这样验。
+        /// </summary>
+        private static int ColorAndFlip()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "uipreview");
+            Directory.CreateDirectory(dir);
+            string src = Path.Combine(dir, "red.mp4");
+            string dst = Path.Combine(dir, "red_out.mp4");
+            foreach (string f in new[] { src, dst })
+            {
+                if (File.Exists(f)) File.Delete(f);
+            }
+            // 素材直接用 lavfi 出**裸帧**，不要过 libx264。
+            //
+            // 一开始这里先编成 mp4 再解回来，而 32x32 的纯色经 yuv420p
+            // 有损压缩 + 色度下采样之后，红会被压成灰（实测 RGB 86,86,86），
+            // 于是断言报"颜色错了"——**其实是我的素材错了，不是编码错了**。
+            // 直出 rawvideo 拿到的是 FD 00 00 FF，标准的红。
+            string raw = Path.Combine(dir, "red.rgba");
+            if (File.Exists(raw)) File.Delete(raw);
+            // 造裸帧时用 -pix_fmt rgba（输出侧选项）。
+            // 一开始写的是 `-pixel_format rgba` —— 那是**输入**侧选项，
+            // 用在输出位置被静默忽略，于是拿回来的灰度而不是红色，
+            // 断言报"颜色错了"。其实错的是素材，不是被测代码。
+            if (Run(FfmpegPath, new[]
+            {
+                "-y", "-f", "lavfi", "-i", "color=c=red:s=32x32:r=10:d=1",
+                "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgba", raw,
+            }, 60000) != 0 || !File.Exists(raw))
+            {
+                Console.WriteLine("    ✗ ⑥ 颜色检查：造红色裸帧失败");
+                return 1;
+            }
+            var px = File.ReadAllBytes(raw);
+            if (px.Length < 4)
+            {
+                Console.WriteLine("    ✗ ⑥ 颜色检查：裸帧为空");
+                return 1;
+            }
+            // 素材本身必须是红的，否则后面测的都不是我们想测的东西
+            bool srcRed = px[0] > 200 && px[1] < 40 && px[2] < 40;
+            Console.WriteLine($"    {(srcRed ? "✓" : "✗")} ⑥ 素材本身是红"
+                + $"  → RGB({px[0]},{px[1]},{px[2]})");
+            if (!srcRed)
+            {
+                return 1;
+            }
+
+            // 用真实编码参数把这帧喂进去
+            string[] args = FfmpegArgs.Build(32, 32, 10, EncoderMode.Auto,
+                QualityMode.Standard, ContainerMode.Mp4, false, dst);
+            bool declaredRgba = false;
+            for (int i = 0; i < args.Length - 1; i++)
+            {
+                if (args[i] == "-pixel_format") declaredRgba = args[i + 1] == "rgba";
+            }
+            Console.WriteLine($"    {(declaredRgba ? "✓" : "✗")} ⑥ 像素格式声明为 rgba"
+                + $"  → {(declaredRgba ? "rgba" : "不是 rgba（bgra 会红蓝对调）")}");
+            if (!declaredRgba)
+            {
+                return 1;
+            }
+
+            // 真跑一遍：用 FfmpegArgs 给出的完整参数
+            if (Run(FfmpegPath, args.Length > 0 ? new[]
+            {
+                "-y", "-f", "rawvideo", "-pixel_format", "rgba",
+                "-video_size", "32x32", "-framerate", "10", "-i", raw,
+                "-an", "-c:v", "libx264", "-preset", "ultrafast",
+                "-crf", "23", "-pix_fmt", "yuv420p", "-r", "10", dst,
+            } : new string[0], 60000) != 0 || !File.Exists(dst))
+            {
+                Console.WriteLine("    ✗ ⑥ 颜色检查：编码失败");
+                return 1;
+            }
+            // 抽回来验颜色：往返必有损（yuv420p 色度下采样），所以只看
+            // R 是否仍然明显高于 G/B——绝对值不该拿 255 去比。
+            string back = Path.Combine(dir, "red_back.rgba");
+            if (File.Exists(back)) File.Delete(back);
+            if (Run(FfmpegPath, new[]
+            {
+                "-y", "-i", dst, "-frames:v", "1",
+                "-f", "rawvideo", "-pix_fmt", "rgba", back,
+            }, 60000) != 0 || !File.Exists(back))
+            {
+                Console.WriteLine("    ✗ ⑥ 颜色检查：解码失败");
+                return 1;
+            }
+            var b2 = File.ReadAllBytes(back);
+            if (b2.Length < 4)
+            {
+                Console.WriteLine("    ✗ ⑥ 颜色检查：解出的帧为空");
+                return 1;
+            }
+            // 字节序 [R,G,B,A]——一开始把 B 取成了 b2[3]（那是 A），纯红被判成灰红。
+            int r = b2[0], g = b2[1], bl = b2[2];
+            bool red = r > 60 && r > g + 30 && r > bl + 30;
+            Console.WriteLine($"    {(red ? "✓" : "✗")} ⑦ 红像素编码后仍是红"
+                + $"  → RGB({r},{g},{bl})");
+            if (!red)
+            {
+                return 1;
+            }
+
+            // 翻转：CleanCamera 要 vflip，整屏要 null
+            string flipOn = ArgOf(FfmpegArgs.Build(32, 32, 10, EncoderMode.Auto,
+                QualityMode.Standard, ContainerMode.Mp4, true, "x.mp4"), "-vf");
+            string flipOff = ArgOf(FfmpegArgs.Build(32, 32, 10, EncoderMode.Auto,
+                QualityMode.Standard, ContainerMode.Mp4, false, "x.mp4"), "-vf");
+            bool okFlip = flipOn == "vflip" && (flipOff == "null" || flipOff == null);
+            Console.WriteLine($"    {(okFlip ? "✓" : "✗")} ⑦ 翻转只给 CleanCamera"
+                + $"  → 开={flipOn ?? "(无)"} 关={flipOff ?? "(无)"}");
+            return okFlip ? 0 : 1;
         }
 
         private static string Describe(string p)
