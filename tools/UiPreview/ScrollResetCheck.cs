@@ -63,6 +63,8 @@ namespace UiPreview
                 var content = Content();
                 float h = content != null ? content.sizeDelta.y : 0f;
                 Console.WriteLine($"    ·  关于页内容高 {h:F0}px");
+
+                fail += ClampHolds();
             }
             finally
             {
@@ -71,11 +73,72 @@ namespace UiPreview
             return fail;
         }
 
-        private static ScrollRect Scroll()
+        /// <summary>
+        /// 每帧的不变量兜底：内容被推出去之后，ClampContent 必须把它拉回来。
+        ///
+        /// 这条**是真能在离屏验的**——ClampContent 只依赖视口高与内容高，
+        /// 两个都是我们自己显式写进去的 sizeDelta，不牵扯 ScrollRect 的
+        /// 内部时序。所以不像"切页后回到顶部"那条（桩件里那个 setter 什么
+        /// 都不做，验的是空）。
+        ///
+        /// 直接把偏移设成一个离谱的值模拟故障，再看它有没有被夹回范围。
+        /// </summary>
+        private static int ClampHolds()
         {
+            int bad = 0;
+            var content = Content();
+            var viewport = Viewport();
+            if (content == null || viewport == null)
+            {
+                Console.WriteLine("    ✗ 找不到内容或视口");
+                return 1;
+            }
+
+            // ① 内容比视口高：能滚，但不能被推出两端之外
+            PanelHost.Show(2);                     // 渲染页，内容最长
+            content.anchoredPosition = new Vector2(0f, -99999f);
+            PanelHost.ClampContent();
+            float viewH = viewport.rect.height;
+            float contentH = content.rect.height;
+            float minY = -MathF.Max(0f, contentH - viewH);
+            float y = content.anchoredPosition.y;
+            bool okA = y >= minY - 0.5f && y <= 0.5f;
+            Console.WriteLine($"    {(okA ? "✓" : "✗")} 内容被推出后夹回范围"
+                + $"  → {y:F0} ∈ [{minY:F0}, 0]（视口 {viewH:F0} 内容 {contentH:F0}）");
+            if (!okA) bad++;
+
+            // ② 往下也推：内容顶边不能被抬到视口顶边之上
+            content.anchoredPosition = new Vector2(0f, 99999f);
+            PanelHost.ClampContent();
+            y = content.anchoredPosition.y;
+            bool okB = y <= 0.5f;
+            Console.WriteLine($"    {(okB ? "✓" : "✗")} 内容顶边不被抬到视口之上  → {y:F0}");
+            if (!okB) bad++;
+
+            // ③ 内容比视口短：必须钉在顶部
+            PanelHost.Show(3);                     // 关于页，内容最短
+            content.anchoredPosition = new Vector2(0f, -500f);
+            PanelHost.ClampContent();
+            y = content.anchoredPosition.y;
+            bool okC = MathF.Abs(y) < 0.5f;
+            Console.WriteLine($"    {(okC ? "✓" : "✗")} 内容比视口短时钉在顶部  → {y:F0}");
+            if (!okC) bad++;
+
+            PanelHost.Show(0);
+            return bad;
+        }
+
+        private static ScrollRect Scroll()        {
             var f = typeof(PanelHost).GetField("_scroll",
                 BindingFlags.NonPublic | BindingFlags.Static);
             return f?.GetValue(null) as ScrollRect;
+        }
+
+        private static RectTransform Viewport()
+        {
+            var f = typeof(PanelHost).GetField("_viewport",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            return f?.GetValue(null) as RectTransform;
         }
 
         private static RectTransform Content()

@@ -515,8 +515,15 @@ namespace SpectreReplay.Ui
                 PageTitle = _pageTitle.text,
             };
             p.Build?.Invoke(pb);
-            _content.sizeDelta = new Vector2(0f, pb.ContentHeight + 24f);
+            // 底部余量必须与 HeightFor 算面板高度时用的**同一个常量**。
+            // 之前这里是写死的 24，而那边用的是 Theme.ContentPad（16）——
+            // 差这 8 像素，于是每张内容刚好装得下的短页面都会比视口高 8px，
+            // 永远多出一截没必要的滚动条和滚动范围。高度和内容两个地方
+            // 算同一件事，就得用同一个数。
+            _content.sizeDelta = new Vector2(0f,
+                pb.ContentHeight + Theme.ContentPad);
             indexForLog = index;
+            _clampWarned = false;
             ResetScroll();
         }
 
@@ -571,6 +578,54 @@ namespace SpectreReplay.Ui
         }
 
         private static int indexForLog;
+
+        /// <summary>
+        /// 每帧把内容夹回视口内——一条**不变量**，不管是谁把它推出去的。
+        ///
+        /// 内容顶边不许高过视口顶边（否则上面的行全被 RectMask2D 裁掉，
+        /// 界面上大片空白），底边也不许低过视口底边。内容比视口短时直接
+        /// 钉在顶部。
+        ///
+        /// 为什么非得每帧兜底：ScrollRect 归位靠它自己的边界计算，而那依赖
+        /// "布局已经重算"。切页、改面板高度、字体解析完成导致行高变化——
+        /// 每一次都会有一两帧读到的还是旧边界，偏移就停在错的地方不回来。
+        /// 盯着归位不如直接守住范围：这几个数（视口高、内容高）都是我们自己
+        /// 写进去的，不依赖任何 Unity 内部时序。
+        ///
+        /// 只在越界时才写回，静止时一帧都不碰。
+        /// </summary>
+        internal static void ClampContent()
+        {
+            if (_content == null || _viewport == null)
+            {
+                return;
+            }
+            float viewH = _viewport.rect.height;
+            float contentH = _content.rect.height;
+            if (viewH <= 0f || contentH <= 0f)
+            {
+                return;
+            }
+            // 锚点在顶部、pivot 在顶部：偏移 0 就是"顶边贴视口顶边"。
+            float maxY = 0f;
+            float minY = -Mathf.Max(0f, contentH - viewH);
+            float y = _content.anchoredPosition.y;
+            if (y <= minY && y >= maxY)
+            {
+                return;
+            }
+            float fixedY = Mathf.Clamp(y, minY, maxY);
+            _content.anchoredPosition = new Vector2(_content.anchoredPosition.x, fixedY);
+            if (!_clampWarned)
+            {
+                _clampWarned = true;
+                UnityEngine.Debug.LogWarning(
+                    $"[SpectreReplay] 内容跑出视口（偏移 {y:F0}），已夹回 "
+                    + $"{fixedY:F0}。视口 {viewH:F0} 内容 {contentH:F0}");
+            }
+        }
+
+        private static bool _clampWarned;
 
         internal static void Refresh() => Show(_current);
 
@@ -664,6 +719,10 @@ namespace SpectreReplay.Ui
             {
                 _nextTick = Time.unscaledTime + 0.2f;
                 PanelHost.TickLive();
+            }
+            if (PanelHost.IsOpen)
+            {
+                PanelHost.ClampContent();
             }
         }
     }
