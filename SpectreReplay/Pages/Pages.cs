@@ -21,12 +21,22 @@ namespace SpectreReplay.Pages
         internal static void DrawRecord()
         {
             OnGui.Group("page.record");
+            OnGui.Note("record.howto");
             OnGui.Row("record.recording", Settings.RecordingOn,
                 v => Commit(() => Settings.RecordingOn = v));
             OnGui.Row("record.autosave", Settings.AutoSave,
                 v => Commit(() => Settings.AutoSave = v));
             OnGui.Row("record.asyncinput", Settings.AsyncInput,
                 v => Commit(() => Settings.AsyncInput = v));
+
+            OnGui.Group("record.hotkeys");
+            // 按任意键改键。做这一段是因为之前把热键全删了之后，
+            // 玩家想主动存一局只能等通关自动保存——练到一半的短局根本存不下来。
+            // 做法照 Spectre（Features/QuartzUi/SpectreUiPages.cs）。
+            OnGui.RowHotkey("record.savekey", () => Settings.SaveKey,
+                k => Settings.SaveKey = k);
+            OnGui.RowHotkey("record.cancelSaveKey", () => Settings.CancelSaveKey,
+                k => Settings.CancelSaveKey = k);
             OnGui.Note("record.note");
         }
 

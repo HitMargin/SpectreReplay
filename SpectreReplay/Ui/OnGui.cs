@@ -322,7 +322,88 @@ namespace SpectreReplay.Ui
         }
 
         /// <summary>
-        /// 一段说明文字（缩进到标签列右边，与上面的控件对齐）。
+        /// 「按任意键改键」的行。
+        ///
+        /// 照 Spectre 的 Features/QuartzUi/SpectreUiPages.cs（它用
+        /// KeyCaptureWatch 组件每帧扫 Input.GetKeyDown）。IMGUI 版不需要那个
+        /// 组件——OnGUI 每帧被调用，在这里扫一遍等价，而且少一个常驻组件。
+        ///
+        /// 三段状态：已绑定（显示键名）/ 等待按键（显示 "…"）/ 未绑定。
+        /// 点一次进入等待，再点退出；**等待期间要能按 Esc 取消**，否则手滑
+        /// 按了 Esc 就再也退不出来。
+        /// </summary>
+        internal static void RowHotkey(string labelKey, Func<int> get, Action<int> set)
+        {
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(Loc.T(labelKey), GUILayout.Width(LabelW));
+            int cur = get();
+            string text = _capturing == GetCaptureId(labelKey)
+                ? Loc.T("ui.pressKey")
+                : (cur > 0 ? KeyName((KeyCode)cur) : Loc.T("ui.noKey"));
+            if (GUILayout.Button(text, GUILayout.Width(200f), GUILayout.Height(24f)))
+            {
+                int id = GetCaptureId(labelKey);
+                _capturing = _capturing == id ? 0 : id;
+            }
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
+
+            if (_capturing != GetCaptureId(labelKey))
+            {
+                return;
+            }
+            // 等按键时**不能让 UMM 关窗口**：ESC 既是"取消捕获"，
+            // 又可能是玩家想绑的键，两者会同时发生——玩家按 ESC 想绑，
+            // 窗口却先关了，一来一回永远绑不上 ESC。
+            // 办法：捕获期间独占 ESC（吃掉它），窗口就关不掉；
+            // 想退出捕获就点那个按钮。这是有意的取舍。
+            if (Event.current.type == EventType.KeyDown
+                && Event.current.keyCode == KeyCode.Escape)
+            {
+                _capturing = 0;
+                Event.current.Use();
+                return;
+            }
+            // 只在 Repaint 扫，避免 Layout 趟也吃输入——那样一个键会被算两次
+            if (Event.current.type != EventType.Repaint)
+            {
+                return;
+            }
+            foreach (KeyCode k in (KeyCode[])Enum.GetValues(typeof(KeyCode)))
+            {
+                // 鼠标键不适合当保存键：分不清左中右，而且点哪都触发
+                if (k == KeyCode.Mouse0 || k == KeyCode.Mouse1 || k == KeyCode.Mouse2)
+                {
+                    continue;
+                }
+                if (!Input.GetKeyDown(k))
+                {
+                    continue;
+                }
+                _capturing = 0;
+                set((int)k);
+                Settings.Commit();
+                return;
+            }
+        }
+
+        /// <summary>正在等按键的那一行（0 = 没有）。</summary>
+        private static int _capturing;
+
+        private static int GetCaptureId(string labelKey) => labelKey.GetHashCode() & 0x7fffffff;
+
+        /// <summary>键码 → 可读名字。F1..F12 是连续的，其余交给枚举名。</summary>
+        internal static string KeyName(KeyCode k)
+        {
+            int n = (int)k;
+            if (n >= 282 && n <= 293)
+            {
+                return "F" + (n - 281);
+            }
+            return k.ToString();
+        }
+
+        /// <summary>一段说明文字（缩进到标签列右边，与上面的控件对齐）。
         ///
         /// 不给定死宽度：之前写的是 Width(LabelW+300f)，UMM 窗口宽度随
         /// 玩家窗口变，一旦窄于那个值，右边的话就被**截断**而不是换行——

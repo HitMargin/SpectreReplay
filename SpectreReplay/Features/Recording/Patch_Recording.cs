@@ -74,6 +74,59 @@ namespace SpectreReplay.Features.Recording
             }
         }
 
+        /// <summary>
+        /// 保存 / 取消保存的快捷键。
+        ///
+        /// 挂在 <c>scrConductor.Update</c> 的 Postfix 上，与 Spectre 同一个
+        /// 挂点同一个做法（见它的 Features/Replay/Patch_Misc.cs 里的
+        /// Patch_ConductorUpdate）。
+        ///
+        /// **必须有它。** 之前换成 UMM 的 OnGUI 时我把所有热键都删了，
+        /// 理由是"界面热键没用了"——但保存键不是界面热键：没有它，玩家
+        /// 想主动存一局就只能等通关自动保存，练到一半的短局根本存不下来。
+        /// 模组因此变得没法用。
+        ///
+        /// 只在 3/5/6 状态（游玩中/暂停/结算）响应，跟 Spectre 一致——
+        /// 主菜单里按保存键不该有反应。
+        /// </summary>
+        [GamePatch(typeof(scrConductor), "Update", PatchKind.Postfix, "recording")]
+        private static void HotkeyPostfix()
+        {
+            try
+            {
+                int state = (int)(States)scrController.instance.stateMachine.GetState();
+                if (state != 3 && state != 5 && state != 6)
+                {
+                    return;
+                }
+                if (Settings.SaveKey > 0
+                    && Input.GetKeyDown((KeyCode)Settings.SaveKey))
+                {
+                    string path = KeyRecorder.End(true);
+                    if (path != null)
+                    {
+                        Debug.Log("[SpectreReplay] 已用快捷键保存：" + path);
+                    }
+                }
+                else if (Settings.CancelSaveKey > 0
+                    && Input.GetKeyDown((KeyCode)Settings.CancelSaveKey))
+                {
+                    // End(false) 已经够：它结束录制但**不落盘**，数据就丢了。
+                    // 原本还调了一个不存在的 Discard()，编译不过。
+                    if (KeyRecorder.IsRecording)
+                    {
+                        KeyRecorder.End(false);
+                        Debug.Log("[SpectreReplay] 已取消保存");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // 每帧都跑，不能让异常抛进游戏主循环
+                Debug.LogError("[SpectreReplay] 快捷键处理异常：" + ex);
+            }
+        }
+
         [GamePatch(typeof(scrMarginTracker), "AddHit", PatchKind.Postfix, "recording")]
         private static void HitPostfix(HitMargin hit)
         {

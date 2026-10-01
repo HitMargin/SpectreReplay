@@ -66,15 +66,25 @@ namespace SpectreReplay
         internal static bool DuplicateWhenLate = true;
 
         // ── 界面 ──────────────────────────────────────────────
-        // 原先这里有三项：热键、字号缩放、进入关卡自动开界面。
-        // **换成 UMM 自带的 OnGUI 之后全都不起作用了**：UMM 窗口由 UMM 自己
-        // 管（默认 F7），字号由 UMM 的皮肤决定，也没有"自动打开"这回事。
+        // 原先这里有三项：热键、字号缩放、进入关卡自动开界面。换成 UMM 自带的
+        // OnGUI 之后它们全都不起作用（UMM 窗口由 UMM 自己管、字号由皮肤决定），
+        // 已经删掉了。
         //
-        // 留着比删掉更糟——三个滑条摆在那里，拖了纹丝不动，玩家只会
-        // 得出"这个模组的设置全是坏的"。设置项必须和实际行为一一对应。
-        //
-        // 已经在用的旧 Configs.json 里还留着这三个键：读取时忽略未知键
-        // （见 Apply），下次保存就不写了，无需迁移。
+        // 但**不能就此不提供任何快捷键**：Spectre 的保存回放键挂在
+        // scrConductor.Update 上、每帧查 Input.GetKeyDown（见它的
+        // Features/Replay/Patch_Misc.cs）。没有这一下，玩家打��局只能被动
+        // 等自动保存，想主动存就得关掉设置重开——模组等于不好用。
+
+        /// <summary>
+        /// 保存回放的按键（KeyCode）。0 = 不绑定。
+        ///
+        /// 挂在 scrConductor.Update 上每帧查，与 Spectre 同位置同做法。
+        /// 默认 F9。
+        /// </summary>
+        internal static int SaveKey = 290;
+
+        /// <summary>取消保存（丢弃本局录制）的按键。0 = 不绑定。默认 F10。</summary>
+        internal static int CancelSaveKey = 291;
 
         // ── 路径 ──────────────────────────────────────────────
         /// <summary>模组根目录（dll 所在处）。UM4 把 dll 放在 Mods\&lt;名&gt;\ 下。</summary>
@@ -175,6 +185,8 @@ namespace SpectreReplay
             Settings.TailSeconds = GetFloat(d, "TailSeconds", Settings.TailSeconds);
             Settings.OutputDir = GetString(d, "OutputDir", Settings.OutputDir);
             Settings.DuplicateWhenLate = GetBool(d, "DuplicateWhenLate", Settings.DuplicateWhenLate);
+            Settings.SaveKey = GetInt(d, "SaveKey", Settings.SaveKey);
+            Settings.CancelSaveKey = GetInt(d, "CancelSaveKey", Settings.CancelSaveKey);
         }
 
         private static bool GetBool(Dictionary<string, object> d, string k, bool def)
@@ -225,6 +237,8 @@ namespace SpectreReplay
                     { "TailSeconds", Settings.TailSeconds },
                     { "OutputDir", Settings.OutputDir },
                     { "DuplicateWhenLate", Settings.DuplicateWhenLate },
+                    { "SaveKey", Settings.SaveKey },
+                    { "CancelSaveKey", Settings.CancelSaveKey },
                 };
                 string dir = Path.GetDirectoryName(FilePath);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
