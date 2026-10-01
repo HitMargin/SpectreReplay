@@ -7,8 +7,14 @@ namespace SpectreReplay
     using ModEntry = UnityModManagerNet.UnityModManager.ModEntry;
 
     /// <summary>
-    /// UM4 入口。只做三件事：探测环境、装配 UI 宿主、注册补丁。
-    /// 真正的功能代码都在 Features\ 下，不往这里堆。
+    /// UM4 入口。结构照 Spectre 的 Main：Load 只做最轻的事，
+    /// 真正要建对象、挂补丁的活全放 OnToggle。
+    ///
+    /// 为什么这么分：OnToggle 在模组被**启用**时触发，那时游戏场景已经
+    /// 起来了；Load 在 UMM 的加载期触发，那时场景还没就绪。原先把
+    /// GameObject 创建、Harmony 初始化、补丁挂载全塞在 Load 里，
+    /// 目标方法很可能根本还没准备好——这类问题在日志里表现为
+    /// "补丁没挂上"，查起来毫无头绪。
     /// </summary>
     public static class Main
     {
@@ -26,12 +32,28 @@ namespace SpectreReplay
             UnityEngine.Debug.Log("[SpectreReplay] Load() 进入");
             try
             {
-                Load2(modEntry);
+                mod = modEntry;
+                // 配置与文案：纯数据读取，不碰场景，Load 期做是安全的。
+                ConfigStore.Load();
+                // 语言要先定下来：顶栏提示、热键名等都是按当前语言现生成的。
+                // 放在 ApplyHotkey 之前，顺序反了就会按默认语言生成。
+                Ui.Loc.RefreshLanguage();
+                Ui.PanelHost.ApplyHotkey(Settings.Hotkey);
+                Pages.Pages.RegisterAll();
+                // 装配在 OnToggle 里做，不在 Load 里做。Spectre 也是这么分的：
+                // Load 只读配置、设回调，重活（Harmony 初始化、补丁挂载、
+                // 建 GameObject）全在模组被启用、游戏场景就绪之后。
+                //
+                // 差别不是风格问题：**Load 跑在 UMM 的加载期，那时场景还没
+                // 就绪**，补丁目标可能找不到、组件可能建在错误的时机上。
+                // 收摊挂在 OnToggle(false) 上：UMM 没有 OnUnload 这个回调，
+                // Spectre 也是这么做的（onToggle 里判 isToggled）。
+                modEntry.OnToggle = OnToggle;
             }
             catch (System.Exception ex)
             {
-                // 到这里才算真加载了，所以 mod 可能还没建好——
-                // 两边都记，别让"记录失败"本身把异常吞掉。
+                // UMM 只会记一行警告就继续，模组看起来就是"什么都没发生"。
+                // 所以异常必须在这里说清楚是哪一类。
                 UnityEngine.Debug.LogError("[SpectreReplay] 加载失败："
                     + ex.GetType().Name + ": " + ex.Message + "\n" + ex.StackTrace);
                 try
@@ -46,14 +68,31 @@ namespace SpectreReplay
             }
         }
 
-        private static void Load2(ModEntry modEntry)
+        /// <summary>
+        /// 模组被启用时做真正的装配。与 Spectre 同一个位置。
+        /// </summary>
+        private static bool OnToggle(ModEntry modEntry, bool isToggled)
         {
-            mod = modEntry;
-            ConfigStore.Load();
-            // 语言要先定下来：顶栏提示、热键名等都是按当前语言现生成的。
-            // 放在 ApplyHotkey 之前，顺序反了就会按默认语言生成。
-            Ui.Loc.RefreshLanguage();
-            Ui.PanelHost.ApplyHotkey(Settings.Hotkey);
+            if (isToggled)
+            {
+                try
+                {
+                    Boot(isToggled);
+                }
+                catch (System.Exception ex)
+                {
+                    UnityEngine.Debug.LogError("[SpectreReplay] 启用失败："
+                        + ex.GetType().Name + ": " + ex.Message + "\n" + ex.StackTrace);
+                    return false;
+                }
+                return true;
+            }
+            Ui.PanelHost.Close();
+            return true;
+        }
+
+        private static void Boot(bool isToggled)
+        {
             // 常驻输入轮询：热键开关面板、ESC 关闭、驱动会变文字
             var go = new GameObject("SpectreReplayHost");
             UnityEngine.Object.DontDestroyOnLoad(go);
@@ -64,15 +103,14 @@ namespace SpectreReplay
             // 用户在界面里改的每个设置重开游戏就丢了。表现是"点得动、
             // 界面也变、就是不生效"。
             go.AddComponent<ConfigFlusher>();
-            Pages.Pages.RegisterAll();
 
             // 功能门控：设置页改开关后由 Settings.Commit 触发 PatchLoader.Refresh
-            Patching.FeatureGate.Declare("recording", () => Settings.RecordingOn);
-            Patching.FeatureGate.Declare("render", () => Settings.RenderOn);
+            FeatureGate.Declare("recording", () => Settings.RecordingOn);
+            FeatureGate.Declare("render", () => Settings.RenderOn);
             // 回放泵只在真的载入回放时才有意义；常驻挂着会每帧做一次
             // songposition 读取与游标比较（虽廉价，但没理由付）。
-            Patching.FeatureGate.Declare("playback", () => Features.Playback.PlaybackEngine.IsPlaying);
-            Patching.PatchLoader.Register();
+            FeatureGate.Declare("playback", () => Features.Playback.PlaybackEngine.IsPlaying);
+            PatchLoader.Register();
 
             // 进关检测常驻（不是补丁，是状态轮询），
             // 否则首次进入关卡这条路径在不同版本里没有稳定的钩子。
@@ -83,10 +121,25 @@ namespace SpectreReplay
             // 看到的时间顺序是反的，排查时会对不上。缺哪个补丁、为什么缺，
             // 必须一眼能看完——否则只能靠猜。
             mod.Logger.Log("[SpectreReplay] 已加载：补丁 "
-                + Patching.PatchLoader.AppliedCount + "/" + Patching.PatchLoader.DeclaredCount
+                + PatchLoader.AppliedCount + "/" + PatchLoader.DeclaredCount
                 + "（界面热键 " + Pages.Pages.KeyName((KeyCode)Settings.Hotkey) + "）"
-                + Patching.PatchLoader.FailureSummary);
+                + PatchLoader.FailureReport);
             IsReady = true;
+        }
+
+        /// <summary>
+        /// 模组被关闭时收摊。
+        ///
+        /// 卸载补丁交给 PatchLoader 自己：它有 Harmony 实例的引用，
+        /// 而 OnToggle(false) 拿到的 ModEntry 里没有。GameObject 是
+        /// DontDestroyOnLoad 的常驻对象，UMM 不管，得自己关掉面板。
+        /// </summary>
+        private static bool Shutdown()
+        {
+            Ui.PanelHost.Close();
+            PatchLoader.UnpatchAll();
+            IsReady = false;
+            return true;
         }
     }
 }

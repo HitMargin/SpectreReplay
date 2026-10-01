@@ -149,7 +149,12 @@ namespace SpectreReplay.Patching
         internal static string FailureReport =>
             Failures.Count == 0 ? null : string.Join(" | ", Failures);
 
-        private static void UnpatchAll()
+        /// <summary>
+        /// 卸掉本模组挂的全部补丁。模组被关闭时由 Main 调用——
+        /// 不卸的话，补丁会留在游戏方法上，而模组代码已经不再被调用，
+        /// 表现是关掉模组后功能照旧（而且再也关不掉）。
+        /// </summary>
+        internal static void UnpatchAll()
         {
             if (_harmony == null)
             {
