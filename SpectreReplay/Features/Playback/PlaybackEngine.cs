@@ -97,6 +97,8 @@ namespace SpectreReplay.Features.Playback
                 Patching.PatchLoader.Refresh();
                 Debug.Log("[SpectreReplay] 已载入回放：" + path
                     + "（" + _data.Keys.Count + " 按键 / " + _data.Length.ToString("0.0") + "s）");
+                Ui.Status.Say("status.loaded",
+                    System.IO.Path.GetFileNameWithoutExtension(path));
                 return true;
             }
             catch (Exception ex)
@@ -104,6 +106,7 @@ namespace SpectreReplay.Features.Playback
                 _data = null;
                 LastError = ex.Message;
                 Debug.LogError("[SpectreReplay] 回放读取失败：" + ex);
+                Ui.Status.Warn("status.loaded_none", ex.Message);
                 return false;
             }
         }
@@ -119,6 +122,7 @@ namespace SpectreReplay.Features.Playback
             _position = 0;
             // 同 Load：门控随状态变化，必须重挂才能真正摘掉 Prefix
             Patching.PatchLoader.Refresh();
+            Ui.Status.Say("status.stopped");
         }
 
         /// <summary>

@@ -114,10 +114,35 @@ namespace SpectreReplay.Ui
             // 直接收起。每趟开头归零，两趟编号才一致。
             _openSeq = 0;
             GUILayout.Space(4f);
+            DrawStatus();
             DrawPatchWarning();
             DrawTabs();
             GUILayout.Space(8f);
             DrawPage();
+        }
+
+        /// <summary>
+        /// 顶部那行"正在渲染多少"。
+        ///
+        /// 事件提示已经走游戏自带的 Notification（浮在游戏画面上，那个才
+        /// 是玩家真正会看到的地方）。这里只留渲染进度——它是**持续变化**的量，
+        /// 每帧刷一条浮层通知既吵又占资源，画在设置页顶部更合适。
+        /// </summary>
+        private static void DrawStatus()
+        {
+            // 进度直接读 RenderStatus.Progress——那边本来就有人在维护，
+            // 我不该在 Status 里再存一份（存两份必然会走偏）。
+            float p = Features.VideoRender.RenderStatus.Progress;
+            int state = (int)Features.VideoRender.RenderStatus.Current;
+            bool rendering = state != (int)Features.VideoRender.RenderStatus.State.Idle
+                && state != (int)Features.VideoRender.RenderStatus.State.Done
+                && state != (int)Features.VideoRender.RenderStatus.State.Failed;
+            if (!rendering)
+            {
+                return;
+            }
+            GUILayout.Label(string.Format(Loc.T("status.rendering"),
+                (p * 100f).ToString("F0") + "%"), GUILayout.Height(20f));
         }
 
         /// <summary>

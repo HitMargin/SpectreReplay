@@ -70,6 +70,26 @@ namespace SpectreReplay.Ui
                 { "render.note.offline", "离线渲染：重跑一遍回放逐帧捕获，耗时更长但画面与原回放完全一致。" },
                 { "about.note", "SpectreReplay 是独立模组，不依赖 Spectre，两者可同时启用。" },
 
+                // ── 状态提示 ──────────────────────────────────────
+                // 之前一个都没有：录制开始了没人知道、回放载入了没人知道、
+                // 渲染出片了没人知道。整个模组于是"像没生效"。
+                // Spectre 有 TriggerMessage 这一套（见它的 SpectreState.cs），
+                // 靠它自己场景里的 Notification 预制体——我们不能依赖那个资源，
+                // 改在自己的设置页顶部常驻一行，见 OnGui.DrawStatus。
+                { "status.idle", "空闲：没在录制，也没在渲染。" },
+                { "status.recording", "正在录制本局按键…" },
+                { "status.playing", "回放进行中…" },
+                { "status.rendering", "正在渲染…{0}" },
+                { "status.saved", "回放已保存：{0}" },
+                { "status.saved_none", "本局没有录到按键，未保存（这是正常的，空关不会产生回放）。" },
+                { "status.loaded", "已载入回放：{0}" },
+                { "status.loaded_none", "没有可载入的回放文件。" },
+                { "status.stopped", "回放已停止。" },
+                { "status.render_done", "渲染完成：{0}" },
+                { "status.render_fail", "渲染失败：{0}" },
+                { "status.render_start", "开始渲染…" },
+                { "status.cancelled", "已取消。" },
+
                 { "render.duplicate_when_late", "跟不上时复制上一帧" },
                 { "playback.files", "回放文件" },
                 { "playback.replay", "回放" },
@@ -149,6 +169,20 @@ namespace SpectreReplay.Ui
                 { "render.note.live", "Record-while-playing: starts automatically when you enter a level and finishes on results. The level is not replayed." },
                 { "render.note.offline", "Offline: replays the level frame by frame. Slower, but pixel-identical to the replay." },
                 { "about.note", "SpectreReplay is standalone and does not require Spectre; both can be enabled at once." },
+
+                { "status.idle", "Idle: not recording, not rendering." },
+                { "status.recording", "Recording your keys..." },
+                { "status.playing", "Replay in progress..." },
+                { "status.rendering", "Rendering... {0}" },
+                { "status.saved", "Replay saved: {0}" },
+                { "status.saved_none", "No keys were recorded this run, so nothing was saved (normal for an empty level)." },
+                { "status.loaded", "Replay loaded: {0}" },
+                { "status.loaded_none", "No replay file available." },
+                { "status.stopped", "Replay stopped." },
+                { "status.render_done", "Render finished: {0}" },
+                { "status.render_fail", "Render failed: {0}" },
+                { "status.render_start", "Rendering started..." },
+                { "status.cancelled", "Cancelled." },
 
                 { "render.duplicate_when_late", "Duplicate last frame when behind" },
                 { "playback.files", "Replays" },

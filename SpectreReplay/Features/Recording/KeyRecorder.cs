@@ -61,6 +61,9 @@ namespace SpectreReplay.Features.Recording
             Reset(Current, conductor, floor);
             _recording = true;
             Debug.Log("[SpectreReplay] 开始录制");
+            // 光写日志玩家看不见。顶栏那行状态得跟着变，
+            // 否则"打了一局什么都没发生"与"没录到东西"从外面看一模一样。
+            Ui.Status.Say("status.recording");
         }
 
         /// <summary>结束录制并按需落盘。返回文件路径；未落盘返回 null。</summary>
@@ -78,6 +81,13 @@ namespace SpectreReplay.Features.Recording
             Current.Length = SongPositionOfNow();
             if (Current.IsEmpty || !autoSave)
             {
+                // 空关（一个键都没按）也会走到这里。以前直接返回 null、
+                // 一句话都不说——玩家打完一局看不到任何反馈，只能以为功能坏了。
+                // 用警告级：这不是正常结局，得让人多看一眼。
+                if (Current.IsEmpty)
+                {
+                    Ui.Status.Warn("status.saved_none");
+                }
                 return null;
             }
             try
@@ -91,6 +101,9 @@ namespace SpectreReplay.Features.Recording
                 ReplayFile.Write(path, Current);
                 Debug.Log("[SpectreReplay] 回放已保存：" + path
                     + "（按键 " + Current.Keys.Count + " 个）");
+                // 只给文件名：整条路径塞进顶栏那一行会把界面挤爆
+                Ui.Status.Say("status.saved",
+                    System.IO.Path.GetFileName(path));
                 return path;
             }
             catch (Exception ex)

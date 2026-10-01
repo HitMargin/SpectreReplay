@@ -211,6 +211,7 @@ namespace SpectreReplay.Features.VideoRender
                 RenderStatus.FramesDone = 0;
                 Debug.Log("[SpectreReplay] 开始实时录制 " + w + "x" + h + "@"
                     + Settings.Fps + " → " + _outputPath);
+                Ui.Status.Say("status.render_start");
             }
             catch (Exception ex)
             {
@@ -275,6 +276,9 @@ namespace SpectreReplay.Features.VideoRender
                 Debug.Log("[SpectreReplay] 录制完成：" + finalPath
                     + "（" + _frameIndex + " 帧，补 " + _duplicated + " 帧，跳 " + _skipped + " 帧，"
                     + (int)_clock.Elapsed.TotalSeconds + "s）");
+                Ui.Status.Say("status.render_done",
+                    System.IO.Path.GetFileName(finalPath),
+                    Ui.Status.Level.Info, 8f);
             }
             catch (Exception ex)
             {
