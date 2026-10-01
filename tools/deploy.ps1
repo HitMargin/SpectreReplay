@@ -14,13 +14,23 @@ $gameRoot = 'D:\Program Files (x86)\Steam\steamapps\common\A Dance of Fire and I
 $modDir = Join-Path $gameRoot 'Mods\SpectreReplay'
 
 $dll = Join-Path $binDir 'SpectreReplay.dll'
-if (-not (Test-Path $dll)) { throw "找不到 $dll —— 请先构建（dotnet build SpectreReplay.csproj -c $Config）" }
+if (-not (Test-Path $dll)) { throw "build output missing: $dll" }
 
 # 游戏在跑时覆盖 dll 会失败（文件被锁），先探一下再动手
 $running = Get-Process -Name 'A Dance of Fire and Ice' -ErrorAction SilentlyContinue
-if ($running) { throw '游戏正在运行，关闭后再部署（dll 会被占用）' }
+if ($running) { throw 'game is running, close it before deploying' }
 
 New-Item -ItemType Directory -Path $modDir -Force | Out-Null
+
+# UMM 会在进程启动时把加载过的 dll 缓存成 <name>.dll.<pid>.cache，
+# 下次启动优先用那份缓存。**不删它的话，游戏里跑的一直是几轮之前的
+# 旧代码**——部署看起来成功，改动却毫无反应。
+# 曾因此误判成"改了没效果"，白查了两天。
+Get-ChildItem -Path $modDir -Filter "$([System.IO.Path]::GetFileName($dll)).*.cache*" -ErrorAction SilentlyContinue |
+    ForEach-Object {
+        Remove-Item $_.FullName -Force
+        Write-Output "removed stale cache: $($_.Name)"
+    }
 
 Copy-Item $dll (Join-Path $modDir 'SpectreReplay.dll') -Force
 if (Test-Path (Join-Path $binDir 'SpectreReplay.pdb')) {
@@ -36,25 +46,25 @@ $ownFfmpeg = Join-Path $projectRoot 'tools\ffmpeg.exe'
 if (Test-Path $ownFfmpeg) {
     Copy-Item $ownFfmpeg (Join-Path $modDir 'ffmpeg.exe') -Force
     $ffmpegPlaced = $true
-    Write-Output "部署完成：ffmpeg.exe（工程内）"
+    Write-Output "ffmpeg: from project tools/"
 } else {
     $spectreFfmpeg = Join-Path $gameRoot 'Mods\Spectre\ffmpeg.exe'
     if (Test-Path $spectreFfmpeg) {
         Copy-Item $spectreFfmpeg (Join-Path $modDir 'ffmpeg.exe') -Force
         $ffmpegPlaced = $true
-        Write-Output "部署完成：ffmpeg.exe（自 Spectre 复制，只读取）"
+        Write-Output "ffmpeg: copied from Spectre (read-only)"
     }
 }
 if (-not $ffmpegPlaced) {
-    Write-Warning '未找到 ffmpeg.exe：录制可用、视频渲染会失败。请把 ffmpeg.exe 放到工程 tools\ 下。'
+    Write-Warning 'ffmpeg.exe not found: recording works, video render will fail.'
 }
 
 foreach ($d in 'Replays', 'Videos') {
     New-Item -ItemType Directory -Path (Join-Path $modDir $d) -Force | Out-Null
 }
 
-Write-Output "部署完成：$modDir"
+Write-Output "deployed: $modDir"
 Get-ChildItem $modDir | ForEach-Object {
     if ($_.PSIsContainer) { Write-Output ("  {0}/" -f $_.Name) }
-    else { Write-Output ("  {0}  ({1:N0} B)" -f $_.Name, $_.Length) }
+    else { Write-Output ("  {0}  ({1} bytes)" -f $_.Name, $_.Length) }
 }

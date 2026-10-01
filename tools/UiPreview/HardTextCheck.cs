@@ -35,6 +35,11 @@ namespace UiPreview
                 "Failures 列表只流向 Debug.LogWarning，玩家在界面上看不到" },
             { "UiFonts.cs",
                 "字体来源/告警只打 Player.log，界面上的提示另有文案" },
+            // Main.cs 里的中文只出现在 Load 的失败分支与"已加载"摘要里，
+            // 两者都只走 Debug.Log / mod.Logger。入口抛异常时 UMM 只记一行
+            // 警告就继续，不把这句打出来的话，模组在现象上就是"什么都没发生"。
+            { "Main.cs",
+                "入口失败诊断与加载摘要只写 Player.log / UMM 窗口，不在界面上" },
         };
 
         internal static int Run(string projectRoot)

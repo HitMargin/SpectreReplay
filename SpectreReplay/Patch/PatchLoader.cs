@@ -88,6 +88,18 @@ namespace SpectreReplay.Patching
         private static readonly List<string> Failures = new List<string>();
 
         internal static IReadOnlyList<string> ApplyFailures => Failures;
+
+        /// <summary>
+        /// 未挂载补丁的摘要，直接拼在"补丁 5/6"那一行后面。
+        ///
+        /// 只打"5/6"是没用的：缺的是哪个、为什么缺，都在里面。分开打的话
+        /// 计数在 Load 里、原因在 Refresh 里（早一行），两个窗口里看到的
+        /// 顺序是反的，排查时对不上。合到一行才是一眼能看完的诊断。
+        /// </summary>
+        internal static string FailureSummary
+            => Failures.Count == 0 ? string.Empty
+                : "；未挂载：" + string.Join(" | ", Failures);
+
         internal static int AppliedCount => _applied.Count;
         internal static int DeclaredCount { get; private set; }
 
@@ -121,7 +133,21 @@ namespace SpectreReplay.Patching
                 Debug.LogWarning("[SpectreReplay] " + Failures.Count
                     + " 个补丁未挂载（对应功能不会生效）：" + string.Join(" | ", Failures));
             }
+            else if (DeclaredCount > 0)
+            {
+                Debug.Log("[SpectreReplay] 补丁 " + AppliedCount + "/" + DeclaredCount
+                    + " 全部挂载");
+            }
         }
+
+        /// <summary>
+        /// 没挂上的补丁名，供入口日志一次说清。
+        ///
+        /// 之前只有"补丁 5/6"这样的数字，不说哪个没挂上、为什么——
+        /// 光看那个数字没法定位，只知道"有一处坏了"却不知道坏在哪。
+        /// </summary>
+        internal static string FailureReport =>
+            Failures.Count == 0 ? null : string.Join(" | ", Failures);
 
         private static void UnpatchAll()
         {
