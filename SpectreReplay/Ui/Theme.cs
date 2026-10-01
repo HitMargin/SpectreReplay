@@ -49,7 +49,7 @@ namespace SpectreReplay.Ui
         /// <summary>页面区宽度（侧栏之外的部分）。</summary>
         internal const float PageAreaW = PanelW - SidebarW;
         internal const float SidebarW = 250f;
-        internal const float HeaderH = 66f;
+        internal const float HeaderH = 78f;
 
         internal const float PadX = 24f;
         internal const float RowH = 56f;

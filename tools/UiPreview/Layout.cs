@@ -239,6 +239,14 @@ namespace UiPreview
 
         /// <summary>溢出告警：文字实际宽度超出它所在的矩形。</summary>
         internal readonly List<string> Overflows = new List<string>();
+
+        /// <summary>
+        /// TMP 的单行高度 = 字号 × (faceInfo.lineHeight / unitsPerEm)。
+        /// Source Han Sans 这个比值约 1.16——带拼音标调的字体普遍在
+        /// 1.15~1.20。取 1.16：宁可多报一点，也不要放过"框比一行还矮"
+        /// 这种会让整段文字凭空消失的毛病。
+        /// </summary>
+        private const float LineHeightFactor = 1.16f;
         internal int DrawTextCalls;
 
         internal Renderer(int w, int h)
@@ -399,6 +407,17 @@ namespace UiPreview
             {
                 Overflows.Add($"  「{Trim(n.Text)}」 单行需 {sz.Width:F0}px，框宽 {n.W:F0}px"
                     + (n.Cjk ? "  (含中文)" : ""));
+            }
+            // 单行文字**也要查高度**。原先只量宽度，于是"框比行高矮"这种
+            // 毛病完全看不见——而 TMP 的 Ellipsis 在文字放不下时会把整段
+            // 吃掉，不是截断：界面上就是**一个字都不显示**，没有任何报错。
+            // 这正是用户在真机��看到的情况：标题栏一片空白。
+            float needH = n.FontSize * LineHeightFactor;
+            if (needH > n.H + 0.5f)
+            {
+                Overflows.Add($"  「{Trim(n.Text)}」 {n.FontSize:F0}pt 行高需 "
+                    + $"{needH:F0}px，框高 {n.H:F0}px  ← 框比一行还矮，"
+                    + "Ellipsis 会整段不显示");
             }
             float dx = x;
             if (n.Align == TextAlignmentOptions.Center)

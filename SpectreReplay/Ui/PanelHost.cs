@@ -38,9 +38,23 @@ namespace SpectreReplay.Ui
         /// 顶部提示里的热键文字。由 <see cref="SetHotkeyHint"/> 从设置注入，
         /// 面板本身不读配置——这样离线预览不必连上 ConfigStore。
         /// </summary>
-        internal static string HotkeyHint = Loc.T("ui.hint").Replace("{0}", "F9");
+        /// <summary>
+        /// 顶部提示里的热键文字。
+        ///
+        /// **按需生成，不缓存。** 原来是静态字段，在类初始化时就把
+        /// <c>Loc.T("ui.hint")</c> 求值了——那一刻游戏语言还没确定
+        /// （Main.Load 里 ApplyHotkey 跑在 RefreshLanguage 之前），
+        /// 于是英文语言的用户看到的是一句中文提示。缓存一个"依赖当时
+        /// 环境"的字符串，就把它冻在了那个时刻。
+        ///
+        /// 面板本身不读配置，热键由 <see cref="ApplyHotkey"/> 注入——
+        /// 这样离线预览不必连上 ConfigStore。
+        /// </summary>
+        internal static string HotkeyHint => string.Format(Loc.T("ui.hint"),
+            _hotkeyName);
+        private static string _hotkeyName = "F9";
 
-        internal static void SetHotkeyHint(string text) => HotkeyHint = text;
+        internal static void SetHotkeyHint(string text) => _hotkeyName = text;
 
         /// <summary>
         /// 换热键：把生效的键与标题栏的提示**一起**改。
@@ -53,7 +67,7 @@ namespace SpectreReplay.Ui
         internal static void ApplyHotkey(int keyCode)
         {
             Hotkey = keyCode;
-            SetHotkeyHint(string.Format(Loc.T("ui.hint"), KeyName(keyCode)));
+            _hotkeyName = KeyName(keyCode);
         }
 
         /// <summary>F1..F12 → "F1".."F12"；别的键退回键名本身。</summary>
@@ -369,11 +383,17 @@ namespace SpectreReplay.Ui
 
             var header = Gfx.Rect(area, "Header", 0f, 0f, pageW, Theme.HeaderH,
                 Theme.Header, false);
-            // 标题与提示别挨着：标题 30px 字的字形下沿会探出 32px 的框，
-            // 框贴框排看着就是两行字撞在一起。留 8px 间隙。
-            _pageTitle = Gfx.Text(header, "Title", Theme.PadX, 8f, 520f, 34f, "",
+            // 框高必须容得下一整行：TMP 的 Ellipsis 在放不下时是**整段不显示**，
+            // 不是截断成省略号。30pt 的行高约 35px（Source Han Sans 的
+            // lineHeight/unitsPerEm ≈ 1.16），原先只给 34px——差这一像素，
+            // 标题在真机上一个字都不显示，而预览器只看宽度、压根没查高度，
+            // 于是"全绿"地放过去了。侧栏品牌是 28pt 塞进 36px，所以它正常，
+            // 一眼就能看出"品牌名有、标题没有"。
+            _pageTitle = Gfx.Text(header, "Title", Theme.PadX, 8f, 520f, 40f, "",
                 Theme.FontTitle, Theme.Text);
-            Gfx.Text(header, "Hint", Theme.PadX, 46f, 500f, 20f,
+            // 18pt 的行高约 21px，给 24px。位置跟着标题下沿走，两行之间
+            // 留 6px 间隙，框贴框排会看着像两行字撞在一起。
+            Gfx.Text(header, "Hint", Theme.PadX, 50f, 500f, 24f,
                 HotkeyHint, Theme.FontTiny, Theme.TextFaint);
 
             // 滚动：视口固定，内容高度由 PageBuilder 累加后写回 sizeDelta

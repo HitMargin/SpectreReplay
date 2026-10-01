@@ -19,6 +19,9 @@ namespace SpectreReplay
         {
             mod = modEntry;
             ConfigStore.Load();
+            // 语言要先定下来：顶栏提示、热键名等都是按当前语言现生成的。
+            // 放在 ApplyHotkey 之前，顺序反了就会按默认语言生成。
+            Ui.Loc.RefreshLanguage();
             Ui.PanelHost.ApplyHotkey(Settings.Hotkey);
             // 常驻输入轮询：热键开关面板、ESC 关闭、驱动会变文字
             var go = new GameObject("SpectreReplayHost");
