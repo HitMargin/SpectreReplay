@@ -64,7 +64,7 @@ namespace UiPreview
                 float h = content != null ? content.sizeDelta.y : 0f;
                 Console.WriteLine($"    ·  关于页内容高 {h:F0}px");
 
-                fail += ClampHolds();
+                fail += ClampHolds();                fail += BarSize();
             }
             finally
             {
@@ -126,6 +126,51 @@ namespace UiPreview
 
             PanelHost.Show(0);
             return bad;
+        }
+
+        /// <summary>
+        /// 滑块长度必须反映内容与视口的比例。
+        ///
+        /// **ScrollRect 只驱动 value（滑块位置），从不设置 size（滑块长度）**，
+        /// 而 size 默认是 1 —— 不自己算的话滑块永远是满格，看上去"能拖到底"，
+        /// 其实底下没什么可看的。这条在离屏验得了：size 就是个普通字段。
+        /// </summary>
+        private static int BarSize()
+        {
+            int bad = 0;
+            var content = Content();
+            var viewport = Viewport();
+            var bar = Bar();
+            if (bar == null)
+            {
+                Console.WriteLine("    ✗ 找不到滚动条");
+                return 1;
+            }
+
+            // 内容比视口高 → 滑块必须短于满格
+            PanelHost.Show(2);
+            float want = viewport.rect.height / content.rect.height;
+            bool ok = bar.size > 0.05f && bar.size < 0.99f
+                && MathF.Abs(bar.size - want) < 0.02f;
+            Console.WriteLine($"    {(ok ? "✓" : "✗")} 内容比视口高时滑块变短"
+                + $"  → size={bar.size:F2}（应为 {want:F2}）");
+            if (!ok) bad++;
+
+            // 内容装得下 → 满格
+            PanelHost.Show(3);
+            bool ok2 = MathF.Abs(bar.size - 1f) < 0.01f;
+            Console.WriteLine($"    {(ok2 ? "✓" : "✗")} 内容装得下时滑块满格  → size={bar.size:F2}");
+            if (!ok2) bad++;
+
+            PanelHost.Show(0);
+            return bad;
+        }
+
+        private static UnityEngine.UI.Scrollbar Bar()
+        {
+            var f = typeof(PanelHost).GetField("_bar",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            return f?.GetValue(null) as UnityEngine.UI.Scrollbar;
         }
 
         private static ScrollRect Scroll()        {

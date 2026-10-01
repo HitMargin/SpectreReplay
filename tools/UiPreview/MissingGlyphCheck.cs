@@ -22,8 +22,42 @@ namespace UiPreview
             Console.WriteLine("  ── 缺字形自检 ──");
             int fail = 0;
 
+            // 探针字体：缺字表是**实例**的（真实字体各有各的字符表），
+            // 得让 UiFonts.Main 真的解析到这个实例上才能测。光建个对象
+            // 改它的缺字表没用——ReportMissing 查的是 Main。
+            // 探针字体：缺字表是**实例**的（真实字体各有各的字符表），
+            // 得让 UiFonts.Main 真的解析到这个实例上才能测。光建个对象
+            // 改它的缺字表没用——ReportMissing 查的是 Main。
+            //
+            // **所有**候选都要缺那几个字：现在解析是"逐个验字形、挑一个
+            // 一个字都不缺的"，只让一个候选缺的话，它压根不会被选中，
+            // ReportMissing 自然没话说——那是选字形的断言，不是这条的。
+            // 要走到"最好的也缺"这一支，就得全都缺。
+            var probe = new TMP_FontAsset { name = "探针" };
+            UnityEngine.Resources.Registry.Clear();
+            foreach (var p in new[]
+            {
+                "SourceHanSans/ChineseSimplified/SourceHanSansSC-Normal",
+                "SourceHanSans/ChineseSimplified/ChineseSimplified-Normal",
+                "SourceHanSans/Normal",
+                "SourceHanSans/Latin/Latin-Normal",
+            })
+            {
+                UnityEngine.Resources.Registry.Add(new TMP_FontAsset { name = p });
+            }
+            // FontCheck 的最后一个用例把 RDConstants.data 整个置空了，
+            // 而这里跑在它后面。检查之间不该互相假设对方留下的状态。
+            if (UnityEngine.RDConstants.data == null)
+            {
+                UnityEngine.RDConstants.data = new UnityEngine.RDConstants();
+            }
+            UnityEngine.RDConstants.data.chineseFontTMPro = probe;
+            UnityEngine.RDConstants.data.latinFontTMPro = probe;
+
             // ① 什么都不缺时不该报警
-            TMP_FontAsset.Missing.Clear();
+            foreach (var f in UnityEngine.Resources.Registry) f.Missing.Clear();
+            probe.Missing.Clear();
+            UiFonts.Invalidate();
             Loc.UseChinese = true;
             var lines = CaptureWarnings(() =>
                 UiFonts.ReportMissing("UI text", Loc.AllText()));
@@ -43,9 +77,16 @@ namespace UiPreview
             //    一开始我随手写了「缘」，它不在文案中，自检自然不报，
             //    一开始我随手写了「缘」，它不在文案中，自检自然不报，
             //    结果被误判成"自检不起作用"。
-            TMP_FontAsset.Missing.Clear();
-            TMP_FontAsset.Missing.Add('渲');
-            TMP_FontAsset.Missing.Add('录');
+            foreach (var f in UnityEngine.Resources.Registry)
+            {
+                f.Missing.Clear();
+                f.Missing.Add('渲');
+                f.Missing.Add('录');
+            }
+            probe.Missing.Clear();
+            probe.Missing.Add('渲');
+            probe.Missing.Add('录');
+            UiFonts.Invalidate();
             lines = CaptureWarnings(() =>
                 UiFonts.ReportMissing("UI text", Loc.AllText()));
             bool named = false;
@@ -70,8 +111,11 @@ namespace UiPreview
             Console.WriteLine($"    {(once ? "✓" : "✗")} 同一个字不重复报");
             if (!once) fail++;
 
-            TMP_FontAsset.Missing.Clear();
+            probe.Missing.Clear();
             UiFonts.Invalidate();
+            // 收尾：把替身字体撤掉，别留给后面跑的检查
+            UnityEngine.Resources.Registry.Clear();
+            UnityEngine.Resources.HasSourceHanSans = true;
             return fail;
         }
 

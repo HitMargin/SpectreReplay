@@ -25,6 +25,8 @@ namespace SpectreReplay.Ui
         private static TMP_FontAsset _cjk;
         private static TMP_FontAsset _latin;
         private static bool _resolved;
+        private static string from;
+        private static int bestMissing;
 
         /// <summary>
         /// 重新解析字体。面板每次打开都调一次。
@@ -136,68 +138,155 @@ namespace SpectreReplay.Ui
                 return;
             }
             _resolved = true;
-            string from = null;
 
-            // 1. RDConstants.data —— 游戏的常量资源，是 ScriptableObject。
-            //    之前用的是 FindAnyObjectByType<RDConstants>()，那要在场景里找
-            //    组件；RDConstants 是资源不是场景对象，那样多半找不到，
-            //    字体一路退化到兜底分支还不报错。
-            try
+            // 候选逐个收，谁**真的**有界面要用的字就用谁。
+            //
+            // 之前是"谁先取到谁上"，那等于相信字段名——真机日志里
+            // RDConstants.data.chineseFontTMPro 给的是
+            // `cjkFonts-regular-normalized SDF`，它**缺界面里 200 多个字**。
+            // 界面上少数能显示的字是回退链救回来的，救不回来的全是空白，
+            // 于是整页看着像空的，只有一行说明的下半截隐约可见。
+            //
+            // 所以顺序无所谓，重要的是**验**：HasCharacters 是 TMP 自己的
+            // 答案，比任何字段名都可靠。
+            var cands = new System.Collections.Generic.List<Candidate>();
+            Try(() =>
             {
                 var c = RDConstants.data;
-                if (c != null)
-                {
-                    _cjk = Pick(c.chineseFontTMPro, c.japaneseFontTMPro,
-                        c.koreanFontTMPro, c.latinFontTMPro);
-                    _latin = c.latinFontTMPro ?? _cjk;
-                    if (_cjk != null)
-                    {
-                        from = "RDConstants.data";
-                    }
-                }
-            }
-            catch
-            {
-                // 资源尚未加载
-            }
+                if (c == null) return;
+                Add(cands, c.chineseFontTMPro, "RDConstants/中文");
+                Add(cands, c.japaneseFontTMPro, "RDConstants/日文");
+                Add(cands, c.koreanFontTMPro, "RDConstants/韩文");
+                Add(cands, c.latinFontTMPro, "RDConstants/拉丁");
+            });
+            Add(cands, Load("SourceHanSans/ChineseSimplified/SourceHanSansSC-Normal"),
+                "Resources/SourceHanSansSC-Normal");
+            Add(cands, Load("SourceHanSans/ChineseSimplified/ChineseSimplified-Normal"),
+                "Resources/ChineseSimplified-Normal");
+            Add(cands, Load("SourceHanSans/Normal"), "Resources/SourceHanSans/Normal");
+            Add(cands, Load("SourceHanSans/Latin/Latin-Normal"),
+                "Resources/Latin-Normal");
+            Add(cands, TMP_Settings.defaultFontAsset, "TMP默认");
 
-            // 2. 兜底走 Resources。路径来自游戏自己的资源清单
-            //    （StreamingAssets\aa\catalog.json 里 SourceHanSans/* 的实际条目），
-            //    别凭空猜——原先写的 "SourceHanSans/Regular" **根本不存在**，
-            //    实际是 Normal / Light / Medium / Bold 这些字重，CJK 在
-            //    SourceHanSans/ChineseSimplified/ 下面。
-            if (_latin == null)
+            string probe = Loc.AllText();
+            var tried = new System.Text.StringBuilder();
+            Candidate best = null;
+            foreach (var cd in cands)
             {
-                _latin = Load("SourceHanSans/Latin/Latin-Normal")
-                    ?? Load("SourceHanSans/Normal");
-                if (_latin != null && from == null)
+                cd.Missing = CountMissing(cd.Font, probe);
+                if (tried.Length > 0) tried.Append("  ");
+                tried.Append(cd.Label).Append("=").Append("缺" + cd.Missing);
+                // 一个字都不缺的立刻就用；否则先记着，最后挑缺得最少的
+                if (cd.Missing == 0)
                 {
-                    from = "Resources/SourceHanSans/Latin";
+                    best = cd;
+                    break;
+                }
+                if (best == null || cd.Missing < best.Missing)
+                {
+                    best = cd;
                 }
             }
-            if (_cjk == null)
+            if (best?.Font == null)
             {
-                _cjk = Load("SourceHanSans/ChineseSimplified/SourceHanSansSC-Normal")
-                    ?? Load("SourceHanSans/ChineseSimplified/ChineseSimplified-Normal");
-                if (_cjk != null)
-                {
-                    from = "Resources/SourceHanSans/ChineseSimplified";
-                }
+                _cjk = null;
+                _latin = null;
             }
-            _cjk = _cjk ?? _latin;
+            else
+            {
+                _cjk = best.Font;
+                _latin = PickLatin(cands) ?? _cjk;
+                from = best.Label;
+                bestMissing = best.Missing;
+            }
 
             ApplyFallbackChain();
             if (Main == null)
             {
                 UnityEngine.Debug.LogWarning(
-                    "[SpectreReplay] 没找到任何 TMP 字体（RDConstants.data 与 SourceHanSans 都没拿到）"
-                    + "，界面文字可能显示不出来");
+                    "[SpectreReplay] 没找到任何 TMP 字体，界面文字可能显示不出来");
             }
             else
             {
-                // 字体来源只能从 Player.log 看，出问题时这是第一现场
+                // 缺几个字、哪个字体、为什么选它——只能从 Player.log 看。
+                // 出问题时这是第一现场：以前这行只写字体名，恰恰是那个名字
+                // （"中文=cjkFonts..."）把人带偏了，以为字段叫中文就是中文字体。
                 UnityEngine.Debug.Log("[SpectreReplay] 界面字体来源：" + from
+                    + "（缺字 " + bestMissing + "）候选：" + tried
                     + "（中文=" + Name(_cjk) + " 拉丁=" + Name(_latin) + "）");
+                if (bestMissing > 0)
+                {
+                    ReportMissing("UI text", probe);
+                }
+            }
+        }
+
+        private sealed class Candidate
+        {
+            internal TMP_FontAsset Font;
+            internal string Label;
+            internal int Missing = int.MaxValue;
+        }
+
+        private static void Add(System.Collections.Generic.List<Candidate> into, TMP_FontAsset f, string label)
+        {
+            if (f != null)
+            {
+                into.Add(new Candidate { Font = f, Label = label });
+            }
+        }
+
+        /// <summary>取第一个不是 CJK 主字体的候选，作为拉丁回退。</summary>
+        private static TMP_FontAsset PickLatin(System.Collections.Generic.List<Candidate> cands)
+        {
+            foreach (var cd in cands)
+            {
+                if (cd.Font != _cjk && cd.Font != null)
+                {
+                    return cd.Font;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>这段文字里有多少个字形是字体没有的。拿不到答案时按 0 算。</summary>
+        private static int CountMissing(TMP_FontAsset font, string text)
+        {
+            if (font == null || string.IsNullOrEmpty(text))
+            {
+                return 0;
+            }
+            try
+            {
+                if (font.HasCharacters(text, out uint[] missing, true, false))
+                {
+                    return 0;
+                }
+                var set = new System.Collections.Generic.HashSet<char>();
+                if (missing != null)
+                {
+                    foreach (uint c in missing)
+                    {
+                        if (c < 0x110000u) set.Add((char)c);
+                    }
+                }
+                return set.Count;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private static void Try(Action a)
+        {
+            try
+            {
+                a();
+            }
+            catch
+            {
+                // 资源尚未加载
             }
         }
 

@@ -89,6 +89,13 @@ namespace UnityEngine
         /// <summary>SourceHanSans 资源是否存在。</summary>
         public static bool HasSourceHanSans = true;
 
+        /// <summary>
+        /// Resources.Load 从这里返回字体实例。默认每次现造一个。
+        /// 需要"两个候选缺的东西不同"时就把它们注册进来。
+        /// </summary>
+        public static System.Collections.Generic.List<TMPro.TMP_FontAsset> Registry
+            = new System.Collections.Generic.List<TMPro.TMP_FontAsset>();
+
         /// <summary>最近一次被请求的路径，便于断言"没去请求不存在的资源"。</summary>
         public static string LastPath;
 
@@ -123,6 +130,13 @@ namespace UnityEngine
             if (!HasSourceHanSans || !Exists(path))
             {
                 return null;
+            }
+            foreach (var f in Registry)
+            {
+                if (f != null && f.name == path)
+                {
+                    return (T)(Object)f;
+                }
             }
             return (T)(Object)new TMPro.TMP_FontAsset { name = path };
         }
@@ -570,9 +584,11 @@ namespace TMPro
 
         /// <summary>
         /// 模拟"这个字体里没有这些字"。默认空的＝什么都不缺。
-        /// 设成非空就能验缺字形自检是不是真的会报。
+        ///
+        /// **是实例字段不是静态**——真实字体资产各有各的字符表，正是因为
+        /// 这个才需要"逐个候选验字形"：两个候选缺的东西完全不同。
         /// </summary>
-        public static System.Collections.Generic.HashSet<char> Missing
+        public System.Collections.Generic.HashSet<char> Missing
             = new System.Collections.Generic.HashSet<char>();
 
         public bool HasCharacter(int c, bool searchFallbacks = false)

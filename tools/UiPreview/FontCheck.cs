@@ -45,7 +45,12 @@ namespace UiPreview
             fail += Probe("④ 退到 TMP 默认字体", "TMP默认");
 
             // ⑤ 连默认字体都没有：应返回 null 并告警，不能抛异常
+            // ⑤ 连默认字体都没有：应返回 null 并告警，不能抛异常。
+            //    **必须先 Invalidate**：Resolve() 是粘的，选中的候选会缓存进
+            //    _cjk。上一例（④）已经把 TMP 默认字体选进去了，不清缓存的话
+            //    这里读到的还是它——那不是"彻底没有字体"的情形。
             TMPro.TMP_Settings.defaultFontAsset = null;
+            SpectreReplay.Ui.UiFonts.Invalidate();
             int before = fail;
             var m = SpectreReplay.Ui.UiFonts.Main;
             bool none = m == null;
@@ -64,10 +69,64 @@ namespace UiPreview
                 fail = before;
             }
 
+            // ⑦ **选字体不能相信字段名**。
+            //    真机日志里 RDConstants.data.chineseFontTMPro 给的是
+            //    `cjkFonts-regular-normalized SDF`，它缺界面里 200 多个字，
+            //    于是整页看着是空的。现在改成逐个候选验字形，谁真的有就用谁。
+            fail += CheckPicksByGlyphs();
+
             // ⑥ 回退链：中英混排是常态（"60 fps" 挨着中文标签），
             //    只挂一个字体的话缺的那部分就是空白方块。
             fail += CheckFallbackChain();
             return fail;
+        }
+
+        /// <summary>
+        /// 选字体时**逐个候选验字形**：字段名叫"中文"的未必真���常用字。
+        ///
+        /// 真机上就是这么翻车的：RDConstants.data.chineseFontTMPro 给的是
+        /// `cjkFonts-regular-normalized SDF`，界面里 200 多个字它都没有，
+        /// 屏幕上却只有少数几个字（靠回退链救回来的）。界面上看起来就是
+        /// "整页是空的"。
+        ///
+        /// 这里模拟两个候选：前面那个缺一堆字，后面那个齐全。
+        /// 期望选中后面那个——而不是"第一个取到的"。
+        /// </summary>
+        private static int CheckPicksByGlyphs()
+        {
+            UnityEngine.Resources.HasSourceHanSans = true;
+            TMPro.TMP_Settings.defaultFontAsset = null;
+
+            var bogus = new TMPro.TMP_FontAsset { name = "缺字的那个" };
+            // good 必须挂在**真实的资源路径**上，否则 Resources.Load 取不到它，
+            // 解析就会落到别的候选上——那不是"选错了"，是"压根没这个选项"。
+            var good = new TMPro.TMP_FontAsset
+            {
+                name = "SourceHanSans/ChineseSimplified/SourceHanSansSC-Normal"
+            };
+            foreach (char c in "渲界面设置录制回放视频关于") bogus.Missing.Add(c);
+            // 上一个用例（⑤）把 RDConstants.data 整个置空了，得先建回来。
+            if (UnityEngine.RDConstants.data == null)
+            {
+                UnityEngine.RDConstants.data = new UnityEngine.RDConstants();
+            }
+            var saved = UnityEngine.RDConstants.data?.chineseFontTMPro;
+            UnityEngine.RDConstants.data.chineseFontTMPro = bogus;
+            // 让 Resources 分发到那个"齐全"的字体
+            UnityEngine.Resources.Registry.Clear();
+            UnityEngine.Resources.Registry.Add(good);
+            SpectreReplay.Ui.UiFonts.Invalidate();
+            var picked = SpectreReplay.Ui.UiFonts.Main;
+            bool ok = picked == good;
+            Console.WriteLine($"    {(ok ? "✓" : "✗")} 缺字的候选被跳过 "
+                + $"→ 选中「{picked?.name}」");
+
+            UnityEngine.RDConstants.data.chineseFontTMPro = saved;
+            UnityEngine.Resources.Registry.Clear();
+            UnityEngine.Resources.HasSourceHanSans = false;
+            TMPro.TMP_Settings.defaultFontAsset = null;
+            SpectreReplay.Ui.UiFonts.Invalidate();
+            return ok ? 0 : 1;
         }
 
         /// <summary>

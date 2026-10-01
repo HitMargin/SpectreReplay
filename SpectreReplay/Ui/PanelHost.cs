@@ -27,6 +27,7 @@ namespace SpectreReplay.Ui
         private static TMP_Text _pageTitle;
         private static ScrollRect _scroll;
         // ResizeTo 要用：面板高度变了，这几个跟着一起变        private static RectTransform _panel;        private static RectTransform _sidebar;        private static RectTransform _viewport;        private static RectTransform _scrollbar;
+        private static UnityEngine.UI.Scrollbar _bar;
         private static readonly List<PageDef> Pages = new List<PageDef>();
         private static int _current = -1;
         private static readonly List<LiveText> LiveTexts = new List<LiveText>();
@@ -466,6 +467,33 @@ namespace SpectreReplay.Ui
             scroll.verticalScrollbarVisibility =
                 ScrollRect.ScrollbarVisibility.AutoHide;
             scroll.verticalScrollbarSpacing = 0f;
+            _bar = sb;
+        }
+
+        /// <summary>
+        /// 按内容与视口的比例设置滑块长度。
+        ///
+        /// **ScrollRect 不会替你做这件事。** Unity 的 ScrollRect 只驱动
+        /// 滚动条的 `value`（滑块在轨道上的位置），**从不设置 `size`**
+        /// （滑块占轨道的比例）——那个默认是 1，于是不管下面有多少内容，
+        /// 滑块永远是满格，看上去"能拖到底"，其实底下没什么可看的。
+        /// 真正的做法是自己按 视口高/内容高 算一遍。
+        /// </summary>
+        private static void UpdateScrollbarSize()
+        {
+            if (_bar == null || _viewport == null || _content == null)
+            {
+                return;
+            }
+            float viewH = _viewport.rect.height;
+            float contentH = _content.rect.height;
+            if (viewH <= 0f)
+            {
+                return;
+            }
+            _bar.size = contentH > viewH
+                ? Mathf.Clamp01(viewH / contentH)
+                : 1f;
         }
 
         // ── 切页 ────────────────────────────────────────────────
@@ -522,6 +550,7 @@ namespace SpectreReplay.Ui
             // 算同一件事，就得用同一个数。
             _content.sizeDelta = new Vector2(0f,
                 pb.ContentHeight + Theme.ContentPad);
+            UpdateScrollbarSize();
             indexForLog = index;
             _clampWarned = false;
             ResetScroll();
