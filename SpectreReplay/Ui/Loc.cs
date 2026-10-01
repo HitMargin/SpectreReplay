@@ -72,6 +72,7 @@ namespace SpectreReplay.Ui
                 { "render.on", "启用视频渲染" },
                 { "render.status", "状态" },
                                 { "ui.hint", "{0} 开关界面 · ESC 关闭" },
+                { "ui.patchFailed", "有功能未能加载，详见 Player.log" },
                 { "render.err.ffmpeg_start", "无法启动 ffmpeg：{0}" },
                 { "render.err.ffmpeg_timeout", "ffmpeg 超时未退出" },
                 { "render.err.encoder_exit", "编码器未正常退出" },

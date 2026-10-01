@@ -103,6 +103,12 @@ namespace SpectreReplay.Patching
         internal static int AppliedCount => _applied.Count;
         internal static int DeclaredCount { get; private set; }
 
+        /// <summary>
+        /// 挂失败的补丁数。UI 层只读这个数字，不引 Patching 命名空间——
+        /// 离线预览器并不链接 PatchLoader，引了那边就编不过。
+        /// </summary>
+        internal static int FailedCount => Failures.Count;
+
         internal static void Register()
         {
             Scan();

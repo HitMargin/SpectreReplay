@@ -28,12 +28,24 @@ namespace SpectreReplay.Ui
         private static ScrollRect _scroll;
         // ResizeTo 要用：面板高度变了，这几个跟着一起变        private static RectTransform _panel;        private static RectTransform _sidebar;        private static RectTransform _viewport;        private static RectTransform _scrollbar;
         private static UnityEngine.UI.Scrollbar _bar;
+        private static RectTransform _banner;
+        private static TMP_Text _bannerText;
+        private static float _bannerHideAt;
         private static readonly List<PageDef> Pages = new List<PageDef>();
         private static int _current = -1;
         private static readonly List<LiveText> LiveTexts = new List<LiveText>();
 
         internal static bool IsOpen => _root != null;
         internal static int Hotkey = 290;
+
+        /// <summary>
+        /// 挂失败的补丁数。由 <c>Main</c> 注入。
+        ///
+        /// UI 层**不直接引 PatchLoader**：离线预览器不链接它（那要 Harmony
+        /// 和游戏程序集），引了那边预览就编不过。钩子式注入是 UI 与功能层
+        /// 解耦的老办法，不是为了绕过编译而临时糊的。
+        /// </summary>
+        internal static int PatchFailures;
 
         /// <summary>
         /// 顶部提示里的热键文字。由 <see cref="SetHotkeyHint"/> 从设置注入，
@@ -127,6 +139,49 @@ namespace SpectreReplay.Ui
             // 标签用英文：它只出现在日志里，不是玩家看到的界面文案。
             UiFonts.ReportMissing("UI text", Loc.AllText());
             Show(0);
+            // 挂不上的补丁 = 对应功能静默消失，而原因只在日志里。
+            // 用户看到的现象是"某个开关点了没反应"，根本猜不到是补丁没挂上。
+            // 所以除了日志，还要在界面上说一次——Spectre 也是这么做的
+            // （SpectrePatchHub.ShowApplyFailureSummary）。
+            // 用 UI 层自己的钩子，不引 PatchLoader：离线预览没有链接补丁
+            // 加载器（它要 Harmony 与游戏程序集），引了那边那边就编译不过。
+            if (PatchFailures > 0)
+            {
+                ShowBanner(Loc.T("ui.patchFailed"), 8f);
+            }
+        }
+
+        /// <summary>
+        /// 在面板顶部弹一条自动消失的横幅。
+        ///
+        /// 挂在 Overlay 底下而不是面板里：面板有 RectMask2D，会把它裁掉。
+        /// </summary>
+        internal static void ShowBanner(string text, float seconds)
+        {
+            if (_banner == null)
+            {
+                return;
+            }
+            _banner.gameObject.SetActive(true);
+            _bannerText.text = text;
+            _bannerHideAt = Time.unscaledTime + seconds;
+        }
+
+        /// <summary>
+        /// 到点收起横幅。由 PanelHostBehaviour 每帧调一次。
+        ///
+        /// 用 unscaledTime：暂停时 Time.time 不走，横幅会永远收不起来。
+        /// </summary>
+        internal static void TickBanner()
+        {
+            if (_banner == null || !_banner.gameObject.activeSelf)
+            {
+                return;
+            }
+            if (Time.unscaledTime >= _bannerHideAt)
+            {
+                _banner.gameObject.SetActive(false);
+            }
         }
 
         internal static void Close()
@@ -202,6 +257,17 @@ namespace SpectreReplay.Ui
             overlay.offsetMax = Vector2.zero;
             Gfx.MakeButton(overlay.gameObject, Color.white, Color.white, Color.white,
                 Close);
+
+            // 失败横幅贴在遮罩上、面板之下：点得穿（不吃射线），
+            // 但看得见。见 Banner()。
+            _banner = Gfx.Rect(overlay, "Banner", 0f, 0f, 0f, 0f,
+                new Color(0f, 0f, 0f, 0f), false);
+            _banner.anchorMin = new Vector2(0.5f, 0f);
+            _banner.anchorMax = new Vector2(0.5f, 0f);
+            _banner.pivot = new Vector2(0.5f, 0f);
+            _banner.sizeDelta = new Vector2(760f, 40f);
+            _banner.anchoredPosition = new Vector2(0f, 40f);
+            _banner.gameObject.SetActive(false);
 
             var panel = BuildPanel(root);
             // 侧栏与页面区挂在**面板**下，不是画布根下。
@@ -747,6 +813,12 @@ namespace SpectreReplay.Ui
             if (PanelHost.IsOpen && UnityEngine.Input.GetKeyDown(KeyCode.Escape))
             {
                 PanelHost.Close();
+            }
+            if (PanelHost.IsOpen)
+            {
+                // 横幅自己算消失时刻，不另开一个协程：低频界面，
+                // 为了一个 5 秒的淡出多挂一个 MonoBehaviour 不划算。
+                PanelHost.TickBanner();
             }
             if (PanelHost.IsOpen && Time.unscaledTime >= _nextTick)
             {
