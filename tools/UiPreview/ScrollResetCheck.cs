@@ -124,6 +124,32 @@ namespace UiPreview
             Console.WriteLine($"    {(okC ? "✓" : "✗")} 内容比视口短时钉在顶部  → {y:F0}");
             if (!okC) bad++;
 
+            // ④ **偏移本来就合法时，不该报警、更不该改写。**
+            //    原来范围判断写反了（y <= minY && y >= maxY），一个完全正常
+            //    的偏移 0 也被判成越界。真机日志里"内容跑出视口（偏移 0），
+            //    已夹回 0"就是这么来的——一眼看着像废话，细想才知道是个 bug。
+            PanelHost.Show(2);
+            content.anchoredPosition = new Vector2(0f, 0f);     // 合法
+            var warned = new System.Collections.Generic.List<string>();
+            var real = UnityEngine.Debug.LogWarning;
+            UnityEngine.Debug.LogWarning = o => { warned.Add(o?.ToString() ?? ""); };
+            try
+            {
+                PanelHost.ClampContent();
+            }
+            finally
+            {
+                UnityEngine.Debug.LogWarning = real;
+            }
+            bool okD = warned.Count == 0;
+            Console.WriteLine($"    {(okD ? "✓" : "✗")} 偏移合法时不报警"
+                + $"  → {warned.Count} 条");
+            if (!okD)
+            {
+                foreach (var w in warned) Console.WriteLine("        " + w);
+                bad++;
+            }
+
             PanelHost.Show(0);
             return bad;
         }

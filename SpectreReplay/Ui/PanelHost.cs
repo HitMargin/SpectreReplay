@@ -639,7 +639,11 @@ namespace SpectreReplay.Ui
             float maxY = 0f;
             float minY = -Mathf.Max(0f, contentH - viewH);
             float y = _content.anchoredPosition.y;
-            if (y <= minY && y >= maxY)
+            // minY <= maxY 恒成立，所以"在范围内"是 y >= minY && y <= maxY。
+            // 原来写成 y <= minY && y >= maxY —— 那只在 minY==maxY==0 时为真，
+            // 于是一个完全正常的偏移 0 也被判成越界，每次切页都白打一条
+            // "内容跑出视口"的警告。真机日志里那行就是这么来的。
+            if (y >= minY && y <= maxY)
             {
                 return;
             }
