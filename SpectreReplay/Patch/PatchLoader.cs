@@ -208,7 +208,17 @@ namespace SpectreReplay.Patching
             }
             catch (Exception ex)
             {
-                Failures.Add(spec.Owner.Name + "." + spec.Attr.MethodName + "（" + ex.GetType().Name + "）");
+                // 只记 ex.GetType().Name 等于什么都没说——Harmony 拒绝挂载的
+                // 真正理由（目标签名不匹配、补丁链冲突、找不到 IL……）全在
+                // Message 里，而类型名每次都一样。日志里既然要写"为什么没挂上"，
+                // 就把消息带上；换行压掉，免得把 UMM 窗口刷成一片。
+                string why = (ex.Message ?? "").Replace("\r", " ").Replace("\n", " ");
+                if (why.Length > 120)
+                {
+                    why = why.Substring(0, 120) + "…";
+                }
+                Failures.Add(spec.Owner.Name + "." + spec.Attr.MethodName
+                    + "（" + ex.GetType().Name + (why.Length > 0 ? ": " + why : "") + "）");
             }
         }
 
