@@ -207,10 +207,25 @@ namespace SpectreReplay.Features.VideoRender
                 w = _frames.Width;
                 h = _frames.Height;
 
-                var ext = Settings.Container == 1 ? "mkv"
+                // **目标容器**决定最终产物是什么（用户选的那个）。
+                string ext = Settings.Container == 1 ? "mkv"
                     : Settings.Container == 2 ? "webm" : "mp4";
+                // 中间产物的扩展名跟目标容器分开定：
+                //
+                // 照 Spectre 的 VideoRenderJob.cs:528-532 的理由——muxer 是
+                // **按扩展名**选容器的，而选 webm 时中间产物编的是 VP9。
+                // VP9 流写进 `.mp4` 在 ffmpeg 4.x 是 experimental
+                // （拒绝写入，渲染首帧即死）；`.mkv` 通吃 VP9/H.264。
+                //
+                // 原先这里直接用目标容器的扩展名，选 webm 时碰巧对了，
+                // 但那是**巧合**：一旦出现"目标容器=mp4 而编码器选到 VP9"
+                // 的组合就死。更要命的是两个扩展名曾写在同一个 `ext`
+                // 变量里，读代码的人会以为它们必然一致。
+                //
+                // 所以中间产物一律 .mkv：VP9 与 H.264 都装得下。
+                // 注意这只影响**临时文件**，最终产物仍按用户选的容器。
                 _rawVideoPath = System.IO.Path.Combine(_tempDir,
-                    "live_" + System.DateTime.Now.ToString("HHmmss") + "." + ext);
+                    "live_" + System.DateTime.Now.ToString("HHmmss") + ".mkv");
                 _outputPath = System.IO.Path.Combine(Settings.VideoDir,
                     System.IO.Path.GetFileNameWithoutExtension(_rawVideoPath) + "_final." + ext);
 

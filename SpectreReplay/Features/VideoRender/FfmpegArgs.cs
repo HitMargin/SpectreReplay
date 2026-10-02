@@ -30,12 +30,35 @@ namespace SpectreReplay.Features.VideoRender
         /// （CleanCamera 翻、ReadPixels 不翻），于是正反取决于选了哪个模式。
         /// Spectre 也是统一交给编码器：VideoRenderJob 把 NeedsRowFlip
         /// 传进来，VideoEncoder 拼成 <c>(flipRows ? "vflip," : "") + ...</c>。
+        ///
+        /// <c>-vf</c> **不是裸 vflip，是三段式**，后两段各修一个真实的失败：
+        ///
+        /// ① <c>pad=ceil(iw/2)*2:ceil(ih/2)*2</c>
+        ///    yuv420p 要求偶数宽高。奇数时 libx264 **直接失败**——实测把
+        ///    33x25 的裸帧喂进去，ffmpeg 报 "Terminating thread with
+        ///    error: Invalid argument"、退出码非 0、产物 0 字节；加上 pad
+        ///    之后同样的输入退出码 0、产物 1560 字节。整屏模式的分辨率
+        ///    直接取 Screen.width/height，**用户把窗口拖成奇数宽就必然
+        ///    踩到**，而失败发生在第一帧，界面上的表现是"渲染了但没有
+        ///    视频"。（VP9 不挑奇数，实测能过——但同一组界面里两个编码器
+        ///    行为不一致更难排查，所以统一补。）
+        ///
+        /// ② <c>scale=out_color_matrix=bt709</c>
+        ///    swscale 对**无标记的 RGB 默认按 BT.601** 转换，而游戏输出的
+        ///    是 BT.709，少这一句高饱和色（红蓝）整体偏色。它与下面的
+        ///    <c>-colorspace</c>/<c>-color_primaries</c>/<c>-color_trc</c>
+        ///    **不是一回事**：那三个是给播放器看的**标记**，
+        ///    而 <c>out_color_matrix</c> 决定**转换时用哪张矩阵**——
+        ///    标了 709 但转换时按 601 算，得到的仍是错的像素值。
+        ///    照 Spectre 的 <c>VideoEncoder.RowFilter()</c>（:343-348）。
         /// </summary>
         internal static string[] Build(int width, int height, int fps,
             EncoderMode encoder, QualityMode quality, ContainerMode container,
             bool flipRows, string outPath)
         {
-            string vflip = flipRows ? "vflip" : "null";
+            string vf = (flipRows ? "vflip," : "")
+                + "pad=ceil(iw/2)*2:ceil(ih/2)*2"
+                + ",scale=out_color_matrix=bt709,format=yuv420p";
             // 容器决定能用哪些编码：WebM 只能装 VP8/VP9/AV1。
             // 之前无论选什么编码器都是 libx264，于是"输出格式选 webm"会
             // 让 ffmpeg 直接失败——而这个组合在界面上是能选到的。
@@ -69,7 +92,7 @@ namespace SpectreReplay.Features.VideoRender
                 "-framerate", fpsText,
                 "-i", "pipe:0",
                 "-an",                       // 音频由单独的混音轨合进来
-                "-vf", vflip,
+                "-vf", vf,
                 "-c:v", codec,
                 "-preset", preset,
             };

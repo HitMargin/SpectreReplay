@@ -29,6 +29,9 @@
 //     （缺了它判定一旦判失败行星就不前进，表现为「回放卡住」且无日志）
 //   · CompatCheck        版本兼容层**在真游戏程序集上**反射，确认选中的
 //     重载形状正确（源码级断言验不了"择路选对了"这件事）
+//   · FrameSourceCheck    帧来源的请求/回调配对：pending 只在真的排上
+//     回读之后才置位。原来的无条件 return true 会让"相机列表为空"那一帧
+//     永远等不到回调——画面黑、音频走、日志全无，却什么都不停
 //
 // 界面本身只能靠游戏里开一次 UMM 窗口看。这是 GUILayout 的代价，
 // 换来的是不用再维护 Canvas/EventSystem/ScrollRect/TMP 那一整套。
@@ -82,8 +85,13 @@ namespace UiPreview
             int compatFail = CompatCheck.Run(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
 
+            // 帧来源的请求/回调配对：pending 只在真的排上回读之后才置位。
+            int frameFail = FrameSourceCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+
             int total = replayFail + ffFail + locFail + hardFail + patchFail
-                + levelFail + probeFail + avFail + validFail + hitFail + compatFail;
+                + levelFail + probeFail + avFail + validFail + hitFail
+                + compatFail + frameFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"

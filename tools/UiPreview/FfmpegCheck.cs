@@ -41,7 +41,167 @@ namespace UiPreview
             fail += FloatWavMuxes();
             fail += NegativeControl();
             fail += Mux();
+            fail += OddWidthSurvives();
+            fail += IntermediateExtIsMkv();
             return fail;
+        }
+
+        /// <summary>
+        /// **奇数宽高必须能出片**——真跑真实参数，不看拼出来的字符串。
+        ///
+        /// 整屏模式的分辨率直接取 Screen.width/height，用户把窗口拖成
+        /// 奇数宽就能选到这个组合。原先只拼了裸 <c>vflip</c>，于是
+        /// libx264 遇到奇数宽高**直接失败**：实测 ffmpeg 报
+        /// "Terminating thread with error: Invalid argument"、退出码非 0、
+        /// 产物 0 字节。界面上的表现是"渲染了但没有视频"，日志里只有
+        /// ffmpeg 自己那一行。
+        ///
+        /// 为什么非要用真 ffmpeg 判：断言"-vf 里含 pad"只能证明参数
+        /// 拼对了，证明不了**ffmpeg 真的接受这个组合**。中间任何一个
+        /// 滤镜名写错（比如 ceil 拼成 ceal），源码检查照样全绿。
+        /// </summary>
+        private static int OddWidthSurvives()
+        {
+            const int W = 33, H = 25;
+            string dir = Path.Combine(Path.GetTempPath(), "ffcheck");
+            Directory.CreateDirectory(dir);
+            string raw = Path.Combine(dir, "odd.rgba");
+            string outPath = Path.Combine(dir, "odd_real.mp4");
+            if (File.Exists(outPath)) File.Delete(outPath);
+
+            // 造一张奇数尺寸的裸帧：左上红、右下蓝，便于顺带确认 pad
+            // 是**在右边和下边**补的（内容不能被挪位）
+            var px = new byte[W * H * 4];
+            for (int y = 0; y < H; y++)
+            {
+                for (int x = 0; x < W; x++)
+                {
+                    int o = (y * W + x) * 4;
+                    bool corner = (x < W / 2 && y < H / 2)
+                        || (x >= W / 2 && y >= H / 2);
+                    px[o] = corner ? (byte)220 : (byte)30;
+                    px[o + 1] = corner ? (byte)30 : (byte)60;
+                    px[o + 2] = corner ? (byte)30 : (byte)220;
+                    px[o + 3] = 255;
+                }
+            }
+            File.WriteAllBytes(raw, px);
+
+            // 用真实的 Build() 参数——不是手搓的一份
+            var args = FfmpegArgs.Build(W, H, 10, EncoderMode.Auto,
+                QualityMode.Standard, ContainerMode.Mp4, false, outPath);
+            // stdin 那条路在这里换成文件输入，其余参数一字不改
+            int pipeAt = Array.IndexOf(args, "pipe:0");
+            if (pipeAt >= 0) args[pipeAt] = raw;
+            else return Report(1, "参数里找不到 pipe:0，无法改成文件输入");
+
+            int rc = Run(FfmpegPath, args, 90000);
+            bool has = File.Exists(outPath) && new FileInfo(outPath).Length > 0;
+            if (rc == 0 && has)
+            {
+                // 还要确认尺寸确实被补成了偶数（而不是裁掉或拉伸）
+                var (vw, vh) = ProbeSize(outPath);
+                bool even = vw % 2 == 0 && vh % 2 == 0 && vw >= W && vh >= H;
+                Console.WriteLine($"    {(even ? "✓" : "✗")} ⑩ 奇数宽高 {W}x{H} 仍能出片"
+                    + $"  → 退出码 {rc}，产物被补成 {vw}x{vh}"
+                    + (even ? "（pad 在右边/下边补黑，内容未挪位）" : "（尺寸不对）"));
+                return even ? 0 : 1;
+            }
+            Console.WriteLine($"    ✗ ⑩ 奇数宽高 {W}x{H} 渲染失败"
+                + $"  → 退出码 {rc}，产物 {(has ? "有" : "无")}"
+                + "（整屏模式把窗口拖成奇数宽就能复现）");
+            return 1;
+        }
+
+        private static int Report(int code, string why)
+        {
+            Console.WriteLine("    ✗ ⑩ 奇数宽高检查：" + why);
+            return code;
+        }
+
+        /// <summary>用 ffmpeg 自己读回产物的视频尺寸。</summary>
+        private static (int, int) ProbeSize(string path)
+        {
+            var psi = new ProcessStartInfo(FfmpegPath)
+            {
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            psi.ArgumentList.Add("-i");
+            psi.ArgumentList.Add(path);
+            using var p = Process.Start(psi);
+            string all = p.StandardOutput.ReadToEnd() + p.StandardError.ReadToEnd();
+            p.WaitForExit(20000);
+            // "Stream #0:0: Video: h264 ..., 34x26, 62 kb/s"
+            //
+            // 尺寸后面可能跟 "[SAR ...]" 也可能直接跟 ", 62 kb/s"——
+            // 第一版只认带方括号那种，于是解析出 0x0，断言报"尺寸不对"，
+            // 而产物其实是对的。
+            var m = System.Text.RegularExpressions.Regex.Match(
+                all, @",\s*(\d+)x(\d+)\s*(?:\[|,)");
+            return m.Success ? (int.Parse(m.Groups[1].Value),
+                                int.Parse(m.Groups[2].Value)) : (0, 0);
+        }
+
+        /// <summary>
+        /// 中间产物必须是 <c>.mkv</c>，与目标容器无关。
+        ///
+        /// ffmpeg 的 muxer **按扩展名**选容器。选 webm 时中间产物编的是
+        /// VP9，而 VP9 流写进 <c>.mp4</c> 在 ffmpeg 4.x 是 experimental
+        /// ——拒绝写入，渲染首帧即死（照 Spectre 的
+        /// VideoRenderJob.cs:528-532 的注释）。
+        ///
+        /// 原先两处都直接用目标容器的扩展名，选 webm 时碰巧对了。
+        /// 那是**巧合**：判据是"源码里没有把 ext 用在中间路径上"，
+        /// 而巧合性正确就是等着被下一个组合打破。
+        ///
+        /// 判据按**两个文件都查**（LiveSession 与 OfflineSession 各一份），
+        /// 少改一处就变红——它们本来就是复制出来的，很容易只改一个。
+        /// </summary>
+        private static int IntermediateExtIsMkv()
+        {
+            string root = Path.GetFullPath(@"..\..\SpectreReplay\Features\VideoRender");
+            int bad = 0;
+            foreach (var name in new[] { "LiveSession.cs", "OfflineSession.cs" })
+            {
+                string file = Path.Combine(root, name);
+                if (!File.Exists(file))
+                {
+                    Console.WriteLine("    ✗ ⑪ 找不到 " + name);
+                    bad++;
+                    continue;
+                }
+                string src = File.ReadAllText(file);
+                // 中间产物那一行必须写死 .mkv；"stem + "." + ext" 那种写法判红
+                int at = src.IndexOf("_rawVideoPath = Path.Combine", StringComparison.Ordinal);
+                if (at < 0)
+                {
+                    at = src.IndexOf("_rawVideoPath = System.IO.Path.Combine",
+                        StringComparison.Ordinal);
+                }
+                if (at < 0)
+                {
+                    Console.WriteLine("    ✗ ⑪ " + name + " 找不到 _rawVideoPath 的赋值");
+                    bad++;
+                    continue;
+                }
+                int end = src.IndexOf(';', at);
+                string line = src.Substring(at, end - at);
+                bool ok = line.Contains(".mkv");
+                Console.WriteLine($"    {(ok ? "✓" : "✗")} ⑪ {name} 的中间产物是 .mkv"
+                    + $"  → {(ok ? "VP9 与 H.264 都装得下" : line.Trim())}");
+                if (!ok) bad++;
+            }
+            if (bad == 0)
+            {
+                Console.WriteLine("    ✓ ⑪b 两处中间产物都用 .mkv，"
+                    + "不会被「目标容器=mp4 + 编码器=VP9」打死");
+                return 0;
+            }
+            Console.WriteLine("      ← VP9 写进 .mp4 在 ffmpeg 4.x 是 experimental，渲染首帧即死");
+            return bad;
         }
 
         /// <summary>
@@ -643,7 +803,13 @@ namespace UiPreview
             string[] build = FfmpegArgs.Build(S, S, 10, EncoderMode.Auto,
                 QualityMode.Standard, ContainerMode.Mp4, true, outPath);
             string vf = ArgOf(build, "-vf");
-            bool declaredFlip = vf == "vflip";
+            // 只断言**vflip 有没有被写进去**，不断言 -vf 就等于 "vflip"。
+            //
+            // 原先写的是 `vf == "vflip"`——那是裸翻转时代的写法。补上
+            // pad 与色彩矩阵之后 -vf 变成三段式，这一条立刻变红，
+            // 而被测代码其实是对的。**测试跟着实现变过时，要先分清
+            // 是实现错了还是判据过时**，不能直接改代码去迎合断言。
+            bool declaredFlip = vf != null && vf.Contains("vflip");
 
             // 真跑：raw 文件当输入，参数照抄被测函数产出的那一套
             var psi = new ProcessStartInfo(FfmpegPath)

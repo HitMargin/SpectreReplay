@@ -108,10 +108,18 @@ namespace SpectreReplay.Features.VideoRender
                 _poolFrameSize = _frames.FrameSize;
                 _pool = new FrameBufferPool(_poolFrameSize, null);
 
+                // **目标容器**决定最终产物（用户选的那个）。
                 string ext = Settings.Container == 1 ? "mkv"
                     : Settings.Container == 2 ? "webm" : "mp4";
                 string stem = "offline_" + DateTime.Now.ToString("HHmmss");
-                _rawVideoPath = Path.Combine(_tempDir, stem + "." + ext);
+                // **中间产物一律 .mkv**，与目标容器无关。
+                //
+                // 理由照 Spectre 的 VideoRenderJob.cs:528-532：muxer 按
+                // **扩展名**选容器，而选 webm 时中间产物编的是 VP9——
+                // VP9 流写进 `.mp4` 在 ffmpeg 4.x 是 experimental
+                // （拒绝写入，渲染首帧即死）。`.mkv` 通吃 VP9 与 H.264。
+                // 详见 LiveSession 里的同一段说明。
+                _rawVideoPath = Path.Combine(_tempDir, stem + ".mkv");
                 _outputPath = Path.Combine(Settings.VideoDir, stem + "_final." + ext);
 
                 _encoder = VideoEncoder.Start(_pool, w, h, Settings.Fps,

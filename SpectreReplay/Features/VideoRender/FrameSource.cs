@@ -106,23 +106,34 @@ namespace SpectreReplay.Features.VideoRender
             {
                 return false;
             }
-            if (_surface == FrameSurface.WholeScreen)
+            // **只有真的排上了才置 _readbackPending 并返回 true。**
+            //
+            // 这里的"真的"必须由被调方回传，不能在这里自己置位：
+            // RequestCleanCamera 开头有一条提前返回——游戏相机列表为空
+            // （切场景瞬间、切到编辑器、关卡加载中都会出现）就 return，
+            // 那时**没有排任何回读**。可 Request() 仍然返回了 true，
+            // 调用方于是以为"已排队，等回调"就 return 去了。
+            //
+            // 后果是那一帧再也不会有回调，而 _readbackPending 也没被置上：
+            // 下一帧 Request() 又能排上，所以整个录制**不会停**，但每一帧
+            // 都在等一个**永远不会来的**回调。表现是画面停在黑帧、
+            // 音频照走、帧栅格不动——成片是黑的，而日志里什么都没有。
+            bool queued = _surface == FrameSurface.WholeScreen
+                ? RequestWholeScreen()
+                : RequestCleanCamera();
+            if (queued)
             {
-                RequestWholeScreen();
+                _readbackPending = true;
             }
-            else
-            {
-                RequestCleanCamera();
-            }
-            return true;
+            return queued;
         }
 
-        private void RequestCleanCamera()
+        private bool RequestCleanCamera()
         {
             var cams = GameCameras.Cameras();
             if (cams.Count == 0)
             {
-                return;
+                return false;
             }
             var prev = RenderTexture.active;
             RenderTexture.active = _rt;
@@ -138,19 +149,27 @@ namespace SpectreReplay.Features.VideoRender
             }
             RenderTexture.active = prev;
             AsyncGPUReadback.Request(_rt, 0, OnReadback);
-            _readbackPending = true;
+            return true;
         }
 
-        private void RequestWholeScreen()
+        private bool RequestWholeScreen()
         {
             int w = Screen.width;
             int h = Screen.height;
+            // 窗口尺寸为 0 时（比如正在切场景）ReadPixels 会拿到空区域。
+            // 与上面的相机列表为 0 是同一类"这次什么都没排上"，必须一起返回 false，
+            // 否则调用方会等一个不会来的回调。
+            if (w <= 0 || h <= 0)
+            {
+                return false;
+            }
             _readbackRequestW = w;
             _readbackRequestH = h;
             _readbackTemp = new Texture2D(w, h, TextureFormat.RGBA32, false);
             _readbackTemp.ReadPixels(new Rect(0, 0, w, h), 0, 0);
             _readbackTemp.Apply();
             NativeArrayToBytes(_readbackTemp, OnWholeScreenReady);
+            return true;
         }
 
         private Texture2D _readbackTemp;
