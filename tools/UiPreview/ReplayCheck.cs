@@ -160,6 +160,7 @@ namespace UiPreview
                 IfNoFail = true,
                 SpeedTrail = 1.75,
                 SpeedTrailMode = true,
+                HitMarginLimit = 2,
             };
             for (int i = 0; i < marginKinds; i++)
             {
@@ -242,6 +243,7 @@ namespace UiPreview
             if (a.IfNoFail != b.IfNoFail) bad.Add("IfNoFail 不符");
             if (a.SpeedTrail != b.SpeedTrail) bad.Add($"SpeedTrail 不符（{a.SpeedTrail} vs {b.SpeedTrail}）");
             if (a.SpeedTrailMode != b.SpeedTrailMode) bad.Add("SpeedTrailMode 不符");
+            if (a.HitMarginLimit != b.HitMarginLimit) bad.Add($"HitMarginLimit 不符（{a.HitMarginLimit} vs {b.HitMarginLimit}）");
 
             if (a.Margins.Count != b.Margins.Count)
             {

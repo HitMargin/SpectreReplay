@@ -34,6 +34,20 @@ namespace SpectreReplay.Features.Playback
         private static string _sourcePath;
         private static int _lastFrame = -1;
 
+        // ── 回放期间必须夹逼的全局状态 ────────────────────────────
+        //
+        // 照 Spectre 的 SpectreState。回放会改写玩家的全局设置，
+        // 不夹住就会泄漏到回放之外——而玩家从界面上看不出任何异常。
+        //
+        // · NoFailBackup      回放强制 noFail=true，否则回放里的"失败"
+        //                     会真的把玩家卡住（行星不前进）
+        // · HitMarginBackup   回放期间判定窗口放宽，否则注��的按键
+        //                     落在录制容差之外时会被判失败
+        private static bool _noFailBackup;
+        private static bool _noFailBackupValid;
+        private static HitMarginLimit _hitMarginBackup;
+        private static bool _hitMarginStored;
+
         // 每帧复用：Pump 每帧都跑，不能每帧 new List。
         private static readonly List<KeyboardSimulation.INPUT> Staged =
             new List<KeyboardSimulation.INPUT>(32);
@@ -125,6 +139,10 @@ namespace SpectreReplay.Features.Playback
             // 不补的话那个键会一直卡在按下状态，玩家的下一个物理按键
             // 只会被当成一次松开，之后判定全乱。
             KeyboardSimulation.ReleaseAll();
+            // 还原全局状态（noFail / 判定窗口）。
+            // **必须在 _data == null 的早退之前**——回放被打断时
+            // 数据可能已经清空了，但全局状态是我们自己改的，必须还原。
+            RestoreGlobalState();
             if (_data == null)
             {
                 return;
@@ -166,9 +184,88 @@ namespace SpectreReplay.Features.Playback
             _cursor = 0;
             _position = 0;
             _lastFrame = -1;
+            ClampGlobalState();
             Debug.Log("[SpectreReplay] 回放开始：" + _data.Keys.Count
                 + " 按键 / " + _data.Length.ToString("0.0") + "s");
             Ui.Status.Say("status.playing");
+        }
+
+        /// <summary>
+        /// 开播前改写全局状态，并把原值备份下来。
+        ///
+        /// 两处，都照 Spectre（Patch_Lifecycle.cs:219-225）：
+        ///
+        /// ① <c>noFail = true</c> —— 回放是按录制数据推进的，注���的按键
+        ///    不可能每次都落在玩家的判定窗口内。一旦判失败，行星就停在原地
+        ///    不前进，表现为「回放卡住了」。强制 noFail 是 Spectre 的做法。
+        ///
+        /// ② <c>GCS.hitMarginLimit</c> —— 用**录制时的判定窗口**，而不是一律放宽。
+        ///    照 Spectre（Patch_Lifecycle.cs:219-223）从回放数据里读出
+        ///    <c>hitMarginLimit</c> 并应用，回放看到的就是录制时的判定档位，
+        ///    飘字与判定结果因此与录制一致。
+        ///    读不到（v1 旧文件没有这个字段）时退回最宽松
+        ///    （(HitMarginLimit)0 = 不设限），与 Spectre 的默认值一致
+        ///    （SpectreState.cs:183）——那时注���的按键必须全部收下，
+        ///    否则回放会中途卡住。
+        ///
+        /// 备份**只在第一次生效**，否则重播一次就把"备份值"覆盖成了
+        /// 上一次自己写进去的宽松值——玩家真实的设置就永久丢了。
+        /// </summary>
+        private static void ClampGlobalState()
+        {
+            var controller = scrController.instance;
+            if (controller != null && !_noFailBackupValid)
+            {
+                _noFailBackup = controller.noFail;
+                _noFailBackupValid = true;
+                controller.noFail = true;
+            }
+            if (!_hitMarginStored)
+            {
+                _hitMarginBackup = GCS.hitMarginLimit;
+                _hitMarginStored = true;
+            }
+            GCS.hitMarginLimit = StoredHitMarginLimit(_data);
+        }
+
+        private static HitMarginLimit StoredHitMarginLimit(ReplayData d)
+        {
+            // 越界的值说明文件损坏或来自别的版本。判不出就退回"不设限"，
+            // 那是最宽松的：回放中途卡住比判定显示错更糟。
+            int v = d?.HitMarginLimit ?? 0;
+            var max = Enum.GetValues(typeof(HitMarginLimit)).Length;
+            if (v < 0 || v >= max)
+            {
+                return (HitMarginLimit)0;
+            }
+            return (HitMarginLimit)v;
+        }
+
+        /// <summary>停止时把全局状态还原。由 Stop 统一调用。</summary>
+        private static void RestoreGlobalState()
+        {
+            if (_noFailBackupValid)
+            {
+                try
+                {
+                    var controller = scrController.instance;
+                    if (controller != null)
+                    {
+                        controller.noFail = _noFailBackup;
+                    }
+                }
+                catch { }
+                _noFailBackupValid = false;
+            }
+            if (_hitMarginStored)
+            {
+                try
+                {
+                    GCS.hitMarginLimit = _hitMarginBackup;
+                }
+                catch { }
+                _hitMarginStored = false;
+            }
         }
 
         /// <summary>放弃待播的回放（玩家点了别的关卡或取消）。</summary>

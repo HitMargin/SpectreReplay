@@ -99,6 +99,17 @@ namespace SpectreReplay.Features.Recording
         /// <summary>是否处于倍速模式。</summary>
         internal bool SpeedTrailMode;
 
+        /// <summary>
+        /// 录制时的判定窗口（HitMarginLimit 枚举的数值）。
+        ///
+        /// 回放时应用它，飘字与判定结果才与录制时一致（照 Spectre 的
+        /// StoredHitMarginLimit，见 Patch_Lifecycle.cs:219-223）。
+        ///
+        /// 0 = 不设限。默认值给 0 是**有意**的：读不到时回放必须全部收下
+        /// 注入的按键，判太严会让回放中途卡住——那比判定档位显示错更糟。
+        /// </summary>
+        internal int HitMarginLimit;
+
         /// <summary>通关时间（歌曲时间轴上的终点）。</summary>
         internal double Length;
 
@@ -126,7 +137,7 @@ namespace SpectreReplay.Features.Recording
     internal static class ReplayFile
     {
         private const uint Magic = 0x53505250;   // "SRPP"
-        private const int Version = 2;
+        private const int Version = 3;
 
         internal static void Write(string path, ReplayData data)
         {
@@ -161,6 +172,8 @@ namespace SpectreReplay.Features.Recording
                 w.Write(data.IfNoFail);
                 w.Write(data.SpeedTrail);
                 w.Write(data.SpeedTrailMode);
+                // v3：录制时的判定窗口，回放时应用
+                w.Write(data.HitMarginLimit);
 
                 foreach (var kv in data.Margins)
                 {
@@ -236,6 +249,12 @@ namespace SpectreReplay.Features.Recording
                     d.IfNoFail = r.ReadBoolean();
                     d.SpeedTrail = r.ReadDouble();
                     d.SpeedTrailMode = r.ReadBoolean();
+                    // v3 才有。按版本号读，不逐字段判存在性——
+                    // 理由见上面那段注释。
+                    if (version >= 3)
+                    {
+                        d.HitMarginLimit = r.ReadInt32();
+                    }
                 }
                 for (int i = 0; i < marginKinds; i++)
                 {

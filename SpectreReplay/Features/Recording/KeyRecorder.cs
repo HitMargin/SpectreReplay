@@ -175,8 +175,10 @@ namespace SpectreReplay.Features.Recording
                     && scrController.instance.noFail;
                 d.SpeedTrailMode = GCS.speedTrialMode || GCS.practiceMode;
                 d.SpeedTrail = d.SpeedTrailMode
-                    ? (double)GCS.currentSpeedTrial : 1.0;
+                    ? (double)GCS.currentSpeedTrial : 0.0;
                 d.IsOfficialLevel = ADOBase.isOfficialLevel;
+                // 判定窗口：回放时应用它，飘字才与录制一致
+                d.HitMarginLimit = (int)GCS.hitMarginLimit;
             }
             catch { }
 
