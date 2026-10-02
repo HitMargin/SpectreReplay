@@ -245,10 +245,17 @@ namespace SpectreReplay.Features.Playback
                 _hitMarginBackup = GCS.hitMarginLimit;
                 _hitMarginStored = true;
             }
-            GCS.hitMarginLimit = StoredHitMarginLimit(_data);
+            GCS.hitMarginLimit = StoredHitMarginLimitFrom(_data);
         }
 
-        private static HitMarginLimit StoredHitMarginLimit(ReplayData d)
+        /// <summary>
+        /// 从回放数据里取判定窗口，越界/取不到时退回"不设限"。
+        ///
+        /// 名字带 From：同类型的成员里已有一个 <see cref="StoredHitMarginLimit"/>
+        /// 属性（给 LightUp 的 Postfix 用，读的是"当前生效值"）。
+        /// 两者语义不同——这个是**解析**，那个是**读状态**。
+        /// </summary>
+        private static HitMarginLimit StoredHitMarginLimitFrom(ReplayData d)
         {
             // 越界的值说明文件损坏或来自别的版本。判不出就退回"不设限"，
             // 那是最宽松的：回放中途卡住比判定显示错更糟。
@@ -260,6 +267,19 @@ namespace SpectreReplay.Features.Playback
             }
             return (HitMarginLimit)v;
         }
+
+        /// <summary>
+        /// 当前生效的判定窗口（回放期间 = 录制时那档）。
+        ///
+        /// 给 <c>scrFloor.LightUp</c> 的 Postfix 用：LightUp 内部会把砖块
+        /// 颜色按 <c>PerfectsOnly</c> 处理，方法体跑完要立刻恢复成录制档位，
+        /// 否则后续判定飘的档位就不对了（照 Spectre 的 Patch_Misc.cs:92-96）。
+        ///
+        /// 没载入回放时直接回读 GCS——那时它本来就该是玩家自己的设置，
+        /// 不做任何假设。
+        /// </summary>
+        internal static HitMarginLimit StoredHitMarginLimit
+            => _data == null ? GCS.hitMarginLimit : StoredHitMarginLimitFrom(_data);
 
         /// <summary>停止时把全局状态还原。由 Stop 统一调用。</summary>
         private static void RestoreGlobalState()

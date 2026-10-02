@@ -35,6 +35,8 @@ namespace UiPreview
             fail += NeverPassHitTick(projectRoot);
             fail += BothTracksMustFinish(projectRoot);
             fail += ReplayHitIsByShape(projectRoot);
+            fail += MarkFailIsScoped(projectRoot);
+            fail += LightUpClampIsPaired(projectRoot);
             return fail;
         }
 
@@ -352,6 +354,135 @@ namespace UiPreview
                 sb.Append(c);
             }
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// MarkFail 的屏蔽必须**成对开合**。
+        ///
+        /// <c>scrPlanet.MarkFail()</c>（scrPlanet.cs:1626）无条件
+        /// <c>Instantiate</c> 一个 failIndicator 挂在 next 行星上。回放期间
+        /// 若真人误触，屏幕上会多出红色指示器并跟着行星飞出画面——
+        /// 成片里就是一团跟着跑的鬼影。
+        ///
+        /// 但**不能无条件屏蔽**：状态轨要复现录制时的 noFail 闪烁，
+        /// 它自己就得调 MarkFail。所以规则是"由 ReplayHit 开屏蔽范围调用"。
+        ///
+        /// 判据两条：
+        ///   ① 屏蔽走 MarkFailScope（try/finally），不是裸赋值
+        ///      ——裸赋值后若 BlinkForSeconds 抛异常，标志永久留在 true，
+        ///        之后玩家整局都看不到 miss 指示器，且无从察觉
+        ///   ② ReplayHit 里确实走的是 MarkFailScope，而不是直接调 MarkFail
+        /// </summary>
+        private static int MarkFailIsScoped(string projectRoot)
+        {
+            string clamps = StripComments(Read(projectRoot,
+                "Features/Playback/PlaybackClamps.cs"));
+            string replayer = StripComments(Read(projectRoot,
+                "Features/Playback/HitStateReplayer.cs"));
+            if (clamps.Length == 0 || replayer.Length == 0)
+            {
+                Console.WriteLine("    ✗ ⑥ 找不到 PlaybackClamps.cs / HitStateReplayer.cs");
+                return 1;
+            }
+            // ① MarkFail 的 Prefix 必须在屏蔽时返回 false 并清 __result
+            int m = clamps.IndexOf("MarkFail", StringComparison.Ordinal);
+            if (m < 0 || !clamps.Contains("__result = null"))
+            {
+                Console.WriteLine("    ✗ ⑥ MarkFail 没有被 Prefix 屏蔽"
+                    + "（回放期间真人误触会在画面上留下跟着行星飞的红色鬼影）");
+                return 1;
+            }
+            if (!Regex.IsMatch(clamps, @"MarkFailScope[\s\S]*finally"))
+            {
+                Console.WriteLine("    ✗ ⑥ MarkFailScope 没有 finally："
+                    + "标志会永久留在 true，之后玩家整局都看不到 miss 指示器");
+                return 1;
+            }
+            // ② ReplayHit 走的是 scope，而不是直接调
+            if (!replayer.Contains("MarkFailScope"))
+            {
+                Console.WriteLine("    ✗ ⑥ ReplayHit 没走 MarkFailScope："
+                    + "要么 noFail 闪烁被自己的屏蔽吞掉，要么屏上多出鬼影");
+                return 1;
+            }
+            // **每一次** MarkFail 调用都必须在某个 MarkFailScope 内部。
+            //
+            // 判据不能是"不许出现 planet.MarkFail()"——正确写法恰恰**要**调它，
+            // 只不过是在屏蔽范围内调。第一版就是这条判据写反了，
+            // 把唯一正确的实现判成红。
+            //
+            // 正确的判法：逐个 MarkFail() 往回找最近的 MarkFailScope(，
+            // 若两者之间已经出现了 "});"（lambda 闭合），说明这个调用
+            // **落在范围之外**——那才是绕过屏蔽。
+            foreach (Match call in Regex.Matches(replayer, @"MarkFail\(\)"))
+            {
+                int at = call.Index;
+                int scope = replayer.LastIndexOf("MarkFailScope(",
+                    at, StringComparison.Ordinal);
+                if (scope < 0)
+                {
+                    Console.WriteLine("    ✗ ⑥ 有 MarkFail 调用不在任何屏蔽范围内"
+                        + $"（偏移 {at}）——真人误触会在画面上留下红色鬼影");
+                    return 1;
+                }
+                string between = replayer.Substring(scope, at - scope);
+                if (between.Contains("});"))
+                {
+                    Console.WriteLine("    ✗ ⑥ 有 MarkFail 调用在屏蔽范围**之外**"
+                        + "（已遇到 lambda 闭合）——会绕过屏蔽");
+                    return 1;
+                }
+            }
+            Console.WriteLine("    ✓ ⑥ MarkFail 屏蔽成对开合（try/finally），"
+                + "且 ReplayHit 的每次 MarkFail 都在屏蔽范围内");
+            return 0;
+        }
+
+        /// <summary>
+        /// 判定窗口必须在 <c>scrFloor.LightUp</c> 前后**成对夹逼**。
+        ///
+        /// <c>LightUp()</c>（scrFloor.cs:1200）里读
+        /// <c>GCS.hitMarginLimit != HitMarginLimit.PerfectsOnly</c> 来决定
+        /// 要不要给砖块换随机颜色，而游戏会在别处把它写回玩家真实设置。
+        /// 只在开播时设一次，砖块亮起时读到的可能已经是玩家自己的档位。
+        ///
+        /// 夹逼成 PerfectsOnly 是有意的：让 SetToRandomColor 一定被跳过——
+        /// 颜色是录进视频的，中途变了成片就与录制不是一回事。
+        ///
+        /// 判据：Prefix 与 Postfix 两条都要在，且**都判 IsPlaying**。
+        /// 少任何一条都会漏（只写 Prefix = 之后永远是 PerfectsOnly；
+        /// 只写 Postfix = 根本没夹）。
+        /// </summary>
+        private static int LightUpClampIsPaired(string projectRoot)
+        {
+            string src = StripComments(Read(projectRoot,
+                "Features/Playback/PlaybackClamps.cs"));
+            if (src.Length == 0)
+            {
+                Console.WriteLine("    ✗ ⑦ 找不到 PlaybackClamps.cs");
+                return 1;
+            }
+            bool hasPrefix = Regex.IsMatch(src,
+                @"LightUp""\s*,\s*PatchKind\.Prefix");
+            bool hasPostfix = Regex.IsMatch(src,
+                @"LightUp""\s*,\s*PatchKind\.Postfix");
+            if (!hasPrefix || !hasPostfix)
+            {
+                Console.WriteLine("    ✗ ⑦ LightUp 只挂了 "
+                    + (hasPrefix ? "Prefix" : hasPostfix ? "Postfix" : "任何一侧")
+                    + "：判定窗口夹逼必须前后成对"
+                    + "（只 Prefix = 之后永远 PerfectsOnly；只 Postfix = 根本没夹）");
+                return 1;
+            }
+            if (!src.Contains("HitMarginLimit.PerfectsOnly"))
+            {
+                Console.WriteLine("    ✗ ⑦ LightUp 夹逼时没有设成 PerfectsOnly："
+                    + "砖块颜色会随档位变化，成片与录制对不上");
+                return 1;
+            }
+            Console.WriteLine("    ✓ ⑦ LightUp 前后成对夹逼判定窗口，"
+                + "期间置 PerfectsOnly 以固定砖块颜色");
+            return 0;
         }
     }
 }

@@ -235,11 +235,25 @@ namespace SpectreReplay.Features.Playback
             RDC.auto = hc.IsAuto;
             if (hc.NoFailHit)
             {
-                var ind = planet.MarkFail();
-                if (ind != null)
+                // 录制时这一砖是 noFail 命中的，屏幕上有一个 miss 指示器在闪。
+                // 必须复现它，否则成片里少了那个闪烁。
+                //
+                // 而**别的时候**必须屏蔽 MarkFail（PlaybackClamps 的 Prefix）：
+                // 它无条件 Instantiate 指示器并挂在 next 行星上。回放期间若有
+                // 真人误触，屏幕上会多出一个红色指示器，并跟着行星一路飞出
+                // 画面——成片里就是一团跟着跑的红色鬼影。
+                //
+                // 所以"开屏蔽 → 调 → 关屏蔽"必须成对，且用 try/finally：
+                // BlinkForSeconds 之后若还有代码抛异常，标志会永久留在 true，
+                // 之后玩家整局都看不到 miss 指示器，且无从察觉。
+                PlaybackClamps.MarkFailScope(true, () =>
                 {
-                    ind.BlinkForSeconds(3f);
-                }
+                    var ind = planet.MarkFail();
+                    if (ind != null)
+                    {
+                        ind.BlinkForSeconds(3f);
+                    }
+                });
             }
             // ② 让游戏自己走命中链路推进行星。
             //

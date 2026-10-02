@@ -444,14 +444,41 @@ Spectre 回放时改了若干全局状态，都有对应的还原点：
 | `noFail` | `TryStartPlayback:225` 备份后强制 true；`Stop():54` 还原 |
 | `IgnoreMarkFail` | `Patch_Misc.cs:75` Prefix 令 `__result = null` |
 
-**SpectreReplay 的对应实现**（本轮随修复 C 一并补上，尚未逐条对齐）：
+**SpectreReplay 的对应实现**（本轮随修复 C 一并补上）：
 
 | 状态 | 我们的做法 |
 |---|---|
 | `HitLocked` | ✅ `HitStateReplayer.Locked`，在 `Pump` 里开合；`Patch_HitRecord` 的 Prefix 据此掐掉键轨触发的 `Hit` |
 | `noFail` | ✅ `ClampGlobalState` 备份后强制 true，`Stop` 还原 |
-| `GCS.hitMarginLimit` | ⚠️ 用**录制时的**值覆盖，但没有 Spectre 那样在 `scrFloor.LightUp` 前后夹逼——关卡自己会重置它（`Patch_Misc.cs:86/92`） |
-| `IgnoreMarkFail` | ❌ 未做。回放期间真人误触会真的 `MarkFail` |
+| `GCS.hitMarginLimit` | ✅ `scrFloor.LightUp` 前后成对夹逼（`PlaybackClamps`），期间置 `PerfectsOnly` |
+| `IgnoreMarkFail` | ✅ `scrPlanet.MarkFail` 的 Prefix，见「修复 D」 |
+
+**`LightUp` 夹逼为什么置 `PerfectsOnly`**：`LightUp()`（`scrFloor.cs:1200`）读
+`GCS.hitMarginLimit != PerfectsOnly` 来决定要不要 `SetToRandomColor()`。
+夹成 `PerfectsOnly` 就是让它**一定跳过**——砖块颜色是**录进视频里的**，
+中途变了成片就与录制不是一回事。方法体跑完（Postfix）立刻恢复成录制档位，
+让后续判定照常按录制时的档位飘字。
+
+只夹一次（只在开播时设）不够：游戏会在别处把 `GCS.hitMarginLimit` 写回
+玩家真实设置，砖块亮起时读到的可能已经是玩家自己的档位。
+
+### 修复 D：回放期间的 `IgnoreMarkFail`（偏差 19 剩余）
+
+`scrPlanet.MarkFail()`（`scrPlanet.cs:1626-1634`）**无条件** `Instantiate`
+一个 failIndicator 并挂到 `next` 行星上。回放期间若有真人误触（或键轨的按键
+被游戏判失败），屏幕上会凭空多出一个红色指示器，**而且它跟着行星一路飞出画面**
+——成片里就是一团跟着跑的红色鬼影。
+
+做法照 Spectre 的 `Patch_MarkFail`（`Patch_Misc.cs:73-81`）：Prefix 里
+`__result = null; return false;`。
+
+**但不能无条件屏蔽**：状态轨要复现录制时的 noFail 闪烁，它自己就得调
+`MarkFail()`。所以做成 `MarkFailScope(bool, Action)`：由 `ReplayHit` 在
+需要复现时开屏蔽范围调用。
+
+**必须用 try/finally 而不是"设了再改回来"**：`BlinkForSeconds` 之后若还有代码
+抛异常（协程启动失败等），裸赋值会让标志**永久留在 true**——
+之后玩家整局游玩都不会再看到 miss 指示器，而且完全无从察觉。
 
 ---
 
@@ -461,6 +488,6 @@ Spectre 回放时改了若干全局状态，都有对应的还原点：
 1. ~~偏差 3（音频取 clip，原理上不成立）~~ ✅
 2. ~~偏差 14（校验）~~ ✅
 3. ~~偏差 1 + 1b（HitContext 状态轨，工作量最大）~~ ✅
-4. 偏差 19 剩余项：`IgnoreMarkFail` 补上；`hitMarginLimit` 补 `LightUp` 前后夹逼
+4. ~~偏差 19（回放期间的状态夹逼四项）~~ ✅
 5. 偏差 15（版本兼容层）
 6. 其余（GPU 回读帧序、编码器看门狗、中间文件扩展名、状态码 3/5/6→6/5/7）
