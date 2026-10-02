@@ -32,6 +32,10 @@
 //   · FrameSourceCheck    帧来源的请求/回调配对：pending 只在真的排上
 //     回读之后才置位。原来的无条件 return true 会让"相机列表为空"那一帧
 //     永远等不到回调——画面黑、音频走、日志全无，却什么都不停
+//   · PatchGuardCheck     补丁体异常兜底：Guard 只吞自己的异常，
+//     「认不出 / 不是我们的」两个上抛出口都必须还在
+//   · StateCheck          结算状态判据：从**真程序集**读 States 枚举。
+//     原来的 3/5/6 其实是 Checkpoint/Fail/Fail2，结算状态 7 被漏掉了
 //
 // 界面本身只能靠游戏里开一次 UMM 窗口看。这是 GUILayout 的代价，
 // 换来的是不用再维护 Canvas/EventSystem/ScrollRect/TMP 那一整套。
@@ -93,9 +97,13 @@ namespace UiPreview
             int guardFail = PatchGuardCheck.Run(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
 
+            // 结算状态判据：从真程序集读 States，顺带钉住枚举值。
+            int stateFail = StateCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+
             int total = replayFail + ffFail + locFail + hardFail + patchFail
                 + levelFail + probeFail + avFail + validFail + hitFail
-                + compatFail + frameFail + guardFail;
+                + compatFail + frameFail + guardFail + stateFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"

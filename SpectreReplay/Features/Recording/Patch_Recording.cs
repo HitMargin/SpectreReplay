@@ -117,16 +117,38 @@ namespace SpectreReplay.Features.Recording
         /// 想主动存一局就只能等通关自动保存，练到一半的短局根本存不下来。
         /// 模组因此变得没法用。
         ///
-        /// 只在 3/5/6 状态（游玩中/暂停/结算）响应，跟 Spectre 一致——
-        /// 主菜单里按保存键不该有反应。
+        /// 只在 Fail / Fail2 / Won（结算）状态响应，跟 Spectre 一致
+        /// （Patch_Misc.cs:41）——主菜单里按保存键不该有反应。
+        ///
+        /// **注意这里不包含 PlayerControl**：Spectre 也一样。回放数据必须是
+        /// **跑完的一整局**，存到一半的数据重放出来会是断的。
+        /// 要存练到一半的短局，走设置里的"通关自动保存"之外的路径
+        /// （或等它结束）。这个取舍是 Spectre 定的，不是我拍脑袋。
         /// </summary>
         [GamePatch(typeof(scrConductor), "Update", PatchKind.Postfix, "recording")]
         private static void HotkeyPostfix()
         {
             try
             {
-                int state = (int)(States)scrController.instance.stateMachine.GetState();
-                if (state != 3 && state != 5 && state != 6)
+                // **判状态用枚举名，不用魔数。**
+                //
+                // 原先写的是 `state != 3 && state != 5 && state != 6`，
+                // 注释说那是"游玩中/暂停/结算"。照真程序集读枚举：
+                //     3 = Checkpoint   5 = Fail   6 = Fail2   7 = Won
+                // 也就是说那三个数是**存档点、失败、失败二**，
+                // 和注释里说的完全是两回事——而**结算状态 7 被漏掉了**。
+                //
+                // 后果正是"保存键在游玩中没反应"：
+                // 正常一局走 PlayerControl(4)，压根不在这三个数里，
+                // 而玩家恰恰是在游玩中想存一局。唯一能触发的是打了存档点
+                // 或者已经失败了——那时数据里只剩最后一段。
+                //
+                // Spectre 用的是 6/5/7（Fail/Fail2/Won），即**只在结算后存**：
+                // 它保存的是刚跑完的完整一局，这是回放数据的正确形态。
+                // 照 Spectre 的 Patch_Misc.cs:41/:57。
+                var state = (States)scrController.instance.stateMachine.GetState();
+                if (state != States.Fail && state != States.Fail2
+                    && state != States.Won)
                 {
                     return;
                 }
