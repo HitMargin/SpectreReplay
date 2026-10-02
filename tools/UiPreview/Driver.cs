@@ -89,9 +89,13 @@ namespace UiPreview
             int frameFail = FrameSourceCheck.Run(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
 
+            // 补丁体异常兜底：只吞自己的，且两个上抛出口都在。
+            int guardFail = PatchGuardCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+
             int total = replayFail + ffFail + locFail + hardFail + patchFail
                 + levelFail + probeFail + avFail + validFail + hitFail
-                + compatFail + frameFail;
+                + compatFail + frameFail + guardFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"

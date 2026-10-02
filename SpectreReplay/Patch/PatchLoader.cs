@@ -13,6 +13,13 @@ namespace SpectreReplay.Patching
         Prefix,
         Postfix,
         /// <summary>
+        /// IL 改写：直接改原方法体。
+        ///
+        /// 异常发生在**补丁应用期**，不走 Guard——那时还没有补丁体可护。
+        /// 与 SpectrePatch 的处置一致（SpectrePatchHub.cs:625）。
+        /// </summary>
+        Transpiler,
+        /// <summary>
         /// 方法体执行完（或抛出）后调用，用来观察或吞掉异常。
         ///
         /// 必须用它的一类场景：异常发生在**方法体内部**，Prefix/Postfix
@@ -23,6 +30,9 @@ namespace SpectreReplay.Patching
         /// 语义与 Harmony 一致：形参 <c>__exception</c> 为 null 表示**没抛异常**
         /// ——Finalizer 在无异常时也会被调用，不判这一条会走错分支；
         /// 返回 null 表示吞掉，返回原异常表示继续上抛。
+        ///
+        /// Guard 不挂在它自己身上：Finalizer 本身就是兜底，再套一层
+        /// finalizer 是自己吞自己。
         /// </summary>
         Finalizer,
     }
@@ -45,6 +55,36 @@ namespace SpectreReplay.Patching
         internal PatchKind Kind;
         internal string Feature;      // 分组名，只用于日志与统计
         internal string[] ParameterTypes;   // 可选：重载消歧
+
+        /// <summary>
+        /// 补丁体异常是否由共享 Guard 吞掉（默认 true）。
+        ///
+        /// **默认开着，因为补丁体抛出去的后果由"谁在调它"决定，不由它自己决定。**
+        /// 我们挂的全是游戏的 Update/Hit 这类主干方法，Harmony 把补丁体的
+        /// 异常原样抛进游戏栈之后，玩家看到的是"游戏崩了/卡死了"，
+        /// 而日志里那一行的类名是**游戏的**，排查时根本想不到是模组。
+        ///
+        /// 没有 Guard 时，Harmony 会在连续失败后**永久跳过**该补丁
+        /// （MAX_HARMS 机制），于是变成"开着开关却什么都不发生"——
+        /// 同样无声无息。
+        ///
+        /// 与 Finalizer 不同：Finalizer 守的是**游戏方法体自己**抛的异常
+        /// （如 UpdateHoldKeys 的越界），Guard 守的是**我们的补丁体**抛的。
+        /// 两层都要，互不替代。
+        /// </summary>
+        internal bool TryingCatch = true;
+
+        /// <summary>
+        /// TryingCatch 生效时，30s 窗口内异常累计到该次数就**自动卸载这个补丁**（0 = 从不）。
+        ///
+        /// 给"宁缺毋滥"的补丁用：持续故障自我了断，好过无限刷日志。
+        /// 卸载后要重新 Initialize（模组重开）才恢复。
+        ///
+        /// 不给全部补丁默认开——那会让"一次偶发异常"永久关掉某项功能，
+        /// 而用户界面上看不出任何区别。只有明确知道某补丁在特定版本上
+        /// 必然失败时才设。
+        /// </summary>
+        internal int DisableAfterExceptions;
 
         internal GamePatchAttribute(Type target, string methodName, PatchKind kind,
             string feature = "", params string[] parameterTypes)
@@ -131,6 +171,186 @@ namespace SpectreReplay.Patching
         /// 离线预览器并不链接 PatchLoader，引了那边就编不过。
         /// </summary>
         internal static int FailedCount => Failures.Count;
+
+        // ── 补丁体异常兜底（偏差 10）────────────────────────────────
+        //
+        // 为什么必须有：Harmony 把补丁体的异常原样抛进游戏方法的栈里，
+        // 玩家看到的是"游戏崩了/卡死了"，而日志里那一行的类名是**游戏的**，
+        // 排查时根本想不到是模组。更糟的是 Harmony 的 MAX_HARMS 机制——
+        // 同一处补丁连续失败若干次后**永久跳过**它，于是变成
+        // "开关开着却什么都不发生"，同样一声不响。
+        //
+        // 所以共享一个 Guard finalizer 吞掉我们自己的补丁异常，并按窗口
+        // 限流：首现详报（带栈），持续重复只打一行计数摘要。
+        // 照 SpectrePatchHub 的 Guard（:615-627 挂载、:750-812 统计）。
+        //
+        // **Guard 按栈帧比对来判断"这是不是我们补丁体抛的"**，所以只吞自己
+        // 的异常——游戏方法体自己抛的会原样上抛，不会被误吞。那类要治的是
+        // 游戏自身的 bug，用 [GamePatch(..., PatchKind.Finalizer)] 单独兜
+        // （见 Patch_Recording.HoldKeysFinalizer）。
+
+        private static readonly HashSet<MethodInfo> GuardedMethods =
+            new HashSet<MethodInfo>();
+
+        /// <summary>限流窗口（秒）。与 SpectrePatchHub 的 GuardWindowSeconds 同值。</summary>
+        private const int GuardWindowSeconds = 30;
+
+        private sealed class GuardStat
+        {
+            internal DateTime WindowStart;
+            internal int Suppressed;
+            internal string Sig;
+        }
+
+        private static readonly Dictionary<string, GuardStat> GuardStats =
+            new Dictionary<string, GuardStat>(StringComparer.Ordinal);
+        private static readonly object GuardLock = new object();
+
+        private static HarmonyMethod _guard;
+
+        /// <summary>
+        /// 共享的异常兜底 finalizer。
+        ///
+        /// 静态属性做懒加载：它在扫描完所有补丁之后才被第一次取用，
+        /// 那时 Harmong 还没创建也不需要。
+        /// </summary>
+        private static HarmonyMethod GuardMethod =>
+            _guard ??= new HarmonyMethod(
+                typeof(PatchLoader).GetMethod(
+                    nameof(Guard),
+                    System.Reflection.BindingFlags.NonPublic
+                    | System.Reflection.BindingFlags.Static));
+
+        /// <summary>
+        /// 共享 Guard 的实现。语义照 Harmony：
+        /// <c>__exception</c> 为 null 表示没异常（也会被调用），
+        /// 返回 null = 吞掉，返回原异常 = 继续上抛。
+        /// </summary>
+        private static Exception Guard(Exception __exception,
+            MethodBase __originalMethod)
+        {
+            if (__exception == null)
+            {
+                return null;       // 没异常：原样放行，别把正常路径搞坏
+            }
+            try
+            {
+                // 栈顶那一帧就是补丁体所在（异常正从它抛出）
+                var frameMethod = new System.Diagnostics.StackTrace(__exception, false)
+                    .GetFrame(0)?.GetMethod();
+                if (frameMethod == null)
+                {
+                    return __exception;   // 认不出来 → 不吞，绝不误伤游戏自己的
+                }
+                lock (GuardLock)
+                {
+                    if (!GuardedMethods.Contains(frameMethod))
+                    {
+                        return __exception;
+                    }
+                    string key = frameMethod.DeclaringType?.FullName + "." + frameMethod.Name
+                        + "@" + __originalMethod?.DeclaringType?.Name + "."
+                        + __originalMethod?.Name;
+                    string sig = __exception.GetType().Name + ": " + __exception.Message;
+                    DateTime nowUtc = DateTime.UtcNow;
+                    int occurrences;
+                    if (!GuardStats.TryGetValue(key, out GuardStat stat)
+                        || stat.Sig != sig)
+                    {
+                        // 首现（或异常性质变了）：详报并开窗
+                        stat = new GuardStat
+                        {
+                            WindowStart = nowUtc,
+                            Suppressed = 0,
+                            Sig = sig,
+                        };
+                        GuardStats[key] = stat;
+                        occurrences = 1;
+                        Debug.LogWarning("[SpectreReplay] 补丁 "
+                            + frameMethod.DeclaringType?.FullName + "." + frameMethod.Name
+                            + " 在 " + __originalMethod?.DeclaringType?.Name + "."
+                            + __originalMethod?.Name + " 内抛出异常（已吞掉，功能可能退化，"
+                            + "游戏版本不匹配？）: " + sig + "\n" + __exception.StackTrace);
+                    }
+                    else if ((nowUtc - stat.WindowStart).TotalSeconds >= GuardWindowSeconds)
+                    {
+                        // 窗口外仍在重复：一行合并摘要，重新开窗
+                        Debug.LogWarning("[SpectreReplay] 补丁 "
+                            + frameMethod.DeclaringType?.FullName + "." + frameMethod.Name
+                            + " 异常持续（" + GuardWindowSeconds + "s 内重复 "
+                            + stat.Suppressed + " 次，已合并）: " + sig);
+                        stat.WindowStart = nowUtc;
+                        stat.Suppressed = 0;
+                        occurrences = 1;
+                    }
+                    else
+                    {
+                        stat.Suppressed++;
+                        occurrences = stat.Suppressed + 1;
+                    }
+                    // 异常自禁用：宁缺毋滥的补丁到阈值就自己卸掉。
+                    // 默认阈值是 0（从不），所以这段对绝大多数补丁是死代码。
+                    Spec owner = FindOwningSpec(frameMethod, __originalMethod);
+                    if ((owner?.Attr.DisableAfterExceptions ?? 0) > 0
+                        && occurrences >= owner.Attr.DisableAfterExceptions)
+                    {
+                        Unapply(owner);
+                        Debug.LogWarning("[SpectreReplay] 补丁 "
+                            + frameMethod.DeclaringType?.FullName + "." + frameMethod.Name
+                            + " 异常达阈值（窗口内 " + occurrences + " 次），已自动卸载；"
+                            + "重开模组前不会自动恢复");
+                    }
+                }
+                return null;       // 吞掉
+            }
+            catch
+            {
+                // Guard 自己绝不能把异常放出去——那会让"兜底"变成放大器
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 反查补丁方法属于哪条 spec（异常自禁用要用它的阈值）。
+        /// </summary>
+        private static Spec FindOwningSpec(MethodBase patch, MethodBase target)
+        {
+            if (target == null)
+            {
+                return null;
+            }
+            foreach (Spec s in Specs)
+            {
+                if (s.Patch == patch
+                    && s.Attr.Target != null
+                    && target.DeclaringType == s.Attr.Target
+                    && target.Name == s.Attr.MethodName)
+                {
+                    return s;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>卸载单条 spec。只摘它自己那条，不动别人。</summary>
+        private static void Unapply(Spec spec)
+        {
+            try
+            {
+                _harmony?.UnpatchAll();
+            }
+            catch
+            {
+                // UnpatchAll 是按 id 卸的，会把这个补丁一起带走
+            }
+            if (spec.Patch != null)
+            {
+                lock (GuardLock)
+                {
+                    GuardedMethods.Remove(spec.Patch);
+                }
+            }
+        }
 
         internal static void Register()
         {
@@ -262,17 +482,28 @@ namespace SpectreReplay.Patching
                     return;
                 }
                 HarmonyMethod hm = new HarmonyMethod(patch);
-                // 三种 kind **全部显式分派**，不靠 else 兜底。
+                // Guard = 共享的异常兜底 finalizer。Transpiler 的异常发生在
+                // 补丁**应用期**，那时没有补丁体可护；Finalizer 本身就是
+                // 兜底，再套一层是自己吞自己。两种都不挂 Guard。
+                HarmonyMethod guard = spec.Attr.TryingCatch
+                    && spec.Attr.Kind != PatchKind.Transpiler
+                    && spec.Attr.Kind != PatchKind.Finalizer
+                    ? GuardMethod : null;
+                // 四种 kind **全部显式分派**，不靠 else 兜底。
                 // 写成「Prefix 走 prefix，其余一律 postfix」的话，
                 // Finalizer 会被静默挂成 postfix：补丁照样"挂上了"，
                 // 日志里也看不出任何异常，却完全不起兜底作用。
                 if (spec.Attr.Kind == PatchKind.Prefix)
                 {
-                    _harmony.Patch(target, prefix: hm);
+                    _harmony.Patch(target, prefix: hm, finalizer: guard);
                 }
                 else if (spec.Attr.Kind == PatchKind.Postfix)
                 {
-                    _harmony.Patch(target, postfix: hm);
+                    _harmony.Patch(target, postfix: hm, finalizer: guard);
+                }
+                else if (spec.Attr.Kind == PatchKind.Transpiler)
+                {
+                    _harmony.Patch(target, transpiler: hm);
                 }
                 else
                 {
@@ -280,6 +511,10 @@ namespace SpectreReplay.Patching
                     // 是刻意的：新加一种 kind 时会落到这里被明确暴露，
                     // 而不会静默挂成 postfix。
                     _harmony.Patch(target, finalizer: hm);
+                }
+                if (guard != null)
+                {
+                    GuardedMethods.Add(patch);
                 }
                 _applied.Add(hm);
             }

@@ -324,23 +324,75 @@ experimental（拒绝写入，渲染首帧即死）；`.mkv` 通吃 VP9/H.264。
 它们本来就是复制出来的，只改一个是最容易犯的错。变异测试只回退
 其中一个，立刻被指到具体那行。
 
-### 偏差 10：补丁框架的能力差距
+### 偏差 10：补丁框架的能力差距 → 部分补齐（按"会不会无声失败"排序，不按功能表补）
 
-`SpectrePatchAttribute`（`SpectrePatch.cs:140-204`）支持：
-`MethodNames` 候选链、`MinVersion`/`MaxVersion` 版本矩阵、`ParameterTypes`
-重载消歧、`PropertyAccessor` 属性访问器、`.ctor`/`.cctor` 构造器、
-`DisableAfterExceptions` 异常自禁用、`Priority`/`Before`/`After` 排序、
-`TryingCatch` 共享 finalizer。
+`SpectrePatch`（共享库 `D:\Projects\SpectrePatch`）支持：
+`MethodNames`/`ClassNames` 候选链、`MinVersion`/`MaxVersion` 版本矩阵、
+`AllOverloads`、`PropertyAccessor`（含 `MoveNext`）、`.ctor`/`.cctor`、
+`TryingCatch` 共享 finalizer、`DisableAfterExceptions` 异常自禁用、
+`Priority`/`Before`/`After` 排序、`Feature` 的 AND/OR 组合。
 
-`SpectreReplay.GamePatchAttribute` 只有 `Target/MethodName/Kind/Feature/ParameterTypes`。
+**没有照单全补。** 判据是「它对应的失败模式在我们这里会不会真的发生」：
 
-其中两条契约是我反复违反的：
+| 能力 | 处置 | 理由 |
+|---|---|---|
+| `TryingCatch` 共享 finalizer | ✅ **补** | 见下，这是唯一一条"会无声失败"的 |
+| `DisableAfterExceptions` | ✅ 补（默认 0） | 同上链上的一环 |
+| `PatchKind.Transpiler` | ✅ 补（枚举 + 显式分派） | 补齐 enum 才不会新增 kind 时被静默挂成 Finalizer |
+| `AllOverloads` | ❌ 不补 | 我们唯一有同名重载的 `Hit` 已在 `ParameterTypes` 上精确锁定 |
+| `MethodNames`/`ClassNames` 候选链 | ❌ 不补 | 版本差异交给 `GameCompat` 按形状择路（偏差 15），不靠挂两遍补丁 |
+| `MinVersion`/`MaxVersion` | ❌ 不补 | 版本判断集中在 `GameVersion` 一处，比散在每个特性里更难漏 |
+| `Priority`/`Before`/`After` | ❌ 不补 | 我们没有多个补丁挂在同一目标且需要定序的场合 |
+| `PropertyAccessor` / `.ctor` | ❌ 不补 | 现有目标全是普通方法 |
+| `Feature` 的 `&` / `,` 组合 | ❌ 不补 | 每个功能只挂一组，没有共享补丁 |
 
-1. **「谓词为假时补丁根本不挂载，补丁体内无需再查主开关」**
-   （`SpectrePatch.cs:110-112`）——我却在多处体内重复判断。
-2. **`DisambiguateByPatchParams` 按参数名消歧，全淘汰则返回 null 进探针，
-   绝不猜**（`:553-556`）。我曾因参数名对不上（`checkpointNum` vs
-   `_currentSeqID`）导致补丁挂不上。
+#### 为什么 `TryingCatch` 是唯一必须补的
+
+Harmony 把补丁体的异常**原样抛进游戏方法的栈里**。我们挂的全是
+`Update`/`Hit` 这类主干方法，于是玩家看到的是"游戏崩了/卡死了"，
+而日志里那一行的类名是**游戏的**——排查时根本想不到是模组。
+
+更糟的是 Harmony 的 `MAX_HARMS` 机制：同一处补丁连续失败若干次后
+**永久跳过**它，于是变成"开关开着却什么都不发生"，同样一声不响。
+
+`Guard` 的三条约束（照 `SpectrePatchHub.cs:615-627`、`:750-812`）：
+
+1. **只吞我们自己补丁体抛的**：按**栈顶帧**比对 `GuardedMethods`，
+   认不出来、或不是我们的，一律 `return __exception` 原样上抛。
+   这两条出口都不能省——省掉任何一条，Guard 就变成"游戏方法体里任何
+   异常都消失"，玩法异常不再报错，玩家只会觉得"这模组有问题"。
+   那比不加 Guard 坏得多。
+2. **无异常时也判 `__exception == null`**：Harmony 的 Finalizer 在
+   没有异常时**也会被调用**，不判会走错分支。
+3. **Guard 自己的 catch 必须吞**：兜底层一旦抛出去就变成放大器。
+
+与 `Finalizer` 那一层**不冲突、互不替代**：`Finalizer` 守的是
+**游戏方法体自己**抛的异常（如 `UpdateHoldKeys` 的越界），
+Guard 守的是**我们补丁体**抛的。两者都挂在同一个方法上时，
+Harmony 依次执行，异常先经 Finalizer 再经 Guard（若仍抛出）。
+
+#### `DisableAfterExceptions` 默认必须是 0
+
+给它一个非 0 默认值听起来更"安全"，实际很糟：**一次偶发异常就永久
+关掉某项功能**，而界面上看不出任何区别——开关还亮着，功能没了，
+重新开模组才恢复。"宁缺毋滥"只该由具体补丁显式选择，不是全局默认。
+（这一点与 `GameVersion` 的探测失败返回 -1 而非 0 是同一类判断：
+**哨兵值必须让"未知"落到保守的一侧，而不是恰好能被当成有效值。**）
+
+#### 闸门：`PatchGuardCheck`（3 条）
+
+① Prefix/Postfix 真的把 Guard 接上了（判**调用形状** `prefix: hm, finalizer: guard`，
+不是"Guard 这词出现过"——Guard 的方法定义本身就会让那种检查通过），
+且 Guard 的挂载条件同时排除 Transpiler 与 Finalizer；
+② Guard 的三条分支齐全（`__exception == null` 放行、认不出栈帧上抛、
+不是我们的上抛），且自己的 catch 吞掉；
+③ `DisableAfterExceptions` 无默认值，判据兜 0。
+
+三条各做了变异验证（Guard 无条件挂、删掉「不是我们的就上抛」、
+默认值改成 5），全部被检出。第三条的第一版报错理由是错的——
+把默认值改掉后它报"找不到字段"，而字段明明在。**报错理由比报错本身
+更费时间**：照着"字段不存在"去查声明，怎么也查不出来。已改为先认
+字段存在（两种形态都认），再单独判默认值。
 
 ### 偏差 13：版本兼容层（`Features/Compat/GameCompat.cs`）
 
@@ -632,4 +684,5 @@ Spectre 回放时改了若干全局状态，都有对应的还原点：
 5. ~~偏差 15（版本兼容层）~~ ✅
 6. ~~偏差 6/8/9（帧序、`-vf` 三段式、中间文件扩展名）~~ ✅
 7. ~~偏差 7（编码器看门狗，复核后做了减法）~~ ✅
-8. 偏差 10（补丁框架能力差距）、状态码 3/5/6→6/5/7
+8. ~~偏差 10（补丁框架：异常兜底 + Transpiler 分派）~~ ✅
+9. 状态码 3/5/6 → 6/5/7 对齐
