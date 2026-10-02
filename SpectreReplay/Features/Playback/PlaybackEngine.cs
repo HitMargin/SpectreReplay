@@ -75,12 +75,24 @@ namespace SpectreReplay.Features.Playback
         /// <summary>回放总长（秒）。未载入时为 0。</summary>
         internal static double ReplayLength => _data == null ? 0.0 : _data.Length;
 
+        /// <summary>
+        /// 状态轨回放期间为真。
+        ///
+        /// **这是两条轨互锁的关键**，照 Spectre 的 SpectreState.HitLocked
+        /// （Playback 用 Patch_Recording.cs:39 的 `if (HitLocked) return false;`
+        /// 掐掉键轨触发的 scrPlayer.Hit）。不互锁的话同一块砖会被判两次：
+        /// 一次是键轨注入按键让游戏自然判定，一次是状态轨强制写回状态再判。
+        /// 表现为判定条飘两次字、行星跳两格，且角度被反复拉回。
+        /// </summary>
+        internal static bool HitLocked => HitStateReplayer.Locked;
+
         /// <summary>游标归零但不卸载——离线渲染需要"从头再放一遍"。</summary>
         internal static void ResetCursor()
         {
             _cursor = 0;
             _position = 0;
             _lastFrame = -1;
+            HitStateReplayer.Reset();
         }
 
         internal static string Describe()
@@ -92,7 +104,8 @@ namespace SpectreReplay.Features.Playback
             return (_data.SongName.Length > 0 ? _data.SongName : "?")
                 + (_data.DifficultyName.Length > 0 ? " · " + _data.DifficultyName : "")
                 + "   " + _data.Keys.Count + " keys"
-                + "   " + ((_cursor * 100) / Math.Max(1, _data.Keys.Count)) + "%";
+                + "   " + _data.Hits.Count + " hits"
+                + "   " + (_cursor * 100) / Math.Max(1, _data.Keys.Count) + "%";
         }
 
         internal static bool Load(string path)
@@ -105,13 +118,15 @@ namespace SpectreReplay.Features.Playback
                 _cursor = 0;
                 _position = 0;
                 _lastFrame = -1;
+                HitStateReplayer.Load(_data);
                 LastError = "";
                 // playback 功能是按"是否有载入的回放"门控的，载入成功后
                 // 必须让补丁层重挂一次，否则 UpdateInput 的 Prefix 还没上。
                 Patching.PatchLoader.Refresh();
                 Debug.Log("[SpectreReplay] 已载入回放：" + path
-                    + "（" + _data.Keys.Count + " 按键 / " + _data.Length.ToString("0.0") + "s）");
-                if (_data.Keys.Count == 0)
+                    + "（" + _data.Keys.Count + " 按键 / " + _data.Hits.Count
+                    + " 命中 / " + _data.Length.ToString("0.0") + "s）");
+                if (_data.Keys.Count == 0 && _data.Hits.Count == 0)
                 {
                     // 空回放：播了也不会有任何表现。直说，别让玩家对着
                     // "点了回放没反应"猜是哪一步坏了。
@@ -139,6 +154,9 @@ namespace SpectreReplay.Features.Playback
             // 不补的话那个键会一直卡在按下状态，玩家的下一个物理按键
             // 只会被当成一次松开，之后判定全乱。
             KeyboardSimulation.ReleaseAll();
+            // 状态轨：卸掉。**必须在 _data == null 的早退之前**——
+            // 与 RestoreGlobalState 同理，这一份是我们自己持有了数据。
+            HitStateReplayer.Unload();
             // 还原全局状态（noFail / 判定窗口）。
             // **必须在 _data == null 的早退之前**——回放被打断时
             // 数据可能已经清空了，但全局状态是我们自己改的，必须还原。
@@ -184,9 +202,11 @@ namespace SpectreReplay.Features.Playback
             _cursor = 0;
             _position = 0;
             _lastFrame = -1;
+            HitStateReplayer.Reset();
             ClampGlobalState();
             Debug.Log("[SpectreReplay] 回放开始：" + _data.Keys.Count
-                + " 按键 / " + _data.Length.ToString("0.0") + "s");
+                + " 按键 / " + _data.Hits.Count + " 命中 / "
+                + _data.Length.ToString("0.0") + "s");
             Ui.Status.Say("status.playing");
         }
 
@@ -275,16 +295,31 @@ namespace SpectreReplay.Features.Playback
         }
 
         /// <summary>
-        /// 每帧调用。把时间已到的按键注入系统。
+        /// 每帧调用。把时间已到的按键注入系统，并推进状态轨。
         ///
-        /// 挂在 <c>scrController.UpdateInput</c> 的 **Prefix**：早于游戏自己的
+        /// 挂在 <c>scrController.PlayerControl_Update</c> 的 **Prefix**：早于游戏自己的
         /// 输入处理，这一帧注入的当帧就被看到，凭空多一帧延迟。
+        ///
+        /// **两条轨的先后顺序：先键轨、后状态轨。** 与 Spectre 一致
+        /// （Patch_Playback.cs:126-158：先 ReplayHit 一轮，最后才
+        /// Play_keybd_event）。理由是状态轨按**当前角度**推进
+        /// （angle >= hc.Angle 才判），先注入按键会让游戏自己把行星
+        /// 推进一段，状态轨随后看到的就是"已经转过头的角度"——
+        /// 于是密集段里每块砖的命中会早触发一帧到半帧，判定条整体前移。
+        ///
+        /// 反过来先状态轨、键轨后走，键轨触发的 scrPlayer.Hit 会被
+        /// HitLocked 掐掉（这正是互锁的意义），键轨就只剩"驱动
+        /// 长按/hold 段"这一个作用——那是它本来的职责。
         /// </summary>
         internal static void Pump()
         {
             // 待播（已载入、还没重开关卡）时不注入：关卡还停在结算画面，
             // 歌曲位置早就跑完整个回放了，这时注入只会把游标一次性冲到底。
-            if (_data == null || Pending || _data.Keys.Count == 0)
+            if (_data == null || Pending)
+            {
+                return;
+            }
+            if (_data.Keys.Count == 0 && !HitStateReplayer.HasTrack)
             {
                 return;
             }
@@ -320,30 +355,41 @@ namespace SpectreReplay.Features.Playback
                 {
                     _cursor++;
                 }
+                // 状态轨游标同样要退：它靠"地板序号对不上就快进"来纠偏，
+                // 而重开时地板序号会**从低序号重新开始**，纠偏方向正好相反。
+                // 不退的话游标停在末尾，重开后一整局都不再推进。
+                HitStateReplayer.Reset();
             }
             _position = pos;
 
+            // ── 轨一：按键 ────────────────────────────────────
             var keys = _data.Keys;
             Staged.Clear();
-            int injected = 0;
             while (_cursor < keys.Count && keys[_cursor].SongPosition <= pos)
             {
                 var ev = keys[_cursor++];
                 KeyboardSimulation.Stage(ev.Key, ev.IsPressed, Staged);
-                injected++;
             }
             if (Staged.Count > 0)
             {
                 KeyboardSimulation.Send(Staged);
-                Staged.Clear();
             }
-            else
-            {
-                Staged.Clear();
-            }
+            Staged.Clear();
 
-            // 结束时把仍按着的键补松掉，再卸数据——顺序不能反
-            if (_cursor >= keys.Count && pos > _data.Length + 1.5)
+            // ── 轨二：状态 ────────────────────────────────────
+            // 必须在按键之后（见方法说明）。
+            HitStateReplayer.Pump(scrController.instance);
+
+            // 结束时把仍按着的键补松掉，再卸数据——顺序不能反。
+            //
+            // 两条轨**都跑完**才算结束（照 Spectre Patch_Playback.cs:160-161
+            // 的 `PlayIndex >= HitContext_list.Count && KeyEventIndex >= Count`）。
+            // 少一条轨的结束条件就是"回放提前停掉"：状态轨还没走完就卸数据，
+            // 后半段的行星状态就停在录制中途的样子，画面是错的。
+            bool keysDone = _cursor >= keys.Count;
+            bool hitsDone = !HitStateReplayer.HasTrack
+                || HitStateReplayer.Cursor >= _data.Hits.Count;
+            if (keysDone && hitsDone && pos > _data.Length + 1.5)
             {
                 Debug.Log("[SpectreReplay] 回放结束");
                 Stop();

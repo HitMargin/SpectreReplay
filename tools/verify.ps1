@@ -52,7 +52,21 @@ if (-not $SkipPreview) {
         # 必须 --no-incremental：预览器链接的是**外部**文件（Gfx.cs、
         # PanelHost.cs、UiFonts.cs …），改完还原之后普通的增量构建察觉不到，
         # 跑出来还是上一次的二进制。已经因此误判过两次"修复没生效"。
-        & dotnet build -c Release -v q --nologo --no-incremental 2>&1 | Out-Null
+        #
+        # **构建失败必须判红，不能把输出丢掉。** 原先这里写的是
+        # `| Out-Null`，于是预览器编译不过时后面 --no-build 去跑一个
+        # 不存在的 exe，报的是"系统找不到指定的文件"——把"代码写错了"
+        # 伪装成"环境有问题"，排查方向整个带偏（这次就撞上了）。
+        $buildOut = & dotnet build -c Release -v q --nologo --no-incremental 2>&1
+        $buildErrs = @($buildOut | Select-String -Pattern 'error CS')
+        if ($buildErrs.Count -gt 0) {
+            $buildErrs | Select-Object -Unique -First 8 | ForEach-Object {
+                Write-Host ('  ✗ 预览器编译不过：' + $_.Line.Trim()) -ForegroundColor Red
+            }
+            $script:fail++
+            Pop-Location
+            return
+        }
         $out = & dotnet run -c Release -v q --no-build -- $outDir --click 2>&1
         Pop-Location
         $lines = $out

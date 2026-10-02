@@ -29,6 +29,61 @@ namespace SpectreReplay.Features.Recording
         internal double SongPosition;
     }
 
+    /// <summary>
+    /// 一次命中发生时，行星/玩家的全部关键状态。
+    ///
+    /// 照 Spectre 的 Features/Replay/HitContext.cs（12 个字段）。
+    ///
+    /// **为什么必须有这条轨，而不能只靠按键轨。** 按键轨（KeyEvent）把
+    /// 「玩家按了哪个键」喂回游戏，走完全相同的判定链路。但**判定结果不
+    /// 一定相同**：游戏按当帧的行星角度算判定窗口，而回放时注入的按键落在
+    /// 录制容差之外是完全正常的（量子化到一帧 + 注入延迟）。一旦某次判定
+    /// 判成 Fail/Overload，行星就停在原地不前进——「回放卡住了」。
+    ///
+    /// 状态轨则把命中瞬间的内部状态**原样写回去**：angle、targetExitAngle、
+    /// overloadCounter、midspinInfiniteMargin 全部按录制值覆盖，
+    /// 判定结果因此与录制一致。Spectre 是**双轨**回放（见
+    /// Patch_Playback.cs:99-161）：两条轨都跑完才算回放结束。
+    ///
+    /// 字段一个不多一个不少地照抄 Spectre——不是抄懒，是这些字段**各自**
+    /// 都会被回放路径读写，少一个就有一处状态被回放污染。
+    /// </summary>
+    internal struct ReplayHitContext
+    {
+        /// <summary>命中时的行星角度（已按 isCW 取正负，见 AngleOf）。</summary>
+        internal float Angle;
+
+        /// <summary>命中时的绝对角度（chosenPlanet.angle 原值）。</summary>
+        internal double CachedAngle;
+
+        /// <summary>命中时的目标退出角度。</summary>
+        internal double TargetExitAngle;
+
+        /// <summary>命中时是否处于 noFail 无限判定。</summary>
+        internal bool NoFailHit;
+
+        /// <summary>命中时是否由 auto 触发。</summary>
+        internal bool IsAuto;
+
+        /// <summary>下一块砖是否是 auto。</summary>
+        internal bool NextFloorAuto;
+
+        /// <summary>命中时录制到的 RDC.auto。</summary>
+        internal bool RdcAuto;
+
+        /// <summary>命中时是否处于 midspin 无限判定。</summary>
+        internal bool MidspinInfiniteMargin;
+
+        /// <summary>命中时的 overload 计数（必须原样写回，否则过载条对不上）。</summary>
+        internal float OverloadCounter;
+
+        /// <summary>命中时的地板序号（回放时用于对位，见 HitCursor 同步）。</summary>
+        internal int CurrentFloorId;
+
+        /// <summary>命中时的自由漫游区段序号（自由漫游里地板序号会重复）。</summary>
+        internal int FreeRoamSection;
+    }
+
     /// <summary>一次游玩采到的全部数据。</summary>
     internal sealed class ReplayData
     {
@@ -123,6 +178,12 @@ namespace SpectreReplay.Features.Recording
         internal readonly Dictionary<string, List<double>> MarginTimes =
             new Dictionary<string, List<double>>();
 
+        /// <summary>
+        /// 状态轨：每次命中按时间升序。与 Keys 并行存在，**不替代**它。
+        /// 键轨负责让游戏「动起来」，状态轨负责让判定「复现」。
+        /// </summary>
+        internal readonly List<ReplayHitContext> Hits = new List<ReplayHitContext>();
+
         internal bool IsEmpty => Keys.Count == 0 && Margins.Count == 0;
     }
 
@@ -137,7 +198,18 @@ namespace SpectreReplay.Features.Recording
     internal static class ReplayFile
     {
         private const uint Magic = 0x53505250;   // "SRPP"
-        private const int Version = 3;
+        private const int Version = 4;
+
+        /// <summary>
+        /// 状态轨每条的上限。
+        ///
+        /// 读取时**必须**有上限：段头给的是文件自报的条数，一个损坏或
+        /// 恶意构造的文件能让它变成 int.MaxValue，没上限就是当场
+        /// new List(2G) 或在分配 Path 上耗尽内存——而整个读取过程
+        /// 就在玩家的按键事件里同步发生，界面直接卡死。
+        /// 正常一局几千条，这个上限高到不可能误伤真的回放。
+        /// </summary>
+        private const int MaxHits = 2_000_000;
 
         internal static void Write(string path, ReplayData data)
         {
@@ -174,6 +246,14 @@ namespace SpectreReplay.Features.Recording
                 w.Write(data.SpeedTrailMode);
                 // v3：录制时的判定窗口，回放时应用
                 w.Write(data.HitMarginLimit);
+                // v4：状态轨条数。
+                //
+                // **条数必须写在定长头里，不能像 Margins 那样把集合放在变长段里。**
+                // 变长段必须整体连续才能跳过；一旦把状态轨塞在 Keys 之后，
+                // 读 v1~v3 文件时就得为了跳过它而**解析整个 Keys 段**——
+                // 那是为了一份用不上的数据去走一遍最长的解析路径。
+                // 放定长头里，v1~v3 的读取逻辑一行都不用改。
+                w.Write(data.Hits.Count);
 
                 foreach (var kv in data.Margins)
                 {
@@ -196,6 +276,22 @@ namespace SpectreReplay.Features.Recording
                     {
                         w.Write(t);
                     }
+                }
+                // 状态轨的实体段。放最后，读端也可以最后才解析——
+                // 就算这里有脏数据，前面的 Margins/Keys 已经读完了。
+                foreach (var h in data.Hits)
+                {
+                    w.Write(h.Angle);
+                    w.Write(h.CachedAngle);
+                    w.Write(h.TargetExitAngle);
+                    w.Write(h.NoFailHit);
+                    w.Write(h.IsAuto);
+                    w.Write(h.NextFloorAuto);
+                    w.Write(h.RdcAuto);
+                    w.Write(h.MidspinInfiniteMargin);
+                    w.Write(h.OverloadCounter);
+                    w.Write(h.CurrentFloorId);
+                    w.Write(h.FreeRoamSection);
                 }
                 foreach (var k in data.Keys)
                 {
@@ -256,6 +352,18 @@ namespace SpectreReplay.Features.Recording
                         d.HitMarginLimit = r.ReadInt32();
                     }
                 }
+                // v4 才有：状态轨条数。v1~v3 文件到这里直接进 Margins 段，
+                // 所以这个 int32 **只在 version >= 4 时读**。
+                int hitCount = 0;
+                if (version >= 4)
+                {
+                    hitCount = r.ReadInt32();
+                    if (hitCount < 0 || hitCount > MaxHits)
+                    {
+                        throw new System.IO.InvalidDataException(
+                            string.Format(Ui.Loc.T("render.err.checkpoints"), hitCount));
+                    }
+                }
                 for (int i = 0; i < marginKinds; i++)
                 {
                     d.Margins[ReadStr(r)] = r.ReadInt32();
@@ -294,6 +402,32 @@ namespace SpectreReplay.Features.Recording
                         IsPressed = r.ReadBoolean(),
                         SongPosition = r.ReadDouble(),
                     });
+                }
+                // 状态轨实体段在 Keys 之后（见 Write 里的说明）。
+                //
+                // 读取顺序必须与写入顺序**完全一致**。这里与 Keys 的顺序
+                // 是反的（写：Hits → Keys；读：Keys → Hits），因为 Keys
+                // 是格式里最老的一段、位置不能动——动它就要求 v1 也要改。
+                if (hitCount > 0)
+                {
+                    d.Hits.Capacity = hitCount;
+                    for (int i = 0; i < hitCount; i++)
+                    {
+                        d.Hits.Add(new ReplayHitContext
+                        {
+                            Angle = r.ReadSingle(),
+                            CachedAngle = r.ReadDouble(),
+                            TargetExitAngle = r.ReadDouble(),
+                            NoFailHit = r.ReadBoolean(),
+                            IsAuto = r.ReadBoolean(),
+                            NextFloorAuto = r.ReadBoolean(),
+                            RdcAuto = r.ReadBoolean(),
+                            MidspinInfiniteMargin = r.ReadBoolean(),
+                            OverloadCounter = r.ReadSingle(),
+                            CurrentFloorId = r.ReadInt32(),
+                            FreeRoamSection = r.ReadInt32(),
+                        });
+                    }
                 }
                 return d;
             }

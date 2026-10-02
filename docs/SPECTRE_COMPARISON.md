@@ -25,7 +25,9 @@ SpectreReplay 只实现了 `Replay` + `VideoRender` 两块，故本次重点在�
 
 ## 二、已确认的重大偏差
 
-### 偏差 1：判定复现方式——SpectreReplay 缺失整个 `HitContext` 模型
+### 偏差 1：判定复现方式——SpectreReplay 缺失整个 `HitContext` 模型 → ✅ 已补
+
+**状态：已实现（本轮）。** 见下面「修复 C」。以下论证仍然成立，作为实现依据。
 
 **这是最根本的架构差异。**
 
@@ -63,7 +65,7 @@ Spectre 的回放是**双轨制**（两份报告一致确认）：
 - 即便触发，判定结果也取决于游戏当时的物理状态，而非录制时的确切上下文；
 - 失败条、miss 闪烁、行星出角全都不会复现。
 
-### 偏差 1b：`HitContext_list` 的"回滚删除"机制（未被任何报告明确提及的实现难点）
+### 偏差 1b：`HitContext_list` 的"回滚删除"机制 → ✅ 已实现（判据按本项目的依据重写）
 
 `Patch_Recording.cs:91-107`：每次 `Hit` 后，若检测到 **margin 统计无变化 + 地板未变**，
 就 `RemoveAt(Count-1)` **删掉上一次追加的记录**。
@@ -72,6 +74,23 @@ Spectre 的回放是**双轨制**（两份报告一致确认）：
 变化才认定为"一次真实命中"。保留幽灵命中会让回放时多打一次 hit。
 
 初读极易误读为"删掉刚加的"，实际删的是**上一次调用**加的。
+
+**我们的判据没有照抄这一条。** Spectre 拿 `marginTracker.hitMarginsCount`
+（判定计数向量）当"状态变了没"的依据，那需要持有整个计数数组与长度约定。
+我们改用**命中时刻直接可比的那几个字段**（`HitDedupe.SameHit`）：
+地板序号 + 自由漫游区段 + `NoFailHit`/`IsAuto`/`NextFloorAuto`/`RdcAuto`/
+`MidspinInfiniteMargin`/`OverloadCounter`。
+
+理由：
+
+- 效果等价——在"同砖重复判定"这一场景下，这些字段都不变。
+- **刻意不比较角度**：`angle`/`CachedAngle`/`TargetExitAngle` 每帧都在变，
+  算进去则去重几乎永不触发，撤销的记录会留在轨里（正是它要防的事）。
+- 地板序号**必须**参与：自由漫游区段内序号会重复，只比状态会在漫游里
+  误撤真命中，画面卡在两块砖中间。
+
+多出一条 Spectre 没有的：**地板取不到（`-1`）直接丢弃**，不录。
+这种条目在回放时对不上任何砖，录进去等于凭空在错的位置触发一次命中。
 
 ### 偏差 2：按键注入方式
 
@@ -273,6 +292,76 @@ SpectreReplay 没有这一层。当前游戏是 r150+，我的补丁走的是
 **为什么必须**：弹出的通知条会吃掉它下面的点击——玩家正要按砖块，
 通知正好盖住，判定就没了。Spectre 明确做了这一步（`:338-341`）。
 
+### 修复 C：补上状态轨——回放从「单轨」变成 Spectre 的「双轨」（偏差 1 + 1b）
+
+**这是本轮最大的一块，也是 SpectreReplay 与 Spectre 最本质的架构差距。**
+
+改动：
+
+| 文件 | 作用 |
+| --- | --- |
+| `Features/Recording/Patch_HitRecord.cs`（新） | `scrPlayer.Hit` 的 Prefix 采状态；双轨互锁的闸门 |
+| `Features/Recording/HitDedupe.cs`（新） | 去重判据（纯逻辑，可离线验证） |
+| `Features/Recording/ReplayData.cs` | `ReplayHitContext` 11 字段 + v4 格式 |
+| `Features/Recording/KeyRecorder.cs` | `RecordHit` 落库；`Reset`/`Begin` 清轨 |
+| `Features/Playback/HitStateReplayer.cs`（新） | 状态轨推进 + 命中复现 |
+| `Features/Playback/PlaybackEngine.cs` | 双轨编排、结束条件、互锁标志 |
+
+**为什么必须有它。** 键轨让游戏自然地跑判定，而游戏按**当帧的行星角度**
+算判定窗口。回放时注入的按键落在录制容差之外是常态（量化到一帧 +
+`SendInput` 有一帧延迟），于是某次判定判成 Fail/Overload → 行星停在原地
+不前进 → 用户看到「回放卡住了」，而且**日志里没有任何异常**。状态轨把
+`angle`/`TargetExitAngle`/`overloadCounter`/`midspinInfiniteMargin` 按录制值
+覆盖回去，判定因此复现，不依赖注入的按键落在哪。
+
+**四处关键决策，每一处都有代价：**
+
+1. **挂在 Prefix 而非 Postfix**（同 Spectre `Patch_Recording.cs:26-35`）。
+   `Hit` 一进来就 `SwitchChosen`（`scrPlayer.cs:761`）把行星切到下一块，
+   之后再取样拿到的是**下一块砖**的 angle。回放时写回去 = 提前半块砖转过去，
+   且逐块累积。
+
+2. **双轨互锁，且 `HitLocked` 必须排在 `IsRecording` 之前。**
+   状态轨期间键轨触发的 `scrPlayer.Hit` 必须被掐掉，否则同一块砖判两次。
+   顺序是关键：回放时录制是关的，`IsRecording` 恒为 `false`，互锁放在它后面
+   就永远走不到。**这一条本轮自己踩过**：初版就写反了，是闸门抓出来的。
+
+3. **绝不透传录制的 HitTick**（同 Spectre `ReplayPlayer.cs:336-343`）。
+   录制时干脆不记它。理由见上面的引用：它是 SkyHook 绝对 tick，换算要减
+   **本次运行**启动时校准的 `AsyncInputManager.offsetTick`，拿录制局的 tick
+   在回放局换算 → 判定算不出数 → 被 noFail 兜住 → **行星原地打转（"卡输入"）**。
+
+4. **不走 `ReplayHitOld` 手工复刻，直接调 `scrPlayer.Hit`。**
+   老式复刻要自己调 `SwitchChosen`、喂判定条、管相机脉冲，抄漏一处就与真机
+   分叉；直接调 `Hit` 让**游戏自己的代码**推进行星，跨版本自动成立。
+   代价是签名跨版本变了（`Hit(bool)` → `Hit(long?, bool)`），必须**按参数形状
+   反射**调用并同时认两种形状（照 Spectre `GameCompat.PlayerHit`）。
+
+**为什么 11 个字段不是 12 个**：Spectre 的第 12 个是 `HitTick`，
+按上面第 3 点刻意不录。其余 11 个在回放路径上**各自**都被读写，少一个就有一处
+状态被回放污染。
+
+**闸门**（`HitTrackCheck`，5 条 + `ReplayCheck` 4 条）：
+
+- 状态轨 11 字段逐项往返（8 个是 bool/float，**恰是"写漏一个也读不出垃圾"的
+  类型**，必须逐字段比）；
+- v1 / v3 文件仍能读出且状态轨为空（每次加字段都要有一条对应断言——
+  这正是 v2 加字段时踩过的同一个坑）；
+- 荒谬条数（`int.MaxValue`）被拒（读取发生在点击事件里，无上限就是当场申请 2G）；
+- 去重四组边界、互锁顺序、hitTick 为 null、结束条件真比较两个游标、
+  反射认两种签名。
+
+**每条断言都做了变异验证**（回退实现必须真的变红）。这一步抓出两件事：
+一是我把去重断言的下标写错了（验的是副本，真代码没错）；二是
+**`BothTracksMustFinish` 第一版是假断言**——它只查变量名 `hitsDone` 出现过，
+而 `bool hitsDone = true;` 照样通过。已改为要求真的出现
+`Cursor >= …Hits.Count` 形状的比较。
+
+顺带把去重从 `KeyRecorder` 拆成 `HitDedupe.cs`：原先判据内联在碰引擎的类里，
+闸门只能**复刻**一份——那等于自己测自己，真代码改错了副本照样全绿。拆成纯逻辑
+文件后预览器直接链接，验的就是真代码。变异测试确认：真代码去掉同地板判断 /
+去掉撤销逻辑，闸门均变红。
+
 ---
 
 ## 三之三、Replay 侧新增偏差（据深读报告补充）
@@ -355,14 +444,23 @@ Spectre 回放时改了若干全局状态，都有对应的还原点：
 | `noFail` | `TryStartPlayback:225` 备份后强制 true；`Stop():54` 还原 |
 | `IgnoreMarkFail` | `Patch_Misc.cs:75` Prefix 令 `__result = null` |
 
-**SpectreReplay 没有这些夹逼**，回放时会让真人输入仍然触发 `Hit` 记录。
+**SpectreReplay 的对应实现**（本轮随修复 C 一并补上，尚未逐条对齐）：
+
+| 状态 | 我们的做法 |
+|---|---|
+| `HitLocked` | ✅ `HitStateReplayer.Locked`，在 `Pump` 里开合；`Patch_HitRecord` 的 Prefix 据此掐掉键轨触发的 `Hit` |
+| `noFail` | ✅ `ClampGlobalState` 备份后强制 true，`Stop` 还原 |
+| `GCS.hitMarginLimit` | ⚠️ 用**录制时的**值覆盖，但没有 Spectre 那样在 `scrFloor.LightUp` 前后夹逼——关卡自己会重置它（`Patch_Misc.cs:86/92`） |
+| `IgnoreMarkFail` | ❌ 未做。回放期间真人误触会真的 `MarkFail` |
 
 ---
 
 ## 四、下一步
 
 按严重度依次修复，每项补离线断言并验证。优先级：
-1. 偏差 3（音频取 clip，原理上不成立）
-2. 偏差 14 + 1（校验 + HitContext 轨，工作量最大）
-3. 偏差 15（兼容层）
-4. 其余
+1. ~~偏差 3（音频取 clip，原理上不成立）~~ ✅
+2. ~~偏差 14（校验）~~ ✅
+3. ~~偏差 1 + 1b（HitContext 状态轨，工作量最大）~~ ✅
+4. 偏差 19 剩余项：`IgnoreMarkFail` 补上；`hitMarginLimit` 补 `LightUp` 前后夹逼
+5. 偏差 15（版本兼容层）
+6. 其余（GPU 回读帧序、编码器看门狗、中间文件扩展名、状态码 3/5/6→6/5/7）

@@ -61,6 +61,10 @@ namespace SpectreReplay.Features.Recording
             // 上一局按住的键，第一帧差分会把它们误判成"刚松开"。
             System.Array.Clear(PrevState, 0, 256);
             Reset(Current, conductor, floor);
+            // 前缀弃权标志必须跟着重开一起清：它上一局若是 true，
+            // 这一局的精确匹配前缀第一次进 Hit 之前，兜底条会一直弃权，
+            // 于是这一局前若干次命中一条都不记。
+            Patch_HitRecord.Reset();
             _recording = true;
             Debug.Log("[SpectreReplay] 开始录制");
             // 光写日志玩家看不见。顶栏那行状态得跟着变，
@@ -128,6 +132,7 @@ namespace SpectreReplay.Features.Recording
             d.Keys.Clear();
             d.Margins.Clear();
             d.MarginTimes.Clear();
+            d.Hits.Clear();
             d.Length = 0;
             // 元数据纯装饰（只影响文件名与界面展示）。游戏的歌曲/难度对象
             // （AudioSource / Level）在程序集里拿不到完整元数据——Assembly-CSharp
@@ -439,6 +444,22 @@ namespace SpectreReplay.Features.Recording
                 Current.MarginTimes[name] = list;
             }
             list.Add(songPosition);
+        }
+
+        // ── 状态轨 ──────────────────────────────────────────────
+        /// <summary>
+        /// 记一次命中。由 scrPlayer.Hit 的前缀调用。
+        ///
+        /// 判据全在 <see cref="HitDedupe"/> 里（纯逻辑，可离线验证），
+        /// 这里只负责"在录才记"。
+        /// </summary>
+        internal static void RecordHit(ReplayHitContext hc)
+        {
+            if (!_recording)
+            {
+                return;
+            }
+            HitDedupe.Record(Current.Hits, hc);
         }
     }
 }
