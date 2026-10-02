@@ -82,6 +82,9 @@ trap {
 $OFFLINE = 'Features\VideoRender\OfflineSession.cs'
 $STATE   = 'Features\Playback\HitStateReplayer.cs'
 $LOADER  = 'Patch\PatchLoader.cs'
+$LIFE    = 'Features\Playback\Patch_Lifecycle.cs'
+$ENGINE  = 'Features\Playback\PlaybackEngine.cs'
+$HITREC  = 'Features\Recording\Patch_HitRecord.cs'
 
 switch ($Which) {
     # 写端（Set 侧）整个删掉，只留读端 —— 上一版的"只做一半"
@@ -154,6 +157,142 @@ switch ($Which) {
     'MUT-V' {
         Backup $LOADER
         ReplaceExact $LOADER 'p.GetGetMethod(true)' 'p.GetGetMethod(false)'
+    }
+    # 整条生命周期拆除链退回"不存在"——这就是这一版的旧样子：
+    # Stop() 只剩界面按钮一个调用点。
+    # **必须整条拿掉，而不是把某个方法体掏空**：掏空之后 C# 根本编译不过，
+    # 预览器读源码不受影响，但它会一路找到下一个挂点的方法体、读到人家的
+    # Teardown()，闸门全绿——那是"变异形状不对"，不是"断言是假的"。
+    'MUT-W' {
+        Backup $LIFE
+        $lines = Lines $LIFE
+        $start = $null
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Contains('internal static void Teardown()')) { $start = $i; break }
+        }
+        if ($null -eq $start) { throw '找不到 Teardown 定义' }
+        $depth = 0
+        $end = $start
+        for ($i = $start; $i -lt $lines.Count; $i++) {
+            $depth += ([regex]::Matches($lines[$i], '\{')).Count
+            $depth -= ([regex]::Matches($lines[$i], '\}')).Count
+            if ($depth -le 0 -and $i -gt $start) { $end = $i; break }
+        }
+        $out = @()
+        foreach ($i in 0..$end) { $out += $lines[$i] }
+        $out += '    }'
+        $out += '}'
+        SetLines $LIFE $out
+    }
+    # 退出挂点改成 Postfix → 场景已经切走，拆得太晚
+    'MUT-X' {
+        Backup $LIFE
+        ReplaceExact $LIFE 'typeof(scrController), "QuitToMainMenu", PatchKind.Prefix' `
+            'typeof(scrController), "QuitToMainMenu", PatchKind.Postfix   // MUT-X'
+    }
+    # 给退出挂点设上 "playback" 门控 —— 真实世界会踩的坑：
+    # 回放没载入时该开关是 false，补丁压根不挂且日志里一句失败都没有。
+    'MUT-Y' {
+        Backup $LIFE
+        ReplaceExact $LIFE 'typeof(scrController), "Restart", PatchKind.Prefix)' `
+            'typeof(scrController), "Restart", PatchKind.Prefix, "playback")   // MUT-Y'
+    }
+    # 删掉空 Feature 的早退分支，退回"查不到的功能名 = 关闭"。
+    # 这一条最恶劣：不挂载、不报失败、计数还看着正常。
+    'MUT-Z' {
+        Backup $LOADER
+        $lines = Lines $LOADER
+        $start = $null
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Contains('if (string.IsNullOrEmpty(name))')) { $start = $i; break }
+        }
+        if ($null -eq $start) { throw '找不到空 Feature 的早退分支' }
+        # 分支体是 `{` / `return true;` / `}` 三行
+        $out = @()
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($i -ge $start -and $i -le $start + 3) { continue }
+            $out += $lines[$i]
+        }
+        SetLines $LOADER $out
+    }
+    # Teardown 不调 Stop → 四条挂点都变成空转（形状全对、行为没了）
+    'MUT-AA' {
+        Backup $LIFE
+        ReplaceExact $LIFE 'PlaybackEngine.Stop();' '// MUT-AA: 忘了调 Stop'
+    }
+    # 四条挂点各写一份拆除代码（把 Restart 那条改成自己清数据），
+    # 对照"必须共用一个入口"——改了三处忘了第四处是真实事故形态。
+    #
+    # **只能替换 Teardown() 那一行**：如果去替换整个方法体（连 `{` `}` 一起），
+    # 判据 ④ 的"方法体必须在签名后面"会先一步变红——那是另一条断言的功劳，
+    # 这条变异就算"被检出"也没验到它想验的东西。变异形状必须对准判据。
+    'MUT-AB' {
+        Backup $LIFE
+        $lines = Lines $LIFE
+        $hit = $lines | Select-String -SimpleMatch 'private static void RestartPrefix' |
+            Select-Object -First 1
+        if (-not $hit) { throw '找不到 RestartPrefix' }
+        $at = $hit.LineNumber - 1
+        $out = @()
+        foreach ($i in 0..($lines.Count - 1)) {
+            if ($i -eq ($at + 2)) {
+                $out += '            PlaybackEngine.Stop();   // MUT-AB'
+                continue
+            }
+            $out += $lines[$i]
+        }
+        SetLines $LIFE $out
+    }
+    # Stop() 里三件拆除之一挪到 `_data == null` 早退之后。
+    # 退出钩子必然走这条早退路径（回放被中断时数据可能已清空），
+    # 所以这不是"无害的重排"。
+    'MUT-AC' {
+        Backup $ENGINE
+        $lines = Lines $ENGINE
+        $start = $null
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Contains('internal static void Stop()')) { $start = $i; break }
+        }
+        if ($null -eq $start) { throw '找不到 PlaybackEngine.Stop()' }
+        $hit = $null
+        for ($i = $start; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Contains('RestoreGlobalState();')) { $hit = $i; break }
+        }
+        if ($null -eq $hit) { throw '找不到 RestoreGlobalState() 调用' }
+        $out = @()
+        foreach ($i in 0..($lines.Count - 1)) {
+            if ($i -eq $hit) { continue }
+            # 插到 `if (_data == null)` 那行之后
+            if ($lines[$i].Contains('if (_data == null)')) {
+                $out += $lines[$i]
+                $out += '                RestoreGlobalState();   // MUT-AC'
+                continue
+            }
+            $out += $lines[$i]
+        }
+        SetLines $ENGINE $out
+    }
+    # 双轨互锁退化成"什么都不做" → 键轨的判定列表混进整局回放的判定
+    'MUT-AD' {
+        Backup $HITREC
+        $lines = Lines $HITREC
+        $hit = $lines | Select-String -SimpleMatch 'if (PlaybackEngine.HitLocked)' |
+            Select-Object -First 1
+        if (-not $hit) { throw '找不到 HitLocked 互锁' }
+        $at = $hit.LineNumber - 1
+        $out = @()
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($i -eq ($at + 1)) { $out += '                    return true;   // MUT-AD'; continue }
+            if ($i -eq ($at + 2)) { continue }   # 原来的 return false;
+            $out += $lines[$i]
+        }
+        SetLines $HITREC $out
+    }
+    # 游戏把退出入口改名/改签名（对照 ⑥：那条断言必须真的去反射真程序集）
+    'MUT-AE' {
+        Backup $LIFE
+        ReplaceExact $LIFE 'typeof(scrUIController), "WipeToBlack", PatchKind.Prefix' `
+            'typeof(scrUIController), "WipeToBlackXXX", PatchKind.Prefix   // MUT-AE'
     }
     default { throw "未知变异 $Which" }
 }

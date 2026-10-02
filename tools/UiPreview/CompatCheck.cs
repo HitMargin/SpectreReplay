@@ -27,12 +27,15 @@ namespace UiPreview
         /// <summary>
         /// 定位游戏的 Assembly-CSharp.dll。
         ///
+        /// internal 而不是 private：LifecycleCheck 也要在真程序集上核对
+        /// 那四个退出入口还在不在。两处各找一次，路径漂了就有一处失配。
+        ///
         /// 相对路径从 tools\UiPreview 起算：…\SpectreReplay\tools\UiPreview
         /// → 上三级是 D:\Projects，再拼 adofai-libs。
         /// 与 SpectreReplay.csproj 里的 HintPath 保持同一份拷贝，
         /// 免得两个地方指向不同的 dll。
         /// </summary>
-        private static string FindGameAssembly(out string why)
+        internal static string FindGameAssembly(out string why)
         {
             var candidates = new List<string>
             {

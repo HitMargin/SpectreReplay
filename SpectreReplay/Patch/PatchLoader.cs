@@ -148,6 +148,20 @@ namespace SpectreReplay.Patching
 
         internal static bool IsEnabled(string name)
         {
+            // **空 Feature = 不设门控 = 恒挂载。**
+            //
+            // 这个分支以前不存在，于是"不写 Feature"被当成了"功能名是空串"
+            // 去查表，查不到 → false → Refresh 里 continue 跳过。
+            // 结果是这类补丁**一个都挂不上**，而日志里连一句失败都没有
+            // （它压根没进 TryApply，Failures 是空的，只留下"补丁 N/N-4 已挂载"
+            // 那种让人以为正常的计数）。拆除回放的四个生命周期补丁就踩在这上面。
+            //
+            // 所以：写空串 = 故意不设门控；写了个没声明的名字 = 手滑，
+            // 仍然按"关闭"处理，两者的区别必须留在代码里而不是靠猜。
+            if (string.IsNullOrEmpty(name))
+            {
+                return true;
+            }
             for (int i = 0; i < Entries.Count; i++)
             {
                 if (Entries[i].Name == name)

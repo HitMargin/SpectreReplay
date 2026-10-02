@@ -914,10 +914,105 @@ Spectre 的 `Patch_UpdateFreeroam`（`Patch_Misc.cs:100-115`）我们完全没�
 ——下一条命中的区段号与当前一致就禁。**探针失败时放行而不是禁**：
 读不到区段号就把整个自由漫游段掐掉，砖块会永久停在起点。
 
-### 本轮的变异验证
+---
 
-新增 `tools\mutate.ps1`（把修复退回旧样子、跑离屏套件、判红或报"这条断言
-是假的"、**自动还原**）。七条变异全部被检出：
+## 六、退出关卡时的拆除链（偏差 23）
+
+### 偏差 23：`PlaybackEngine.Stop()` 只有界面按钮一个调用点
+
+`Stop()` 全仓三个调用点：界面上的"停止"按钮、`Pump()` 的异常兜底、
+离线渲染收尾。也就是说**只要玩家不点那个按钮，回放就不会停**——
+哪怕他已经重开、换关、退回主菜单了。
+
+而 `LevelWatcher.FinishCurrentLevel()` 只管录制与渲染
+（`KeyRecorder.End` + `RenderService.OnLevelEnd`），
+它连 `PlaybackEngine.Stop()` 都不调。这不是漏写，是两边从来没交接过：
+LevelWatcher 的判据是**场景名变了**（5 帧迟滞），
+而 `scnEditor.SwitchToEditMode` **根本不换场景**，任何看场景名的判据
+都发现不了那次离开。
+
+Spectre 的 `Patch_Lifecycle.cs:16-42` 挂了四条，我们一条都没有。
+
+**残留的具体后果**（`Stop()` 里的三件事一件都没跑）：
+
+| 没跑的那件 | 残留 |
+|---|---|
+| `KeyboardSimulation.ReleaseAll()` | 回放中途按下的键一直卡着，玩家的下一个物理按键只会被当成一次松开，之后判定全乱 |
+| `HitStateReplayer.Unload()` | 上一局的数据留着，跟着新关卡的 `UpdateFreeroam` 继续按上一局角度推进行星 |
+| `RestoreGlobalState()` | `noFail` 仍是 `true`、`GCS.hitMarginLimit` 仍是录制时那档，**之后正常游玩也跟着生效** |
+
+### 四条挂点，逐个对着真程序集核过
+
+选哪四条不是照抄 Spectre，是把真程序集里**所有**通往
+「离开游玩状态」的公共入口数了一遍：
+
+| 挂点 | 为什么是它 | 覆盖掉什么 |
+|---|---|---|
+| `scrUIController.WipeToBlack` | UI 级擦黑 | PauseMenu 换关（`PauseMenu.cs:1434/:1463` **绕过 Restart**）、关卡选择/ TARO 界面回退 |
+| `scrController.Restart` | 重开关卡 | `scrController.cs:2626` |
+| `scrController.QuitToMainMenu` | 退回主菜单 | `scrController.cs:2447` |
+| `scnEditor.SwitchToEditMode` | **不换场景**，只切游戏状态 | 任何"看场景名"的判据都看不见的那次离开 |
+
+`scrLoader.LoadSceneWithTransition`（`scrLoader.cs:107`）是场景切换的唯一实现，
+它的调用点只有 6 处，全都从上面四个方法里出去
+（`scrController.cs:2300/2447/2626`、`scnEditor.cs:1605`、
+`scnCLS.cs:2216`、`scnCalibration.cs:527`）。
+
+**为什么全是 Prefix**：`LoadSceneWithTransition` 起一个 0.3 秒的 DOTween 擦黑，
+擦完才 `SceneManager.LoadScene`。Postfix 时旧场景的 `scrController` 还活着、
+按住的键还按着——拆得太晚。
+
+**为什么不设 Feature 名**，以及它踩到的那个坑：
+
+`"playback"` 读的是 `PlaybackEngine.IsPlaying`，**没载入回放时就是 false**，
+而 `PatchLoader.Refresh()` 在门控为假时 `continue`，**连 `TryApply` 都不进、
+`Failures` 里也不会有它**。于是"载入过回放 → 退出去"能拆，"没载入过 → 退出去"
+拆不了，而日志里只有一行：
+
+```
+补丁 N/N-4 已挂载（playback 组只在载入回放时挂上，计数偏少是正常的）
+```
+
+那句话本来是为 playback 组写的，**反而替这个缺陷打了掩护**。
+
+顺带查出 `FeatureGate.IsEnabled` 压根没有空串分支：
+"不写 Feature"被当成"功能名是空串"去查表，查不到 → false。
+所以 `PatchLoader.Refresh()` 里"不设门控的补丁"这个类别**从来就没存在过**。
+已修：空 Feature 现在明确定义为「不设门控 = 恒挂载」，
+而**未声明的非空名字仍然判关闭**（否则把所有开关都废掉也能全绿）。
+
+### 断言（`LifecycleCheck`，八条）
+
+上一轮的经验是**检查了一个名字在，没检查它还起没起作用**。
+这里最容易踩且最难查的一种形状是"补丁压根没挂载"——不报失败、计数正常。
+所以除了"四条挂点在不在"，还钉了三件别的事：
+
+- ⑥ **真的去反射游戏程序集**，核对四个目标方法存在且**形参个数**对。
+  源码级断言只能证明"我们写了四条挂点"，证明不了"这四条挂得上"；
+  游戏改名时只会多一行「（目标不存在）」，拆除链就静静地少了一条。
+- ③ 反面判据：把 `IsEnabled` 整个改成 `return true` 也必须变红。
+- ④ 方法体必须**紧跟签名**，且**只能调 `Teardown()` 一个调用**。
+  第一版少了前半句，"方法体被掏空"这种变异会一路找到**下一个**挂点的
+  方法体、读到人家的 `Teardown()`，闸门全绿（真·踩到了）。
+
+### 变异（MUT-W / X / Y / Z / AA / AB / AC / AD / AE）
+
+九条全部被检出，各自由它设计时针对的那条断言抓到。两条值得记：
+
+- **MUT-W 第一版是错的变异**：我把 `WipeToBlackPrefix` 的方法体掏空，
+  结果判据一路找到下一个方法体照样读到 `Teardown()`，闸门全绿。
+  改成"整条链退回不存在"——那才是这一版的真·旧样子。
+  教训：**变异形状必须对准判据**，否则"被检出"也是空的。
+- **MUT-AB 第一版也踩了同一个坑**：替换整个方法体（连 `{` `}` 一起）时，
+  判据 ④ 的"方法体在签名后面"会先一步变红——那是另一条断言的功劳。
+  改成只替换 `Teardown()` 那一行，才真的验到它想验的"必须共用一个入口"。
+
+---
+
+## 七、累计的变异验证
+
+`tools\mutate.ps1`（把修复退回旧样子、跑离屏套件、判红或报"这条断言
+是假的"、**自动还原**）。累计十七条变异，全部被检出：
 
 | 变异 | 内容 | 被哪条断言抓到 |
 |---|---|---|
@@ -929,6 +1024,15 @@ Spectre 的 `Patch_UpdateFreeroam`（`Patch_Misc.cs:100-115`）我们完全没�
 | MUT-T | 先替换 value 之后才抄真值 | ② 没有在替换前抄 |
 | MUT-U | 门控改成 `区段+1 == 当前` | ⑧ 同 MUT-Q |
 | MUT-V | `GetGetMethod(true)` → `(false)` | ① ResolveTarget 没翻译属性名 |
+| MUT-W | 整条拆除链退回"不存在"（真·旧样子） | ①/②/⑤ 四条挂点都没有 |
+| MUT-X | 退出挂点改 Postfix | ① 挂成了 Postfix |
+| MUT-Y | 给退出挂点设 `"playback"` 门控 | ② 退出挂点设了功能门控 |
+| MUT-Z | 删掉空 Feature 的早退分支 | ③ IsEnabled 没处理空 Feature |
+| MUT-AA | `Teardown()` 不调 `Stop()` | ⑤ try 里没有 `PlaybackEngine.Stop()` |
+| MUT-AB | 一条挂点自己内联 `Stop()` | ④ 方法体不是只调 `Teardown()` |
+| MUT-AC | `RestoreGlobalState()` 挪到早退之后 | ⑦ 写在早退之后 |
+| MUT-AD | `HitLocked` 互锁改 `return true` | ⑧ 早退返回的是 true |
+| MUT-AE | 目标方法名改 `WipeToBlackXXX` | ①/②/④ 挂点找不到 |
 
 **顺带修掉闸门自身的一个毛病**：游戏在跑时 `deploy.ps1` 抛"dll 被锁"，
 原先那个 throw 会把整个 `verify.ps1` 掀掉——后面「Spectre 未被污染」
@@ -958,6 +1062,7 @@ Spectre 的 `Patch_UpdateFreeroam`（`Patch_Misc.cs:100-115`）我们完全没�
 10. ~~偏差 20（命中误差分析，清单之外发现）~~ ✅
 11. ~~偏差 21（离线渲染时间钉扎从未生效）~~ ✅
 12. ~~偏差 22（回放期未禁 `UpdateFreeroam`）~~ ✅
+13. ~~偏差 23（退出关卡时的拆除链 + 空 Feature 语义）~~ ✅
 
 ---
 
@@ -968,7 +1073,7 @@ Spectre 的 `Patch_UpdateFreeroam`（`Patch_Misc.cs:100-115`）我们完全没�
 **一类是补缺口**：状态轨（偏差 1+1b）、回放期状态夹逼（19）、
 版本兼容层（15）、`-vf` 三段式（8）、中间文件扩展名（9）、
 补丁异常兜底（10）、结算状态判据、离线渲染时间钉扎（21）、
-回放期禁 `UpdateFreeroam`（22）。
+回放期禁 `UpdateFreeroam`（22）、退出时的拆除链（23）。
 
 **一类是复核后**减法**：编码器看门狗（7）——原判断"缺三层"是错的，
 真正兜住卡死的那层我们早已有，而泵线程里那个看门狗会在收尾阶段
@@ -982,6 +1087,13 @@ Spectre 的 `Patch_UpdateFreeroam`（`Patch_Misc.cs:100-115`）我们完全没�
   结算状态 7 被漏掉 → 保存键在游玩中没反应
 - `-vf` 缺 `pad`，奇数宽高时 libx264 **直接失败**、产物 0 字节
   （偏差 8，用真 ffmpeg 实测证明）
+- **`FeatureGate.IsEnabled` 没有空串分支**，所以"不写 Feature"被当成
+  "功能名是空串"去查表 → 查不到 → false → 所有不设门控的补丁**一个都挂不上**，
+  而 `Failures` 里一条都没有（偏差 23 连带查出的）。
+  更麻烦的是日志那句「playback 组计数偏少是正常的」恰好替它打了掩护。
+- **闸门自己的一条工具教训**：`edit` 每次写 `tools\*.ps1` 都会**剥掉 UTF-8 BOM**，
+  之后 PowerShell 把中文读成乱码、脚本直接解析失败（报一个指向语法块的
+  ParserError，完全指不到编码）。已改成每次改完补回 BOM。
 
 **一类是"清单本身有洞"**：偏差 20。清单列的是我当时已知的偏差，
 而重列 Spectre 的特性文件才看见 `ReplayAnalyzer` 这个整块缺失——
@@ -1002,6 +1114,7 @@ Spectre 的 `Patch_UpdateFreeroam`（`Patch_Misc.cs:100-115`）我们完全没�
 | 20 命中误差分析 | ✅ 本轮 |
 | 21 离线渲染时间钉扎 | ✅ 本轮（修的是"一直没生效"） |
 | 22 回放期未禁 UpdateFreeroam | ✅ 本轮 |
+| 23 退出时的拆除链 | ✅ 本轮（修的是"只有按钮能停"） |
 | 3 / 14 音频取 clip、校验 | ✅ 更早轮次 |
 | 16 / 17 哈希陷阱 | ✅ 已在 `FfmpegArgs` 侧按不变文化处理 |
 | 2 / 3a / 4 / 5 / 18 | ✅ 不是缺陷，见各节说明 |

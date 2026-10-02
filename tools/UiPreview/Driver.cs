@@ -40,6 +40,11 @@
 //     「认不出 / 不是我们的」两个上抛出口都必须还在
 //   · StateCheck          结算状态判据：从**真程序集**读 States 枚举。
 //     原来的 3/5/6 其实是 Checkpoint/Fail/Fail2，结算状态 7 被漏掉了
+//   · LifecycleCheck      离开关卡时必须真的拆除回放：四条退出挂点
+//     都是 Prefix、不设功能门控（空 Feature 曾被当成查不到的功能名
+//     → false → 补丁一个都不挂且不报失败）、四条共用一个入口。
+//     Stop() 原先只有界面按钮一个可靠调用点——玩家不点就一直不停，
+//     noFail 与判定窗口会带着录制时那档继续生效
 //
 // 界面本身只能靠游戏里开一次 UMM 窗口看。这是 GUILayout 的代价，
 // 换来的是不用再维护 Canvas/EventSystem/ScrollRect/TMP 那一整套。
@@ -114,10 +119,16 @@ namespace UiPreview
             int clockFail = ClockPinCheck.Run(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
 
+            // 退出关卡时的拆除链：Stop() 原本只有界面按钮一个可靠调用点，
+            // 玩家不点就永远不停（noFail / 判定窗口 / 按住的键全留着）。
+            // 这组断言里有一条真的去反射游戏程序集，确认四条挂点挂得上。
+            int lifecycleFail = LifecycleCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+
             int total = replayFail + ffFail + locFail + hardFail + patchFail
                 + levelFail + probeFail + avFail + validFail + hitFail
                 + compatFail + frameFail + guardFail + stateFail + timingFail
-                + clockFail;
+                + clockFail + lifecycleFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"
