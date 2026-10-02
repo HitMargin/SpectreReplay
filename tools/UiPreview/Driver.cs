@@ -101,9 +101,12 @@ namespace UiPreview
             int stateFail = StateCheck.Run(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
 
+            // 命中误差换算：链接真实源码，钉住 π / 60 / 1000 那几处换算。
+            int timingFail = TimingCheck.Run();
+
             int total = replayFail + ffFail + locFail + hardFail + patchFail
                 + levelFail + probeFail + avFail + validFail + hitFail
-                + compatFail + frameFail + guardFail + stateFail;
+                + compatFail + frameFail + guardFail + stateFail + timingFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"

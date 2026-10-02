@@ -57,6 +57,78 @@ namespace SpectreReplay.Features.Playback
         internal static string LastError { get; private set; } = "";
 
         /// <summary>
+        /// 已载入回放的命中误差统计（UI 用）。
+        ///
+        /// 返回 null = 算不了（没载入回放 / 状态轨为空 / 关卡未加载）。
+        /// **返回 null 而不是空报告**是刻意的：画一个空分组会让人
+        /// 以为"分析结果是 0"，而真实原因只是"还没载入"。
+        ///
+        /// 三个前提里最容易缺的是**关卡已加载**：误差换算要 bpm、pitch
+        /// 与逐砖 speed，它们只存在于当前加载的谱面里。Spectre 同此
+        /// （ReplayAnalyzer.cs:12-13：要求关卡已加载）。
+        ///
+        /// 结果每次重算但**只在 OnGUI 里调**，而 OnGUI 每帧可能跑两次
+        /// （Layout + Repaint 事件各一次）。这点数量的算术不值得为此
+        /// 引入缓存失效机制——缓存需要一个"什么时候变脏"的判据，
+        /// 而逐砖 speed 会随关卡推进变化，那个判据比算术本身更容易错。
+        /// </summary>
+        internal static HitTimingReport TimingReport()
+        {
+            if (_data == null || _data.Hits.Count == 0)
+            {
+                return null;
+            }
+            var conductor = scrConductor.instance;
+            var controller = scrController.instance;
+            if (conductor == null || controller == null)
+            {
+                return null;
+            }
+            var floors = ADOBase.lm != null ? ADOBase.lm.listFloors : null;
+            if (floors == null || floors.Count == 0)
+            {
+                return null;
+            }
+            float pitch = conductor.song != null ? conductor.song.pitch : 1f;
+            if (pitch <= 0f)
+            {
+                return null;
+            }
+            int n = _data.Hits.Count;
+            var angles = new List<double>(n);
+            var perFloor = new List<int>(n);
+            for (int i = 0; i < n; i++)
+            {
+                var hit = _data.Hits[i];
+                // 自动命中不是玩家按的，与实时统计口径一致
+                if (hit.IsAuto)
+                {
+                    continue;
+                }
+                // RecordedFloor 是**被离开的**那块砖：逼近目标出角期间
+                // 的角速度由它的 speed 决定，不是落点那块。
+                // 角差用 CachedAngle − TargetExitAngle（与 Spectre 的
+                // ReplayAnalyzer.cs:95 同式），不是 Angle 字段——后者是
+                // 供回放推进行星用的按转向取过正负的值，口径不同。
+                int floorId = hit.CurrentFloorId;
+                if (floorId < 0 || floorId >= floors.Count)
+                {
+                    continue;
+                }
+                double bts = conductor.bpm * floors[floorId].speed;
+                // **必须转 double 再进数组。** 那个数组是 List<int>
+                // （Analyze 的入参写成 int 是有意的：它要表达
+                // "取不到就传 0"，而 double 的 0.0 没有这个语义差别）。
+                // 直接 (int)bts 会在 bpm=120.5、speed=1 的谱面上
+                // 把 120.5 截成 120——误差 0.4%，累积到一整局
+                // 就变成"你的平均误差偏了 4ms"这种看着合理的错值。
+                angles.Add(hit.CachedAngle - hit.TargetExitAngle);
+                perFloor.Add((int)Math.Round(bts));
+            }
+            return HitTimingAnalyzer.Analyze(angles, perFloor, pitch);
+        }
+
+        /// <summary>
         /// 已载入但还没真正开播——等关卡重开时接管。
         ///
         /// **必须这样。** Load 时关卡往往停在结算画面，

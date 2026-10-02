@@ -122,6 +122,7 @@ namespace SpectreReplay.Pages
                 Features.Playback.PlaybackEngine.CancelPending();
             }
             GUILayout.EndHorizontal();
+            DrawTiming();
         }
 
         /// <summary>
@@ -164,6 +165,48 @@ namespace SpectreReplay.Pages
         }
 
         // ── 视频渲染 ────────────────────────────────────────────
+        /// <summary>
+        /// 已载入回放的命中误差统计（照 Spectre 的 ReplayAnalyzer）。
+        ///
+        /// 数据来源就是偏差 1/1b 补的状态轨：每条命中都记了
+        /// <c>CachedAngle − TargetExitAngle</c>，此前那个差值**只被用来
+        /// 推进行星、从没被读出来看过**。它其实是"这一击偏了多少"，
+        /// 也正是玩家最想知道的：整体偏早、还是某几处单独拖后腿。
+        ///
+        /// **要求关卡已加载**：误差换算需要 bpm、pitch 与逐砖 speed，
+        /// 它们只存在于当前加载的谱面里（Spectre 同此，见 ReplayAnalyzer.cs:12-13）。
+        /// 不满足就整块不画——画一个空分组会让人以为"分析结果是 0"。
+        /// </summary>
+        private static void DrawTiming()
+        {
+            var report = Features.Playback.PlaybackEngine.TimingReport();
+            if (report == null)
+            {
+                return;
+            }
+            OnGui.Group("playback.timing");
+            GUILayout.Label(Loc.F("playback.timing_summary",
+                (report.AnalyzedHits).ToString(),
+                report.EarlyCount.ToString(),
+                report.LateCount.ToString(),
+                Fmt(report.MedianMs)));
+            GUILayout.Label(Loc.F("playback.timing_detail",
+                Fmt(report.MeanMs), Fmt(report.SigmaMs),
+                Fmt(report.MinMs), Fmt(report.MaxMs)));
+            // 跳过的那些击要说出来，否则玩家会以为分析漏了数据，
+            // 或者更糟——以为那些击的误差是 0。
+            int skipped = report.TotalHits - report.AnalyzedHits;
+            if (skipped > 0)
+            {
+                OnGui.NoteText(Loc.F("playback.timing_skipped",
+                    skipped.ToString()));
+            }
+        }
+
+        /// <summary>毫秒数的统一写法。固定一位小数 + 正负号。</summary>
+        private static string Fmt(float ms)
+            => (ms >= 0 ? "+" : "") + ms.ToString("0.0") + " ms";
+
         internal static void DrawRender()
         {
             OnGui.Group("page.render");
