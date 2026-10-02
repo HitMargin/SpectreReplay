@@ -205,9 +205,15 @@ namespace UiPreview
         /// GetHitMarginInSec 判不出数 → 回放强制 noFail 吞掉失败 →
         /// 行星原地打转、永不前进（"卡输入"）。
         ///
-        /// 判据：传给 Hit 的第一个实参必须是 null 字面量。
-        /// 因为值要从反射参数数组里出（签名跨版本变了），所以认的是
-        /// <c>new object[] { null, ...</c> 这个形状。
+        /// 判据：**调用点**必须传 null 字面量。
+        /// 反射实参数组住在 <c>GameCompat.PlayerHit</c> 内部（兼容层搬过去之后），
+        /// 那里自己会把它填成 null（形参默认值）。所以这里认的是
+        /// <c>GameCompat.PlayerHit(player, isAuto, null)</c> 这个调用形状。
+        ///
+        /// 为什么看调用点而不是实参数组：实参数组是兼容层的通用实现，
+        /// 它按"签名有几参"决定填什么，本来就不该由它保证 null；
+        /// **保证 null 的是"谁在调"**。曾经这里扫的是实参数组，
+        /// 实现一搬家判据就落空了——判据必须跟着"规则真正的归属"走。
         /// </summary>
         private static int NeverPassHitTick(string projectRoot)
         {
@@ -218,16 +224,25 @@ namespace UiPreview
                 Console.WriteLine("    ✗ ③ 找不到 HitStateReplayer.cs");
                 return 1;
             }
-            // 必须是 new object[] { null, isAuto } —— 第一槽位是 null。
-            var m = Regex.Match(src, @"new\s+object\[\]\s*\{\s*null\s*,");
-            if (!m.Success)
+            var calls = Regex.Matches(src, @"GameCompat\.PlayerHit\s*\(([^;]*)\)");
+            if (calls.Count == 0)
             {
-                // 反向诊断：把真正传的东西报出来，便于一眼看出是哪个
-                var any = Regex.Match(src, @"new\s+object\[\]\s*\{[^}]*\}");
-                Console.WriteLine("    ✗ ③ 调 scrPlayer.Hit 时没有把 hitTick 置为 null"
-                    + "（实测写法：" + (any.Success ? any.Value : "没找到实参数组")
-                    + "）→ 会用录制局的绝对 tick 换算，行星原地打转");
+                Console.WriteLine("    ✗ ③ 状态轨没有经 GameCompat 调命中");
                 return 1;
+            }
+            foreach (Match c in calls)
+            {
+                string args = c.Groups[1].Value;
+                // 第三参必须是 null 字面量
+                var third = Regex.Match(args, @",\s*([^,]+?)\s*$");
+                string v = third.Success ? third.Groups[1].Value.Trim() : "";
+                if (v != "null")
+                {
+                    Console.WriteLine("    ✗ ③ 调 scrPlayer.Hit 时没有把 hitTick 置为 null"
+                        + $"（实参为 {args.Trim()}）"
+                        + " → 会用录制局的绝对 tick 换算，行星原地打转");
+                    return 1;
+                }
             }
             Console.WriteLine("    ✓ ③ 命中复现时 hitTick 恒为 null"
                 + "（不拿录制局的 SkyHook 绝对 tick 换算）");
@@ -299,24 +314,33 @@ namespace UiPreview
         /// 判据：必须同时出现 2 参数与 1 参数两种形状的识别。
         /// 只认一种 = 换一个版本就静默退化成"找不到方法"，
         /// 而那句错误只在首次调用时打一次日志，之后状态轨静静地什么都不做。
+        ///
+        /// **实现搬到 GameCompat.cs 了，这条判据跟着搬。**
+        /// 曾经这里扫 HitStateReplayer.cs——实现一搬家它就找不到形状，
+        /// 报「命中只认了任何一种签名」。判据必须跟着"规则真正的归属"走，
+        /// 否则一次重构就让守卫悄悄失去作用。
+        /// 兼容层那边另有 CompatCheck 在**真程序集上**验择路结果。
         /// </summary>
         private static int ReplayHitIsByShape(string projectRoot)
         {
-            string src = StripComments(Read(projectRoot,
-                "Features/Playback/HitStateReplayer.cs"));
+            string src = StripComments(Read(projectRoot, "Patch/GameCompat.cs"));
             if (src.Length == 0)
             {
-                Console.WriteLine("    ✗ ⑤ 找不到 HitStateReplayer.cs");
+                Console.WriteLine("    ✗ ⑤ 找不到 Patch/GameCompat.cs");
                 return 1;
             }
-            bool two = src.Contains("ps.Length >= 2")
-                || Regex.IsMatch(src, @"ps\.Length\s*==\s*2");
-            bool one = src.Contains("new object[] { isAuto }");
-            if (!two || !one)
+            // 两种 arity 的探测：先 2 参（r150+）再 1 参（旧版）
+            bool two = Regex.IsMatch(src, @"""Hit""\s*,\s*2\b");
+            bool one = Regex.IsMatch(src, @"""Hit""\s*,\s*1\b");
+            // 实参也必须两套：2 参传 {hitTick, isAuto}，1 参只传 {isAuto}
+            bool args = src.Contains("new object[] { isAuto }")
+                && Regex.IsMatch(src, @"new\s+object\[\]\s*\{\s*hitTick\s*,");
+            if (!two || !one || !args)
             {
                 Console.WriteLine("    ✗ ⑤ 命中只认了 "
                     + (two ? "2 参数" : one ? "1 参数" : "任何一种")
-                    + " 签名：换游戏版本会静默退化成「找不到方法」");
+                    + " 签名探测" + (args ? "" : "，实参也只有一套")
+                    + "：换游戏版本会静默退化成「找不到方法」");
                 return 1;
             }
             Console.WriteLine("    ✓ ⑤ 命中按参数形状反射调用，1/2 参数两种签名都能认");

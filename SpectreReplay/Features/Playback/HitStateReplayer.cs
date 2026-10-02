@@ -276,87 +276,16 @@ namespace SpectreReplay.Features.Playback
         }
 
         /// <summary>
-        /// 调 <c>scrPlayer.Hit</c>。
+        /// 调 <c>scrPlayer.Hit</c>，委托给 <see cref="GameCompat.PlayerHit"/>。
         ///
-        /// **必须按名 + 形状反射，不能写编译期调用。** 签名跨版本变了：
-        /// r141–r149 是 <c>Hit(bool isAuto)</c>，r150+ 是
-        /// <c>Hit(long? hitTick, bool isAuto)</c>。写死编译期调用的话，
-        /// 在另一个版本上不是编译不过就是运行时 MissingMethodException。
-        /// 照 Spectre 的 GameCompat.PlayerHit（GameCompat.cs:223-249）。
+        /// 这里刻意**不自己缓存 MethodInfo**：形状探测是"先找新版形状、
+        /// 找不到退旧版"，它的逻辑有 5 处分支，复制一份必然与兼容层走偏
+        /// （上一轮就是这样：兼容层和这里各有一份 FindHitMethod）。
+        /// 探测只跑一次（结果存在兼容层的静态字段里），调用本身才是热路径。
         ///
-        /// 每次调用都取 GetMethod 有点浪费，但只在命中时调用
-        /// （一局几千次），而缓存会让"第一次用时正好是异常时机"变成
-        /// 永久失效的坑。这里用静态缓存 + 失败不缓存。
+        /// **hitTick 恒为 null**，理由见 <see cref="ReplayHit"/> 的方法说明 ①。
         /// </summary>
-        private static System.Reflection.MethodInfo _hitMethod;
-        private static bool _hitMethodMissing;
-
         private static bool CallHit(scrPlayer player, bool isAuto)
-        {
-            if (_hitMethod == null && !_hitMethodMissing)
-            {
-                _hitMethod = FindHitMethod();
-                _hitMethodMissing = _hitMethod == null;
-                if (_hitMethodMissing)
-                {
-                    Debug.LogError("[SpectreReplay] 找不到 scrPlayer.Hit，"
-                        + "状态轨无法推进行星（回放会卡住）");
-                }
-            }
-            if (_hitMethod == null)
-            {
-                return false;
-            }
-            try
-            {
-                var ps = _hitMethod.GetParameters();
-                object[] args = ps.Length >= 2
-                    ? new object[] { null, isAuto }
-                    : new object[] { isAuto };
-                return (bool)_hitMethod.Invoke(player, args);
-            }
-            catch (Exception ex)
-            {
-                // 只记第一次：这是每帧可能重复的路径，刷屏会把 UMM 窗口埋掉。
-                Debug.LogError("[SpectreReplay] 调用 scrPlayer.Hit 失败："
-                    + ex.GetType().Name + ": " + ex.Message);
-                return false;
-            }
-        }
-
-        private static System.Reflection.MethodInfo FindHitMethod()
-        {
-            const System.Reflection.BindingFlags flags =
-                System.Reflection.BindingFlags.Public
-                | System.Reflection.BindingFlags.NonPublic
-                | System.Reflection.BindingFlags.Instance;
-            // 优先 2 参数（r150+）：第一参是 long?，第二参是 bool。
-            foreach (var m in typeof(scrPlayer).GetMethods(flags))
-            {
-                if (m.Name != "Hit" || m.ReturnType != typeof(bool))
-                {
-                    continue;
-                }
-                var ps = m.GetParameters();
-                if (ps.Length == 2 && ps[0].ParameterType == typeof(long?)
-                    && ps[1].ParameterType == typeof(bool))
-                {
-                    return m;
-                }
-            }
-            foreach (var m in typeof(scrPlayer).GetMethods(flags))
-            {
-                if (m.Name != "Hit" || m.ReturnType != typeof(bool))
-                {
-                    continue;
-                }
-                var ps = m.GetParameters();
-                if (ps.Length == 1 && ps[0].ParameterType == typeof(bool))
-                {
-                    return m;
-                }
-            }
-            return null;
-        }
+            => GameCompat.PlayerHit(player, isAuto, null);
     }
 }

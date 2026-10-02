@@ -27,6 +27,8 @@
 //   · ValidatorCheck     回放前置校验的六条规则，含「取不到就放行」
 //   · HitTrackCheck      状态轨（双轨回放）的去重、互锁、绝不透传 HitTick
 //     （缺了它判定一旦判失败行星就不前进，表现为「回放卡住」且无日志）
+//   · CompatCheck        版本兼容层**在真游戏程序集上**反射，确认选中的
+//     重载形状正确（源码级断言验不了"择路选对了"这件事）
 //
 // 界面本身只能靠游戏里开一次 UMM 窗口看。这是 GUILayout 的代价，
 // 换来的是不用再维护 Canvas/EventSystem/ScrollRect/TMP 那一整套。
@@ -75,8 +77,12 @@ namespace UiPreview
             int hitFail = HitTrackCheck.Run(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
 
+            // 版本兼容层：真的去反射游戏程序集，确认选中的重载形状正确。
+            int compatFail = CompatCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+
             int total = replayFail + ffFail + locFail + hardFail + patchFail
-                + levelFail + probeFail + avFail + validFail + hitFail;
+                + levelFail + probeFail + avFail + validFail + hitFail + compatFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"

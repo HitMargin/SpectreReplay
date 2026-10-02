@@ -144,7 +144,8 @@ namespace SpectreReplay
             // 必须一眼能看完——否则只能靠猜。
             // 界面不再有热键：UMM 窗口由 UMM 自己开（默认 F7），
             // 模组选中即显示。摘要里也就不必再报一个不存在的键。
-            mod.Logger.Log("[SpectreReplay] 已加载：补丁 "
+            mod.Logger.Log("[SpectreReplay] 已加载：" + Patching.GameVersion.Describe()
+                + "；补丁 "
                 + PatchLoader.AppliedCount + "/" + PatchLoader.DeclaredCount
                 + PatchLoader.FailureReport);
             IsReady = true;

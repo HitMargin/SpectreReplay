@@ -376,26 +376,72 @@ ReplayData 升到 v2 承载这些字段，v1 文件仍兼容。
 SpeedTrail 用 `<= 0` 作「没记到」的哨兵 —— 0 与 1.0 都是合法值，
 拿它们当默认值会让「没记到」与「确实是那个值」无法区分。
 
-### 偏差 15：版本兼容层完全缺失（`Features/Compat/GameCompat.cs`）
+### 偏差 15：版本兼容层完全缺失 → ✅ 已加（`Patch/GameCompat.cs`）
 
-当前游戏是 **r150**（`Main.cs:27` 的 `VerifiedBuild = 150`）。Spectre 的兼容层
-处理了 r149→r150 的多处签名变更，而 SpectreReplay 直接按 r150 编译：
+**这是本轮实测，不是照抄。** 先在**真程序集**上查了每一行到底适不适用：
 
-| 成员 | 差异 | 不处理的后果 |
+| 成员 | 实测结果 | 对我们是否适用 |
 |---|---|---|
-| `scrPlayer.Hit` | r149 `Hit(bool)` → r150 `Hit(long?, bool)` | 补丁按名消歧失败，绑不上 |
-| `scrPlanet.SwitchChosen` | r150 起多 `long? hitTick` 形参 | 直接调用抛 `MissingMethodException` |
-| `HitFiresInputEvents` | r150 起 `Hit` 内部自调 `HitInputEvent` | ⭐ **双触发**：一次按键 Any+Action1 各发一次 |
-| `HasUpdateHitErrorMeter` | r150 起误差条喂数搬进游戏自身 | 补一次就**双记** |
-| `scrMarginTracker.deadTiles` | r150 删除 | `MissingFieldException` |
+| `scrPlayer.Hit` | 只有 `Hit(long?, bool)` | ✅ **适用**，是唯一真会打到我们的 |
+| `scrPlanet.SwitchChosen` | 只有 `SwitchChosen(long?)` | ❌ 不适用——我们不直接调，由游戏在 `Hit` 内部调 |
+| `HitFiresInputEvents` | r150 的 `Hit` 内部确实自调 | ❌ 不适用——我们没有代发 `HitInputEvent` 的代码 |
+| `HasUpdateHitErrorMeter` | 存在（3 参） | ❌ 不适用——我们不手动喂判定条 |
+| `scrMarginTracker.deadTiles` | **已删除** | ❌ 不适用——我们从没读过它 |
 
-`Patch_Recording.cs:42-50` 的注释详述了双触发的机制：前缀先把 Any 目标的
-`lastHitFrame` 帧位占掉（`handled=true`），游戏那次 Any 被帧守卫拦下、
-`Action1` 反而因 `handled=false` 放行。
+**结论与原判断不同：五项里只有一项真的适用。** Spectre 需要整层是因为它改写
+判定与判定条，那几处都要按老签名调；我们的功能面窄，只有"调用 `Hit`"
+这一个入口踩在跨版本的缝上。原文档把它们并列成"五处待处理"会误导——
+照着做等于为四个用不到的通道各写一份永远不会执行的代码。
 
-**判定手段值得学**：`GameCompat.HitFiresInputEvents` 用**签名形状**探测
-（找首参为 `long?` 的重载）而非版本号（`GameCompat.cs:258-259`）：
-「游戏再改签名时此处自然重新探测」。
+**保留的通道**（`SwitchChosen` / `HitInputEvent` / `HasUpdateHitErrorMeter`）：
+留着不调用，成本是几十行；将来加功能时**不需要重新踩一遍版本坑**。
+理由同 Spectre——那几条注释是写给"下一个加功能的人"的。
+
+**一处实测纠正了 Spectre。** Spectre 的版本探测按 `{"GCNS", "Releases"}`
+顺序找 `releaseNumber`（`JALibMissing.cs:30`）。实测本版本：
+
+- `GCNS` **存在**，但只有场景名/分支列表，**没有任何版本字段**；
+- 真正的版本在 `Releases.releaseNumber`（Int32，当前值 **150**）。
+
+照 Spectre 的顺序取，今天也能拿到 150（第一个类型里没有该字段，继续找），
+但那是**巧合性正确**：GCNS 一旦加上同名字段就会取错。而版本取错的后果是
+**升级之后反而走进旧路径**——比取不到更糟。所以我们显式按
+"找名为 `releaseNumber` 的 Int32 字段"写，并**以 Releases 优先**，
+顺序本身被断言钉住（见下）。
+
+**探测失败返回 -1 而不是 0**：0 会被 `rel >= 150` 判成"旧版"，
+于是升级之后走旧路径——最坏的失败方向。
+
+**顺带消除一处重复实现**：上一轮我在 `HitStateReplayer` 里自己写了一份
+`FindHitMethod`（按参数个数找 `scrPlayer.Hit`），与兼容层要做的是同一件事。
+两份必然走偏，而走偏的那份恰好在**调用命中**的位置——表现为
+"回放卡住且日志无异常"。现已合并为 `GameCompat.PlayerHit` 一处。
+
+#### 闸门：`CompatCheck`（7 条）
+
+这一条是本项目少有的能**离线跑真东西**的地方：直接
+`Assembly.LoadFrom(adofai-libs\Assembly-CSharp.dll)`，
+把与兼容层同形的择路算法跑在**真元数据**上，看它挑中的方法是否就是
+游戏自己的定义。
+
+只断言源码里"有按参数个数分支"是没用的——分支写对了但探测条件写错了
+（比如按名字取第一个而不看返回类型），源码检查照样全绿。
+
+七条：① `Hit` 选中 r150 重载（带返回类型校验）② `HitFiresInputEvents`
+形状探测为 true ③ `SwitchChosen` 选中 1 参 ④ `HitInputEvent` 选中 3 参
+④b `handleAll` 传 false ⑤ 版本探测命中 `Releases.releaseNumber = 150`
+⑤b **探测顺序为 Releases → GCNS** ⑥ 命中反射只有兼容层一份实现。
+
+**三条断言是变异测试逼出来的**（都已证明回退实现时变红）：
+
+| 变异 | 结果 |
+|---|---|
+| 探测顺序反成 GCNS 优先 | **第一版漏掉了**，补了 ⑤b |
+| 删掉 `Hit` 的 1 参降级分支 | 命中（代码仍能编译） |
+| `handleAll` 传 `true` | **第一版漏掉了**，补了 ④b |
+
+后两条的共同点值得记住：**形状对了不等于参数对了**。
+`handleAll` 从 false 改成 true 时，上面所有形状检查都还是绿的。
 
 ### 偏差 16：`FloorHash` 的可靠性陷阱（即使照抄也要知道）
 
@@ -489,5 +535,5 @@ Spectre 回放时改了若干全局状态，都有对应的还原点：
 2. ~~偏差 14（校验）~~ ✅
 3. ~~偏差 1 + 1b（HitContext 状态轨，工作量最大）~~ ✅
 4. ~~偏差 19（回放期间的状态夹逼四项）~~ ✅
-5. 偏差 15（版本兼容层）
+5. ~~偏差 15（版本兼容层）~~ ✅
 6. 其余（GPU 回读帧序、编码器看门狗、中间文件扩展名、状态码 3/5/6→6/5/7）

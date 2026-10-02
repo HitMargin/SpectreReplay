@@ -40,6 +40,12 @@ namespace UiPreview
             // 警告就继续，不把这句打出来的话，模组在现象上就是"什么都没发生"。
             { "Main.cs",
                 "入口失败诊断与加载摘要只写 Player.log / UMM 窗口，不在界面上" },
+            // 兼容层的降级告警与版本摘要同样只进日志。刻意按**类型**放行而不是
+            // 按文件名：GameCompat 里有 5 个通道，每个都只在失败时 WarnOnce
+            // 打一行，写成 5 处 Loc 键纯属噪音（这些字符串玩家永远看不到，
+            // 只有排查者看得到，而排查者看的就是日志）。
+            { "GameCompat.cs",
+                "兼容层的 WarnOnce 告警与版本摘要只写 Player.log / UMM 窗口" },
         };
 
         internal static int Run(string projectRoot)
