@@ -24,8 +24,11 @@ namespace SpectreReplay.Features.VideoRender
     /// 这样主线程永远不会被编码阻塞；而缓冲的租还必须跨线程安全，
     /// 所以池用 lock 保护（见 FrameBufferPool）。
     ///
-    /// stdin 写死会卡死 ffmpeg 时（磁盘满、编码器内部挂起），所以泵线程
-    /// 带看门狗：超过阈值没有进展就放弃这次渲染并报失败，而不是永远挂着。
+    //// stdin 写死会卡死 ffmpeg 时（磁盘满、编码器内部挂起），
+    /// 主线程会卡在 <see cref="Submit"/> 的反压等待里。这一层的保护**不在这里**，
+    /// 而在 <c>Submit</c> 的 <see cref="SubmitWaitMs"/> 超时：等满就抛，
+    /// 调用方据此收摊报失败。理由见那个常量的注释——按"队列长度是否变化"
+    /// 计时的那类看门狗，在渲染收尾阶段会**必然误判**。
     /// </summary>
     internal sealed class VideoEncoder : IDisposable
     {
@@ -33,14 +36,10 @@ namespace SpectreReplay.Features.VideoRender
         private System.Threading.Thread _pump;
         private readonly BlockingQueue _queue;
         private readonly FrameBufferPool _pool;
-        private readonly Stopwatch _watch = Stopwatch.StartNew();
-
         private volatile bool _stopRequested;
         private volatile bool _finished;
         private Exception _failure;
         private int _written;
-
-        private const int WatchdogSeconds = 20;
 
         internal int FramesWritten => _written;
         internal string Error { get; private set; } = "";
@@ -135,11 +134,18 @@ namespace SpectreReplay.Features.VideoRender
         }
 
         /// <summary>
-        /// 单帧入队最长等待。
+        /// 单帧入队最长等待。**这就是整个编码器唯一的卡死保护。**
         ///
-        /// 取 Spectre 的量级（VideoEncoder.cs:197 用 120 秒）。这个值不是
-        /// "正常情况下的等待时长"——正常情况下编码器远快于实时，队列永远不满。
-        /// 它只在 ffmpeg 停止消费 stdin 时才被耗尽，用来把"卡死"变成"可诊断的失败"。
+        /// 取 Spectre 的量级（VideoEncoder.cs:197-223 用 120 秒）。这个值不是
+        /// "正常情况下的等待时长"——正常情况下编码器远快于实时，队列永远不满，
+        /// Enqueue 立刻返回。它只在 ffmpeg 停止消费 stdin 时才被耗尽，
+        /// 用来把"静默挂死"变成"可诊断的失败"。
+        ///
+        /// Spectre 的注释把这一点讲得很直白（原 :192-196）：不设此阈值，
+        /// ffmpeg 停止读 stdin 时 Submit 会无限自旋，整次渲染**静默挂死**。
+        ///
+        /// 为什么泵线程那边不需要第二个看门狗：见 <see cref="Pump"/> 里的说明，
+        /// 那类看门狗在收尾阶段会必然误判。
         /// </summary>
         private const int SubmitWaitMs = 120_000;
 
@@ -152,13 +158,22 @@ namespace SpectreReplay.Features.VideoRender
                     byte[] frame = _queue.Dequeue(50);
                     if (frame == null)
                     {
-                        // 空队列：检查看门狗。长时间没有新帧进来说明上游停了，
-                        // 但 ffmpeg 还在等 stdin —— 此时需要收尾，否则永远挂着。
-                        if (_watch.Elapsed.TotalSeconds > WatchdogSeconds
-                            && _queue.Count == 0)
-                        {
-                            break;
-                        }
+                        // 空队列就是正常状态：上游这一帧还没产出，
+                        // 或者已经全部送完、正在等收尾。
+                        //
+                        // **这里刻意不设看门狗。** 曾经的写法是"超过 20 秒
+                        // 没有新帧进来就 break"，而它会在渲染**收尾阶段必然误判**：
+                        // 最后一帧送出去之后 ffmpeg 还要排空管道、封装、写文件，
+                        // 这段时间里上游不会再有任何 Submit——队列长度就是不变，
+                        // 20 秒一到就把**成功的渲染**报成失败。
+                        //
+                        // 而收尾恰恰是最容易出问题的阶段，报错又发生在用户已经
+                        // 耐心等完之后，体验是"画面明明在动，最后告诉我失败"。
+                        //
+                        // 真卡死的情形由 <see cref="SubmitWaitMs"/> 兜：
+                        // 那是主线程在**队列满**上的等待（反压），
+                        // ffmpeg 不读 stdin 时必然顶满队列，于是一定会超时。
+                        // 泵线程空转只是浪费一个后台线程，不会让用户看到坏结果。
                         continue;
                     }
                     _proc.StandardInput.BaseStream.Write(frame, 0, frame.Length);

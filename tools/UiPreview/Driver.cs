@@ -67,7 +67,8 @@ namespace UiPreview
             int probeFail = LevelProbeCheck.Run();
 
             // 音画同步：丢一帧不是少张图，是音画从此永久错位。
-            int avFail = AvSyncCheck.Run();
+            int avFail = AvSyncCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
 
             // 回放前置校验：谱面一改就会在错的位置触发判定，且无任何报错。
             int validFail = ValidatorCheck.Run();
