@@ -7,6 +7,7 @@
 // ffmpeg.exe**，喂进真的 BGRA 帧，看每个容器组合是不是真能出片。
 // 参数写得再"看起来对"，不如让 ffmpeg 自己判一次。
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using SpectreReplay.Features.VideoRender;
@@ -379,15 +380,17 @@ namespace UiPreview
         ///    对照 Spectre 的 VideoEncoder：它同样是
         ///    "-f rawvideo -pixel_format rgba"。
         ///
-        /// ② **翻转只在 CleanCamera 模式加。** 整屏模式（ReadPixels 抓的是最终
-        ///    合成结果）方向本来就对，加了反而上下颠倒。之前是 CPU 侧两条路
-        ///    各翻各的，于是正反取决于选了哪个模式。
+        /// ② **两条取帧路都要 vflip。** 视频原点在左上（首行=顶部），而 GPU 纹理
+        ///    与 ReadPixels 交出来的行序都是自下而上（首行=底部）。不翻就是倒的。
+        ///    之前只给 CleanCamera 翻（照抄 Spectre 的 NeedsRowFlip 表达式），
+        ///    可 Spectre 的整屏走 ScreenCapture.CaptureScreenshotIntoRenderTexture，
+        ///    本模组整屏走 Texture2D.ReadPixels——底层不同，照抄就错。
         ///    对照 Spectre：NeedsRowFlip 显式传进编码器，拼成
         ///    (flipRows ? "vflip," : "") + ...（VideoEncoder.cs:347）。
         ///
-        /// **这条是拿真 ffmpeg 验的**：造一张纯红的素材，按真实参数过一遍，
-        /// 再抽一帧看它还是不是红。声明错了不会报错，只有颜色会错，
-        /// 而颜色只能这样验。
+        /// **颜色和方向都用真 ffmpeg 端到端验**：造一张纯红、一张上白下黑的
+        /// 裸帧，按真实参数过一遍，再抽回来看。声明错了不会报错，只有颜色和
+        /// 方向会错，而那两样只能这样验。
         /// </summary>
         private static int ColorAndFlip()
         {
@@ -491,15 +494,135 @@ namespace UiPreview
                 return 1;
             }
 
-            // 翻转：CleanCamera 要 vflip，整屏要 null
-            string flipOn = ArgOf(FfmpegArgs.Build(32, 32, 10, EncoderMode.Auto,
-                QualityMode.Standard, ContainerMode.Mp4, true, "x.mp4"), "-vf");
-            string flipOff = ArgOf(FfmpegArgs.Build(32, 32, 10, EncoderMode.Auto,
-                QualityMode.Standard, ContainerMode.Mp4, false, "x.mp4"), "-vf");
-            bool okFlip = flipOn == "vflip" && (flipOff == "null" || flipOff == null);
-            Console.WriteLine($"    {(okFlip ? "✓" : "✗")} ⑦ 翻转只给 CleanCamera"
-                + $"  → 开={flipOn ?? "(无)"} 关={flipOff ?? "(无)"}");
-            return okFlip ? 0 : 1;
+            // 翻转：端到端验"翻完之后顶部还是顶部"。
+            //
+            // 光断言"-vf 是 vflip"只能证明参数拼对了，证明不了**方向对**。
+            // 之前这里只查参数，而真实视频是倒的：NeedsRowFlip 对 WholeScreen
+            // 返回 false，于是整屏模式不加 vflip，而 ReadPixels 的行序是
+            // 自下而上的——参数完全正确，视频照样上下颠倒。
+            //
+            // 做法：造一张**上白下黑**的裸帧（模拟"渲染纹理第 0 行是画面底部"
+            // 的真实情形），用真实参数编码后再抽第 1 行：
+            //   · 顶部是白 → 没翻转（数据本来就是上白下黑）
+            //   · 顶部是黑 → 翻了，或者数据本来就是下白上黑且没翻
+            // 这里断言的是**经过编码器这一路之后，第一行仍然是白色**，
+            // 也就是"喂进去下白上白，出来上白下黑"。
+            return TopRowIsWhite();
+        }
+
+        /// <summary>
+        /// 上白下黑的帧经过真实编码参数后，第一行必须仍是白色。
+        ///
+        /// 喂进去的裸帧模拟 GPU 纹理的真实行序（**第 0 行是画面底部**），
+        /// 也就是底白顶黑。视频格式的原点在左上，所以正确的输出是顶白底黑。
+        /// 不加 vflip 的话，输出会与输入行序一致 → 顶黑底白 → 上下颠倒。
+        ///
+        /// 分辨率取 16x16：够小，且 yuv420p 的色度下采样不会把纯白弄脏。
+        /// </summary>
+        private static int TopRowIsWhite()
+        {
+            const int S = 16;
+            string dir = Path.Combine(Path.GetTempPath(), "uipreview");
+            Directory.CreateDirectory(dir);
+            string raw = Path.Combine(dir, "flip.rgba");
+            string outPath = Path.Combine(dir, "flip.mp4");
+            string back = Path.Combine(dir, "flip_back.rgba");
+            foreach (string f in new[] { raw, outPath, back })
+            {
+                if (File.Exists(f)) File.Delete(f);
+            }
+
+            // 底白顶黑：GPU 纹理的第 0 行是画面底部。
+            // 用 lavfi 的 "nullsrc + drawbox" 不够稳，直接手写字节最确定，
+            // 不用猜 filter 的 y 轴方向——猜错一次测试就成了假阳性。
+            var px = new byte[S * S * 4];
+            for (int y = 0; y < S; y++)
+            {
+                byte v = y < S / 2 ? (byte)0 : (byte)255;   // 前半黑、后半白
+                for (int x = 0; x < S; x++)
+                {
+                    int o = (y * S + x) * 4;
+                    px[o] = v; px[o + 1] = v; px[o + 2] = v; px[o + 3] = 255;
+                }
+            }
+            File.WriteAllBytes(raw, px);
+
+            // 用真实参数（NeedsRowFlip 现在恒为 true，所以传 true）
+            string[] build = FfmpegArgs.Build(S, S, 10, EncoderMode.Auto,
+                QualityMode.Standard, ContainerMode.Mp4, true, outPath);
+            string vf = ArgOf(build, "-vf");
+            bool declaredFlip = vf == "vflip";
+
+            // 真跑：raw 文件当输入，参数照抄被测函数产出的那一套
+            var psi = new ProcessStartInfo(FfmpegPath)
+            {
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            foreach (string a in Replace(rawInput: raw, build, outPath))
+            {
+                psi.ArgumentList.Add(a);
+            }
+            using (var p = Process.Start(psi))
+            {
+                p.ErrorDataReceived += (_, __) => { };
+                p.BeginErrorReadLine();
+                if (!p.WaitForExit(60000))
+                {
+                    try { p.Kill(); } catch { }
+                    Console.WriteLine("    ✗ ⑧ 翻转端到端：ffmpeg 超时");
+                    return 1;
+                }
+                if (p.ExitCode != 0 || !File.Exists(outPath))
+                {
+                    Console.WriteLine($"    ✗ ⑧ 翻转端到端：编码失败 退出码 {p.ExitCode}");
+                    return 1;
+                }
+            }
+
+            // 抽回第一行
+            if (Run(FfmpegPath, new[]
+            {
+                "-y", "-i", outPath, "-frames:v", "1",
+                "-f", "rawvideo", "-pix_fmt", "rgba", back,
+            }, 60000) != 0 || !File.Exists(back))
+            {
+                Console.WriteLine("    ✗ ⑧ 翻转端到端：解码失败");
+                return 1;
+            }
+            var b = File.ReadAllBytes(back);
+            if (b.Length < S * 4)
+            {
+                Console.WriteLine("    ✗ ⑧ 翻转端到端：解出的帧太小");
+                return 1;
+            }
+            // 第 0 行的第 0 个像素。视频第 0 行 = 画面顶部。
+            byte top = b[0], bottom = b[(S - 1) * S * 4];
+            bool upright = top > 200 && bottom < 60;
+            Console.WriteLine($"    {(upright && declaredFlip ? "✓" : "✗")} ⑧ 上下方向正确"
+                + $"  → 顶={top} 底={bottom}（-vf {vf}）"
+                + (upright ? "" : "  ← 视频是倒的"));
+            return upright && declaredFlip ? 0 : 1;
+        }
+
+        /// <summary>
+        /// 把 FfmpegArgs 的产出改成"从文件读入"的可执行形式。
+        ///
+        /// 不直接用它的输出：真实流程里帧是从 stdin 管道喂进来的，测试用
+        /// 文件当输入更省事，但 pipe:0 必须换成真实路径。
+        /// </summary>
+        private static string[] Replace(string rawInput, string[] build, string outPath)
+        {
+            var args = new List<string>(build.Length + 2);
+            for (int i = 0; i < build.Length; i++)
+            {
+                if (build[i] == "pipe:0") { args.Add(rawInput); continue; }
+                if (build[i] == outPath) continue;
+                args.Add(build[i]);
+            }
+            args.Add(outPath);
+            return args.ToArray();
         }
 
         private static string Describe(string p)

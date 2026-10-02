@@ -40,7 +40,13 @@ namespace SpectreReplay.Features.Recording
             {
                 // 掉出关卡（切菜单/切谱）也当成一次结束，否则会留下半截数据
                 KeyRecorder.End(Settings.AutoSave);
-                VideoRender.RenderService.OnLevelEnd();
+                // 渲染会话与录制是两条独立的生命周期：玩家关掉"启用录制"
+                // 但开着"启用渲染"时，掉出关卡仍然必须把视频收尾，
+                // 否则临时文件永远留着，界面一直显示"渲染中"。
+                if (VideoRender.LiveSession.IsRunning)
+                {
+                    VideoRender.RenderService.OnLevelEnd();
+                }
             }
         }
 

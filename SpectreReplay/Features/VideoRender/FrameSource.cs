@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
+using Object = UnityEngine.Object;      // 与 System.Object 撞名，显式绑定
 
 namespace SpectreReplay.Features.VideoRender
 {
@@ -33,13 +35,22 @@ namespace SpectreReplay.Features.VideoRender
         /// <summary>
         /// 编码时是否需要上下翻转。
         ///
-        /// 只有 CleanCamera 需要：渲染纹理原点在左下，视频原点在左上。
-        /// 整屏模式（ReadPixels 抓的是最终合成结果）方向本来就对。
+        /// **两条取帧路都需要翻转。** 视频的原点在左上（第一行是画面顶部），
+        /// 而 Unity 的 GPU 纹理与 ReadPixels 交出来的行序都是**自下而上**
+        /// （第 0 行是画面底部）。不翻就是上下颠倒。
         ///
-        /// 与 Spectre 的 VideoFrameSource.NeedsRowFlip 同名同义——它的注释
-        /// 写着"纹理行序与视频相反，编码时要翻转 / 方向与视频一致，无需翻转"。
+        /// 之前这里写的是 <c>_surface == FrameSurface.CleanCamera</c>，
+        /// 依据是 Spectre 的 <c>NeedsRowFlip</c> 同名表达式。但两者的
+        /// 整屏取帧方式根本不同：
+        ///   Spectre  WholeScreen 走 ScreenCapture.CaptureScreenshotIntoRenderTexture
+        ///   本模组 WholeScreen 走 Texture2D.ReadPixels
+        /// 后者拿到的像素行序与渲染纹理一致（自下而上），于是"不翻"就是错的。
+        /// 照抄那个表达式时没核对底层差异，视频就是倒着放的。
+        ///
+        /// 结论：**只要帧是从 GPU 纹理里读出来的就要翻**，与走哪条相机链无关。
+        /// 哪天若改回 ScreenCapture 方案，必须重新核对这一行。
         /// </summary>
-        internal bool NeedsRowFlip => _surface == FrameSurface.CleanCamera;
+        internal bool NeedsRowFlip => true;
 
         internal FrameSource(FrameSurface surface, int width, int height)
         {
@@ -207,44 +218,40 @@ namespace SpectreReplay.Features.VideoRender
     {
         internal static List<Camera> _scratch = new List<Camera>(4);
 
+        /// <summary>
+        /// 取游戏自己的相机链，而不是 GameObject.Find。
+        ///
+        /// **Why 不是 Find：名字对不上且找不全。** scrCamera.cs:17-25 的字段名是
+        /// Bgcamstatic / BGcam / camobj / Overlaycam，而场景里实际的 GameObject
+        /// 名字未必是 "BGCamstatic"——我原来按名字 Find，结果只捡到其中一部分，
+        /// 于是编辑器面板（Overlaycam 画的）漏进画面里。而 Find 找不到时静默
+        /// 退回 Camera.main，把"没找对"变成了"看起来能用但内容不对"。
+        ///
+        /// 照 Spectre（VideoFrameSource 的构造函数）：直接读
+        /// scrCamera.instance 上的三个相机字段。
+        ///
+        /// 注意**不包含 Overlaycam**：编辑器面板/暂停菜单是它画的，
+        /// CleanCamera 模式的意义就是不要它们。Spectre 也只用三个。
+        /// </summary>
         internal static List<Camera> Cameras()
         {
             var list = _scratch;
             list.Clear();
-            Camera bgStatic = null, bg = null, cam = null;
             try
             {
-                var go = GameObject.Find("BGCamstatic");
-                if (go != null)
+                // scrCamera 在**全局命名空间**（scrCamera.cs:6，class scrCamera）
+                // 且继承 ADOBase，不在 ADOFAI 命名空间里。
+                var cam = scrCamera.instance;
+                if (cam != null)
                 {
-                    bgStatic = go.GetComponent<Camera>();
-                }
-                go = GameObject.Find("BGCam");
-                if (go != null)
-                {
-                    bg = go.GetComponent<Camera>();
-                }
-                go = GameObject.Find("camobj");
-                if (go != null)
-                {
-                    cam = go.GetComponent<Camera>();
+                    if (cam.Bgcamstatic != null) list.Add(cam.Bgcamstatic);
+                    if (cam.BGcam != null) list.Add(cam.BGcam);
+                    if (cam.camobj != null) list.Add(cam.camobj);
                 }
             }
-            catch
+            catch (Exception)
             {
-                // 场景里没有这些名字：退回主相机
-            }
-            if (bgStatic != null)
-            {
-                list.Add(bgStatic);
-            }
-            if (bg != null)
-            {
-                list.Add(bg);
-            }
-            if (cam != null)
-            {
-                list.Add(cam);
+                // 关卡尚未生成相机：当作没有
             }
             if (list.Count == 0)
             {
