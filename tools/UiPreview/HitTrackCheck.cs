@@ -37,6 +37,7 @@ namespace UiPreview
             fail += ReplayHitIsByShape(projectRoot);
             fail += MarkFailIsScoped(projectRoot);
             fail += LightUpClampIsPaired(projectRoot);
+            fail += FreeroamIsSuppressed(projectRoot);
             return fail;
         }
 
@@ -506,6 +507,104 @@ namespace UiPreview
             }
             Console.WriteLine("    ✓ ⑦ LightUp 前后成对夹逼判定窗口，"
                 + "期间置 PerfectsOnly 以固定砖块颜色");
+            return 0;
+        }
+
+        /// <summary>
+        /// 回放期间必须禁掉游戏自己的 <c>scrController.UpdateFreeroam</c>（偏差 22）。
+        ///
+        /// 自由漫游区段结束的那一帧，游戏（scrController.cs:2817-2873）会一口气
+        /// 做完：淡出整段砖块、给行星挂 DOMove、锁输入、设无敌帧、移动相机，
+        /// 然后重写行星状态（:2861 lastHit、:2867 SetTargetExitAngle、
+        /// :2868 SetSnappedLastAngle、:2871 TweenCosmeticAngle），
+        /// 最后 :2872 <c>gameworld = true</c>、:2875 <c>curFreeRoamSection++</c>。
+        ///
+        /// **两处与状态轨打架：**
+        ///   ① 同一批字段被状态轨按录制数据写一遍，两边同帧各写一次，
+        ///      画面随机地跳一下/倒转一点；
+        ///   ② <c>gameworld = true</c>——全仓库只有三处赋值，它却是判定条、
+        ///      失败条、暂停菜单、社交按钮、相机跟随的一大片开关。
+        ///      一次误翻就把本该关闭的表现层全打开。
+        /// 而且 <c>curFreeRoamSection++</c> 是第二个真相源：区段号应由状态轨
+        /// 按录制数据推进（见 Pump 里的 section 对位）。
+        ///
+        /// 判据落在三处，缺一不可：
+        ///   · Prefix 挂在 UpdateFreeroam 上，判据是**下一条**命中的区段号
+        ///     与当前一致（照 Spectre Patch_Misc.cs:100-115）；
+        ///   · 拿不到区段号时**放行**而不是禁——探针失败不该把整个自由
+        ///     漫游段掐掉（砖块会永久停在起点）；
+        ///   · Pump 里的 section 对位仍在（禁掉游戏那份之后，唯一的推进者
+        ///     是我们；若这条也丢了，区段号永远不动）。
+        /// </summary>
+        private static int FreeroamIsSuppressed(string projectRoot)
+        {
+            string src = StripComments(Read(projectRoot,
+                "Features/Playback/HitStateReplayer.cs"));
+            if (src.Length == 0)
+            {
+                Console.WriteLine("    ✗ ⑧ 找不到 HitStateReplayer.cs");
+                return 1;
+            }
+            // ① Prefix 挂上了，且门控条件用的是下一条命中的区段号
+            if (!Regex.IsMatch(src,
+                @"UpdateFreeroam""\s*,\s*PatchKind\.Prefix"))
+            {
+                Console.WriteLine("    ✗ ⑧ UpdateFreeroam 没有被 Prefix 禁用"
+                    + "：自由漫游段结束那一帧游戏会重写行星状态并把 gameworld 翻成 true"
+                    + "（判定条/暂停菜单/相机跟随全被打开），"
+                    + "与状态轨同帧各写一次 → 画面随机跳");
+                return 1;
+            }
+            if (!Regex.IsMatch(src,
+                @"_hits\[Cursor\]\.FreeRoamSection\s*==\s*\w+\.curFreeRoamSection"))
+            {
+                // 这条判据会同时抓住两类改坏：恒放行（等于没禁）与
+                // 拿别的区段比（等于永禁）。**两种的报错必须分别说清**——
+                // 第一版只写"不是对位就禁"，恒放行时它报的是反方向的
+                // 后果，照着去查"掐掉自由漫游"会查半天查不出问题。
+                Console.WriteLine("    ✗ ⑧ 门控条件没有按「下一条命中的区段号 == 当前区段号」判"
+                    + "：不等于「区段号对得上就禁」。恒为假 = 从不禁"
+                    + "（游戏照旧翻 gameworld、画面随机跳）；恒为真 = 到处都禁"
+                    + "（砖块永久停在起点）。两种都是坏的，先看它到底返回了什么");
+                return 1;
+            }
+            // ② 判据本体：找不到区段号要放行，不能禁
+            int at = src.IndexOf("private static bool ShouldSuppressFreeroam(");
+            if (at < 0)
+            {
+                Console.WriteLine("    ✗ ⑧ 找不到门控实现 ShouldSuppressFreeroam");
+                return 1;
+            }
+            int brace = src.IndexOf('{', at);
+            int end = src.IndexOf("\n        }", brace);
+            if (end < 0)
+            {
+                Console.WriteLine("    ✗ ⑧ 找不到门控实现的方法体边界");
+                return 1;
+            }
+            string body = src.Substring(brace, end - brace);
+            if (!Regex.IsMatch(body, @"catch[\s\S]*?return\s+false"))
+            {
+                Console.WriteLine("    ✗ ⑧ 读不到区段号时不是放行："
+                    + "探针失败会把整个自由漫游段掐掉，砖块永久停在起点");
+                return 1;
+            }
+            if (!Regex.IsMatch(body, @"Cursor\s*>=\s*_hits\.Count[\s\S]*?return\s+false"))
+            {
+                Console.WriteLine("    ✗ ⑧ 游标越界时不是放行："
+                    + "回放收尾阶段会被继续掐住自由漫游");
+                return 1;
+            }
+            // ③ Pump 里的区段号对位仍在——禁掉游戏那份之后，
+            //    唯一该推进区段号的就是我们。
+            if (!Regex.IsMatch(src, @"\bsection\s*=\s*\w+\.curFreeRoamSection"))
+            {
+                Console.WriteLine("    ✗ ⑧ Pump 里不再按 curFreeRoamSection 对位："
+                    + "游戏那份 ++ 已被禁掉，没有推进者会卡在第 0 段");
+                return 1;
+            }
+            Console.WriteLine("    ✓ ⑧ 回放期间禁掉游戏自己的 UpdateFreeroam"
+                + "（探针失败则放行），区段号仍由状态轨对位推进");
             return 0;
         }
     }

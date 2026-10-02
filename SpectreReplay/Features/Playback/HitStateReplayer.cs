@@ -69,6 +69,75 @@ namespace SpectreReplay.Features.Playback
         internal static bool Locked => _locked;
 
         /// <summary>
+        /// 回放期间是否禁止游戏自己的 <c>scrController.UpdateFreeroam</c>。
+        /// 纯查询（不缓存）：前缀每帧问一次，判据就是"下一条命中的区段号
+        /// 与当前区段号一致"，直接现算比每帧同步一次更不容易走偏——
+        /// 不存在"上一帧算的答案留在这一帧"的情况。
+        /// </summary>
+        internal static bool FreeroamSuppressed
+            => ShouldSuppressFreeroam(scrController.instance);
+
+        /// <summary>
+        /// <c>scrController.UpdateFreeroam</c> 的前缀。
+        ///
+        /// ── 为什么必须禁 ─────────────────────────────────────────
+        /// 自由漫游区段结束的那一帧，游戏（scrController.cs:2817-2873）会
+        /// 一口气做完：淡出整段砖块、给行星挂 <c>DOMove</c>、锁输入、设无敌帧、
+        /// 移动相机，然后重写行星状态——
+        ///     <c>playerOne.lastHit = …</c>（:2861）
+        ///     <c>SetTargetExitAngle / SetSnappedLastAngle / Update_RefreshAngles</c>（:2867-2869）
+        ///     <c>TweenCosmeticAngle</c>（:2871）
+        ///     <c>gameworld = true</c>（:2872）
+        ///     <c>curFreeRoamSection++</c>（:2875）
+        ///
+        /// **这与状态轨直接冲突。** 状态轨正要按录制数据写回同一批字段
+        /// （见 <see cref="ReplayHit"/>），两边同帧各写一次，
+        /// 行星角度与相机落到谁的取值上取决于执行顺序——画面随机地
+        /// "跳一下"或"倒转一点"。
+        ///
+        /// 更麻烦的是 <c>gameworld = true</c>：全仓库只有三处赋值
+        /// （<c>scnGame</c> / <c>scnEditor</c> 进关时，和这里），而它的读点
+        /// 遍布判定条、失败条、暂停菜单、社交按钮、相机跟随——
+        /// 一次误翻会把一大片本该关闭的表现层全打开。这就是此前
+        /// "渲染里混进了编辑器状态"那类现象的机制。
+        ///
+        /// 禁掉整个方法同时也就禁掉了 <c>curFreeRoamSection++</c>——
+        /// 那正是我们要的：区段号由**状态轨**按录制数据推进（见
+        /// <see cref="Pump"/> 里的 <c>section</c> 对位），游戏自己那份
+        /// 是第二个真相源。
+        ///
+        /// 与 Spectre 的 Patch_UpdateFreeroam 同解（Patch_Misc.cs:100-115），
+        /// 门控条件也照抄：回放中且下一条命中的区段号与当前一致时禁掉。
+        /// </summary>
+        [GamePatch(typeof(scrController), "UpdateFreeroam", PatchKind.Prefix, "playback")]
+        private static bool FreeroamPrefix(scrController __instance)
+        {
+            return !ShouldSuppressFreeroam(__instance);
+        }
+
+        private static bool ShouldSuppressFreeroam(scrController controller)
+        {
+            if (controller == null || _hits == null || _hits.Count == 0)
+            {
+                return false;
+            }
+            if (Cursor >= _hits.Count)
+            {
+                return false;
+            }
+            try
+            {
+                return _hits[Cursor].FreeRoamSection == controller.curFreeRoamSection;
+            }
+            catch
+            {
+                // 读不到区段号就放行：让游戏跑原逻辑，别因为探针失败
+                // 把整个自由漫游段掐掉（那会让砖块永久停在起点）。
+                return false;
+            }
+        }
+
+        /// <summary>
         /// 每帧推进状态轨。由回放泵在**注入按键之后**调用。
         ///
         /// 返回 true 表示"本帧状态轨至少推进了一次"，

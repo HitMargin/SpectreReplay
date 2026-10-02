@@ -27,6 +27,10 @@
 //   · ValidatorCheck     回放前置校验的六条规则，含「取不到就放行」
 //   · HitTrackCheck      状态轨（双轨回放）的去重、互锁、绝不透传 HitTick
 //     （缺了它判定一旦判失败行星就不前进，表现为「回放卡住」且无日志）
+//   · ClockPinCheck      离线渲染钉的是 songposition_minusi 的**属性访问器**，
+//     不是 dspTime。改 dspTime 在 :852 之后才生效、下一帧又被 :779 覆盖回去，
+//     等于一帧都没钉住——而画面照出，只看「离线」这个名字
+//     根本看不出它其实按真实时间在跑
 //   · CompatCheck        版本兼容层**在真游戏程序集上**反射，确认选中的
 //     重载形状正确（源码级断言验不了"择路选对了"这件事）
 //   · FrameSourceCheck    帧来源的请求/回调配对：pending 只在真的排上
@@ -104,9 +108,16 @@ namespace UiPreview
             // 命中误差换算：链接真实源码，钉住 π / 60 / 1000 那几处换算。
             int timingFail = TimingCheck.Run();
 
+            // 离线渲染的时间钉扎：钉的是 songposition_minusi 的属性访问器。
+            // 原来改 dspTime 一帧都没钉住（:852 先算完、下一帧 :779 覆盖回来），
+            // 而画面照出、日志无异常——这类缺陷只能靠断言守。
+            int clockFail = ClockPinCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+
             int total = replayFail + ffFail + locFail + hardFail + patchFail
                 + levelFail + probeFail + avFail + validFail + hitFail
-                + compatFail + frameFail + guardFail + stateFail + timingFail;
+                + compatFail + frameFail + guardFail + stateFail + timingFail
+                + clockFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"

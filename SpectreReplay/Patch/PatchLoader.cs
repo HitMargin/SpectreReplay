@@ -38,6 +38,31 @@ namespace SpectreReplay.Patching
     }
 
     /// <summary>
+    /// 补丁挂在属性访问器上时，指定打哪一端。
+    /// </summary>
+    /// <remarks>
+    /// 属性补丁的 <c>MethodName</c> 写的是**属性名**（如 "songposition_minusi"），
+    /// 不是 <c>get_</c>/<c>set_</c>——后者由这里翻译。
+    ///
+    /// Harmony 的属性补丁有两处必须同时做才安全：
+    ///   Set（Prefix）——把游戏写进去的值换成钉扎值，否则 :852 那次赋值会
+    ///     把我们的值覆盖掉；
+    ///   Get（Postfix）——把所有读点（行星角度、判定、节拍）都换成钉扎值。
+    /// 只做 Get 的话，游戏每次写完真值、我们读的时候换掉，内部字段仍是
+    /// 真实时间，下一次 :858 的 <c>deltaSongPos = new - old</c> 会变成
+    /// "真实时间 - 钉扎时间" 的巨大跳变。
+    /// </remarks>
+    internal enum PropertyAccessor
+    {
+        /// <summary>按普通方法处理（不解释 MethodName 为属性名）。</summary>
+        None,
+        /// <summary>打 <c>get_X</c>，用 Postfix 改 <c>__result</c>。</summary>
+        Get,
+        /// <summary>打 <c>set_X</c>，用 Prefix 改 <c>ref value</c>。</summary>
+        Set,
+    }
+
+    /// <summary>
     /// 声明式补丁。挂在静态方法上：
     ///     [GamePatch(typeof(scrController), "UpdateInput", PatchKind.Prefix, "recording")]
     ///     static void Prefix() { ... }
@@ -55,6 +80,16 @@ namespace SpectreReplay.Patching
         internal PatchKind Kind;
         internal string Feature;      // 分组名，只用于日志与统计
         internal string[] ParameterTypes;   // 可选：重载消歧
+
+        /// <summary>
+        /// 是否把 <see cref="MethodName"/> 当作属性名处理（可选）。
+        /// 不写时为 <see cref="PropertyAccessor.None"/>，行为与之前完全一致。
+        ///
+        /// **必须是 public**：具名特性实参只能写 public 的可写字段
+        /// （CS0617）。其余字段之所以能是 internal，是因为它们全走
+        /// 构造参数，从来没被当具名实参用过。
+        /// </summary>
+        public PropertyAccessor Accessor;
 
         /// <summary>
         /// 补丁体异常是否由共享 Guard 吞掉（默认 true）。
@@ -542,6 +577,29 @@ namespace SpectreReplay.Patching
             }
             const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic
                 | BindingFlags.Instance | BindingFlags.Static;
+            // 属性补丁：MethodName 写的是属性名，这里翻译成访问器方法名。
+            // 优先按声明顺序匹配（GetProperties 的顺序即声明顺序），
+            // 属性名重复（new 屏蔽）时取第一个，和下面方法名的处理一致。
+            if (a.Accessor != PropertyAccessor.None)
+            {
+                string suffix = a.Accessor == PropertyAccessor.Get ? "get_" : "set_";
+                PropertyInfo p = null;
+                foreach (PropertyInfo pi in a.Target.GetProperties(flags))
+                {
+                    if (pi.Name == a.MethodName)
+                    {
+                        p = pi;
+                        break;
+                    }
+                }
+                if (p == null)
+                {
+                    return null;
+                }
+                MethodBase acc = a.Accessor == PropertyAccessor.Get
+                    ? p.GetGetMethod(true) : p.GetSetMethod(true);
+                return acc;
+            }
             Type[] want = null;
             if (a.ParameterTypes != null && a.ParameterTypes.Length > 0)
             {

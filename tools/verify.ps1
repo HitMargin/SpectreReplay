@@ -86,10 +86,22 @@ Step '部署一致性' {
     # 取最后一条**非空**输出：deploy.ps1 结尾是个空行，直接 -Last 1 会拿到
     # 它，看起来像"部署脚本啥也没干"。这里踩过一次，误以为部署失败。
     if (-not $SkipDeploy) {
-        $d = & powershell -NoProfile -ExecutionPolicy Bypass `
-            -File (Join-Path $root 'tools\deploy.ps1') -Config Release 2>&1 |
-            Where-Object { $_.ToString().Trim() } | Select-Object -Last 1
-        Write-Host ('  ' + $d)
+        # 部署失败（游戏在跑 = dll 被锁）**必须记成一项失败，不能让它抛出来**。
+        # 原先直接 & 调用，deploy.ps1 的 throw 会把整个闸门掀掉：
+        # 后面「Spectre 未被污染」整段不跑，末尾也没有汇总——
+        # 看上去像"闸门崩了"，而不是"部署这一项没过"。
+        # 游戏开着是常态，不是异常。
+        $d = ''
+        try {
+            $d = & powershell -NoProfile -ExecutionPolicy Bypass `
+                -File (Join-Path $root 'tools\deploy.ps1') -Config Release 2>&1 |
+                Where-Object { $_.ToString().Trim() } | Select-Object -Last 1
+            Write-Host ('  ' + $d)
+        } catch {
+            Write-Host ('  ✗ 部署失败：' + $_.Exception.Message) -ForegroundColor Red
+            Write-Host '    （游戏在跑时 dll 被锁，先关掉再部署）' -ForegroundColor DarkGray
+            $script:fail++
+        }
     }
     if (-not (Test-Path $built)) {
         Write-Host '  ✗ 构建产物不存在' -ForegroundColor Red

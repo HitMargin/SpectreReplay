@@ -10,15 +10,14 @@ namespace SpectreReplay.Features.VideoRender
     /// 离线渲染：重跑一遍回放，按目标帧率逐帧推进并逐帧捕获。
     ///
     /// ── 怎么钉住时间轴 ──────────────────────────────────────
-    /// 游戏的歌曲位置是 dspTime 的纯函数（scrConductor.cs:852）：
-    ///     songposition = (dspTime - dspTimeSong - calibration_i) * pitch - addoffset
-    /// 所以要"把时间停在第 i/fps 秒"，唯一需要改的就是 dspTime：
-    ///     dspTime = dspTimeSong + calibration_i + (i/fps + addoffset) / pitch
-    /// 挂在 scrConductor.Update 的 Postfix 上——必须晚于游戏自己那行
-    /// songposition 的赋值，早于本帧其余系统读取，否则钉不住或钉晚了。
+    /// 目标是让所有系统每帧读到同一个歌曲位置：第 i 帧恒为 i/fps 秒。
+    /// 钉点是 <c>scrConductor.songposition_minusi</c> 的**属性访问器**
+    /// （读写两端都换），不是 dspTime——原因见 Patch_OfflineClock 的注释：
+    /// 改 dspTime 既赶不上 :852 的赋值，又会被下一帧 :779 覆盖回去。
     ///
-    /// dspTime 同时被用来排程打击音效/hold 音（同样在 Update 里），
-    /// 钉住它之后这些音效也会按目标时间排，判定与视听一致。
+    /// dspTime 仍被游戏用来排程打击音效/hold 音，那些音效按真实时间发，
+    /// 但它们最终落到 AudioRenderer 混音总线，而混音总线的采样节奏
+    /// 由 AudioRenderer 自己按帧栅格消费，与画面帧号天然同构。
     ///
     /// ── 为什么这个模式还存在 ──────────────────────────────────
     /// 实时录制已经覆盖了"边玩边出"的场景。离线模式的价值是：
@@ -59,8 +58,18 @@ namespace SpectreReplay.Features.VideoRender
         /// <summary>钉住用的目标歌曲时间，由 PumpFrame 写入、补丁读取。</summary>
         internal static double PinnedSongPosition { get; set; }
 
-        /// <summary>是否为钉住生效中。补丁据此决定是否接管 dspTime。</summary>
+        /// <summary>是否为钉住生效中。补丁据此决定是否接管歌曲位置。</summary>
         internal static bool PinActive { get; private set; }
+
+        /// <summary>
+        /// 最近一次游戏**自己算出来的**真实歌曲位置（秒）。
+        ///
+        /// 钉住之后 <c>scrConductor.songposition_minusi</c> 的读端已被接管，
+        /// 从外面读到的一律是钉扎值，"歌放完了没有"这个判断就问不出来了。
+        /// 但写端收到的 <c>value</c> 正是游戏本帧按 dspTime 算出的真实位置
+        /// （scrConductor.cs:852），在写补丁里把它抄一份下来就够了。
+        /// </summary>
+        internal static double LastRealSongPosition { get; set; }
 
         // ── 启动 ────────────────────────────────────────────────
         internal static bool Start(string replayPath)
@@ -163,6 +172,9 @@ namespace SpectreReplay.Features.VideoRender
                 _cancelled = false;
                 PinActive = true;
                 PinnedSongPosition = 0.0;
+                // NaN = 还没收到过本帧真实位置。判据要能认出它：
+                // 给 0 会被当成"已经结束"，给 -1000 也会（一上来就收尾）。
+                LastRealSongPosition = double.NaN;
                 RenderStatus.Current = RenderStatus.State.Offline;
                 RenderStatus.FramesTotal = _totalFrames;
                 RenderStatus.FramesDone = 0;
@@ -199,18 +211,13 @@ namespace SpectreReplay.Features.VideoRender
                 Stop(false);
                 return;
             }
-            // 歌曲已经放完/失败：剩余帧数按"已到结尾"处理，直接收尾
-            double pos = 0;
-            try
-            {
-                pos = scrConductor.instance.songposition_minusi;
-            }
-            catch
-            {
-                Stop(false);
-                return;
-            }
-            if (pos < -0.5)
+            // 歌曲已经放完/失败：剩余帧数按"已到结尾"处理，直接收尾。
+            // 注意读的是 LastRealSongPosition 而不是 songposition_minusi——
+            // 后者的读端已被钉住补丁接管，读出来永远是钉扎值，
+            // 这个判断会永远为 false，渲染就收不了尾。
+            // NaN 表示这一帧游戏还没写过位置（还没起歌）：不是结束，继续。
+            double pos = OfflineSession.LastRealSongPosition;
+            if (!double.IsNaN(pos) && pos < -0.5)
             {
                 Stop(false);
                 return;
@@ -384,13 +391,37 @@ namespace SpectreReplay.Features.VideoRender
     }
 
     /// <summary>
-    /// 钉时间轴的补丁。挂在 conductor.Update 之后：
-    /// 那一行 songposition 的赋值已经跑完，本帧其余系统读到的就是钉好的值。
+    /// 钉时间轴的补丁。
+    ///
+    /// ── 为什么钉的是 songposition_minusi，而不是 dspTime ────────────
+    /// 游戏的歌曲位置是 dspTime 的纯函数（scrConductor.cs:852）：
+    ///     songposition = (dspTime - dspTimeSong - calibration_i) * pitch - addoffset
+    /// 看上去改 dspTime 就够了，但**那是无效的**，实测：
+    ///   · :852 那次赋值在 <c>Update</c> **内部**，我们挂在 Postfix 上，
+    ///     改 dspTime 时 songposition_minusi 已经算完了；
+    ///   · 下一帧 :779 <c>dspTime = AudioSettings.dspTime</c> 会把我们
+    ///     写的值原样覆盖回去。
+    /// 结果：改写 dspTime 一帧歌曲位置都没钉住，而且没有任何症状——
+    /// 画面照出，只是"离线"这件事其实是按真实时间在跑。
+    ///
+    /// 正确的钉点就是歌曲位置本身：**属性访问器**。
+    ///   Set（Prefix）把游戏写进去的值换成钉扎值，否则 :852 每次都覆盖；
+    ///   Get（Postfix）把所有读点（行星角度、判定、节拍、回放调度）换掉。
+    /// 两端都做是必须的：只做 Get 的话内部字段仍是真实时间，
+    /// :858 的 <c>deltaSongPos = new - old</c> 会变成"钉扎 - 真实"的巨大跳变。
+    ///
+    /// 与 Spectre 的 <c>VideoRenderPatches.cs</c> 同解。
+    ///
+    /// ── 剩下的一处真实时间读点 ──────────────────────────────────
+    /// <c>scrConductor.Update</c> 开头 :777-781 读 <c>AudioSettings.dspTime</c>
+    /// 并回写 dspTime，这是引擎原生值，我们不碰；它只影响 dspTime 字段本身
+    /// 与音效排程，而歌曲位置已经全部走钉扎值了。
     /// </summary>
     internal static class Patch_OfflineClock
     {
-        [GamePatch(typeof(scrConductor), "Update", PatchKind.Postfix, "render")]
-        private static void PinPostfix()
+        [GamePatch(typeof(scrConductor), "songposition_minusi", PatchKind.Postfix, "render",
+            Accessor = PropertyAccessor.Get)]
+        private static void PinGetPostfix(ref double __result)
         {
             if (!OfflineSession.PinActive)
             {
@@ -398,20 +429,38 @@ namespace SpectreReplay.Features.VideoRender
             }
             try
             {
-                var c = scrConductor.instance;
-                if (c == null || c.song == null)
+                if (scrConductor.instance != null && scrConductor.instance.song != null)
                 {
-                    return;
+                    __result = OfflineSession.PinnedSongPosition;
                 }
-                double pitch = c.song.pitch <= 0.0001 ? 1.0 : c.song.pitch;
-                // songposition = (dspTime - dspTimeSong - calibration_i) * pitch - addoffset
-                // 反解 dspTime。calibration_i 是静态字段（全局校准值），不是实例字段。
-                c.dspTime = c.dspTimeSong + scrConductor.calibration_i
-                    + (OfflineSession.PinnedSongPosition + c.addoffset) / pitch;
             }
             catch (Exception ex)
             {
-                UnityEngine.Debug.LogWarning("[SpectreReplay] 钉时间轴失败：" + ex.Message);
+                UnityEngine.Debug.LogWarning("[SpectreReplay] 钉歌曲位置（读）失败：" + ex.Message);
+            }
+        }
+
+        [GamePatch(typeof(scrConductor), "songposition_minusi", PatchKind.Prefix, "render",
+            Accessor = PropertyAccessor.Set)]
+        private static void PinSetPrefix(ref double value)
+        {
+            if (!OfflineSession.PinActive)
+            {
+                return;
+            }
+            try
+            {
+                if (scrConductor.instance != null && scrConductor.instance.song != null)
+                {
+                    // value 是游戏本帧算出的真实位置，先抄下来（结束判据要用），
+                    // 再换成钉扎值。
+                    OfflineSession.LastRealSongPosition = value;
+                    value = OfflineSession.PinnedSongPosition;
+                }
+            }
+            catch (Exception ex)
+            {
+                UnityEngine.Debug.LogWarning("[SpectreReplay] 钉歌曲位置（写）失败：" + ex.Message);
             }
         }
     }

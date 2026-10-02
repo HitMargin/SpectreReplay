@@ -835,7 +835,114 @@ Spectre 的做法是运行期按**名字**解析（`Enum.TryParse`），并额�
 
 ---
 
-## 五、按严重度逐项修复，已全部完成
+## 五、复核其余特性目录时又挖出来的（偏差 21 / 22）
+
+把 Spectre 剩下 12 个特性目录（Other / Editor / CustomJudge / JudgeBar /
+ResultsPlus / Perf / PlanetColors / CustomEvents / EffectRemover / QuartzUi）
+连同 89 处 `[SpectrePatch]` 挂点逐个核完。绝大多数判为**产品形态差异**
+（自定义判定、判定条美化、编辑器 UI、星球配色），不影响录制·回放·渲染的
+正确性，不补。但核出来两条真缺口：
+
+### 偏差 21：离线渲染的"钉时间轴"**从来没有生效过**
+
+这是本轮最重的一条。原判"我们钉了 dspTime，应该能钉住歌曲位置"，
+实测**一帧都没钉住**，而且没有任何症状。
+
+**为什么无效**（全部来自真程序集反编译 `scrConductor.cs:768-880`）：
+
+| 步骤 | 时机上发生了什么 | 后果 |
+|---|---|---|
+| `:852` | `songposition_minusi = (dspTime - dspTimeSong - calibration_i) * pitch - addoffset;` 在 `Update` **内部**算完 | 我们挂在 Postfix 上，改 dspTime 时这个值早已定死 |
+| `:779` | 下一帧 `dspTime = AudioSettings.dspTime` **无条件**覆盖 | 我们写进去的值根本留不住 |
+
+结果：画面照出，只是"离线"这件事其实按真实时间在跑。掉帧时音画就错开，
+而日志里什么都没有——**看上去在工作的缺陷最难发现**。
+
+**修法**：钉点换成 `scrConductor.songposition_minusi` 的**属性访问器**，
+读写两端都接管（`Accessor = PropertyAccessor.Get` 的 Postfix 改
+`__result`，`Accessor = PropertyAccessor.Set` 的 Prefix 改 `value`）。
+照 Spectre 的 `VideoRenderPatches.cs:16-38`。
+
+**为什么必须两端都做**：只做 Get 的话 `_songposition_minusi` 仍是真实时间，
+下一次 `:858` 的 `deltaSongPos = new - old` 会变成"钉扎 − 真实"的巨大跳变；
+只做 Set 的话所有读点仍拿真值。缺哪一端都退回"没钉住"。
+
+**顺带的坑**：`Update()` 的结束判据原来读 `songposition_minusi`。
+读端被接管之后读出来永远是钉扎值（i/fps，单调递增），`pos < -0.5`
+永远为假 → 歌曲早就放完了渲染还在跑。改成读写补丁里抄下来的真实位置，
+初值用 `double.NaN`（判据要能区分"还没收到"——给 0 会在第一帧就收尾）。
+
+**另一处值域差异**：Spectre 是 `anchorSongPosition + clock.Time * pitch`
+（**乘 pitch**），我们不乘。因为我们钉的是 `songposition_minusi` 本身，
+它与谱面里每个砖的 `entryTime` **同一域**（都已按 pitch 缩放过）；
+把 Spectre 的公式照搬过来会多乘一次，pitch=1.5 的曲子每帧都快 50%，
+而画面"看着基本对得上"。这条已钉成断言（MUT-P 验证）。
+
+为此给补丁框架加了 `PropertyAccessor { None, Get, Set }`：
+`GamePatchAttribute.Accessor` **必须是 public 字段**——具名特性实参只能写
+public 可写字段，写成 internal 会报 CS0617「不是有效的命名特性参数」，
+而那句话完全指不到访问级别这一层（已钉成断言，MUT-S 验证）。
+
+### 偏差 22：回放期间没禁游戏自己的 `UpdateFreeroam`
+
+Spectre 的 `Patch_UpdateFreeroam`（`Patch_Misc.cs:100-115`）我们完全没有，
+而状态轨又在按录制数据写同一批字段——两边同帧各写一次。
+
+**自由漫游段结束那一帧，游戏会一口气做完**（`scrController.cs:2817-2873`）：
+淡出整段砖块、给行星挂 `DOMove`、锁输入、设无敌帧、移动相机，
+然后重写行星状态：
+
+```
+:2861  playerOne.lastHit = …            ← 状态轨也要写
+:2867  SetTargetExitAngle(num4)         ← 状态轨也要写
+:2868  SetSnappedLastAngle(snapped)    ← 状态轨也要写
+:2871  TweenCosmeticAngle(…)
+:2872  gameworld = true                 ← 下面这条更麻烦
+:2875  curFreeRoamSection++
+```
+
+**`gameworld` 全仓库只有三处赋值**（`scnGame` / `scnEditor` 进关时，加这里），
+但读点遍布判定条、失败条、暂停菜单、社交按钮、相机跟随——
+一次误翻就把一大片本该关闭的表现层全打开。这就是此前
+"渲染里混进了编辑器状态"那类现象的机制来源。
+
+而且 `curFreeRoamSection++` 是**第二个真相源**：区段号应由状态轨按录制数据
+推进（`Pump` 里 `int section = controller.curFreeRoamSection` 对位）。
+
+**修法**：`HitStateReplayer` 加 `[GamePatch(typeof(scrController),
+"UpdateFreeroam", PatchKind.Prefix, "playback")]`，门控条件照抄 Spectre
+——下一条命中的区段号与当前一致就禁。**探针失败时放行而不是禁**：
+读不到区段号就把整个自由漫游段掐掉，砖块会永久停在起点。
+
+### 本轮的变异验证
+
+新增 `tools\mutate.ps1`（把修复退回旧样子、跑离屏套件、判红或报"这条断言
+是假的"、**自动还原**）。七条变异全部被检出：
+
+| 变异 | 内容 | 被哪条断言抓到 |
+|---|---|---|
+| MUT-O | 删掉 Set 侧（只留 Get） | ② 写端没被接管 |
+| MUT-P | 钉扎值照抄 Spectre 乘 pitch | ④ 钉扎值乘了 pitch |
+| MUT-Q | freeroam 门控恒放行 | ⑧ 门控条件不是"对位就禁" |
+| MUT-R | 结束判据改回读 `songposition_minusi` | ⑤ 结束判据读的是被钉住的读端 |
+| MUT-S | `Accessor` 改回 internal | ① 不是 public 字段 |
+| MUT-T | 先替换 value 之后才抄真值 | ② 没有在替换前抄 |
+| MUT-U | 门控改成 `区段+1 == 当前` | ⑧ 同 MUT-Q |
+| MUT-V | `GetGetMethod(true)` → `(false)` | ① ResolveTarget 没翻译属性名 |
+
+**顺带修掉闸门自身的一个毛病**：游戏在跑时 `deploy.ps1` 抛"dll 被锁"，
+原先那个 throw 会把整个 `verify.ps1` 掀掉——后面「Spectre 未被污染」
+整段不跑、末尾也没有汇总，看上去像「闸门崩了」而不是「部署这一项没过」。
+游戏开着是常态不是异常，已包成 try/catch 记成一项失败。
+
+**又一条自己的错断言**：⑧ 最初只写了"不是对位就禁"的单一后果，
+而 MUT-Q 是恒放行（从不禁），报出来的却是"会在无关的区段掐掉自由漫游"
+——**报错方向与实际相反，照着去查会查半天查不出问题**。
+已改成把两种坏法都写出来，并提示"先看它到底返回了什么"。
+
+---
+
+## 八、按严重度逐项修复，已全部完成
 
 按严重度逐项修复，每项补离线断言并做变异验证。**已全部完成**：
 
@@ -849,16 +956,19 @@ Spectre 的做法是运行期按**名字**解析（`Enum.TryParse`），并额�
 8. ~~偏差 10（补丁框架：异常兜底 + Transpiler 分派）~~ ✅
 9. ~~状态码 3/5/6（原注释本身就错了）~~ ✅
 10. ~~偏差 20（命中误差分析，清单之外发现）~~ ✅
+11. ~~偏差 21（离线渲染时间钉扎从未生效）~~ ✅
+12. ~~偏差 22（回放期未禁 `UpdateFreeroam`）~~ ✅
 
 ---
 
-## 六、这一轮改了什么、没改什么
+## 九、这一轮改了什么、没改什么
 
 本轮**没有**新增功能，全是"照着 Spectre 逐项比对之后"的修正。三类：
 
 **一类是补缺口**：状态轨（偏差 1+1b）、回放期状态夹逼（19）、
 版本兼容层（15）、`-vf` 三段式（8）、中间文件扩展名（9）、
-补丁异常兜底（10）、结算状态判据。
+补丁异常兜底（10）、结算状态判据、离线渲染时间钉扎（21）、
+回放期禁 `UpdateFreeroam`（22）。
 
 **一类是复核后**减法**：编码器看门狗（7）——原判断"缺三层"是错的，
 真正兜住卡死的那层我们早已有，而泵线程里那个看门狗会在收尾阶段
@@ -890,6 +1000,8 @@ Spectre 的做法是运行期按**名字**解析（`Enum.TryParse`），并额�
 | 10 补丁框架 | ✅ `b277ffc`（按需补） |
 | 状态码 3/5/6 | ✅ `1dfb6b7` |
 | 20 命中误差分析 | ✅ 本轮 |
+| 21 离线渲染时间钉扎 | ✅ 本轮（修的是"一直没生效"） |
+| 22 回放期未禁 UpdateFreeroam | ✅ 本轮 |
 | 3 / 14 音频取 clip、校验 | ✅ 更早轮次 |
 | 16 / 17 哈希陷阱 | ✅ 已在 `FfmpegArgs` 侧按不变文化处理 |
 | 2 / 3a / 4 / 5 / 18 | ✅ 不是缺陷，见各节说明 |
