@@ -85,6 +85,7 @@ $LOADER  = 'Patch\PatchLoader.cs'
 $LIFE    = 'Features\Playback\Patch_Lifecycle.cs'
 $ENGINE  = 'Features\Playback\PlaybackEngine.cs'
 $HITREC  = 'Features\Recording\Patch_HitRecord.cs'
+$CLAMPS  = 'Features\Playback\PlaybackClamps.cs'
 
 switch ($Which) {
     # 写端（Set 侧）整个删掉，只留读端 —— 上一版的"只做一半"
@@ -293,6 +294,85 @@ switch ($Which) {
         Backup $LIFE
         ReplaceExact $LIFE 'typeof(scrUIController), "WipeToBlack", PatchKind.Prefix' `
             'typeof(scrUIController), "WipeToBlackXXX", PatchKind.Prefix   // MUT-AE'
+    }
+    # ── 偏差 24：回放期的死亡屏障 ──────────────────────────────
+    # 屏障整个没了 —— 这是**修好之前**的样子：hitbox 死亡绕过 noFail，
+    # 直接 ChangeState(States.Fail) + song.Stop()，成片断在一砖。
+    # 必须整条删掉（连特性一起），只掏空方法体会被断言 ② 的
+    # 「方法体必须紧跟特性」顶住，等于没验到想验的东西。
+    'MUT-AF' {
+        Backup $CLAMPS
+        $lines = Lines $CLAMPS
+        $hit = $lines | Select-String -SimpleMatch '[GamePatch(typeof(scrPlayer), "Die"' |
+            Select-Object -First 1
+        if (-not $hit) { throw '找不到 scrPlayer.Die 屏障' }
+        $at = $hit.LineNumber - 1
+        $depth = 0
+        $end = $at
+        $seen = $false
+        for ($i = $at; $i -lt $lines.Count; $i++) {
+            $depth += ([regex]::Matches($lines[$i], '\{')).Count
+            $depth -= ([regex]::Matches($lines[$i], '\}')).Count
+            if ($depth -le 0) { $seen = $true; $end = $i; break }
+        }
+        if (-not $seen) { throw '屏障的方法体括号没配平' }
+        SetLines $CLAMPS ($lines[0..($at - 1)] + $lines[($end + 1)..($lines.Count - 1)])
+    }
+    # 判据反了：只判 !hitbox，漏掉 IsPlaying —— 玩家**正常游玩**时
+    # 打错键的失败判定也被跳过（回放不在，屏障照样生效）。
+    # 这一条钉的是"判据里的 IsPlaying 那一半"，② 要求两半都在。
+    'MUT-AG' {
+        Backup $CLAMPS
+        ReplaceExact $CLAMPS 'if (!PlaybackEngine.IsPlaying || !hitbox)' `
+            'if (!hitbox)'
+    }
+    # 只判 IsPlaying，漏掉 !hitbox —— 命中/失败判定的普通失败
+    # （打错键、判定窗外）整个消失，回放里的判定窗不再对应录制那一档。
+    'MUT-AH' {
+        Backup $CLAMPS
+        ReplaceExact $CLAMPS 'if (!PlaybackEngine.IsPlaying || !hitbox)' `
+            'if (!PlaybackEngine.IsPlaying)'
+    }
+    # 挡下之后返回 true（让 Die 照跑）—— 屏障只写了日志，
+    # 状态机照走，成片还是断在同一砖。对照 ② 的尾巴判据。
+    # 定位必须**在屏障的方法体内**：MarkFailPrefix 里也有一处
+    # `return false`，先撞上的会是它（第一版正是这样——改到了 :45，
+    # 闸门反而全绿，等于验了个寂寞）。
+    'MUT-AI' {
+        Backup $CLAMPS
+        $lines = Lines $CLAMPS
+        $needle = '[GamePatch(typeof(scrPlayer), "Die"'
+        $start = ($lines | Select-String -SimpleMatch $needle | Select-Object -First 1)
+        if (-not $start) { throw '找不到屏障' }
+        $out = @()
+        $done = $false
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ((-not $done) -and $i -gt $start.LineNumber - 1 -and
+                $lines[$i].Trim() -eq 'return false;') {
+                $out += ($lines[$i] -replace 'return false;',
+                    'return true;   // MUT-AI：只记了日志，让 Die 照跑')
+                $done = $true
+                continue
+            }
+            $out += $lines[$i]
+        }
+        if (-not $done) { throw '屏障里没有 return false，MUT-AI 打偏了' }
+        SetLines $CLAMPS $out
+    }
+    # 顺手把行星爆炸也拦了 —— 屏障的对象写错成 scrPlanet.Die，
+    # 命中链路里 scrPlayer.Hit 走到的那次爆炸就永远不出现。对照 ⑤。
+    'MUT-AJ' {
+        Backup $CLAMPS
+        ReplaceExact $CLAMPS 'typeof(scrPlayer), "Die", PatchKind.Prefix, "playback"' `
+            'typeof(scrPlanet), "Die", PatchKind.Prefix, "playback"'
+    }
+    # IgnoreMarkFail 的 finally 没了 —— MarkFailScope 里 body() 抛异常时
+    # 标志永久留在 true，之后玩家整局看不到 miss 指示器。对照 ④。
+    # 只匹配代码行（`try {` 的 `finally` 独占一行且缩进 12）：
+    # `finally` 那个词在文档注释里也出现过。
+    'MUT-AK' {
+        Backup $CLAMPS
+        ReplaceExact $CLAMPS '            finally' '            // MUT-AK: 忘了还原'
     }
     default { throw "未知变异 $Which" }
 }

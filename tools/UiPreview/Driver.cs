@@ -45,6 +45,11 @@
 //     → false → 补丁一个都不挂且不报失败）、四条共用一个入口。
 //     Stop() 原先只有界面按钮一个可靠调用点——玩家不点就一直不停，
 //     noFail 与判定窗口会带着录制时那档继续生效
+//   · BarrierCheck         回放期的死亡屏障：noFail 挡不住 hitbox 死亡
+//     （`scrPlayer.Die` 里那圈 `if (!hitbox)` 保护整圈包在 if 内），
+//     激光/尖刺/装饰物 8 个调用点走这条路，掉进去就 ChangeState(Fail)
+//     + song.Stop()，成片断在一砖且日志无异常。判据要钉住"只拦 hitbox
+//     且只在回放期"，也要钉住第 4 形参真名叫 `hitbox`（前缀绑具名实参）
 //
 // 界面本身只能靠游戏里开一次 UMM 窗口看。这是 GUILayout 的代价，
 // 换来的是不用再维护 Canvas/EventSystem/ScrollRect/TMP 那一整套。
@@ -125,10 +130,15 @@ namespace UiPreview
             int lifecycleFail = LifecycleCheck.Run(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
 
+            // 回放期的死亡屏障：hitbox 死亡绕过 noFail，成片会断在一砖
+            // 且日志无异常。有一条真的去反射游戏程序集核对形参名。
+            int barrierFail = BarrierCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+
             int total = replayFail + ffFail + locFail + hardFail + patchFail
                 + levelFail + probeFail + avFail + validFail + hitFail
                 + compatFail + frameFail + guardFail + stateFail + timingFail
-                + clockFail + lifecycleFail;
+                + clockFail + lifecycleFail + barrierFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"

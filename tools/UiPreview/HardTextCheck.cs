@@ -46,6 +46,11 @@ namespace UiPreview
             // 只有排查者看得到，而排查者看的就是日志）。
             { "GameCompat.cs",
                 "兼容层的 WarnOnce 告警与版本摘要只写 Player.log / UMM 窗口" },
+            // PlaybackClamps 的挡命中框告警走的是 Player.log：这条在正常游玩
+            // 里**不该**出现，出现即说明有一关真的用到了激光/尖刺，值得查录制。
+            // 玩家在界面上看不到，也不需要看到——它不是他能处理的。
+            { "PlaybackClamps.cs",
+                "回放期挡下激光/尖刺等 hitbox 死亡的告警只写 Player.log" },
         };
 
         internal static int Run(string projectRoot)
