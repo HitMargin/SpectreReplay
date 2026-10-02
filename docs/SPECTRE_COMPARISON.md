@@ -152,22 +152,19 @@ Spectre 根本不需要面对的一整类问题：
   `ProbeLevel` 的三条判据都会在加载中间态失效）；
 - 音画同步只能靠栅格对齐近似，达不到 Spectre 的逐帧确定性。
 
-### 偏差 5：音频来源——Spectre 用 `AudioRenderer`，不是取 clip
+### 偏差 3：音频来源——~~取 clip~~ → ✅ 已改为 AudioRenderer
 
-`VideoAudioTrack.cs:12` 用 Unity 的 **`AudioRenderer`**（`OnAudioFilterRead` 回调）
-抓**游戏最终混音总线**——歌曲、打击音、hold 音、键盘录音全在内（`:8-9`）。
-逐帧 `AudioRenderer.GetSampleCountForCaptureFrame()` + `Render(NativeArray<float>)`
-（`:71-84`），直接写 float32 WAV。
+**原状**：从 `scrConductor.song.clip` 取采样，日志恒为
+`音频：clip 不可用（clip=null samples=0 frequency=0）`。
 
-**SpectreReplay 试图从 `scrConductor.song.clip` 取采样**
-（`LiveSession.CurrentSongSource()` → `AudioTrackRecorder.Bind`），
-实测日志恒为 `clip 不可用（clip=null samples=0 frequency=0）`。
+**根因不是时机，是原理**：ADOFAI 的歌曲是流式播放的，AudioSource 上
+`clip` 恒为 null。
 
-根因：**流式播放的 AudioSource 上 `clip` 本来就是 null**——取 clip 这条路
-在原理上就不成立，不是取早了。
+**已修**：改用引擎内建的 `AudioRenderer` 抓最终混音总线
+（类型在 `UnityEngine.AudioModule.dll`，反编译的 Assembly-CSharp 里 grep 不到）。
+配套改动见提交 `39c4666`：float32 WAV + 4GB 长度钳位 + 分桶缓冲 + 静默自愈。
 
-顺带：Spectre 的静默自愈机制（`:140-168`）——每静默满 1 秒重启一次
-`AudioRenderer`，预算 3 次；预算耗尽且再静默 5 秒才判死。
+闸门新增一条断言：手写 float32 WAV 走真实合流参数，验产物确实含音轨。
 
 ### 偏差 6：帧序保证——GPU 回读必须只看队首
 

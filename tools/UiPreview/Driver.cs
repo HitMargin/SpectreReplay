@@ -24,6 +24,7 @@
 //   · LevelProbeCheck   「在不在关卡里」的判据选对了没有
 //     （这个判据错了三次，每次都把功能整个废掉）
 //   · AvSyncCheck       音画同步栅格：丢帧会让两者永久错位
+//   · ValidatorCheck     回放前置校验的六条规则，含「取不到就放行」
 //
 // 界面本身只能靠游戏里开一次 UMM 窗口看。这是 GUILayout 的代价，
 // 换来的是不用再维护 Canvas/EventSystem/ScrollRect/TMP 那一整套。
@@ -64,8 +65,11 @@ namespace UiPreview
             // 音画同步：丢一帧不是少张图，是音画从此永久错位。
             int avFail = AvSyncCheck.Run();
 
+            // 回放前置校验：谱面一改就会在错的位置触发判定，且无任何报错。
+            int validFail = ValidatorCheck.Run();
+
             int total = replayFail + ffFail + locFail + hardFail + patchFail
-                + levelFail + probeFail + avFail;
+                + levelFail + probeFail + avFail + validFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"

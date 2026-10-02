@@ -79,6 +79,16 @@ namespace SpectreReplay.Features.Recording
             // 收尾再差分一次：最后一次按键到通关之间的按键也要记进去。
             Capture(scrConductor.instance);
             Current.Length = SongPositionOfNow();
+            // 终点地板序号：必须在收尾时取（通关那一刻 currentSeqID 才是终点）。
+            // 取不到就留 -1，校验器会据此判定「非完整局」并要求精确匹配起点。
+            try
+            {
+                Current.EndTile = scrController.instance.currentSeqID;
+            }
+            catch
+            {
+                Current.EndTile = -1;
+            }
             if (Current.IsEmpty || !autoSave)
             {
                 // 空关（一个键都没按）也会走到这里。以前直接返回 null、
@@ -133,6 +143,97 @@ namespace SpectreReplay.Features.Recording
                 ?? Probe(floor, "level", "name") ?? "";
             d.DifficultyId = Probe(floor, "speedToggle", "ID") ?? "";
             d.Mapper = Probe(floor, "speedToggle", "author") ?? "";
+            CaptureValidationFields(d);
+        }
+
+        /// <summary>
+        /// 采集回放前校验所需的元数据。
+        ///
+        /// 这些与上面的展示元数据不同：**取不到就不填，绝不填假值**。
+        /// 校验器看到空值会跳过对应检查（而不是拿一个错的哈希去和谱面比对，
+        /// 那种"永远不相等"的假失败比不校验更糟——用户会以为回放坏了）。
+        ///
+        /// 每项都包 try/catch：录制开始阶段游戏对象可能还在初始化，
+        /// 抛异常会连带把整次录制掐掉。
+        /// </summary>
+        private static void CaptureValidationFields(ReplayData d)
+        {
+            try
+            {
+                // 场景名：编辑器和正式关卡是两个场景，回放逻辑不同
+                d.SceneName = UnityEngine.SceneManagement.SceneManager
+                    .GetActiveScene().name;
+            }
+            catch { }
+
+            try
+            {
+                d.JudgeMode = GCS.difficulty.ToString();
+                d.StartTile = GCS.checkpointNum;
+                d.InternalLevelName = GCS.internalLevelName ?? "";
+                d.IfNoFail = scrController.instance != null
+                    && scrController.instance.noFail;
+                d.SpeedTrailMode = GCS.speedTrialMode || GCS.practiceMode;
+                d.SpeedTrail = d.SpeedTrailMode
+                    ? (double)GCS.currentSpeedTrial : 1.0;
+                d.IsOfficialLevel = ADOBase.isOfficialLevel;
+            }
+            catch { }
+
+            // 谱面数据只在正式关卡里有；编辑器内 scnGame 为 null
+            try
+            {
+                var game = scnGame.instance;
+                if (game != null && game.levelData != null)
+                {
+                    var ld = game.levelData;
+                    d.Pitch = ld.pitch;
+                    d.Bpm = ld.bpm;
+                    d.FloorHash = ComputeFloorHash(ld);
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// 谱面角度序列的指纹。
+        ///
+        /// **这是整套校验里最关键的一项**：回放按地板序号定位，谱面改了之后
+        /// 同一个序号对应的可能是完全不同的砖——回放会在错误的位置触发判定，
+        /// 而且**没有任何报错**。
+        ///
+        /// 官方关卡恒返回 0（官方谱不可改，Spectre 也这么做，
+        /// 见 Patch_Lifecycle.cs:157-159）。
+        ///
+        /// 取不到角度数据时返回 int.MinValue —— 一个**永远不可能匹配**的哨兵值。
+        /// 用它而不是 0：0 是官方关卡的合法哈希，返回 0 会让
+        /// 「取不到数据」伪装成「官方谱」，从而跳过了本该做的校验。
+        /// 校验器见到 int.MinValue 会跳过检查。
+        /// </summary>
+        private static int ComputeFloorHash(ADOFAI.LevelData ld)
+        {
+            if (ADOBase.isOfficialLevel)
+            {
+                return 0;
+            }
+            var angles = ld.angleData;
+            if (angles == null || angles.Count == 0)
+            {
+                return int.MinValue;     // 取不到：让校验器跳过，而不是误判
+            }
+            // 角度归一化到 [0,360) 再哈希：0 与 360 是同一块砖的两种表示，
+            // 不归一化会让同一张谱面算出两个哈希。
+            // 用 InvariantCulture 格式化：小数点写成逗号的区域设置会算出
+            // 完全不同的字符串，进而误报"谱面不匹配"（Spectre 的同款教训，
+            // 见 Patch_Lifecycle.cs:332-336）。
+            var sb = new System.Text.StringBuilder(angles.Count * 8);
+            for (int i = 0; i < angles.Count; i++)
+            {
+                float a = angles[i];
+                float norm = a >= 0f ? a % 360f : 360f - (-a % 360f);
+                sb.Append(norm.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
+            return sb.ToString().GetHashCode();
         }
 
         /// <summary>按 "持有者字段 → 目标字段" 两级反射取值，任一级缺失返回 null。</summary>

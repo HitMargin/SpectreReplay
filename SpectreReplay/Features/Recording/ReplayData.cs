@@ -38,6 +38,67 @@ namespace SpectreReplay.Features.Recording
         internal string DifficultyName = "";
         internal string Mapper = "";
 
+        // ── 校验用元数据（照 Spectre 的 ReplayKeys 分组）────────────
+        //
+        // 这些字段**不用于展示，只用于回放前的完整性校验**。
+        // 没有它们就无法判断「这个回放是不是在这个谱面、这个难度、
+        // 这个速度下录的」——而谱面一改，同一个地板序号就对应不同的砖，
+        // 回放会在错误的位置触发判定，且没有任何报错。
+        //
+        // Spectre 把这些存在弱类型字典里（LegacyReplayData.strings/ints/…），
+        // 好处是能承载「本版本根本没有的字段」。这里功能少，用强类型字段，
+        // 换来编译期检查与更短的代码。
+
+        /// <summary>录制时的场景名（scnGame / scnEditor）。</summary>
+        internal string SceneName = "";
+
+        /// <summary>判定难度名（GCS.difficulty.ToString()）。</summary>
+        internal string JudgeMode = "";
+
+        /// <summary>官方关卡的内置关卡名（内部关卡才非空）。</summary>
+        internal string InternalLevelName = "";
+
+        /// <summary>是否官方关卡。</summary>
+        internal bool IsOfficialLevel;
+
+        /// <summary>起点的地板序号（GCS.checkpointNum）。</summary>
+        internal int StartTile;
+
+        /// <summary>终点的地板序号（通关时的 currentSeqID）；未通关为 -1。</summary>
+        internal int EndTile = -1;
+
+        /// <summary>
+        /// 谱面角度序列的指纹。
+        ///
+        /// **int.MinValue 表示"没记到"**，校验器见到就跳过谱面检查。
+        /// 官方关卡记 0（合法值，与 Spectre 一致，见 Patch_Lifecycle.cs:157-159）。
+        /// 默认值不给 0：0 是官方谱的合法指纹，用它当默认值会让
+        /// 「没记到」伪装成「官方谱」，从而静默跳过了本该做的校验。
+        /// </summary>
+        internal int FloorHash = int.MinValue;
+
+        /// <summary>谱面移调（半音）。</summary>
+        internal int Pitch;
+
+        /// <summary>谱面 BPM。</summary>
+        internal double Bpm;
+
+        /// <summary>录制时是否开了 noFail。</summary>
+        internal bool IfNoFail;
+
+        /// <summary>
+        /// 倍速模式下的实际速度倍率。
+        ///
+        /// **<= 0 表示"没记到"**，校验器见到就跳过倍速检查。
+        /// 默认值不给 1.0：1.0 是一个合法的真实倍率，用它当"没记到"的默认值，
+        /// 会让「没记到」与「确实是 1 倍速」无法区分——
+        /// 前者该放行，后者该拦。
+        /// </summary>
+        internal double SpeedTrail;
+
+        /// <summary>是否处于倍速模式。</summary>
+        internal bool SpeedTrailMode;
+
         /// <summary>通关时间（歌曲时间轴上的终点）。</summary>
         internal double Length;
 
@@ -65,7 +126,7 @@ namespace SpectreReplay.Features.Recording
     internal static class ReplayFile
     {
         private const uint Magic = 0x53505250;   // "SRPP"
-        private const int Version = 1;
+        private const int Version = 2;
 
         internal static void Write(string path, ReplayData data)
         {
@@ -83,6 +144,23 @@ namespace SpectreReplay.Features.Recording
                 WriteStr(w, data.DifficultyName);
                 WriteStr(w, data.Mapper);
                 w.Write(data.Length);
+
+                // v2：校验用元数据。放在 Keys 之前，且**整体按版本号读写**——
+                // 只按字段逐个加会让 v1 文件从这里起整体错位，
+                // 症状是「回放只推进一格就卡住」且没有任何报错。
+                // 照 Spectre ReplayDecoder 的教训（段版本必须显式上界校验）。
+                WriteStr(w, data.SceneName);
+                WriteStr(w, data.JudgeMode);
+                WriteStr(w, data.InternalLevelName);
+                w.Write(data.IsOfficialLevel);
+                w.Write(data.StartTile);
+                w.Write(data.EndTile);
+                w.Write(data.FloorHash);
+                w.Write(data.Pitch);
+                w.Write(data.Bpm);
+                w.Write(data.IfNoFail);
+                w.Write(data.SpeedTrail);
+                w.Write(data.SpeedTrailMode);
 
                 foreach (var kv in data.Margins)
                 {
@@ -141,6 +219,24 @@ namespace SpectreReplay.Features.Recording
                 d.DifficultyName = ReadStr(r);
                 d.Mapper = ReadStr(r);
                 d.Length = r.ReadDouble();
+                // v2 才有的校验元数据。v1 文件没有这些字段，
+                // 读完 Length 之后紧接的就是 Margins 段——
+                // 所以必须按版本号整体跳过，**不能逐字段判存在性**。
+                if (version >= 2)
+                {
+                    d.SceneName = ReadStr(r);
+                    d.JudgeMode = ReadStr(r);
+                    d.InternalLevelName = ReadStr(r);
+                    d.IsOfficialLevel = r.ReadBoolean();
+                    d.StartTile = r.ReadInt32();
+                    d.EndTile = r.ReadInt32();
+                    d.FloorHash = r.ReadInt32();
+                    d.Pitch = r.ReadInt32();
+                    d.Bpm = r.ReadDouble();
+                    d.IfNoFail = r.ReadBoolean();
+                    d.SpeedTrail = r.ReadDouble();
+                    d.SpeedTrailMode = r.ReadBoolean();
+                }
                 for (int i = 0; i < marginKinds; i++)
                 {
                     d.Margins[ReadStr(r)] = r.ReadInt32();

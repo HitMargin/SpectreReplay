@@ -143,12 +143,24 @@ namespace SpectreReplay.Features.Playback
         /// 游标必须归零：这时候关卡刚重开，songposition 才回到开头。
         /// 不归零的话游标还停在"载入后那次冲到的末尾"，看起来就是
         /// "播了，但一个键都没放"。
+        ///
+        /// 校验放在这里而不是 Load：Load 时玩家可能还没进关卡，
+        /// 那时谱面、难度、起点都取不到，校验只会误报。
+        /// 此刻这些值全部就绪，才是校验的时机。
         /// </summary>
         internal static void Begin()
         {
             Pending = false;
             if (_data == null)
             {
+                return;
+            }
+            if (!PlaybackValidator.Validate(_data))
+            {
+                // 校验不通过：卸载数据。Pending 已在上面清掉，
+                // 所以用户修好东西重新载入即可，不必重启关卡。
+                Debug.Log("[SpectreReplay] 回放被校验拦下，已取消待播状态");
+                Stop();
                 return;
             }
             _cursor = 0;
