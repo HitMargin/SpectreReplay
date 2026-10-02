@@ -358,10 +358,23 @@ namespace SpectreReplay.Features.VideoRender
             {
                 var copy = _pool.Rent();
                 System.Buffer.BlockCopy(_lastFrame, 0, copy, 0, _lastFrame.Length);
-                _encoder.Submit(copy);
-                _duplicated++;
-                _frameIndex++;
-                PushAudioForFrame();
+                if (_encoder.Submit(copy))
+                {
+                    _duplicated++;
+                    _frameIndex++;
+                    PushAudioForFrame();
+                }
+                else
+                {
+                    // 入队失败（ffmpeg 退出或等待超时）：这一帧没有进编码器，
+                    // 帧序号与音频栅格都不能动——否则音画从此错位。
+                    // 下一帧会重试，真正放弃交给 Finish 的看门狗与退出码判定。
+                    _pool.Return(copy);
+                    Debug.LogError("[SpectreReplay] 编码器已停止接收帧，本次录制中止："
+                        + _encoder.Error);
+                    StopCapture();
+                    return;
+                }
             }
             else
             {
@@ -385,7 +398,15 @@ namespace SpectreReplay.Features.VideoRender
                 return;
             }
             _lastFrame = pixels;
-            _encoder.Submit(pixels);
+            // Submit 失败 = 这一帧没能进编码器。帧序号与音频栅格都不能推进，
+            // 否则视频会缺一张对应的图、音频却照常前进 → 永久错位。
+            if (!_encoder.Submit(pixels))
+            {
+                Debug.LogError("[SpectreReplay] 编码器已停止接收帧，本次录制中止："
+                    + _encoder.Error);
+                StopCapture();
+                return;
+            }
             _frameIndex++;
             PushAudioForFrame();
             UpdateStatus();

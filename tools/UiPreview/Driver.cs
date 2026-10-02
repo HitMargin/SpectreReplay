@@ -23,6 +23,7 @@
 //     （「刚开始玩就显示渲染完成」出现过两轮，根因各不相同）
 //   · LevelProbeCheck   「在不在关卡里」的判据选对了没有
 //     （这个判据错了三次，每次都把功能整个废掉）
+//   · AvSyncCheck       音画同步栅格：丢帧会让两者永久错位
 //
 // 界面本身只能靠游戏里开一次 UMM 窗口看。这是 GUILayout 的代价，
 // 换来的是不用再维护 Canvas/EventSystem/ScrollRect/TMP 那一整套。
@@ -60,8 +61,11 @@ namespace UiPreview
             // 「在关卡里吗」的判据：选错一次就整局都不录，已经错过三次。
             int probeFail = LevelProbeCheck.Run();
 
+            // 音画同步：丢一帧不是少张图，是音画从此永久错位。
+            int avFail = AvSyncCheck.Run();
+
             int total = replayFail + ffFail + locFail + hardFail + patchFail
-                + levelFail + probeFail;
+                + levelFail + probeFail + avFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"

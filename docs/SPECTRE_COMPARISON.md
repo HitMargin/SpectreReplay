@@ -1,0 +1,383 @@
+# Spectre → SpectreReplay 对照分析
+
+> 本文基于对 `D:\Projects\Spectre` 的通读（66,775 行 / 560 文件），
+> 每条结论都给出 Spectre 侧的 `文件:行号` 依据。
+> Spectre 项目**只读**，本文不修改它。
+
+## 一、Spectre 项目全貌
+
+| 目录 | 文件 | 行数 | 说明 |
+|---|---|---|---|
+| `Spectre/PacLib` | 335 | 27,360 | 第三方 PACL2 图表编辑器库（内嵌资源），与回放/渲染无关 |
+| `Spectre/Features` | 95 | 18,041 | 功能实现 |
+| `QuartzUi` | 110 | 9,854 | 独立 UI 工程 |
+| `SpectrePatch` | 4 | 1,176 | 补丁应用器库 |
+| `tools` | 2 | 172 | |
+
+`Features` 下按行数：`CustomEvents` 3041 / **`Replay` 2998** / `QuartzUi` 2335 /
+**`VideoRender` 2162** / `JudgeBar` 1882 / `Editor` 1833 / `CustomJudge` 1223 /
+`ResultsPlus` 915 / `Compat` 659 / `Other` 465 / 其余零散。
+
+SpectreReplay 只实现了 `Replay` + `VideoRender` 两块，故本次重点在这两块
+及其依赖的框架层（`SpectreState` / `SpectrePatch` / `FeatureKeys`）。
+
+---
+
+## 二、已确认的重大偏差
+
+### 偏差 1：判定复现方式——SpectreReplay 缺失整个 `HitContext` 模型
+
+**这是最根本的架构差异。**
+
+Spectre 的回放是**双轨制**（两份报告一致确认）：
+
+- **轨道 1（物理轨）`KeyEvent`** —— 真实键盘事件，被 **Win32 `SendInput` 真的打出去**
+  （`ReplayPlayer.cs:148` → `KeyboardSimulation.cs:91`）。让游戏自己的输入链路自然运行。
+- **轨道 2（状态轨）`HitContext`** —— 每次命中的完整快照，被
+  **直接调 `ReplayHit` 复现**（`Patch_Playback.cs:126`），**绕过输入链路**。
+
+两条轨道并行推进，**任一先耗尽即结束**（`Patch_Playback.cs:160-161`）。
+
+`HitContext` 12 个字段（`HitContext.cs:3-30`）承载的是"按下去也不会发生"的东西：
+`OverloadCounter`（失败条）、`NoFailHit` + `MarkFail()` + `BlinkForSeconds(3f)`
+（miss 指示器）、`CachedAngle`/`TargetExitAngle`（行星出角）、`curFreeRoamSection`。
+
+**为什么两条轨都需要**：
+
+- 只有 `KeyEvent` → 画面能动，但失败条、miss 闪烁、行星出角全错
+- 只有 `HitContext` → 数值完全复现，但没有输入特效/按键音/判定音
+
+**判定精度不能靠按键保证**：`ReplayHit` 传 `hitTick = null`（`ReplayPlayer.cs:343`），
+让游戏走 `GetHitMarginInDeg` 角度分支。`ReplayPlayer.cs:336-339` 解释了为什么
+**绝不能透传录制的 HitTick**：
+
+> 换算歌曲时间要减 `AsyncInputManager.offsetTick` —— 那是【本次运行】启动时才
+> 校准的锚点，**每局都不同**。拿录制局的原始 tick 在回放局换算会得到完全错位的
+> 时间差 → `GetHitMarginInSec` 判不出计数 → 回放强制 noFail 吞掉失败 →
+> **行星原地打转、永不前进**。
+
+**SpectreReplay 只有 `ReplayKeyEvent`，没有 HitContext。** 这意味着：
+
+- 回放判定完全依赖注入的按键被游戏自然识别；
+- 只要注入方式有问题（见偏差 2），**判定就完全不触发**；
+- 即便触发，判定结果也取决于游戏当时的物理状态，而非录制时的确切上下文；
+- 失败条、miss 闪烁、行星出角全都不会复现。
+
+### 偏差 1b：`HitContext_list` 的"回滚删除"机制（未被任何报告明确提及的实现难点）
+
+`Patch_Recording.cs:91-107`：每次 `Hit` 后，若检测到 **margin 统计无变化 + 地板未变**，
+就 `RemoveAt(Count-1)` **删掉上一次追加的记录**。
+
+因为游戏在同一砖上可能多次调 `Hit`（多压、auto 迭代、特效），只有 margin 或地板
+变化才认定为"一次真实命中"。保留幽灵命中会让回放时多打一次 hit。
+
+初读极易误读为"删掉刚加的"，实际删的是**上一次调用**加的。
+
+### 偏差 2：按键注入方式
+
+**已修正**：我此前说"Spectre 两路并存"，不够准确。真实结构是：
+
+- **按键注入**只有一条路：**Win32 `SendInput`**（`KeyboardSimulation.cs:91`）。
+  全仓**没有任何地方**向 `AsyncInputManager.keyQueue` 注入——
+  `keyQueue` 只在 `AsyncInputManager.Setup`（游戏自己的 `RuntimeInitializeOnLoadMethod`）
+  与 `scrController.UpdateInput` 之间流转，mod 不参与。
+
+- `AsyncKeyRecorder` 是**录制侧**的可选增强（SkyHook 事件 → `keyQueue` 由游戏自己消费），
+  由子开关 `ReplayAsyncInput` 控制（`FeatureKeys.cs:39`、`Main.cs:80`），
+  `Settings.GetDataFromAsyncInput = false` 默认关闭（`Settings.cs:28`）。
+
+- `Settings.LegacyEngine = true`（`Settings.cs:23`，默认）才是按键注入的**主开关**，
+  UI 上的名字是「模拟按键」（`More.cs:160`）。关掉后：
+  `KeyEventIndex` **照常推进**（`ReplayPlayer.cs:146` 在 `if` 之外），
+  但不构造也不发送任何 INPUT —— 即"纯时间轴驱动器"，
+  回放完全靠 `HitContext` 轨驱动。
+
+所以 Spectre 的两条轨是**「KeyEvent 轨」与「HitContext 轨」**，
+不是「SendInput 与 keyQueue 两条注入路径」。我之前的表述把
+"录制侧的异步采集"误当成了"回放侧的注入路径"。
+
+**SpectreReplay 曾只走 keyQueue 那一路**（已修复为 SendInput），
+但仍然缺少 `HitContext` 轨（偏差 1）。
+
+### 偏差 3：`UpdateInput` 在默认设置下不执行
+
+`scrController.cs:2885`：
+
+```csharp
+if (!RDInput.asyncKeyboard.isActive && !...Left... && !...Right...)
+    return;
+```
+
+`asyncKeyboard.isActive` 仅在玩家勾选异步输入时为真
+（`AsyncInputManager.Update:147`，持久化键 `useAsynchronousInput`，默认关闭）。
+
+所以 Spectre 自己挂 `UpdateInput` 的那个补丁（`Patch_AsyncInput.cs:12`）也是
+**默认不生效的**——它是可选增强，不是主路径。
+
+而 Spectre 的录制/回放主路径挂载点是：
+`scrController.PlayerControl_Update` / `Countdown_Update` / `Checkpoint_Update`
+（`Patch_Playback.cs:47-52`，三个 `[SpectrePatch]` 挂同一方法）。
+
+### 偏差 4：渲染架构——Spectre 没有「边玩边录」
+
+`Settings.cs:299`：
+
+```csharp
+public static int RenderCaptureMode = 0;  // 0 纯净相机 1 游戏画面(含UI)
+```
+
+**只有两种画面采集来源，不存在 Live / Offline 两种渲染模式。**
+渲染恒为**离线逐帧确定性渲染**：重开关卡 → 回放接管 → 按输出帧率逐帧推进
+→ 抓帧 + 抓音 → 编码 → mux。
+
+核心机制（`VideoRenderJob.cs`）：
+
+1. `PlayActions.SwitchToPlayMode()`（`:126`）+ 重开关卡，走既有回放启动链；
+2. `AwaitReplayAlive`（`:402-429`）等回放真正接管（`is_playing` 且 conductor 已开唱）；
+3. **时间钉扎**：`VideoRender.PinTimeline(audioAnchor)`（`:209`），此后每帧
+   `PinnedSongPosition = anchor + clock * pitch`（`:268`）；
+   `scrConductor.songposition_minusi` 的读与写都被替换（`VideoRenderPatches.cs:20-38`）；
+4. `Time.captureFramerate = fps`（`:546`）+ 5 个 `Time.*` 原生 detour（`unscaled` 族）
+   + 1 个 `scrConductor.Update` 的 Transpiler（把 `AudioSettings.dspTime` 等换成确定性值）
+   —— 三路覆盖游戏能读到的**全部时间源**；
+5. 每帧固定十步：反压排空 → `WaitForEndOfFrame` → 推进时钟 → `mixdown.CaptureFrame()`
+   → `frames.Grab(i)` → 音频游标记账 → `TickFrame` → drift 巡检 → `Flush()`
+   → 结尾判定。
+
+**SpectreReplay 的「边玩边录」是自创的**，用墙钟 `Stopwatch` 定点对齐帧栅格
+（`LiveSession.cs:16-18` 的注释说明了这个设计）。这条路线本身可行，但它带来
+Spectre 根本不需要面对的一整类问题：
+
+- 提前收尾（已反复踩坑：`Start_Rewind` 在进关时也会被调、
+  `ProbeLevel` 的三条判据都会在加载中间态失效）；
+- 音画同步只能靠栅格对齐近似，达不到 Spectre 的逐帧确定性。
+
+### 偏差 5：音频来源——Spectre 用 `AudioRenderer`，不是取 clip
+
+`VideoAudioTrack.cs:12` 用 Unity 的 **`AudioRenderer`**（`OnAudioFilterRead` 回调）
+抓**游戏最终混音总线**——歌曲、打击音、hold 音、键盘录音全在内（`:8-9`）。
+逐帧 `AudioRenderer.GetSampleCountForCaptureFrame()` + `Render(NativeArray<float>)`
+（`:71-84`），直接写 float32 WAV。
+
+**SpectreReplay 试图从 `scrConductor.song.clip` 取采样**
+（`LiveSession.CurrentSongSource()` → `AudioTrackRecorder.Bind`），
+实测日志恒为 `clip 不可用（clip=null samples=0 frequency=0）`。
+
+根因：**流式播放的 AudioSource 上 `clip` 本来就是 null**——取 clip 这条路
+在原理上就不成立，不是取早了。
+
+顺带：Spectre 的静默自愈机制（`:140-168`）——每静默满 1 秒重启一次
+`AudioRenderer`，预算 3 次；预算耗尽且再静默 5 秒才判死。
+
+### 偏差 6：帧序保证——GPU 回读必须只看队首
+
+`VideoFrameSource.cs:112-137`：`TryTake` **只看队首**，完成或出错才交付。
+GPU 完成顺序不保证提交顺序，逐帧扫描会乱序。
+
+帧缓冲池必须是 `ConcurrentQueue`（`:36`）——注释记录了血泪史：
+「`Recycle` 由编码器泵线程回调，`Rent` 在主线程取用。**普通 Queue 跨线程
+Enqueue/Dequeue 会破坏内部环形结构**，长渲染收尾阶段可能 Dequeue 出 null
+（曾致 `CopyTo ArgumentNullException` 崩溃）」。
+
+### 偏差 7：编码器看门狗
+
+三层失败检测（`VideoEncoder.cs`）：
+
+1. `Submit` 侧：队列满等待超过 **120 秒** → `TimeoutException`
+   （`:221-223`）。注释 `:192-196`：不设此阈值，ffmpeg 停止读 stdin 时
+   `Submit` 会无限自旋，整次渲染**静默挂死**。
+2. `FinishVideo`：排空超时 10 分钟、等待退出超时 10 分钟、非零退出码。
+3. `RunAndWait`（mux/转码共用）：30 分钟超时 + stderr 回传。
+
+### 偏差 8：`-vf` 三段式，不止 vflip
+
+`VideoEncoder.RowFilter()`（`:343-348`）：
+
+```
+(flipRows ? "vflip," : "") + "pad=ceil(iw/2)*2:ceil(ih/2)*2"
+                                + ",scale=out_color_matrix=bt709,format=yuv420p"
+```
+
+- `pad`：yuv420p 要求偶数宽高；
+- `scale=out_color_matrix=bt709`：注释 `:342` 原文「swscale 对无标记 RGB 默认
+  BT.601，HD 播放器按 709 解读会偏色」。
+
+SpectreReplay 只拼了裸 `vflip`，缺 pad 与色彩矩阵。
+
+### 偏差 9：中间文件扩展名必须跟目标容器
+
+`VideoRenderJob.cs:528-532`：
+
+> 中间文件按容器选扩展：muxer 按扩展名选，**VP9 流写进 `.mp4` 在 ffmpeg 4.x 是
+> experimental（拒绝写入，渲染首帧即死）**。`.mkv` 通吃 VP9/H.264。
+
+SpectreReplay 的 `LiveSession.cs:169-172` 直接用目标容器的扩展名做中间文件，
+选 webm 时才碰巧避开，逻辑上依赖了这个巧合。
+
+### 偏差 10：补丁框架的能力差距
+
+`SpectrePatchAttribute`（`SpectrePatch.cs:140-204`）支持：
+`MethodNames` 候选链、`MinVersion`/`MaxVersion` 版本矩阵、`ParameterTypes`
+重载消歧、`PropertyAccessor` 属性访问器、`.ctor`/`.cctor` 构造器、
+`DisableAfterExceptions` 异常自禁用、`Priority`/`Before`/`After` 排序、
+`TryingCatch` 共享 finalizer。
+
+`SpectreReplay.GamePatchAttribute` 只有 `Target/MethodName/Kind/Feature/ParameterTypes`。
+
+其中两条契约是我反复违反的：
+
+1. **「谓词为假时补丁根本不挂载，补丁体内无需再查主开关」**
+   （`SpectrePatch.cs:110-112`）——我却在多处体内重复判断。
+2. **`DisambiguateByPatchParams` 按参数名消歧，全淘汰则返回 null 进探针，
+   绝不猜**（`:553-556`）。我曾因参数名对不上（`checkpointNum` vs
+   `_currentSeqID`）导致补丁挂不上。
+
+### 偏差 13：版本兼容层（`Features/Compat/GameCompat.cs`）
+
+Spectre 编译时只引用一份 `Assembly-CSharp`（r150），凡 r150 改过签名的成员
+都走 `GameCompat` 择路（`GameCompat.cs:12`）：
+
+| 成员 | 版本差异 |
+|---|---|
+| `SwitchChosen` | r150 起多了 `long? hitTick` 形参（`:191`） |
+| `PlayerHit` | 同上（`:223`） |
+| `HitFiresInputEvents` | r150 起 `scrPlayer.Hit` 内部自调 `HitInputEvent`（`:261`），旧版由补丁 Prefix 代发——不择路会**双触发** |
+| `HasUpdateHitErrorMeter` | r150 起误差条喂数搬进游戏自身（`:388`） |
+| `DeadTiles` | r150 删 `scrMarginTracker.deadTiles`（`:351`） |
+| `ErrorMeterAddHit` | 签名随版本变化（`:320`） |
+
+`HitFiresInputEvents` 那条特别值得注意（`Patch_Recording.cs:44-50` 的注释）：
+r150 前游戏 Hit 不自带输入触发，由补丁代发；r150 起游戏自己会触发，
+补丁再代发就成**双触发**——一次按键 Any+Action1 各发一次，
+且时点早于 `cachedAngle` 回写。
+
+SpectreReplay 没有这一层。当前游戏是 r150+，我的补丁走的是
+「r150 前」的语义（自己在 Prefix 里代发输入事件），一旦有对应逻辑就会出错。
+
+---
+
+## 三之二、本轮已修复
+
+### 修复 A：编码队列丢帧 → 阻塞反压（偏差 5）
+
+`VideoEncoder.cs` 的 `BlockingQueue` 原先 `Capacity = 4` 且**满了直接丢帧**。
+已改为：
+
+- 容量按 256 MiB 预算算（照 Spectre `VideoEncoder.cs:181`），1080p → 32 帧；
+- `Enqueue(item, timeoutMs)` 阻塞等待，**绝不丢帧**；
+- `Submit` 返回 bool，失败时调用方**不推进帧序号**（否则音画永久错位）；
+- 加了 ffmpeg 进程存活检查，进程已退出立刻失败而非空等。
+
+### 修复 B：提示条屏蔽射线（对照 `SpectreState.cs:338-341`）
+
+`Ui/Status.cs` 原先只设文字与图标。已补：`bar.GetComponentsInChildren<Graphic>(true)`
+关掉 `raycastTarget`，并由协程按原值恢复。
+
+**为什么必须**：弹出的通知条会吃掉它下面的点击——玩家正要按砖块，
+通知正好盖住，判定就没了。Spectre 明确做了这一步（`:338-341`）。
+
+---
+
+## 三之三、Replay 侧新增偏差（据深读报告补充）
+
+### 偏差 14：无回放前置校验（`TryStartPlayback` 的七道检查全缺）
+
+Spectre 在 `Patch_Lifecycle.cs:112-243` 有一整套校验，缺任何一道都会静默错位：
+
+| 校验 | 位置 | 不做会怎样 |
+|---|---|---|
+| 字段存在性（14 个必需键） | `SpectreState.cs:25-55` | `KeyNotFoundException`，笼统报错 |
+| 外部 API 阻断快照 | `:123-131` | 与其他 mod 互相覆盖状态 |
+| 单人模式 | `:132-136` | P2 命中完全无法复现 |
+| 官方谱关卡名 | `:142-155` | 在错误的关卡上回放 |
+| **FloorHash（谱面角度序列哈希）** | `:156-165` | ⭐ 谱面改一个角就在错的位置触发命中 |
+| Pitch / Bpm | `:166-172` | 角度→时间换算全错，按键整体错位 |
+| JudgeMode（难度） | `:173-177` | 判定档位窗口不同，判定全错 |
+| StartTile / EndTile 区间 | `:178-190` | FastForward 跳过开头数据 |
+| 实际速度一致性 | `:199-215` | 倍速不符，按键全部错位 |
+
+**其中 FloorHash 最关键**：它对整张谱面所有地板的出角序列求哈希
+（`Patch_Lifecycle.cs:339-348`）。回放循环用 `angle >= hc.CurrAngle` 判断命中，
+而 `CurrAngle` 是录制时的绝对角差——谱面改一个角，回放就在错误位置触发。
+
+**SpectreReplay 的 `Load` 只做「文件能否解析」**，之后直接等关卡重开就开始播。
+
+### 偏差 15：版本兼容层完全缺失（`Features/Compat/GameCompat.cs`）
+
+当前游戏是 **r150**（`Main.cs:27` 的 `VerifiedBuild = 150`）。Spectre 的兼容层
+处理了 r149→r150 的多处签名变更，而 SpectreReplay 直接按 r150 编译：
+
+| 成员 | 差异 | 不处理的后果 |
+|---|---|---|
+| `scrPlayer.Hit` | r149 `Hit(bool)` → r150 `Hit(long?, bool)` | 补丁按名消歧失败，绑不上 |
+| `scrPlanet.SwitchChosen` | r150 起多 `long? hitTick` 形参 | 直接调用抛 `MissingMethodException` |
+| `HitFiresInputEvents` | r150 起 `Hit` 内部自调 `HitInputEvent` | ⭐ **双触发**：一次按键 Any+Action1 各发一次 |
+| `HasUpdateHitErrorMeter` | r150 起误差条喂数搬进游戏自身 | 补一次就**双记** |
+| `scrMarginTracker.deadTiles` | r150 删除 | `MissingFieldException` |
+
+`Patch_Recording.cs:42-50` 的注释详述了双触发的机制：前缀先把 Any 目标的
+`lastHitFrame` 帧位占掉（`handled=true`），游戏那次 Any 被帧守卫拦下、
+`Action1` 反而因 `handled=false` 放行。
+
+**判定手段值得学**：`GameCompat.HitFiresInputEvents` 用**签名形状**探测
+（找首参为 `long?` 的重载）而非版本号（`GameCompat.cs:258-259`）：
+「游戏再改签名时此处自然重新探测」。
+
+### 偏差 16：`FloorHash` 的可靠性陷阱（即使照抄也要知道）
+
+| 条件 | 算法 | 跨进程稳定？ |
+|---|---|---|
+| 官方关卡 | 恒 `0` | ✅ |
+| `levelData.isOldLevel` | `pathData.GetHashCode()` | ❌ `List<T>` 的**对象身份哈希**，每次运行都不同 → 这条路径**永远无法匹配** |
+| 新版谱面 | `ComputeAngleHash` | ⚠️ 依赖 `string.GetHashCode()` 的进程内种子 |
+
+即 Spectre 自己的旧格式路径也有这个 bug。抄之前要知道。
+
+### 偏差 17：哈希的区域设置陷阱
+
+`Patch_Lifecycle.cs:332-336`：
+
+> 数值统一 `InvariantCulture` 格式化：逗号小数区不再因区域差异在他机重算出
+> 不同哈希而误报 `play_error2`。
+
+我已在 `FfmpegArgs.cs` 用 `CultureInfo.InvariantCulture` 处理过帧率，
+但哈希计算还没接触到。
+
+### 偏差 18：`scrPlayer.UpdateHoldKeys` 的 Finalizer 兜底
+
+`Patch_Playback.cs:26-42` 详述了一个**游戏自身的潜伏 bug**：
+
+> 命中 midspin 时 `Hit()` 尾部会向 `keyTimes` 自补一个待处理按键，函数末段
+> midspin 分支的第二次 `RemoveAt(0)` 假定这个补充一定还在。若中途那次 `Hit()`
+> 提前返回 false（无响应窗口、忽略输入特效等），第二次 `RemoveAt` 就在空表上
+> 抛越界。正常游玩几乎凑不齐触发条件；**回放引擎按量化时间注入按键，偶尔恰好凑齐**。
+
+**回放比真人对它更容易触发。** Spectre 用 Finalizer 吞掉
+（仅在 `is_playing` 且异常类型精确匹配时），理由是「抛出只中断当帧的输入模拟——
+回放状态每帧由录制数据覆盖，吞掉不影响回放/成片」。
+
+**SpectreReplay 没有这个兜底**——一旦回放触发到这条路径，会抛
+`ArgumentOutOfRangeException` 打断输入更新。
+
+### 偏差 19：回放期间的三个状态夹逼
+
+Spectre 回放时改了若干全局状态，都有对应的还原点：
+
+| 状态 | 夹逼方式 |
+|---|---|
+| `HitLocked`（屏蔽真实 `Hit`） | `Patch_Recording.cs:39` 返回 false；`ReplayHit` 内部 `:335/:344` 临时开合 |
+| `GCS.hitMarginLimit` | `Patch_Misc.cs:86/92` 在 `LightUp` 前后夹逼；`ReplayPlayer.Stop():36` 终还原 |
+| `noFail` | `TryStartPlayback:225` 备份后强制 true；`Stop():54` 还原 |
+| `IgnoreMarkFail` | `Patch_Misc.cs:75` Prefix 令 `__result = null` |
+
+**SpectreReplay 没有这些夹逼**，回放时会让真人输入仍然触发 `Hit` 记录。
+
+---
+
+## 四、下一步
+
+按严重度依次修复，每项补离线断言并验证。优先级：
+1. 偏差 3（音频取 clip，原理上不成立）
+2. 偏差 14 + 1（校验 + HitContext 轨，工作量最大）
+3. 偏差 15（兼容层）
+4. 其余

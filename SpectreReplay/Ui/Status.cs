@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace SpectreReplay.Ui
 {
@@ -26,13 +27,18 @@ namespace SpectreReplay.Ui
         internal enum Level { Info, Warning }
 
         /// <summary>
-        /// 弹一条提示。
+        /// 被屏蔽了 raycastTarget 的 Graphic，等协程恢复。
         ///
-        /// 全部包在 try 里：Notification.instance 会去 Instantiate 预制体，
-        /// 而预制体所在的资源组在某些时机可能还没就绪（主菜单刚起来、
-        /// 场景切换中）。提示失败绝不能把调用方（录制/渲染的收尾逻辑）
-        /// 一起带崩——那会把"出片成功"变成"出片失败"。
+        /// 类型刻意用 Graphic[]（基类）而不是 Image/Text：预制体内部结构
+        /// 随游戏版本变，只认基类才不会因为多了个子类型就漏掉。
         /// </summary>
+        private struct Suppressed
+        {
+            internal Graphic[] Graphics;
+            internal bool[] RaycastTargets;
+        }
+
+        /// <summary>弹一条提示。</summary>
         internal static void Say(string key, string detail = null,
             Level level = Level.Info, float seconds = 4f)
         {
@@ -57,6 +63,15 @@ namespace SpectreReplay.Ui
                 n.icon.color = level == Level.Warning
                     ? new Color(1f, 0.2f, 0.2f)
                     : new Color(0.2f, 0.7215686f, 0.3921569f);
+
+                // ── 屏蔽提示条上的射线 ──────────────────────────────
+                // 不做这一步，弹出来的通知条会**吃掉它下面的点击**：
+                // 玩家正准备按下一个砖块，通知正好盖住，判定就没了。
+                // 而提示条只是"看一眼就走"的东西，不该有任何交互。
+                // 照 Spectre 的 SpectreState.TriggerMessage（:338-341），
+                // 它也是关掉后由协程 RestoreGraphics 按原值恢复。
+                Suppressed s = SuppressRaycasts(n, seconds);
+
                 // SetupNotification 是 private，编译不过也调不着——
                 // 反射拿，跟 Spectre 用 PatchManager.GetMethodInfo 同一个路子。
                 var m = typeof(Notification).GetMethod("SetupNotification",
@@ -68,11 +83,81 @@ namespace SpectreReplay.Ui
                 {
                     m.Invoke(n, new object[] { seconds, 1f, true });
                 }
+                RestoreLater(n, s, seconds);
             }
             catch (Exception ex)
             {
                 Debug.Log("[SpectreReplay] 提示弹不出来（不影响功能）："
                     + ex.GetType().Name + ": " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// 把通知条上所有 Graphic 的 raycastTarget 关掉，记下原值。
+        ///
+        /// `true` 是 includeInactive：预制体里可能有未激活的子对象，
+        /// 它们之后被激活时同样需要被屏蔽。
+        /// </summary>
+        private static Suppressed SuppressRaycasts(Notification n, float seconds)
+        {
+            var r = new Suppressed { Graphics = null, RaycastTargets = null };
+            if (n.bar == null)
+            {
+                return r;
+            }
+            r.Graphics = n.bar.GetComponentsInChildren<Graphic>(true);
+            r.RaycastTargets = new bool[r.Graphics.Length];
+            for (int i = 0; i < r.Graphics.Length; i++)
+            {
+                if (r.Graphics[i] == null) continue;
+                r.RaycastTargets[i] = r.Graphics[i].raycastTarget;
+                r.Graphics[i].raycastTarget = false;
+            }
+            return r;
+        }
+
+        /// <summary>
+        /// 延时把 raycastTarget 恢复原值。
+        ///
+        /// 用协程而不是定时器：协程随通知条一起被 Unity 管理，
+        /// 场景切换时自动销毁，不会有"恢复回调在场景卸载后触发"的悬垂。
+        /// </summary>
+        private static void RestoreLater(Notification n, Suppressed s, float seconds)
+        {
+            if (s.Graphics == null || s.Graphics.Length == 0)
+            {
+                return;
+            }
+            try
+            {
+                n.StartCoroutine(RestoreRoutine(s, seconds));
+            }
+            catch (Exception)
+            {
+                // 协程起不来（对象已被销毁）就就地恢复：
+                // 宁可在已销毁的对象上写一次，也不能把射线永久留在关闭状态。
+                RestoreNow(s);
+            }
+        }
+
+        private static System.Collections.IEnumerator RestoreRoutine(
+            Suppressed s, float seconds)
+        {
+            // 0.5+0.5 是通知条自己的滑入/淡出余量（照 Spectre RestoreGraphics 的取法）。
+            // 多等一点是为了确保玩家真的读完了才把点击还给底下的按钮。
+            yield return new WaitForSecondsRealtime(0.5f + 0.5f + seconds + 0.3f);
+            RestoreNow(s);
+        }
+
+        private static void RestoreNow(Suppressed s)
+        {
+            if (s.Graphics == null) return;
+            for (int i = 0; i < s.Graphics.Length; i++)
+            {
+                // Unity 对象可能已被销毁：== null 能识别"假 null"，
+                // 用 != null 而不是 ReferenceEquals 才安全。
+                if (s.Graphics[i] == null) continue;
+                s.Graphics[i].raycastTarget = s.RaycastTargets[i];
             }
         }
 

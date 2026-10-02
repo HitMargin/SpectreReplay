@@ -45,17 +45,21 @@ namespace SpectreReplay.Features.VideoRender
         internal int FramesWritten => _written;
         internal string Error { get; private set; } = "";
 
-        private VideoEncoder(FrameBufferPool pool)
+        private VideoEncoder(FrameBufferPool pool, int frameBytes)
         {
             _pool = pool;
-            _queue = new BlockingQueue(pool, null);
+            // 容量按帧大小算：1920×1080 单帧 8 MB，256 MiB 预算 → 32 帧。
+            // 照 Spectre（VideoEncoder.cs:181 的 268435456 / (w*h*4)，夹到 [2,64]）。
+            // 原先固定 4，1080p 下只有 32 MB 缓冲，编码稍慢就频繁顶满。
+            int cap = frameBytes > 0 ? 268435456 / frameBytes : 4;
+            _queue = new BlockingQueue(pool, null, cap);
         }
 
         internal static VideoEncoder Start(FrameBufferPool pool, int width, int height,
             int fps, EncoderMode encoder, QualityMode quality, ContainerMode container,
             bool flipRows, string outputPath, string ffmpegPath)
         {
-            var e = new VideoEncoder(pool);
+            var e = new VideoEncoder(pool, width * height * 4);
             e.Launch(width, height, fps, encoder, quality, container, flipRows,
                 outputPath, ffmpegPath);
             return e;
@@ -101,15 +105,43 @@ namespace SpectreReplay.Features.VideoRender
             => FfmpegArgs.Build(width, height, fps, encoder, quality, container,
                 flipRows, outPath);
 
-        /// <summary>主线程调用：把一帧像素交出去。非阻塞——队列满就丢这一帧。</summary>
-        internal void Submit(byte[] pixels)
+        /// <summary>
+        /// 主线程调用：把一帧像素交出去。
+        ///
+        /// 队列满时会**阻塞等待**（反压），这是有意的——见 BlockingQueue
+        /// 类注释：丢帧会让音频栅格与帧序号永久错位。
+        ///
+        /// 返回 false 表示等待超时或已停止，调用方**不得推进帧序号**：
+        /// 帧没进队列，就不能算作"已产出"，否则音频栅格会跟着前进，
+        /// 而视频里永远不会有这一帧——正是我们要避免的错位。
+        /// </summary>
+        internal bool Submit(byte[] pixels)
         {
             if (_stopRequested || _finished)
             {
-                return;
+                return false;
             }
-            _queue.Enqueue(pixels);
+            if (_proc == null || _proc.HasExited)
+            {
+                // ffmpeg 已经死了：继续入队只会把队列填满后一直阻塞。
+                // 立刻失败，让调用方停在这帧而不是空等。
+                Error = Ui.Loc.T("render.err.encoder_gone");
+                _failure = _failure
+                    ?? new InvalidOperationException(Error);
+                _stopRequested = true;
+                return false;
+            }
+            return _queue.Enqueue(pixels, SubmitWaitMs);
         }
+
+        /// <summary>
+        /// 单帧入队最长等待。
+        ///
+        /// 取 Spectre 的量级（VideoEncoder.cs:197 用 120 秒）。这个值不是
+        /// "正常情况下的等待时长"——正常情况下编码器远快于实时，队列永远不满。
+        /// 它只在 ffmpeg 停止消费 stdin 时才被耗尽，用来把"卡死"变成"可诊断的失败"。
+        /// </summary>
+        private const int SubmitWaitMs = 120_000;
 
         private void Pump()
         {
@@ -243,39 +275,77 @@ namespace SpectreReplay.Features.VideoRender
     }
 
     /// <summary>
-    /// 有界阻塞队列。满了就丢（Recycle()），不让主线程等编码器——
-    /// 视频掉几帧远好过把游戏卡住。
+    /// 有界队列。**满了阻塞等待，不丢帧。**
+    ///
+    /// ── 为什么不能丢帧（曾经的实现：满了就 _pool.Return(item) 丢掉）──
+    /// 输出帧序号与音频帧栅格是一一对应的：LiveSession 每产出一帧就调一次
+    /// PushAudioForFrame，把音频栅格推进到与该帧对齐。丢一帧的后果不是
+    /// 「视频掉一张图」，而是**音画从那一刻起永久错位**——音频照样前进，
+    /// 视频少了一张对应的图，帧序号与音频游标从此对不上，之后每一帧都错。
+    /// 而 LiveSession 的补帧策略（复制上一帧）修不了这个：
+    /// 它保证视频帧数连续，却保证不了音频配对关系。
+    ///
+    /// Spectre 的注释把这条写成了原则（VideoEncoder.cs:12-13）：
+    /// 「有界队列 = 反压：编码跟不上时主线程等待，**不影响成片时间轴**」。
+    ///
+    /// ── 代价与兜底 ──────────────────────────────────────────
+    /// 代价是编码慢时主线程被阻塞。对边玩边录而言，掉几帧听起来比卡一下好，
+    /// 但那只在**画面本身不重要**时成立；音画错位的代价比卡顿大得多，
+    /// 而且卡顿只影响当下这一段，错位会毁掉整个成片的后半段。
+    ///
+    /// 阻塞必须有上限，否则 ffmpeg 一旦停止读 stdin（磁盘满、编码器挂起、
+    /// 进程悄悄死掉），主线程会永远等下去，整个游戏卡死不可玩。
+    /// 所以 Enqueue 带超时：超时后**仍不丢帧**，而是记一次警告并继续等
+    /// ——真正的止损交给 Finish() 的看门狗与退出码判定，
+    /// 那两处能准确告诉你 ffmpeg 到底怎么了。
     /// </summary>
     internal sealed class BlockingQueue
     {
         private readonly System.Collections.Generic.Queue<byte[]> _q =
-            new System.Collections.Generic.Queue<byte[]>(8);
+            new System.Collections.Generic.Queue<byte[]>(64);
         private readonly FrameBufferPool _pool;
         private readonly Action _onWrite;
         private readonly object _gate = new object();
-        private const int Capacity = 4;
+        private readonly System.Threading.SemaphoreSlim _space;
 
-        internal BlockingQueue(FrameBufferPool pool, Action onWrite)
+        /// <summary>
+        /// 队列上限。按 256 MiB 预算算，与 Spectre 一致
+        /// （VideoEncoder.cs:181：268435456 / (w*h*4)），再夹到 [2,64]。
+        ///
+        /// 原先固定 4：1920×1080 单帧 8 MB，4 帧仅 32 MB 缓冲，
+        /// 编码稍慢就立刻顶满，频繁触发阻塞。Spectre 同分辨率下容量是 32。
+        /// </summary>
+        internal BlockingQueue(FrameBufferPool pool, Action onWrite, int capacity)
         {
             _pool = pool;
             _onWrite = onWrite;
+            Capacity = Math.Max(2, Math.Min(64, capacity));
+            _space = new System.Threading.SemaphoreSlim(Capacity, Capacity);
         }
+
+        internal int Capacity { get; }
 
         internal int Count { get { lock (_gate) { return _q.Count; } } }
 
-        internal void Enqueue(byte[] item)
+        /// <summary>
+        /// 入队。**队列满则阻塞等待，绝不丢帧**（理由见类注释）。
+        ///
+        /// 返回 false 表示等待超时——调用方应停止推进而不是继续，
+        /// 因为继续只会让队列越来越满、每一帧都要等满超时。
+        /// 帧**没有**被丢弃：它仍在调用方手里，调用方决定放弃。
+        /// </summary>
+        internal bool Enqueue(byte[] item, int timeoutMs)
         {
+            if (timeoutMs > 0 && !_space.Wait(timeoutMs))
+            {
+                return false;
+            }
             lock (_gate)
             {
-                if (_q.Count >= Capacity)
-                {
-                    // 队列满：这一帧追不上，直接还回池里。
-                    // 这是"实时录制跟不上"的兜底路径，绝不阻塞主线程。
-                    _pool.Return(item);
-                    return;
-                }
                 _q.Enqueue(item);
             }
+            _onWrite?.Invoke();
+            return true;
         }
 
         internal byte[] Dequeue(int timeoutMs)
@@ -287,7 +357,9 @@ namespace SpectreReplay.Features.VideoRender
                 {
                     if (_q.Count > 0)
                     {
-                        return _q.Dequeue();
+                        var v = _q.Dequeue();
+                        _space.Release();
+                        return v;
                     }
                 }
                 if (Environment.TickCount > deadline)
