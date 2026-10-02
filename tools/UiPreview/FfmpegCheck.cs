@@ -38,9 +38,101 @@ namespace UiPreview
             fail += Encode("③ webm（曾经必然失败）", ContainerMode.Webm, ".webm");
             fail += CodecSanity();
             fail += ColorAndFlip();
+            fail += FloatWavMuxes();
             fail += NegativeControl();
             fail += Mux();
             return fail;
+        }
+
+        /// <summary>
+        /// float32 WAV 必须能被合流参数正确读入。
+        ///
+        /// 音频轨改成 <c>AudioRenderer</c> 抓混音之后，wav 的格式从
+        /// 16-bit PCM 变成了 **float32**（format tag = 3）——这是引擎
+        /// <c>AudioRenderer.Render(NativeArray&lt;float&gt;)</c> 的原生格式，
+        /// 也是 Spectre 的 VideoAudioTrack 用的格式。
+        ///
+        /// 这条断言的意义：如果 ffmpeg 读不了这个 wav，音轨会静默消失，
+        /// 而 <c>AudioMux</c> 只看"退出码 0 且产物存在"就当成功——
+        /// 于是界面显示"完成"，视频却依旧无声。必须验产物里真的有音频流。
+        /// </summary>
+        private static int FloatWavMuxes()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "ffcheck");
+            Directory.CreateDirectory(dir);
+            string wav = Path.Combine(dir, "float32.wav");
+            string raw = Path.Combine(dir, "float32.mp4");
+            string outPath = Path.Combine(dir, "float32_muxed.mp4");
+            foreach (string f in new[] { wav, raw, outPath })
+            {
+                if (File.Exists(f)) File.Delete(f);
+            }
+
+            // 手写一个 44 字节 float32 头 + 0.5 秒 440Hz 正弦。
+            // 不用 ffmpeg 造：ffmpeg 默认也写 PCM，要验的是"我们写出来的
+            // 那种头"能不能被读回去，素材必须与生产代码同格式。
+            const int rate = 44100;
+            const int channels = 2;
+            int frames = rate / 2;
+            var pcm = new byte[frames * channels * 4];
+            for (int i = 0; i < frames; i++)
+            {
+                float v = (float)Math.Sin(2.0 * Math.PI * 440.0 * i / rate) * 0.5f;
+                byte[] raw4 = BitConverter.GetBytes(v);
+                Buffer.BlockCopy(raw4, 0, pcm, (i * channels) * 4, 4);
+                Buffer.BlockCopy(raw4, 0, pcm, (i * channels + 1) * 4, 4);
+            }
+            try
+            {
+                using (var fs = new FileStream(wav, FileMode.Create))
+                using (var w = new BinaryWriter(fs))
+                {
+                    w.Write(new[] { (byte)'R', (byte)'I', (byte)'F', (byte)'F' });
+                    w.Write(36 + pcm.Length);
+                    w.Write(new[] { (byte)'W', (byte)'A', (byte)'V', (byte)'E' });
+                    w.Write(new[] { (byte)'f', (byte)'m', (byte)'t', (byte)' ' });
+                    w.Write(16);
+                    w.Write((short)3);                 // IEEE float —— 关键
+                    w.Write((short)channels);
+                    w.Write(rate);
+                    w.Write(rate * channels * 4);
+                    w.Write((short)(channels * 4));
+                    w.Write((short)32);
+                    w.Write(new[] { (byte)'d', (byte)'a', (byte)'t', (byte)'a' });
+                    w.Write(pcm.Length);
+                    w.Write(pcm);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("    ✗ ⑨ float32 wav：写素材失败 " + ex.Message);
+                return 1;
+            }
+
+            // 造一个无声视频当被合流的对象
+            if (Run(FfmpegPath, new[]
+            {
+                "-y", "-f", "lavfi", "-i", "color=c=black:s=64x48:r=30:d=1",
+                "-c:v", "libx264", "-pix_fmt", "yuv420p", raw,
+            }, 60000) != 0 || !File.Exists(raw))
+            {
+                Console.WriteLine("    ✗ ⑨ float32 wav：造视频素材失败");
+                return 1;
+            }
+
+            // 用真实的合流参数
+            int rc = Run(FfmpegPath, FfmpegArgs.BuildMuxArgs(
+                raw, wav, outPath, ContainerMode.Mp4), 60000);
+            bool hasAudio = File.Exists(outPath) && ProbeHasAudio(outPath);
+            Console.WriteLine($"    {(rc == 0 && hasAudio ? "✓" : "✗")} ⑨ float32 wav 合成流"
+                + $"  → 退出码 {rc}，产物 {Describe(outPath)}"
+                + (hasAudio ? "，含音轨" : "，**没有音轨**"));
+            if (rc == 0 && !hasAudio)
+            {
+                Console.WriteLine("      ← ffmpeg 接受了参数但没读出音频；"
+                    + "AudioMux 只看退出码会误判成功");
+            }
+            return (rc == 0 && hasAudio) ? 0 : 1;
         }
 
         /// <summary>

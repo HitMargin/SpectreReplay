@@ -46,8 +46,12 @@ namespace SpectreReplay.Features.VideoRender
         private string _audioPath;
         private string _tempDir;
 
-        // 音频与视频走同一个帧栅格：每产出一帧就补齐这一帧该有的采样数。
-        private readonly Audio.AudioTrackRecorder _audio = new Audio.AudioTrackRecorder();
+        // 音频与视频走同一个帧栅格：每产出一帧就抓一次混音，
+        // 抓到的量自适应，保证音频总长 = 帧数 / fps。
+        //
+        // 惰性创建：构造器要知道 fps（静默重启的节流按秒算），
+        // 而 fps 要等 StartCapture 才从 Settings 读到。
+        private Audio.AudioTrackRecorder _audio;
 
         internal bool IsCapturing => _capturing;
 
@@ -134,6 +138,11 @@ namespace SpectreReplay.Features.VideoRender
                 _encoder?.Finish(3000);
                 _frames?.Dispose();
                 _frames = null;
+                // 混音钩子必须卸：AudioRenderer 是引擎级的全局钩子，
+                // 不 Stop 的话它会一直抓混音，直到下一次渲染重新 Start——
+                // 期间玩家的正常游玩音频被反复抓取，白白吃 CPU。
+                _audio?.Discard();
+                _audio = null;
                 CleanupTemp();
             }
             catch (Exception ex)
@@ -218,15 +227,16 @@ namespace SpectreReplay.Features.VideoRender
 
                 _frames.PendingSink = OnFrameReady;
 
-                // 音频：绑到当前正在播的歌曲。绑不上就只出无声视频，
+                // 音频：抓游戏最终混音总线。绑不上就只出无声视频，
                 // 而不是让整场录制失败——画面本身是有价值的。
                 _audioPath = System.IO.Path.Combine(_tempDir,
                     System.IO.Path.GetFileNameWithoutExtension(_rawVideoPath) + ".wav");
-                bool audioOk = _audio.Bind(LiveSession.CurrentSongSource());
-                if (!audioOk)
+                _audio = new Audio.AudioTrackRecorder(Settings.Fps);
+                if (!_audio.Start(_audioPath))
                 {
                     UnityEngine.Debug.LogWarning(
-                        "[SpectreReplay] 拿不到歌曲采样，本次将产出无声视频");
+                        "[SpectreReplay] 抓不到混音，本次将产出无声视频："
+                        + _audio.DeathReason);
                 }
 
                 _clock.Restart();
@@ -282,15 +292,28 @@ namespace SpectreReplay.Features.VideoRender
                     return;
                 }
 
-                // 音频落盘 + 合流。合流走第二次 ffmpeg，-c:v copy 不重编码，
-                // 只是把音轨贴到已有的视频流上——几秒钟的事。
+                // 音频封口 + 合流。Seal() 回写真实 wav 长度（不封口的话头里的长度是
+                // 占位的 0，ffmpeg 按头读会认为音频是空的）。合流走第二次
+                // ffmpeg，-c:v copy 不重编码，只是把音轨贴到已有视频流上。
                 string finalPath = _rawVideoPath;
-                if (_audio.IsValid && _audio.Save(_audioPath))
+                bool audioOk = _audio != null
+                    && !_audio.Dead
+                    && _audio.Seal()
+                    && _audio.Seconds > 0.05;
+                if (audioOk)
                 {
                     finalPath = MuxAudio(_rawVideoPath, _audioPath, _outputPath);
+                    Debug.Log("[SpectreReplay] 音频已合入，时长 "
+                        + _audio.Seconds.ToString("0.00") + "s");
                 }
                 else
                 {
+                    if (_audio != null && _audio.Dead)
+                    {
+                        UnityEngine.Debug.LogWarning(
+                            "[SpectreReplay] 混音失败，本次产出无声视频："
+                            + _audio.DeathReason);
+                    }
                     // 没音频时直接用裸视频改名，不留 _final 这种中间名
                     try
                     {
@@ -413,23 +436,22 @@ namespace SpectreReplay.Features.VideoRender
         }
 
         /// <summary>
-        /// 把音频栅格推进到与视频第 frameIndex 帧对齐。
-        /// 视频补帧/跳帧时这一步同样会走——帧序号连续，音频才连续。
+        /// 抓这一帧的混音。
+        ///
+        /// **不再有"按需补齐采样"这回事。** AudioRenderer 抓的是混音总线，
+        /// 它按真实时间累积样本；每个渲染帧消费一次"自上次调用以来的全部累积量"，
+        /// 累积量随帧自动伸缩。于是音频总量 = Σ每帧消费量 = 帧数 / fps，
+        /// 与视频栅格天然同构，不需要任何对齐计算。
+        ///
+        /// （旧实现要按 frameIndex 反推该补多少采样，那是 AudioSource.clip
+        /// 路径的产物——而 clip 在流式播放下恒为 null，那条路本来就走不通。）
+        ///
+        /// 调用的时机很重要：必须与 frames.Grab(i) 在**同一协程迭代内**，
+        /// 保证"第 N 次抓到的音频恰好对应第 N 帧图像"。
         /// </summary>
         private void PushAudioForFrame()
         {
-            if (!_audio.IsValid)
-            {
-                return;
-            }
-            try
-            {
-                _audio.AdvanceTo(LiveSession.CurrentSongSource(), _frameIndex, Settings.Fps, out _);
-            }
-            catch (Exception ex)
-            {
-                UnityEngine.Debug.LogWarning("[SpectreReplay] 音频推进失败：" + ex.Message);
-            }
+            _audio.CaptureFrame();
         }
 
         // 当前歌曲的 AudioSource。由 LiveSession 持有但对 OfflineSession 也开放

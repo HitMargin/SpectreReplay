@@ -50,7 +50,9 @@ namespace SpectreReplay.Features.VideoRender
         /// 所以必须自己录一份再合回去——**之前这里什么都没有**，
         /// 于是离线渲染出来的视频是彻底无声的，而界面还显示"完成"。
         /// </summary>
-        private readonly Audio.AudioTrackRecorder _audio = new Audio.AudioTrackRecorder();
+        /// 惰性创建：构造器要知道 fps（静默重启的节流按秒算），
+        /// 而 fps 要等 Start 才从 Settings 读到。
+        private Audio.AudioTrackRecorder _audio;
 
         internal static bool IsRunning => _instance != null && _instance._capturing;
 
@@ -120,16 +122,18 @@ namespace SpectreReplay.Features.VideoRender
                     _rawVideoPath, Settings.FfmpegPath);
                 _frames.PendingSink = OnFrameReady;
 
-                // 音频：离线渲染重放整首歌，采样源同样是当前歌曲。
-                // 绑不上就只出无声视频，而不是让整场渲染失败。
+                // 音频：抓游戏最终混音总线。抓不上就只出无声视频，
+                // 而不是让整场渲染失败。
+                _fps = Mathf.Max(1, Settings.Fps);
                 _audioPath = Path.Combine(_tempDir, stem + ".wav");
-                if (!_audio.Bind(LiveSession.CurrentSongSource()))
+                _audio = new Audio.AudioTrackRecorder(_fps);
+                if (!_audio.Start(_audioPath))
                 {
                     UnityEngine.Debug.LogWarning(
-                        "[SpectreReplay] 拿不到歌曲采样，本次将产出无声视频");
+                        "[SpectreReplay] 抓不到混音，本次将产出无声视频："
+                        + _audio.DeathReason);
                 }
 
-                _fps = Mathf.Max(1, Settings.Fps);
                 // 总帧数 = 回放长度 × 帧率，再加收尾几秒
                 double len = Playback.PlaybackEngine.ReplayLength + Settings.TailSeconds;
                 _totalFrames = Math.Max(1, (int)(len * _fps));
@@ -215,24 +219,15 @@ namespace SpectreReplay.Features.VideoRender
         }
 
         /// <summary>
-        /// 把音频栅格推进到与视频第 _frameIndex 帧对齐。
-        /// 离线渲染是逐帧确定时间轴的，所以这里按帧序号推进即可。
+        /// 抓这一帧的混音。
+        ///
+        /// AudioRenderer 按真实时间累积样本，每帧消费一次累积量——
+        /// 音频总量 = 帧数 / fps，与视频栅格天然同构，不需要对齐计算。
+        /// 必须与帧捕获在同一迭代内，保证第 N 次抓到的对应第 N 帧图像。
         /// </summary>
         private void PushAudioForFrame()
         {
-            if (!_audio.IsValid)
-            {
-                return;
-            }
-            try
-            {
-                _audio.AdvanceTo(LiveSession.CurrentSongSource(), _frameIndex, Settings.Fps, out _);
-            }
-            catch (Exception ex)
-            {
-                UnityEngine.Debug.LogWarning(
-                    "[SpectreReplay] 离线音频推进失败：" + ex.Message);
-            }
+            _audio?.CaptureFrame();
         }
 
         private void OnFrameReady(byte[] pixels, int w, int h)
@@ -270,15 +265,28 @@ namespace SpectreReplay.Features.VideoRender
                         + RenderStatus.LastError);
                     return;
                 }
-                // 音频落盘 + 合流（跟实时录制同一条路径，见 AudioMux）
+                // 音频封口 + 合流。Seal() 回写真实 wav 长度（头里的长度是占位 0 时，
+                // ffmpeg 按头读会认为音频是空的）。
                 string finalPath;
-                if (_audio.IsValid && _audio.Save(_audioPath))
+                bool audioOk = _audio != null
+                    && !_audio.Dead
+                    && _audio.Seal()
+                    && _audio.Seconds > 0.05;
+                if (audioOk)
                 {
                     finalPath = AudioMux.Mux(Settings.FfmpegPath, _rawVideoPath,
                         _audioPath, _outputPath, (ContainerMode)Settings.Container);
+                    UnityEngine.Debug.Log("[SpectreReplay] 音频已合入，时长 "
+                        + _audio.Seconds.ToString("0.00") + "s");
                 }
                 else
                 {
+                    if (_audio != null && _audio.Dead)
+                    {
+                        UnityEngine.Debug.LogWarning(
+                            "[SpectreReplay] 混音失败，本次产出无声视频："
+                            + _audio.DeathReason);
+                    }
                     try
                     {
                         File.Copy(_rawVideoPath, _outputPath, true);
