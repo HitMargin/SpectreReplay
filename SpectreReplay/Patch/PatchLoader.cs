@@ -7,11 +7,24 @@ using UnityEngine;
 
 namespace SpectreReplay.Patching
 {
-    /// <summary>补丁挂在方法的前/后。</summary>
+    /// <summary>补丁挂在方法的前/后，或作为异常兜底。</summary>
     internal enum PatchKind
     {
         Prefix,
         Postfix,
+        /// <summary>
+        /// 方法体执行完（或抛出）后调用，用来观察或吞掉异常。
+        ///
+        /// 必须用它的一类场景：异常发生在**方法体内部**，Prefix/Postfix
+        /// 只在进入前/正常返回后跑，都救不了。
+        /// 例：兜住游戏自身在方法体里抛出的越界（见 Patch_Recording 的
+        /// HoldKeysFinalizer）。
+        ///
+        /// 语义与 Harmony 一致：形参 <c>__exception</c> 为 null 表示**没抛异常**
+        /// ——Finalizer 在无异常时也会被调用，不判这一条会走错分支；
+        /// 返回 null 表示吞掉，返回原异常表示继续上抛。
+        /// </summary>
+        Finalizer,
     }
 
     /// <summary>
@@ -249,13 +262,24 @@ namespace SpectreReplay.Patching
                     return;
                 }
                 HarmonyMethod hm = new HarmonyMethod(patch);
+                // 三种 kind **全部显式分派**，不靠 else 兜底。
+                // 写成「Prefix 走 prefix，其余一律 postfix」的话，
+                // Finalizer 会被静默挂成 postfix：补丁照样"挂上了"，
+                // 日志里也看不出任何异常，却完全不起兜底作用。
                 if (spec.Attr.Kind == PatchKind.Prefix)
                 {
                     _harmony.Patch(target, prefix: hm);
                 }
-                else
+                else if (spec.Attr.Kind == PatchKind.Postfix)
                 {
                     _harmony.Patch(target, postfix: hm);
+                }
+                else
+                {
+                    // 其余目前只有 Finalizer。写成 else 而不是显式判 Finalizer
+                    // 是刻意的：新加一种 kind 时会落到这里被明确暴露，
+                    // 而不会静默挂成 postfix。
+                    _harmony.Patch(target, finalizer: hm);
                 }
                 _applied.Add(hm);
             }

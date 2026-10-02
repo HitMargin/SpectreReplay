@@ -188,6 +188,45 @@ namespace SpectreReplay.Features.Recording
             }
         }
 
+        /// <summary>
+        /// 兜住游戏自身的一个潜伏 bug（偏差 18）。
+        ///
+        /// <c>scrPlayer.UpdateHoldKeys</c>（scrPlayer.cs:694-740）里：
+        ///   :707  keyTimes.RemoveAt(0);      ← 第一次移除
+        ///   :713  if (Hit(targetTick) && …)  ← Hit() 尾部会向 keyTimes 补一条
+        ///   :728  keyTimes.RemoveAt(0);      ← 第二次移除，假定那条补充还在
+        ///
+        /// 若 :713 那次 <c>Hit()</c> 提前返回 false（无响应窗口、忽略输入特效等），
+        /// 它既不推进地板也不补条目，:728 就在空表上抛
+        /// <c>ArgumentOutOfRangeException</c>。
+        ///
+        /// **正常游玩几乎凑不齐触发条件，回放却更容易凑齐。** 照 Spectre 的注释
+        /// （Patch_Playback.cs:26-32）：「回放引擎按量化时间注入按键，偶尔恰好凑齐
+        /// （midspin 链上 keyTimes 恰剩 1 项 + hold 守卫放行 + Hit 空转）」。
+        ///
+        /// 为什么可以放心吞：抛出只中断当帧的输入模拟，而回放状态每帧由
+        /// 注入的按键重新驱动，吞掉不影响回放与成片。
+        ///
+        /// 三个条件缺一不可 —— Finalizer 在没有异常时也会被调用，
+        /// 不判 <c>__exception == null</c> 会把正常路径也走一遍；
+        /// 不判 <c>IsPlaying</c> 会连真人游玩的真 bug 一起吞掉。
+        /// </summary>
+        [GamePatch(typeof(scrPlayer), "UpdateHoldKeys", PatchKind.Finalizer, "playback")]
+        private static System.Exception HoldKeysFinalizer(System.Exception __exception)
+        {
+            if (__exception == null || !PlaybackEngine.IsPlaying)
+            {
+                return __exception;
+            }
+            if (!(__exception is ArgumentOutOfRangeException))
+            {
+                return __exception;
+            }
+            Debug.LogWarning("[SpectreReplay] 撞上游戏 UpdateHoldKeys 的 midspin 越界"
+                + "（keyTimes 被移除两次），已吞掉——不影响回放");
+            return null;
+        }
+
         [GamePatch(typeof(scrMarginTracker), "AddHit", PatchKind.Postfix, "recording")]
         private static void HitPostfix(HitMargin hit)
         {

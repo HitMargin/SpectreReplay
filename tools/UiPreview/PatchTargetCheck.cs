@@ -178,7 +178,101 @@ namespace UiPreview
                 Console.WriteLine($"    ✓ 没有补丁挂在会被前置 return 挡掉的方法上"
                     + $"（已确认使用：{string.Join(" / ", SafePumps)})");
             }
+            fail += DispatchIsExhaustive(projectRoot);
             return fail;
+        }
+
+        /// <summary>
+        /// PatchLoader.Apply 必须对三种 PatchKind 都有**显式**分支。
+        ///
+        /// 理由：它原先写成「Prefix 走 prefix，其余一律走 postfix」。于是
+        /// <c>PatchKind.Finalizer</c> 会被**静默挂成 postfix**——补丁照样
+        /// "挂上了"，日志里也看不出任何异常，却完全不起兜底作用。
+        ///
+        /// 只有一条路能发现这种错：读源码断言它是穷尽分派。
+        /// 这里刻意断言"显式出现三个分支"，而不是"出现了 finalizer 字样"——
+        /// 后者会被注释里的说明文字骗过去。
+        /// </summary>
+        private static int DispatchIsExhaustive(string projectRoot)
+        {
+            string file = System.IO.Path.Combine(projectRoot, "Patch", "PatchLoader.cs");
+            if (!System.IO.File.Exists(file))
+            {
+                Console.WriteLine("    ✗ 找不到 PatchLoader.cs，无法验补丁分派");
+                return 1;
+            }
+            string src = StripComments(System.IO.File.ReadAllText(file));
+            var missing = new List<string>();
+            if (!src.Contains("prefix:"))
+            {
+                missing.Add("prefix");
+            }
+            if (!src.Contains("postfix:"))
+            {
+                missing.Add("postfix");
+            }
+            if (!src.Contains("finalizer:"))
+            {
+                missing.Add("finalizer");
+            }
+            // 判据不是"三种 kind 都出现 == 比较"——刻意的写法会把
+            // Finalizer 放进 else（新增 kind 时落到分支外被明确暴露，
+            // 而不会静默挂成 postfix），那不该判红。
+            //
+            // 真正要防的是**只有两个分支**：那种写法下 Finalizer 会落进
+            // postfix 分支，而补丁照样"挂上了"、日志无异常。
+            // 因此判据改成：Prefix 必须显式判，且 finalizer:/postfix:
+            // 都要以 Harmony 的具名参数形式出现（不能是位置参数）。
+            int explicitKinds = 0;
+            foreach (var k in new[] { "Prefix", "Postfix", "Finalizer" })
+            {
+                if (src.Contains("== PatchKind." + k)) explicitKinds++;
+            }
+            // 至少要显式判 Prefix——它是唯一必须显式的：若写成
+            // 「其余一律 postfix」，Finalizer 必然被吞进 postfix。
+            bool prefixExplicit = src.Contains("== PatchKind.Prefix");
+            bool ok = missing.Count == 0 && prefixExplicit && explicitKinds >= 2;
+            Console.WriteLine($"    {(ok ? "✓" : "✗")} ② 补丁按 kind 穷尽分派"
+                + $"  → 具名参数 {3 - missing.Count}/3，显式 kind 判断 {explicitKinds}/3"
+                + (missing.Count > 0 ? "，缺 " + string.Join("/", missing) : ""));
+            if (!ok)
+            {
+                Console.WriteLine("      ← Finalizer 若被静默挂成 postfix，"
+                    + "兜底补丁照样「挂上了」却不起作用，且日志无异常");
+            }
+            return ok ? 0 : 1;
+        }
+
+        /// <summary>去掉注释，避免说明文字里的关键字骗过检查。</summary>
+        private static string StripComments(string src)
+        {
+            var sb = new System.Text.StringBuilder(src.Length);
+            bool inBlock = false, inStr = false, inChar = false, esc = false;
+            for (int i = 0; i < src.Length; i++)
+            {
+                char c = src[i];
+                if (inBlock)
+                {
+                    if (c == '*' && i + 1 < src.Length && src[i + 1] == '/')
+                    { inBlock = false; i++; }
+                    else if (c == '\n') sb.Append(c);
+                    continue;
+                }
+                if (!inStr && !inChar && c == '/' && i + 1 < src.Length && src[i + 1] == '/')
+                {
+                    while (i < src.Length && src[i] != '\n') i++;
+                    sb.Append('\n');
+                    continue;
+                }
+                if (!inStr && !inChar && c == '/' && i + 1 < src.Length && src[i + 1] == '*')
+                { inBlock = true; i++; continue; }
+                if (esc) { esc = false; sb.Append(c); continue; }
+                if (c == '\\') { esc = true; sb.Append(c); continue; }
+                if (c == '"') inStr = !inStr;
+                else if (c == '\'') inChar = !inChar;
+                sb.Append(c);
+            }
+            return sb.ToString();
         }
     }
 }
