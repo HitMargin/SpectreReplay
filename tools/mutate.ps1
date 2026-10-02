@@ -23,7 +23,18 @@ param(
     # **没有"只施加不跑"的开关**：那种用法迟早会留下一个没还原的变异，
     # 而"工作树里静悄悄地少了一个修复"比没有这个脚本更糟。
     # 要手工确认就先跑本脚本（它自己会还原），再改文件。
-    [Parameter(Mandatory = $true)][string]$Which
+    [Parameter(Mandatory = $true)][string]$Which,
+
+    # **反向对照**：这条变异必须让闸门**保持全绿**。
+    #
+    # 为什么要有这个开关：反向对照用来证明判据的另一半也在跑——
+    # 比如"封禁词写在注释里不该变红"，证明剥注释那一步没被绕过。
+    # 但本脚本原本的语义是"红了才算通过"（exit 1 = 这条断言是假的），
+    # 反向对照天然会撞上它，于是要么被误当成坏变异而改掉，
+    # 要么被人手工豁免——那等于没有这个对照。
+    #
+    # 用法：mutate.ps1 MUT-AR -ExpectGreen
+    [switch]$ExpectGreen
 )
 
 $ErrorActionPreference = 'Stop'
@@ -53,7 +64,20 @@ function SetLines([string]$rel, [string[]]$out) {
 }
 
 # 精确替换整行里的子串，且要求只命中一次
+#
+# **必须校验实参个数。** PowerShell 的命令调用模式里 `+` 是普通实参、
+# 不是运算符：`F 'a' 'b' + "`n" + 'c'` 会把 `$b` 定成 'b'，把
+# `+`、`(换行)`、`+`、`c` 当成额外实参丢掉。ReplaceExact 只声明两个
+# 形参，多出来的被静默忽略，于是**变异整个没生效**、闸门全绿——
+# 恰好是本文件专门要防的那件事。
+# 多半行的替换值必须写进括号：F 'a' ('b' + "`n" + 'c')。
 function ReplaceExact([string]$rel, [string]$old, [string]$new) {
+    if ($args.Count -ne 0) {
+        throw ($rel + '：ReplaceExact 多出 ' + $args.Count +
+            ' 个实参 —— 多半是替换值里的 + 被拆到了外面。PowerShell' +
+            ' 会把 + 当成普通实参丢掉，那样变异根本没生效、闸门却全绿。' +
+            '替换值要写进括号。实参：' + ($args -join ' | '))
+    }
     $lines = Lines $rel
     $hit = 0
     for ($i = 0; $i -lt $lines.Count; $i++) {
@@ -86,6 +110,9 @@ $LIFE    = 'Features\Playback\Patch_Lifecycle.cs'
 $ENGINE  = 'Features\Playback\PlaybackEngine.cs'
 $HITREC  = 'Features\Recording\Patch_HitRecord.cs'
 $CLAMPS  = 'Features\Playback\PlaybackClamps.cs'
+$SETTINGS = 'Config\Settings.cs'
+$RECORDING = 'Features\Recording\Patch_Recording.cs'
+$LIVE      = 'Features\VideoRender\LiveSession.cs'
 
 switch ($Which) {
     # 写端（Set 侧）整个删掉，只留读端 —— 上一版的"只做一半"
@@ -374,6 +401,83 @@ switch ($Which) {
         Backup $CLAMPS
         ReplaceExact $CLAMPS '            finally' '            // MUT-AK: 忘了还原'
     }
+    # 特性对照 ①：在源码里真的用一次被封禁的 API。
+    # （判据扫的是**去注释后**的全文，所以把词写进注释不该触发——
+    #  这一点也要真验：见 MUT-AR，它往注释里塞一个封禁词）
+    'MUT-AL' {
+        Backup $CLAMPS
+        ReplaceExact $CLAMPS `
+            '            if (!PlaybackEngine.IsPlaying || !hitbox)' `
+            '            if (!PlaybackEngine.IsPlaying || !hitbox || scrMisc.GetHitMarginInSec(0, 0, 0, 0, 0) > 0)'
+    }
+    # 特性对照 ①：把自定判定的入口写进**字符串**（AccessTools 的绕法）
+    'MUT-AM' {
+        Backup $CLAMPS
+        ReplaceExact $CLAMPS `
+            '            if (!PlaybackEngine.IsPlaying || !hitbox)' `
+            '            if (!PlaybackEngine.IsPlaying || !hitbox || FeatureGate.IsEnabled("ScrMisc"))'
+    }
+    # 特性对照 ③：把 BGAMode 开关加回设置（哪怕默认 false）
+    'MUT-AN' {
+        Backup $SETTINGS
+        ReplaceExact $SETTINGS `
+            '        internal static bool AsyncInput = true;' `
+            ('        internal static bool AsyncInput = true;' + "`n`n" +
+             '        /// <summary>BGA 模式：屏蔽失败与判定飘字。</summary>' + "`n" +
+             '        internal static bool BGAMode = false;')
+    }
+    # 特性对照 ④：把只读 Postfix 改成调用 AddHit
+    # （"顺手补一下记账"是最可能的来由，而它没有任何症状）
+    'MUT-AO' {
+        Backup $RECORDING
+        # 先把 __instance 接进来，否则那行 AddHit 编译不过，
+        # 而编译不过就只会报"预览器挂了"，验不到判据。
+        ReplaceExact $RECORDING `
+            '        private static void HitPostfix(HitMargin hit)' `
+            '        private static void HitPostfix(scrMarginTracker __instance, HitMargin hit)'
+        ReplaceExact $RECORDING `
+            '                KeyRecorder.RecordMargin(hit, KeyRecorder.SongPositionOfNow());' `
+            ('                KeyRecorder.RecordMargin(hit, KeyRecorder.SongPositionOfNow());' +
+             "`n" + '                __instance.AddHit(hit);   // MUT-AO')
+    }
+    # 特性对照 ⑥：帧栅格改用 Time.realtimeSinceStartup —— 跟随 timeScale，
+    # 游戏一暂停（编辑器内回放正可能被暂停）栅格就停，音画永久错位
+    'MUT-AP' {
+        Backup $LIVE
+        ReplaceExact $LIVE `
+            'private readonly Stopwatch _clock = new Stopwatch();' `
+            'private readonly Stopwatch _clockUnused = new Stopwatch();'
+        ReplaceExact $LIVE `
+            '=> Stopwatch.GetTimestamp() / (double)Stopwatch.Frequency;' `
+            '=> Time.realtimeSinceStartup;'
+    }
+    # 特性对照 ⑤：照搬 Perf 目录那个自我统计（反射加载自身程序集）
+    'MUT-AQ' {
+        Backup $LOADER
+        ReplaceExact $LOADER `
+            '        private static bool _initialized;' `
+            ('        private static bool _initialized;' + "`n" +
+             '        private static int CountSelfPatches()' + "`n" +
+             '        {' + "`n" +
+             '            int n = 0;' + "`n" +
+             '            foreach (Type t in Assembly.LoadFrom(typeof(PatchLoader).Assembly.Location).GetTypes())' + "`n" +
+             '            {' + "`n" +
+             '                n += t.GetCustomAttributes(false).Length;' + "`n" +
+             '            }' + "`n" +
+             '            return n;' + "`n" +
+             '        }')
+    }
+    # 特性对照 ① 的**反向对照**：把封禁词写进注释。判据剥注释后扫，
+    # 所以这条必须仍然全绿 —— 它证明 ① 不会被"注释里提一句 scrMisc"
+    # 这种必要说明误伤。反向对照的作用是证明那半边判据也真的在跑。
+    'MUT-AR' {
+        Backup $CLAMPS
+        ReplaceExact $CLAMPS `
+            '            if (!PlaybackEngine.IsPlaying || !hitbox)' `
+            ('            // 这里不能改成 scrMisc.GetHitMarginInSec：' +
+             "`n" +
+             '            if (!PlaybackEngine.IsPlaying || !hitbox)')
+    }
     default { throw "未知变异 $Which" }
 }
 
@@ -402,6 +506,20 @@ Write-Host ('  断言 ' + ($good.Count + $bad.Count) + ' 条，失败 ' + $bad.C
 
 Cleanup
 Write-Host "已还原 $Which" -ForegroundColor Yellow
+
+if ($ExpectGreen) {
+    if ($bad.Count -eq 0) {
+        Write-Host ("✓ $Which 反向对照成立：闸门保持全绿") -ForegroundColor Green
+        exit 0
+    }
+    Write-Host "✗ $Which 反向对照被检出（失败 $($bad.Count) 条）" `
+        -ForegroundColor Red
+    Write-Host "  这一条本来该全绿。它变红说明判据把本该放行的东西也拦下了 ——" `
+        -ForegroundColor Red
+    Write-Host "  大概率是判据过严（例如忘了剥注释、或名字匹配没有忽略大小写）。" `
+        -ForegroundColor Red
+    exit 1
+}
 
 if ($bad.Count -eq 0) {
     Write-Host "✗ $Which 没有让闸门变红——这条断言是假的" -ForegroundColor Red

@@ -50,6 +50,13 @@
 //     激光/尖刺/装饰物 8 个调用点走这条路，掉进去就 ChangeState(Fail)
 //     + song.Stop()，成片断在一砖且日志无异常。判据要钉住"只拦 hitbox
 //     且只在回放期"，也要钉住第 4 形参真名叫 `hitbox`（前缀绑具名实参）
+//   · FeatureParityCheck   Spectre 剩下六个目录（Other / Editor /
+//     CustomJudge / JudgeBar / ResultsPlus / Perf）**为什么不补**，
+//     钉成反向断言（"不许出现"而不是"必须有"）。因为「看过一遍觉得
+//     不用补」是印象不是结论：改判定的补丁一旦接上，录下来的回放在
+//     别的机器上就飘，而屏蔽 FailAction 会让"按错键"不再失败、
+//     录出来的按键全是命中的。有一条真去反射游戏程序集，确认那些
+//     目标在本版本上的形状（`scrMisc.IsValidHit` r150 已删）
 //
 // 界面本身只能靠游戏里开一次 UMM 窗口看。这是 GUILayout 的代价，
 // 换来的是不用再维护 Canvas/EventSystem/ScrollRect/TMP 那一整套。
@@ -135,10 +142,15 @@ namespace UiPreview
             int barrierFail = BarrierCheck.Run(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
 
+            // 六目录的特性对照：把"为什么不补"钉成断言，免得半年后
+            // 有人看到 Spectre 里有个 GetHitMarginInSec 的补丁就想补。
+            int parityFail = FeatureParityCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+
             int total = replayFail + ffFail + locFail + hardFail + patchFail
                 + levelFail + probeFail + avFail + validFail + hitFail
                 + compatFail + frameFail + guardFail + stateFail + timingFail
-                + clockFail + lifecycleFail + barrierFail;
+                + clockFail + lifecycleFail + barrierFail + parityFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"

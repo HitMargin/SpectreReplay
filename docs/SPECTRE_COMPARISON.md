@@ -1007,12 +1007,59 @@ Spectre 的 `Patch_Lifecycle.cs:16-42` 挂了四条，我们一条都没有。
   判据 ④ 的"方法体在签名后面"会先一步变红——那是另一条断言的功劳。
   改成只替换 `Teardown()` 那一行，才真的验到它想验的"必须共用一个入口"。
 
+### 偏差 24：回放期激光/尖刺会直接把行星打死 —— 死亡在 `noFail` 保护之外
+
+死法有两条路。**普通失败**（激光之外的一切：`scrPlanet.MarkFail`、
+失败判定、飞行动作掉出砖块）都走 `scrPlayer.Die(overload, multipress,
+failMessage)`，**第 4 形参 `hitbox` 是 false** —— 真源码
+`scrPlayer.cs:325-371` 把整段 `noFail` 保护包在 `if (!hitbox)` 里，
+所以偏差 19 加的 `ClampGlobalState()`（`controller.noFail = true`）
+**真的兜住了它们**。
+
+**但激光/尖刺/装饰物走的是另一条**：`LaserSpawner.cs:154`、
+`Mawaru.cs:818`、`PuzzleRoom.cs:81`、`DivineIntervention.cs:1874`、
+`scrPlanet.cs:1249`、`scrDecoration.cs:453` 全部调
+`DieByHitbox()` / `Die(…, hitbox: true)`。这一支**直接跳到
+`scrPlayer.cs:381 planetarySystem.Die(...)` + `alive = false` +
+`OnPlayerDied` + `MarkDeath`**，`noFail` 一眼都看不到。
+
+后果不是"回放多输了一次"，而是**成片断在一砖**：
+`song.Stop()` 之后帧栅格还在按墙钟推进（`LiveSession` 不管游戏死没死），
+录出来的是一段静止画面，`Player.log` 里一句异常都没有。
+
+修法在 `PlaybackClamps.cs:88-143`：一个 `scrPlayer.Die` 的 **Prefix**，
+条件只有 `PlaybackEngine.IsPlaying || !hitbox`（返回 true 放行），
+命中时打一行 `Debug.LogWarning("[SpectreReplay] 回放期挡住一次 hitbox 死亡…")`
+并 `return false`。
+
+**三件事必须一起钉住**（`BarrierCheck` 六条断言）：
+
+1. **它挂在 `scrPlayer.Die` 上，真程序集里第 4 形参真名叫 `hitbox`**
+   且类型 `bool`（`overload:Boolean, multipress:Boolean, failMessage:String,
+   hitbox:Boolean`）。前缀是按**形参名**绑定的，名字写错**永远挂不上**，
+   而日志里只有「（目标不存在）」一行。
+2. **只拦 `hitbox == true`**，普通失败必须放行——否则把偏差 19 刚加的
+   `noFail` 保护整个废掉了。
+3. **不许顺手扩到 `scrPlanet.Die` / `scrSpike.Die`**：那些是行星自己的
+   死亡动画路径，与行星死亡判定无关，拦下来会变成"打不死"。
+
+**顺带查清一件事**：`scrPlayer.cs:363-368` 那个 `noFail` 抢救分支在
+`return` 之前**仍然**做 `controller.noFailInfiniteMargin = true; Hit(null);
+controller.noFailInfiniteMargin = false;`。我们的屏障在 `hitbox == true`
+时就返回了，**够不着这条路径**，所以这条被记下来的 noFail 事件不会被
+屏障吃掉——这点写在屏障的注释里，否则后来人会以为屏障把它一起拦了。
+
+**一句话记这个偏差的教训**：偏差 19 加 `noFail = true` 时，判据只看了
+"普通失败都被兜住"，**没问 `noFail` 在真源码里到底管到哪**。
+`if (!hitbox)` 那个括号就在那儿，差一行没读。
+
 ---
 
 ## 七、累计的变异验证
 
 `tools\mutate.ps1`（把修复退回旧样子、跑离屏套件、判红或报"这条断言
-是假的"、**自动还原**）。累计十七条变异，全部被检出：
+是假的"、**自动还原**）。累计二十三条变异（其中一条反向对照），逐条
+验证结果如下：
 
 | 变异 | 内容 | 被哪条断言抓到 |
 |---|---|---|
@@ -1033,6 +1080,21 @@ Spectre 的 `Patch_Lifecycle.cs:16-42` 挂了四条，我们一条都没有。
 | MUT-AC | `RestoreGlobalState()` 挪到早退之后 | ⑦ 写在早退之后 |
 | MUT-AD | `HitLocked` 互锁改 `return true` | ⑧ 早退返回的是 true |
 | MUT-AE | 目标方法名改 `WipeToBlackXXX` | ①/②/④ 挂点找不到 |
+| MUT-AF | 整条死亡屏障退回"不存在" | ①② |
+| MUT-AG | 屏障门控改成 `if (!hitbox)` | ②③ |
+| MUT-AH | 屏障门控改成 `if (!PlaybackEngine.IsPlaying)` | ② |
+| MUT-AI | 屏障的 `return false;` 改成 `return true;` | ② |
+| MUT-AJ | 屏障目标改 `typeof(scrPlanet), "Die"` | ①②⑤ |
+| MUT-AK | 注释掉 `MarkFailScope` 的 `finally` | LifecycleCheck ④ + BarrierCheck ⑥ |
+| MUT-AL | 屏障条件里加 `scrMisc.GetHitMarginInSec(...) > 0` | ①（另被 ②③，共 5 条） |
+| MUT-AM | 同一处改成 `FeatureGate.IsEnabled("ScrMisc")` | ①（第一轮 ① 漏了，见七之二） |
+| MUT-AN | `Settings.cs` 加 `BGAMode` 开关 | ③ |
+| MUT-AO | `HitPostfix` 调 `__instance.AddHit(hit);` | ④ |
+| MUT-AP | `LiveSession` 时钟改回 `Time.realtimeSinceStartup` | ⑥ |
+| MUT-AQ | `PatchLoader` 插反射加载自身程序集的 `CountSelfPatches()` | ⑤ |
+| MUT-AR | 把封禁词写进**注释**，要求**保持全绿** | 无（反向对照成立） |
+
+累计**二十三条**，其中二十二条必须变红、MUT-AR 必须**保持全绿**。
 
 **顺带修掉闸门自身的一个毛病**：游戏在跑时 `deploy.ps1` 抛"dll 被锁"，
 原先那个 throw 会把整个 `verify.ps1` 掀掉——后面「Spectre 未被污染」
@@ -1043,6 +1105,154 @@ Spectre 的 `Patch_Lifecycle.cs:16-42` 挂了四条，我们一条都没有。
 而 MUT-Q 是恒放行（从不禁），报出来的却是"会在无关的区段掐掉自由漫游"
 ——**报错方向与实际相反，照着去查会查半天查不出问题**。
 已改成把两种坏法都写出来，并提示"先看它到底返回了什么"。
+
+### 变异脚本自己也坏过两次
+
+这两条都是**工具层的坑**，而且都会伪装成"断言是假的"——
+即变异根本没施加、闸门如实全绿。
+
+**① `ReplaceExact` 多出的实参被静默吃掉。**
+MUT-AN / AO / AQ 三条**同时**失效：闸门 116 条失败 0，
+而脚本报 exit 1「这条断言是假的」。根因实测确认：PowerShell 的
+**命令调用模式**里 `+` 是**普通实参**、不是运算符——
+`F 'a' 'b' + "`n" + 'c'` 会把 `$b` 定成 `'b'`，把
+`+`、换行、`+`、`c` 当成额外实参**丢掉**（实测 `extra=4: +|+|third`）。
+`ReplaceExact` 只声明两个形参，多余的被静默忽略 ⇒ **变异根本没生效**。
+修法两条：给 `ReplaceExact` 加 `if ($args.Count -ne 0) { throw ... }`
+（把这个形状永久堵死），且所有多半行的替换值写进括号
+`('a' + "`n" + 'b')`。
+
+**② 给 `mutate.ps1` 加了 `[switch]$ExpectGreen`。**
+反向对照（把封禁词写进注释、要求**保持全绿**）撞上了脚本原本的语义
+——"红了才算通过"，反向对照天然会 exit 1。要么被误当成坏变异而改掉，
+要么被人手工豁免，那等于没有这个对照。现在 `-ExpectGreen` 时
+0 失败 → `✓ <名> 反向对照成立：闸门保持全绿` exit 0；
+有失败 → exit 1 并提示"**判据过严**（忘了剥注释、或没忽略大小写）"。
+
+**③ BOM 事故的第二种形态：把文件改成两个 BOM。**
+为修①我写的"补 BOM"脚本本身判断失误，在**已有** BOM 的文件上又加了一个，
+文件头变成 `239,187,191,239,187,191`；PS 5.1 把多余的 U+FEFF 当命令 token，
+报 `Cleanup : The term 'Cleanup' is not recognized`——**连早已存在的
+MUT-AK 也一起挂掉**。定位靠 `git diff` 里 `-﻿<#` / `+﻿﻿<#` 那一行。
+可靠写法：先 `ReadAllBytes` → 首 3 字节不是 `239,187,191` 才动手；
+动手前先判断文本首字符是否已是 `[char]0xFEFF`，是就先 `Substring(1)`。
+
+---
+
+## 七之二、其余六个特性目录：为什么判定为「不补」
+
+偏差 21–24 那四轮是"核着核着挖出真缺口"。剩下这六个目录反过来——
+**核完了，一条缺口都没有**。那一轮的结论是"绝大多数判为产品形态差异，
+不补"，但它**停在了印象上**：没有说清每一个目录里到底有什么、
+凭哪条依据不补。所以本轮把六条结论钉成断言。
+
+**为什么"不补"本身需要断言**（理由写在 `FeatureParityCheck.cs:1-35`）：
+半年后有人看到 Spectre 里有一个 `scrMisc.GetHitMarginInSec` 的补丁，
+就会想"这个我们好像没有"，于是补一段进去。补进去的后果不是少一个功能：
+
+- **改判定的补丁一旦接上，录下来的回放在别的机器上就飘**，
+  因为判定窗口不再是游戏自己那套；
+- **屏蔽 `FailAction` 的补丁会让"玩家按错了键"不再失败**，
+  录出来的按键全是命中的，回放看起来"很完美"但与真人对不上，
+  而日志里一句异常都没有。
+
+**断言方向是反的**：不是"必须有 X"，而是"**不许出现** X"。这样有人
+想补这些东西时，闸门立刻红，并告诉他为什么。
+
+### 六个目录逐个核完的结论
+
+| 目录 | 文件数 | 内容与不补的依据 |
+|---|---|---|
+| **Other** | 8 | turnaround/暂停时长计算、decode-pause 转译器、异步输入缓存性能、pro events、内存优化器、特殊按键、max-used-keys 统计、judge 文字显示。**没有一个碰录制·回放·渲染的正确性** |
+| **Editor** | 11 | `SpeedMath.cs:105-146` 只读；`Patch_SpeedPauseConverter.cs` 改 `editor.events` 后调游戏自己的 `ApplyEventsToFloors()`；`Patch_BpmBeatCalculator.cs` 注册 `"encode", false`（**从不序列化**，`:348-353` 除零时故意什么都不写）；`Patch_EditorBugfixes.cs:65` 只在拖编辑器时间轴时才够得着。**唯一真影响是 `Patch_BGAMode.cs`**（8 处补丁，默认关 `FeatureKeys.BGAMode`）——见下 |
+| **CustomJudge** | 4 | 只有 `Patch_RealJudge.cs` 改判定，受 `CustomRealJudgeOn`/`CustomOnlyOn` 约束（**默认关**）⇒ **使用约束**，不是缺口。`Patch_TierJudge.cs` 只读 `ref HitMargin`；`TierJudgeState` 已由 `Start_Rewind` Postfix 自动重置（与 `PlaybackEngine.Begin()` 同一个挂点） |
+| **JudgeBar** | 10 | `Patch_JudgeBar.cs:13` 解锁 `DifficultyUIMode.ShowAll`、`:27 UpdateLayout`、`:50 ADOFAI.ErrorMeterTick.Show`；`Patch_FailureJudgement.cs` 14 处挂点（含 `scrPlayer.Die` 的 Prefix/Postfix，`:72 if (multipress \| hitbox) return;`）。默认关（`Spectre\Main.cs:90` + `Settings.cs:199 JudgeBarOn = false`）。`FailureJudgement.cs:75-76/:99` 只读；`JudgeBarMeter.cs:197-198` 改的 `meter.sensitivity`/`tickLife` 是**自身组件**（`:333-334` 还原）；`OverloadBarUI.cs` 是 Overlay 画布，纯外观 |
+| **ResultsPlus** | 3 | `Patch_HitError.cs:9/:15` 只收集命中误差（**我们用 `HitTimingAnalyzer` 覆盖了同一份数据**）；`Patch_ResultsText.cs:22/:32/:55/:87` 是暂停弹窗/状态变更/keyFrequency 去重/结算文字 |
+| **Perf** | 1 | `FeaturePatchCost.cs`（82 行）反射 **Spectre 自己的程序集**数 `[SpectrePatch]` 声明数——**它不挂任何补丁**，只是个自测面板 |
+
+**一条值得单独记的**：`Patch_BGAMode.cs:122` 是 `scrController.FailAction`
+的 Prefix `return false`，`:107` 是 `ShowHitText` 的 Prefix `return false`。
+这正是上面那条"屏蔽失败"的典型。它默认关，`Patch_BGAMode.cs:114 MarkFail`
+与我们 `PlaybackClamps.cs:37-46` 的 `if (!IgnoreMarkFail) return true` 优雅相让，
+`scnEditor.SwitchToEditMode` Postfix 与我们的 `Patch_Lifecycle.cs:109-113` Prefix
+不交叉——所以**结论是使用约束：不要在录制期间开 BGA 模式**，不是"要补"。
+
+### 「不补」里唯一一条需要论证的：没有 `TogglePauseGame` 挂点
+
+Spectre 在 `scrController.TogglePauseGame` 上挂了前缀，在
+"编辑器 playMode + auto + 回放中"时把暂停按掉
+（`Spectre\Features\Replay\Patch_Misc.cs:11-31`）。**我们没有这个挂点**，
+所以要确认"没有它"确实安全。两个时钟分道扬镳：
+
+- **帧栅格是墙钟**：`LiveSession.cs:374` `_startWall + _frameIndex / (double)Settings.Fps`，
+  时钟是 `Stopwatch`（`:36`），**暂停期间照样推进**——这是**故意的**
+  （`:26-29` 说明为什么不用 `Time.realtimeSinceStartup`：那个跟随
+  timeScale，一次慢动作就够音画错位）。
+- **回放游标读 `conductor.songposition_minusi`**：暂停时游戏停了
+  （`scrConductor.cs:776 bool pause = AudioListener.pause;`，`:797-800`
+  `if (!paused) UpdateInput()`——暂停时 `UpdateInput` 不跑），
+  游标不动 ⇒ 按键不注入。
+
+于是暂停期间"墙钟走、游标停"：
+
+- 对**离线渲染**无害：`OfflineSession.cs:225` 把歌曲位置钉在
+  `_frameIndex / (double)_fps`，暂停不改这个值，渲染照样逐帧推进
+  ——这正是"离线"该有的行为。
+- 对**实时录制**只是多录一段静止画面。编辑器的 `pausedInPlayMode`
+  还会顺带关掉相机自定义帧率（`scnEditor.cs:1052-1056`
+  `SetCustomFrameRate(enable: false)`），那只影响游戏自己往四边形上贴的
+  纹理，**不影响我们 `cam.Render()` 到 RenderTexture 的逐帧捕获**
+  （`FrameSource.cs:131-153` 走的是 `cam.targetTexture` + `cam.Render()`）。
+
+所以"不补 `TogglePauseGame`"是有依据的，不是漏抄。**断言 ⑥ 钉的就是
+这个依据**：帧栅格必须用墙钟，不能改成 `Time.realtimeSinceStartup`。
+
+### 断言（`FeatureParityCheck`，六条，12 个计数）
+
+| 断言 | 内容 | 对应的"不补"依据 |
+|---|---|---|
+| ① `NoBannedApiInOurCode` | 剥注释后扫全部 `.cs`（跳过 `\obj\`/`\bin\`/`tools`），20 个封禁词出现即红 | 六个目录里所有碰游戏侧 API 的入口。**刻意不含 `SwitchChosen`**——`GameCompat.cs:140` 有该方法但全仓零调用点，封了会逼出无谓删改 |
+| ② `JudgeRewriteTargetsAreShapedAsSpectreAssumed` | **真反射真程序集**：`scrMisc.GetHitMarginInDeg/7`、`GetHitMarginInSec/5`、`HitMarginHelper.IsCounted/2`、`scrPlayer.Hit/2` 必须**在**；`scrMisc.GetHitMargin/6`、`scrMisc.IsValidHit/1` 必须**不在** | r150 已删 `IsValidHit`，Spectre 那些 `MaxVersion = 149` 的分支在本版本**挂不上**⇒"不补"零成本 |
+| ③ `NoParitySwitches` | 只扫 `Config\Settings.cs`，九个开关名出现即红 | 判据是"**声明了**"而非"默认关"——这三组补丁一旦打开就改判死与判定，后置默认值兜不住 |
+| ④ `OurHitAccountingIsUnpolluted` | 我们对 `scrMarginTracker.AddHit` 只有一个**只读 Postfix**（`Patch_Recording.cs:252`），且全仓**无任何 `.AddHit(` 调用** | `AddHit` 是判定记账入口。一旦我们也调它（哪怕"顺手修一下"），录下来的 `hitMargins` 与真实判定对不上，回放飘字全错而无异常 |
+| ⑤ `NoPerfSelfScan` | 全仓不得出现 `Assembly.GetTypes` / `Assembly.Load(From)?(` | 抄了 Perf 目录那个自我统计，或在运行时动态取补丁目标——两者都该走源码级判据 |
+| ⑥ `EditorPauseDoesNotDesync` | `LiveSession.cs` 必须 `new Stopwatch(` 且不得出现 `Time.realtimeSinceStartup\|unscaledTime\|deltaTime\|time`；`OfflineSession.cs` 必须 `PinnedSongPosition = _frameIndex / (double)_fps` | 上节那条论证 |
+
+**① 的一个设计选择值得记**：判据是"**去注释后**的代码里出现即红"，
+不是"出现即可疑"。注释里提某个 API 是必要的（要说明为什么不补），
+代码里出现就是真的要动那条链路。封禁词表带目录与理由，
+报错形如 `✗ ① Settings 里出现了 scrMisc ← CustomJudge：改判定会让回放飘`。
+
+**② 是这组断言里唯一一条会真去反射游戏程序集的**，而且它有
+"必须不在"的**反向子判据**（`scrMisc.IsValidHit` 已删）。
+只查"在"的话，游戏哪天把它加回来 we'd 毫无反应；只查"不在"的话，
+Spectre 改用新 API 名 we'd 毫无反应。**两个方向都要钉。**
+
+### 变异（MUT-AL … MUT-AR，七条）
+
+七条全部被检出（`MUT-AR` 是反向对照，要求**保持全绿**）：
+
+| 变异 | 内容 | 被哪条断言抓到 |
+|---|---|---|
+| MUT-AL | 在死亡屏障的条件里加 `scrMisc.GetHitMarginInSec(...) > 0` | ①（另被 ②③ 抓到，共 5 条） |
+| MUT-AM | 同一处改成 `FeatureGate.IsEnabled("ScrMisc")`（字符串 + 大小写混写的绕法） | ① + ②③（共 4 条） |
+| MUT-AN | `Settings.cs` 里加 `internal static bool BGAMode = false;` | ③ |
+| MUT-AO | `HitPostfix` 收下 `__instance` 并调 `__instance.AddHit(hit);` | ④ |
+| MUT-AP | `LiveSession` 的 `Stopwatch` 改名、时钟改回 `Time.realtimeSinceStartup` | ⑥ |
+| MUT-AQ | `PatchLoader.cs` 里插一个反射加载自身程序集的 `CountSelfPatches()` | ⑤ |
+| MUT-AR | 把封禁词写进**注释**，要求闸门**保持全绿** | 无（反向对照成立） |
+
+**MUT-AM 揪出了 ① 的一个真漏洞**：第一轮它只被 `BarrierCheck` ②③
+顺手抓到，**① 根本没抓到**——因为 ① 的正则**区分大小写**，
+`FeatureGate.IsEnabled("ScrMisc")` 里的 `ScrMisc` 躲过去了。
+已把 ① 改成 `\b token \b` + `RegexOptions.IgnoreCase`。
+实测全仓仅 3 处忽略大小写后命中（`GetHitMarginInDeg` 在
+`HitStateReplayer.cs:274` 注释、`FailAction` 在 `PlaybackClamps.cs:98` 注释、
+`SpectrePatch` 5 处全在注释），而注释已被剥掉 ⇒ **更严的判据零误伤**。
+教训与 MUT-AB 那次一样：**变异形状必须对准判据**——
+只有当变异恰好躲开某条断言时，才算真的验到了那条断言。
+
+**为 MUT-AR 给 `mutate.ps1` 加了 `[switch]$ExpectGreen`**（见下节）。
 
 ---
 
@@ -1063,6 +1273,8 @@ Spectre 的 `Patch_Lifecycle.cs:16-42` 挂了四条，我们一条都没有。
 11. ~~偏差 21（离线渲染时间钉扎从未生效）~~ ✅
 12. ~~偏差 22（回放期未禁 `UpdateFreeroam`）~~ ✅
 13. ~~偏差 23（退出关卡时的拆除链 + 空 Feature 语义）~~ ✅
+14. ~~偏差 24（回放期 hitbox 死亡绕过 `noFail`）~~ ✅ `9642b4e`
+15. ~~其余六个特性目录：把"不补"的结论钉成反向断言~~ ✅
 
 ---
 
@@ -1073,12 +1285,18 @@ Spectre 的 `Patch_Lifecycle.cs:16-42` 挂了四条，我们一条都没有。
 **一类是补缺口**：状态轨（偏差 1+1b）、回放期状态夹逼（19）、
 版本兼容层（15）、`-vf` 三段式（8）、中间文件扩展名（9）、
 补丁异常兜底（10）、结算状态判据、离线渲染时间钉扎（21）、
-回放期禁 `UpdateFreeroam`（22）、退出时的拆除链（23）。
+回放期禁 `UpdateFreeroam`（22）、退出时的拆除链（23）、
+回放期 hitbox 死亡屏障（24）。
 
 **一类是复核后**减法**：编码器看门狗（7）——原判断"缺三层"是错的，
 真正兜住卡死的那层我们早已有，而泵线程里那个看门狗会在收尾阶段
 **必然误判**，本轮把它删了。帧序（6）也不是缺功能，而是做法不同
 （我们不允许并发回读，比 Spectre 的队列更简单）。
+
+还有一类是**复核后确认"不用补"**：其余六个特性目录（Other / Editor /
+CustomJudge / JudgeBar / ResultsPlus / Perf）核完一条缺口都没有，
+结论钉成反向断言（见七之二）。这类"什么也没改"同样要写进文档，
+否则半年后没人记得它是**查过的**，只会以为是**没人看过**。
 
 **一类是复核时揪出的真 bug**（原对照文档里没有的）：
 - `FrameSource.Request()` 无条件返回 true，相机列表为空时那一帧永远
@@ -1094,6 +1312,13 @@ Spectre 的 `Patch_Lifecycle.cs:16-42` 挂了四条，我们一条都没有。
 - **闸门自己的一条工具教训**：`edit` 每次写 `tools\*.ps1` 都会**剥掉 UTF-8 BOM**，
   之后 PowerShell 把中文读成乱码、脚本直接解析失败（报一个指向语法块的
   ParserError，完全指不到编码）。已改成每次改完补回 BOM。
+- **`ReplaceExact` 静默吃掉了额外实参**，于是 MUT-AN / AO / AQ 三条变异
+  **根本没施加**、闸门如实全绿、脚本却报「这条断言是假的」。
+  根因：PowerShell 命令调用模式里 `+` 是普通实参，`F 'a' 'b' + "`n" + 'c'`
+  会把后面的全丢掉。已加 `if ($args.Count -ne 0) { throw }` 永久堵死
+  （详见第七节的"变异脚本自己也坏过两次"）。
+- **封禁词判据区分大小写**，被 `FeatureGate.IsEnabled("ScrMisc")` 绕过一次
+  （MUT-AM）。已改成忽略大小写，实测零误伤。
 
 **一类是"清单本身有洞"**：偏差 20。清单列的是我当时已知的偏差，
 而重列 Spectre 的特性文件才看见 `ReplayAnalyzer` 这个整块缺失——
@@ -1115,11 +1340,13 @@ Spectre 的 `Patch_Lifecycle.cs:16-42` 挂了四条，我们一条都没有。
 | 21 离线渲染时间钉扎 | ✅ 本轮（修的是"一直没生效"） |
 | 22 回放期未禁 UpdateFreeroam | ✅ 本轮 |
 | 23 退出时的拆除链 | ✅ 本轮（修的是"只有按钮能停"） |
+| 24 hitbox 死亡绕过 noFail | ✅ `9642b4e`（修的是"屏障压根不存在"） |
+| 其余六个特性目录 | ✅ 本轮钉成反向断言（**结论是不补**，见七之二） |
 | 3 / 14 音频取 clip、校验 | ✅ 更早轮次 |
 | 16 / 17 哈希陷阱 | ✅ 已在 `FfmpegArgs` 侧按不变文化处理 |
 | 2 / 3a / 4 / 5 / 18 | ✅ 不是缺陷，见各节说明 |
 
-### 未修的三项，说明为什么
+### 未修的四项，说明为什么
 
 - **偏差 2（按键注入方式）**：Spectre 用 Win32 `SendInput`，我们也用。
   架构一致，无需改。
@@ -1128,8 +1355,12 @@ Spectre 的 `Patch_Lifecycle.cs:16-42` 挂了四条，我们一条都没有。
   意味着重写整个渲染管线，收益不匹配风险。
 - **偏差 18（`UpdateHoldKeys` 越界）**：已用 Finalizer 兜住
   （提交 `554b8fd`），属于"已修"，不再是待办。
+- **`TogglePauseGame` 的编辑器内回放暂停屏蔽**（七之二）：Spectre 在
+  playMode + auto + 回放中把暂停按掉。论证已写在那节——我们的帧栅格是
+  墙钟、游标读游戏暂停即停，两者天然不会错位。**属于"核过确认不用补"，
+  不是待办。**
 
-### 仍然成立的三条限制
+### 仍然成立的四条限制
 
 1. **离屏闸门不覆盖 GEOMETRY/CLICKS**——`GUILayout` 是声明式的，
    复刻不出布局与事件派发。
@@ -1139,3 +1370,9 @@ Spectre 的 `Patch_Lifecycle.cs:16-42` 挂了四条，我们一条都没有。
 3. **`States` 与 `scrPlayer.Hit` 的取值以本机 r150 为准**。
    闸门会在这两处读到不同值时变红，那是有意的：
    **它意味着需要重新确认，而不是可以忽略。**
+4. **① 判据扫的是"**去注释后**的代码"，所以注释里可以自由讨论某个 API**
+   （那正是"为什么不补"的记录方式）。代价是：有人把真正的调用**拼进
+   注释里的字符串**再反射执行，那条路是通的——但那已经不是"顺手补一段"
+   了，而是有人刻意绕闸门。MUT-AR 就是守这一半的：
+   它把封禁词写进注释并要求闸门**保持全绿**，
+   证明"必要说明不会误伤"这半边也在跑。
