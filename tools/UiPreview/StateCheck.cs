@@ -50,8 +50,81 @@ namespace UiPreview
             int fail = 0;
             fail += HotkeyUsesEnumNames(projectRoot);
             fail += EnumValuesFromRealAssembly();
+            fail += NoDriftingEnumMembers(projectRoot);
             return fail;
         }
+
+        /// <summary>
+        /// 全项目**不许出现任何 `HitMargin.Xxx` 形式的成员引用**。
+        ///
+        /// 为什么这是硬要求：枚举成员是**编译期内联常量**，同一个 DLL
+        /// 只能携带一套数值。r150 重排了 <c>HitMargin</c>（删掉 Perfect，
+        /// 新增 XPerfect/PerfectPlus/PerfectMinus/Midspin/FailedFloor，
+        /// 其后所有成员整体后移），所以任何写下的成员引用在另一个版本上
+        /// 都会**静默指向别的成员**——不报错、不警告，只是判定显示错。
+        ///
+        /// Spectre 为此写了 341 行 <c>HitMarginCompat</c>，运行期按名字
+        /// 解析。我们不需要它，**但这个"不需要"必须有断言守着**：
+        /// 哪天有人图省事写一句 <c>HitMargin.Perfect</c>，整件事会当场退化，
+        /// 而且不会有任何测试变红——所以判据就落在这里。
+        ///
+        /// 允许的两类用法（都不随版本漂移）：
+        ///  · <c>HitMargin</c> **类型**本身（签名、形参）
+        ///  · <c>hitMargin.ToString()</c> 取名字
+        /// </summary>
+        private static int NoDriftingEnumMembers(string projectRoot)
+        {
+            var offenders = new List<string>();
+            int scanned = 0;
+            foreach (var file in System.IO.Directory.GetFiles(
+                projectRoot, "*.cs", SearchOption.AllDirectories))
+            {
+                scanned++;
+                string src = StripComments(File.ReadAllText(file));
+                // Xxx.Yyy —— 第二段必须是 HitMargin 的**成员名**才要紧。
+                // 先粗筛"出现了 HitMargin."，再用真程序集的成员名表确认，
+                // 免得把注释里或别的上下文里的同名片段误判。
+                if (!src.Contains("HitMargin."))
+                {
+                    continue;
+                }
+                foreach (Match m in Regex.Matches(src, @"HitMargin\s*\.\s*(\w+)"))
+                {
+                    string member = m.Groups[1].Value;
+                    // 类型上的静态成员（GetValues / IsDefined / TryParse / Parse）
+                    // 是运行时查表的，不存在漂移
+                    if (HitMarginStatics.Contains(member))
+                    {
+                        continue;
+                    }
+                    offenders.Add(Path.GetFileName(file) + ": HitMargin." + member);
+                }
+            }
+            if (offenders.Count > 0)
+            {
+                Console.WriteLine("    ✗ ③ 出现了会随版本漂移的枚举成员引用：");
+                foreach (var o in offenders)
+                {
+                    Console.WriteLine("        " + o);
+                }
+                Console.WriteLine("      ← 枚举成员是编译期内联常量。r150 重排过 HitMargin，"
+                    + "写死的成员会静默指向别的判定——不报错，只是显示错");
+                Console.WriteLine("      ← 要按名字取（ToString + 字典），"
+                    + "或像 PlaybackEngine 那样按 Enum.GetValues 的长度做越界退回");
+                return 1;
+            }
+            Console.WriteLine($"    ✓ ③ 全项目 {scanned} 个源文件里没有一处 "
+                + "HitMargin.Xxx（枚举成员是内联常量，写死会静默指向别的判定）");
+            return 0;
+        }
+
+        /// <summary>Type 上的静态成员，运行时查表、不受版本重排影响。</summary>
+        private static readonly HashSet<string> HitMarginStatics =
+            new HashSet<string>(StringComparer.Ordinal)
+            {
+                "GetValues", "GetNames", "IsDefined", "TryParse", "Parse",
+                "GetName", "GetUnderlyingType",
+            };
 
         private static int HotkeyUsesEnumNames(string projectRoot)
         {

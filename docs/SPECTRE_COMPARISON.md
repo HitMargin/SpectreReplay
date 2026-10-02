@@ -778,6 +778,61 @@ private const string IVStorageKey  = "potato";
 反而会让人误以为它安全。同理 `LegacyReplayData` / `ReplayCrp2Codec`
 也不移植——我们有自己的 `Version = 4` 格式。
 
+### `Compat/HitMarginCompat.cs`（341 行）——不补，但**核过一遍确认不用补**
+
+这份差点被我当成漏项。它解决的是真问题，值得说清楚为什么我们不需要。
+
+r150 重排了 `HitMargin`：**删掉 `Perfect`**，新增 XPerfect / PerfectPlus /
+PerfectMinus / Midspin / FailedFloor，其后所有成员索引整体后移
+（LatePerfect 4→6、VeryLate 5→7、TooLate 6→8、Auto 10→12、OverPress 11→13）。
+而**枚举成员是编译期内联常量**：同一个 DLL 只能携带一套数值，所以任何直接
+写下的 `HitMargin.Xxx` 在另一个版本上都会**静默指向别的成员**。
+Spectre 的做法是运行期按**名字**解析（`Enum.TryParse`），并额外拒绝纯数字串
+——`Enum.TryParse` 会把 `"6"` 当合法值，那是版本相关的陷阱。
+
+照真程序集读当前的 `HitMargin`（16 个成员）：
+
+```
+0=TooEarly   1=VeryEarly  2=EarlyPerfect  3=PerfectMinus  4=XPerfect
+5=PerfectPlus 6=LatePerfect 7=VeryLate   8=TooLate       9=Multipress
+10=FailMiss 11=FailOverload 12=Auto     13=OverPress    14=Midspin
+15=FailedFloor
+```
+
+**我们不需要那 341 行**，因为**全项目一处 `HitMargin.Xxx` 都没写**（grep 确认）：
+判定记账用 `margin.ToString()` 取名字当字典键（`KeyRecorder.cs:438`），
+补丁签名用的是 `HitMargin` **类型**本身（`Patch_Recording.cs:253`）。
+类型引用在跨版本时不会错，错的是**成员**。
+
+我们唯一持久化的枚举是 `HitMarginLimit`（只有 3 个成员：
+`None`/`PerfectsOnly`/`PurePerfectOnly`，且 `PlaybackEngine.cs:335`
+按 `Enum.GetValues` 的长度做了越界退回）。3 个成员的枚举没有
+`HitMargin` 那种大规模重排的风险。
+
+**这条结论只对本机 r150 成立**，所以它不该只是一段散文。
+
+先记一个顺带查出来的事实，它改变了这条风险的描述：**写死一个
+**被删掉**的成员是编译错误，不是静默漂移**——实测把
+`HitMargin.Perfect`（r149 才有）写进代码，编译直接报
+`CS0117: “HitMargin”未包含“Perfect”的定义`。
+
+所以 Spectre 那 341 行真正防的是**另一种情况**：成员**还在、但索引挪了**
+（`LatePerfect` 4→6、`TooLate` 6→8…）。那种情况编译通过、
+运行也正常，只是**判定显示错**——那才是必须靠断言守的地方。
+
+已加断言（`StateCheck` ③）：扫全部源文件，**不许出现任何
+`HitMargin.Xxx` 成员引用**，只豁免 `Type` 上的静态成员
+（`GetValues`/`IsDefined`/`TryParse`…，那些是运行期查表，不漂移）。
+
+两条都做了变异验证：
+- 写死 `HitMargin.LatePerfect` → 立刻被指名到文件与成员；
+- 把真实成员名塞进静态白名单试图豁免 → 变红（附带的编译错误本身
+  也说明"被删的成员"那条路径是编译期就断的）。
+
+**这就是清单需要复核的第二个理由**：
+第一处是偏差 20（漏掉的功能），第二处是这里（差点当成漏项、
+实则不需要，而"不需要"这个结论原本没有任何断言守着）。
+
 ---
 
 ## 五、按严重度逐项修复，已全部完成
