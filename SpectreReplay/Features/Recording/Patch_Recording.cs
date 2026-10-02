@@ -201,7 +201,7 @@ namespace SpectreReplay.Features.Recording
             }
         }
 
-        /// <summary>进入关卡：开始录制（若开着）。由关卡进入补丁调用。</summary>
+        /// <summary>进入关卡：开始录制与渲染（若开着）。由 LevelWatcher 调用。</summary>
         internal static void BeginIfEnabled()
         {
             if (!Settings.RecordingOn && !Settings.RenderOn)
@@ -213,8 +213,13 @@ namespace SpectreReplay.Features.Recording
             {
                 return;
             }
+            // **不要在这里判 gameworld。** 它只在**玩家首次命中之后**才置 true
+            // （scrController.cs:2872，位于 UpdateFreeroam 末尾）——
+            // 拿它当"可以开始录制"的门槛，等于整局都进不来。
+            // 调用方（LevelWatcher）已经确认过"我们在游玩场景里"，
+            // 那才是该问的问题，这里不必重复问一遍。
             var controller = scrController.instance;
-            if (controller == null || controller.gameworld != true)
+            if (controller == null)
             {
                 return;
             }

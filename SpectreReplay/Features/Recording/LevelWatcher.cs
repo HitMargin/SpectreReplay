@@ -99,30 +99,41 @@ namespace SpectreReplay.Features.Recording
         /// 整体 try/catch：这一段每帧执行，抛一次就是一次每帧异常。
         /// 中间态探测不到就返回 false，交给迟滞去滤。
         /// </summary>
+        /// <summary>
+        /// 现在是否在一局里。
+        ///
+        /// 判据：**当前场景是游玩场景**（scnGame / scnEditor），且歌曲已在播。
+        ///
+        /// ── 为什么必须看场景名 ─────────────────────────────────
+        /// 前两版都栽在"找一个表示在关卡里的布尔量"上：
+        ///   · <c>gameworld</c> 只在 <b>玩家首次命中之后</b>才置 true
+        ///     （scrController.cs:2872，位于 UpdateFreeroam 的尾部）。
+        ///     拿它当判据 = 丢掉开局那一大段，倒计时期间压根不录。
+        ///   · <c>currentState</c> 由 scrController.Update（:1675）赋值，
+        ///     而 Start 状态要等玩家按下开始键才切过去。拿它当判据 =
+        ///     整局都不录（上一版就是这么把功能改废的）。
+        ///   · <c>playerOne</c> 是 players[0] 索引属性，空表时抛异常。
+        ///
+        /// 这些字段都有共同点：**它们描述的是"玩到哪一步"，
+        /// 而不是"在不在关卡里"。** 场景名才回答后者。
+        /// Spectre 也是这么判的（Patch_Lifecycle.cs:80-99 直接读
+        /// SceneManager.GetActiveScene().name）。
+        ///
+        /// 整体 try/catch：这一段每帧执行，抛一次就是一次每帧异常。
+        /// </summary>
         private static bool ProbeLevel()
         {
             try
             {
-                var controller = scrController.instance;
-                if (controller == null || !controller.gameworld)
+                // 场景判断先行：不在游玩场景就直接走，连 conductor 都不用碰
+                string scene = UnityEngine.SceneManagement.SceneManager
+                    .GetActiveScene().name;
+                if (scene != GCNS.sceneGame && scene != GCNS.sceneEditor)
                 {
                     return false;
                 }
                 var conductor = scrConductor.instance;
                 if (conductor == null || conductor.song == null)
-                {
-                    return false;
-                }
-                // 状态机在 Start/Countdown/Checkpoint/PlayerControl/Fail/Won
-                // 之间都算"在一局里"；只有 None 才是真的不在。
-                // 玩家还没按下开始键时状态是 Start，也应当算进来——
-                // 否则"等倒计时"的这段完全不录，而玩家以为已经在录了。
-                //
-                // 读 currentState 字段而不是 stateMachine.GetState()：
-                // 前者是 States 强类型、且由游戏自己在 Update 开头每帧刷新
-                // （scrController.cs:1675），拿它是快照而不是再次驱动状态机。
-                // GetState() 返回的是 System.Enum，要靠强转才能比。
-                if (controller.currentState == States.None)
                 {
                     return false;
                 }
