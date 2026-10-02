@@ -166,8 +166,11 @@ namespace SpectreReplay.Patching
             }
             else if (DeclaredCount > 0)
             {
+                // 不写"全部挂载"：playback 组的补丁只在**载入回放时**才挂上，
+                // 所以计数天然会缺几个，那是门控的正常结果，不是故障。
+                // 之前那句"补丁 6/7 全部挂载"自相矛盾，玩家会以为坏了。
                 Debug.Log("[SpectreReplay] 补丁 " + AppliedCount + "/" + DeclaredCount
-                    + " 全部挂载");
+                    + " 已挂载（playback 组只在载入回放时挂上，计数偏少是正常的）");
             }
         }
 

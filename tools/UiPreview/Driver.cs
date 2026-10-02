@@ -13,10 +13,12 @@
 // 检查比没有检查更糟**：它会让人以为界面是对的。
 //
 // 留下的是验**数据层**的部分，与界面怎么画无关：
-//   · ReplayCheck   回放文件格式往返（坏掉的话回放与渲染全废）
-//   · FfmpegCheck   ffmpeg 参数拼装，并真跑一遍
-//   · LocCheck      文案表完整性（漏键 = 界面上露出原始键名）
-//   · HardTextCheck 用户可见的中文有没有被写死
+//   · ReplayCheck     回放文件格式往返（坏掉的话回放与渲染全废）
+//   · FfmpegCheck     ffmpeg 参数拼装，并真跑一遍
+//   · LocCheck        文案表完整性（漏键 = 界面上露出原始键名）
+//   · HardTextCheck   用户可见的中文有没有被写死
+//   · PatchTargetCheck 补丁有没有挂在会被前置 return 挡掉的方法上
+//     （回放与录制曾经因为这个而**完全不工作**且毫无异常，日志里看不出来）
 //
 // 界面本身只能靠游戏里开一次 UMM 窗口看。这是 GUILayout 的代价，
 // 换来的是不用再维护 Canvas/EventSystem/ScrollRect/TMP 那一整套。
@@ -42,7 +44,12 @@ namespace UiPreview
             int hardFail = HardTextCheck.Run(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
 
-            int total = replayFail + ffFail + locFail + hardFail;
+            // 挂载点：挂在会被前置 return 挡掉的方法上，回放与录制会
+            // 静默失效——日志里没有任何异常，只能靠断言守住。
+            int patchFail = PatchTargetCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+
+            int total = replayFail + ffFail + locFail + hardFail + patchFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"

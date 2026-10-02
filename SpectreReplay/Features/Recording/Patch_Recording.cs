@@ -10,14 +10,24 @@ namespace SpectreReplay.Features.Recording
     /// 把采集器接到游戏生命周期上。
     ///
     /// 挂载点与理由：
-    ///   scrController.Won_Update      通关——结算时收尾并存盘
     ///   scrController.PlayerControl_Update  游玩中——每帧泵一次队列
-    ///   scrMarginTracker.AddHit       判定——记一次判定与时刻
-    ///   scrController.Start_Rewind    重开（checkpointNum==0）——丢弃本次数据
+    ///   scrController.Countdown_Update      倒计时阶段（PlayerControl_Update 不跑）
+    ///   scrController.Checkpoint_Update     检查点阶段（同上）
+    ///   scrController.Won_Update            通关——结算时收尾并存盘
+    ///   scrController.Start_Rewind          重开——收尾本次尝试
+    ///   scrMarginTracker.AddHit             判定——记一次判定与时刻
     ///
-    /// UpdateInput 而不是 PlayerControl_Update 做泵点：Input 在输入子系统处理完
-    /// 之后才调用，此时 SkyHook 队列已经被游戏自己取空过一次，我们拿到的是
-    /// "本帧之后"的增量，不会和游戏抢同一批事件。
+    /// **不用 UpdateInput 做泵点。** 它第一行就是
+    ///     if (!RDInput.asyncKeyboard.isActive &amp;&amp; !...Left... &amp;&amp; !...Right...)
+    ///         return;                                    // scrController.cs:2885
+    /// 而 asyncKeyboard.isActive 只在玩家自己去设置里勾了异步输入才为真
+    /// （AsyncInputManager.Update:147）。默认输入下它恒为 false，整个方法体
+    /// 都不执行——泵挂在那里，一帧都不会被调用。
+    ///
+    /// PlayerControl_Update 不受那个开关影响（它在 !isActive 时才去调
+    /// Simulated_PlayerControl_Update，那是玩家的模拟输入），是真正的
+    /// "游玩中每帧"统一点。挂载点选择照 Spectre
+    /// （Features/Replay/Patch_AsyncInput.cs 与 Patch_Playback.cs）。
     /// </summary>
     internal static class Patch_Recording
     {
@@ -35,7 +45,9 @@ namespace SpectreReplay.Features.Recording
             }
         }
 
-        [GamePatch(typeof(scrController), "UpdateInput", PatchKind.Postfix, "recording")]
+        [GamePatch(typeof(scrController), "PlayerControl_Update", PatchKind.Postfix, "recording")]
+        [GamePatch(typeof(scrController), "Countdown_Update", PatchKind.Postfix, "recording")]
+        [GamePatch(typeof(scrController), "Checkpoint_Update", PatchKind.Postfix, "recording")]
         private static void Pump()
         {
             try

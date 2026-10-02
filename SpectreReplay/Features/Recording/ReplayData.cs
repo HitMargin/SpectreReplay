@@ -11,10 +11,14 @@ namespace SpectreReplay.Features.Recording
 
         /// <summary>
         /// SkyHook 的 KeyLabel（枚举序号，存 int）。
-        /// 必须一起存：游戏收到事件后会用 <c>new AsyncKeyCode(element.Key, element.Label)</c>
-        /// 构造按键标识，只给 Key 不给 Label 的话标识对不上，判定根本不会触发。
-        /// 两者之间可用 SkyHookKeyMapper.NativeKeyCodeToKeyLabel 互转，
-        /// 但录制时的 Label 才是权威值（同一 KeyCode 在不同布局下 Label 可能不同）。
+        ///
+        /// **保留字段但当前恒为 0。** 它是为 keyQueue 注入准备的——那条路
+        /// 要求 Label 与 Key 同时正确（游戏用 new AsyncKeyCode(Key, Label)
+        /// 构造按键标识）。现在改用 Win32 SendInput 注入真实按键，游戏侧
+        /// 自己从扫描码算出 Label，这个字段不再参与任何逻辑。
+        ///
+        /// 留着不为将来，是为了不破坏已落盘的 .srp 文件格式：
+        /// 写/读两端的字段布局必须一致，删字段会让所有旧回播放不出来。
         /// </summary>
         internal int Label;
 

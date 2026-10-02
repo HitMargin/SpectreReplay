@@ -163,6 +163,10 @@ namespace SpectreReplay
         private static bool Shutdown()
         {
             PatchLoader.UnpatchAll();
+            // 模组关掉时必须把注入过的键补松掉：否则回放途中关掉模组，
+            // 那个键会一直卡在系统层面的按下状态，玩家的下一个物理按键
+            // 只会被识别成一次松开，之后判定全乱。
+            Features.Playback.KeyboardSimulation.ReleaseAll();
             IsReady = false;
             return true;
         }

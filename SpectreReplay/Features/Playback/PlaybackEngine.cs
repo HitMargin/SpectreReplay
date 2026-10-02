@@ -1,8 +1,5 @@
 using System;
-using System.Diagnostics;
-using System.Reflection;
-using System.Runtime.Serialization;
-using SkyHook;
+using System.Collections.Generic;
 using UnityEngine;
 using SpectreReplay.Ui;
 using SpectreReplay.Patching;
@@ -12,24 +9,22 @@ using Debug = UnityEngine.Debug;
 namespace SpectreReplay.Features.Playback
 {
     /// <summary>
-    /// 回放引擎：**往游戏的按键队列里注入 SkyHookEvent**。
+    /// 回放引擎：按歌曲时间轴，**往 Windows 注入真实键盘输入**。
     ///
-    /// 为什么这么做，而不是直接调 scrPlayer.HitInputEvent：
-    ///   HitInputEvent(bool isAuto, InputEventState state, bool handleAll) 不带按键信息。
-    ///   它是"某个键已经被解析成按下/松开之后"才被调用的下游，单独调它等于
-    ///   无差别地敲一下，判定、按键标识、连击全对不上。
+    /// 为什么不是往 AsyncInputManager.keyQueue 里塞 SkyHookEvent（我最初的做法）：
+    ///   那条路根本走不通。scrController.cs:2885 有一道门——
+    ///     if (!RDInput.asyncKeyboard.isActive &amp;&amp; !...Left... &amp;&amp; !...Right...)
+    ///         return;
+    ///   而 asyncKeyboard.isActive 只有**玩家自己在游戏设置里开了异步输入**才为真
+    ///   （AsyncInputManager.Update:147）。默认输入下它恒为 false，UpdateInput
+    ///   第 2885 行直接 return，队列里的东西永远没人读——"点了回放毫无反应"。
+    ///   Spectre 也不走这条路，它用的是 Win32 SendInput。
     ///
-    /// 正确的注入点在 AsyncInputManager.keyQueue：
-    ///   scrController.UpdateInput 每帧从它取空队列 → 按时间戳排序 →
-    ///   对每条事件 new AsyncKeyCode(Key, Label) 并更新 keyMask/keyDownMask →
-    ///   ProcessKeyInputs。整条链路没有任何按时间的过滤，队列里的都会被当真。
-    ///   所以把构造好的 SkyHookEvent 塞进去，游戏会把它当真实按键走完全流程——
-    ///   判定、飘字、特效、连击数全部与真人游玩一致，我们不必复刻任何判定逻辑。
+    /// 注入真实按键后，游戏自己的 SkyHook 驱动会像真人输入一样收到事件，
+    /// 走完全相同的判定链路。不复刻任何判定逻辑，也不要求玩家改任何设置。
     ///
-    /// 时间字段怎么填：反编译 SkyHookEvent.GetTimeInTicks 的 IL 得到
-    ///     (TimeSec * 10_000_000 + TimeSubsecNano / 100) * (Frequency / 10_000_000)
-    /// 反解即可。填"当前"而不是"录制时的绝对时刻"——绝对时刻早就过期了，
-    /// 队列排序只需要彼此的相对顺序，而同一帧注入的事件相对顺序与录制一致。
+    /// 时间基准与录制一致：<c>scrConductor.songposition_minusi</c>。
+    /// 一帧内到点的按键一次性全部注入——每帧只补一个会让密集段整体延后。
     /// </summary>
     internal static class PlaybackEngine
     {
@@ -37,14 +32,11 @@ namespace SpectreReplay.Features.Playback
         private static int _cursor;
         private static double _position;
         private static string _sourcePath;
+        private static int _lastFrame = -1;
 
-        // SkyHookEvent 没有公开构造函数，用无初始化实例 + 反射写字段。
-        private static readonly Type EventType_ = typeof(SkyHookEvent);
-        private static readonly FieldInfo FTimeSec = EventType_.GetField("TimeSec");
-        private static readonly FieldInfo FSubsec = EventType_.GetField("TimeSubsecNano");
-        private static readonly FieldInfo FType = EventType_.GetField("Type");
-        private static readonly FieldInfo FLabel = EventType_.GetField("Label");
-        private static readonly FieldInfo FKey = EventType_.GetField("Key");
+        // 每帧复用：Pump 每帧都跑，不能每帧 new List。
+        private static readonly List<KeyboardSimulation.INPUT> Staged =
+            new List<KeyboardSimulation.INPUT>(32);
 
         internal static bool IsPlaying => _data != null;
         internal static string CurrentPath => _sourcePath;
@@ -53,14 +45,13 @@ namespace SpectreReplay.Features.Playback
         /// <summary>
         /// 已载入但还没真正开播——等关卡重开时接管。
         ///
-        /// **这整块之前完全没有，是"点了回放没反应"的根因。**
-        /// 之前 Load 完就以为开始了，可泵每帧读的是当前歌曲位置，
-        /// 而关卡还停在结算画面（位置早就跑完 50 秒），于是游标一次性冲到底、
-        /// 什么都不注入，看起来就是"播了但什么也没发生"。
+        /// **必须这样。** Load 时关卡往往停在结算画面，
+        /// songposition 早就跑完整个回放长度；真在 Load 里开播的话，
+        /// 游标会一次性冲到底、什么都不注入，看起来就是"播了但什么也没发生"。
         ///
-        /// Spectre 的做法（Features/Replay/Patch_Lifecycle.cs）：把"该不该播"
-        /// 挂在 scrController.Start_Rewind 的 Prefix，"开始播"挂在 Postfix——
-        /// **跟着关卡重开一起走**，位置自然从 0 开始。
+        /// 挂点照 Spectre 的 Features/Replay/Patch_Lifecycle.cs：
+        /// 把"开始播"挂在 <c>scrController.Start_Rewind</c> 的 **Postfix**，
+        /// **跟着关卡重开一起走**，歌曲位置自然从 0 开始。
         /// </summary>
         internal static bool Pending { get; private set; }
 
@@ -75,19 +66,11 @@ namespace SpectreReplay.Features.Playback
         {
             _cursor = 0;
             _position = 0;
+            _lastFrame = -1;
         }
-
-        /// <summary>构造器是否可用——不可用时整个回放不能工作，提前挡在界面上。</summary>
-        internal static bool CanInject =>
-            FTimeSec != null && FSubsec != null && FType != null
-            && FLabel != null && FKey != null;
 
         internal static string Describe()
         {
-            if (!CanInject)
-            {
-                return Loc.T("playback.structure_mismatch");
-            }
             if (_data == null)
             {
                 return LastError.Length > 0 ? LastError : "—";
@@ -107,15 +90,19 @@ namespace SpectreReplay.Features.Playback
                 _sourcePath = path;
                 _cursor = 0;
                 _position = 0;
+                _lastFrame = -1;
                 LastError = "";
-                // playback 功能是按"是否有载入的回放"门控的，所以载入成功后
-                // 必须让补丁层重挂一次，否则 UpdateInput 的 Prefix 还没上，
-                // 注入的事件要等到下一次 Refresh 才会被消费。
+                // playback 功能是按"是否有载入的回放"门控的，载入成功后
+                // 必须让补丁层重挂一次，否则 UpdateInput 的 Prefix 还没上。
                 Patching.PatchLoader.Refresh();
                 Debug.Log("[SpectreReplay] 已载入回放：" + path
                     + "（" + _data.Keys.Count + " 按键 / " + _data.Length.ToString("0.0") + "s）");
-                // 只是"装好了"，还没开播。真正的开始要等关卡重开——
-                // 见 IsPending 的说明（照 Spectre Patch_Lifecycle 的做法）。
+                if (_data.Keys.Count == 0)
+                {
+                    // 空回放：播了也不会有任何表现。直说，别让玩家对着
+                    // "点了回放没反应"猜是哪一步坏了。
+                    Debug.LogWarning("[SpectreReplay] 这个回放一个按键都没有，播了不会有任何表现");
+                }
                 Pending = true;
                 Ui.Status.Say("status.pending_replay",
                     System.IO.Path.GetFileNameWithoutExtension(path));
@@ -134,6 +121,10 @@ namespace SpectreReplay.Features.Playback
         internal static void Stop()
         {
             Pending = false;
+            // 补发松开：回放中途停掉时，录制里配对的松开事件可能还没轮到，
+            // 不补的话那个键会一直卡在按下状态，玩家的下一个物理按键
+            // 只会被当成一次松开，之后判定全乱。
+            KeyboardSimulation.ReleaseAll();
             if (_data == null)
             {
                 return;
@@ -162,33 +153,50 @@ namespace SpectreReplay.Features.Playback
             }
             _cursor = 0;
             _position = 0;
+            _lastFrame = -1;
             Debug.Log("[SpectreReplay] 回放开始：" + _data.Keys.Count
                 + " 按键 / " + _data.Length.ToString("0.0") + "s");
             Ui.Status.Say("status.playing");
         }
 
-        /// <summary>放弃待播的回放（用户点了别的关卡或取消）。</summary>
+        /// <summary>放弃待播的回放（玩家点了别的关卡或取消）。</summary>
         internal static void CancelPending()
         {
             Pending = false;
         }
 
         /// <summary>
-        /// 每帧调用。把时间已到的事件注入队列。
-        /// 必须早于 scrController.UpdateInput 执行，否则这一帧注入的会等到下一帧。
+        /// 每帧调用。把时间已到的按键注入系统。
+        ///
+        /// 挂在 <c>scrController.UpdateInput</c> 的 **Prefix**：早于游戏自己的
+        /// 输入处理，这一帧注入的当帧就被看到，凭空多一帧延迟。
         /// </summary>
         internal static void Pump()
         {
             // 待播（已载入、还没重开关卡）时不注入：关卡还停在结算画面，
             // 歌曲位置早就跑完整个回放了，这时注入只会把游标一次性冲到底。
-            if (_data == null || Pending || !CanInject)
+            if (_data == null || Pending || _data.Keys.Count == 0)
+            {
+                return;
+            }
+            // UpdateInput 一帧可能被调多次（多个状态机分支都会走到）。
+            // 按 Time.frameCount 挡掉重复，否则同一批按键会被注入两遍——
+            // 表现为"某个键莫名多按了一下"。
+            if (_lastFrame == Time.frameCount)
+            {
+                return;
+            }
+            _lastFrame = Time.frameCount;
+
+            var conductor = scrConductor.instance;
+            if (conductor == null || conductor.song == null)
             {
                 return;
             }
             double pos;
             try
             {
-                pos = scrConductor.instance?.songposition_minusi ?? 0.0;
+                pos = conductor.songposition_minusi;
             }
             catch
             {
@@ -207,48 +215,30 @@ namespace SpectreReplay.Features.Playback
             _position = pos;
 
             var keys = _data.Keys;
+            Staged.Clear();
             int injected = 0;
-            long ticks = Stopwatch.GetTimestamp();
             while (_cursor < keys.Count && keys[_cursor].SongPosition <= pos)
             {
                 var ev = keys[_cursor++];
-                try
-                {
-                    AsyncInputManager.keyQueue.Enqueue(Build(ev, ticks));
-                    injected++;
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogWarning("[SpectreReplay] 注入失败 @" + pos.ToString("0.000")
-                        + "：" + ex.Message);
-                }
+                KeyboardSimulation.Stage(ev.Key, ev.IsPressed, Staged);
+                injected++;
             }
+            if (Staged.Count > 0)
+            {
+                KeyboardSimulation.Send(Staged);
+                Staged.Clear();
+            }
+            else
+            {
+                Staged.Clear();
+            }
+
+            // 结束时把仍按着的键补松掉，再卸数据——顺序不能反
             if (_cursor >= keys.Count && pos > _data.Length + 1.5)
             {
                 Debug.Log("[SpectreReplay] 回放结束");
                 Stop();
             }
-        }
-
-        /// <summary>构造一条 SkyHookEvent。</summary>
-        private static SkyHookEvent Build(ReplayKeyEvent src, long stopwatchTicks)
-        {
-            // 反解 GetTimeInTicks：
-            //   ticks = (TimeSec * 1e7 + TimeSubsecNano / 100) * (Frequency / 1e7)
-            // 所以先把 Stopwatch 刻度换成 100ns 单位，再拆成秒 + 纳秒。
-            double hundredNano = stopwatchTicks * 1e7 / Stopwatch.Frequency;
-            long sec = (long)(hundredNano / 1e7);
-            uint nano = (uint)((hundredNano - sec * 1e7) * 100.0);
-
-            var ev = (SkyHookEvent)FormatterServices.GetUninitializedObject(EventType_);
-            FTimeSec.SetValue(ev, sec);
-            FSubsec.SetValue(ev, nano);
-            FType.SetValue(ev, src.IsPressed
-                ? SkyHook.EventType.KeyPressed
-                : SkyHook.EventType.KeyReleased);
-            FLabel.SetValue(ev, (KeyLabel)src.Label);
-            FKey.SetValue(ev, src.Key);
-            return ev;
         }
     }
 
@@ -256,11 +246,35 @@ namespace SpectreReplay.Features.Playback
     internal static class Patch_Playback
     {
         /// <summary>
-        /// 挂在 UpdateInput 的 **Prefix**：必须早于游戏自己从队列取事件，
-        /// 否则这一帧注入的要等到下一帧才被看到，凭空多一帧延迟。
+        /// 挂在 <c>scrController.PlayerControl_Update</c> 的 **Postfix**，而不是
+        /// <c>UpdateInput</c>。
+        ///
+        /// **换挂载点的原因（回放完全不动的直接原因）：**
+        /// UpdateInput 第一行就是
+        ///     if (!RDInput.asyncKeyboard.isActive &amp;&amp; !...Left... &amp;&amp; !...Right...)
+        ///         return;                                    // scrController.cs:2885
+        /// 而 asyncKeyboard.isActive 只在玩家**自己去设置里勾了异步输入**才为真
+        /// （AsyncInputManager.Update:147）。玩家用默认输入 → 恒为 false →
+        /// UpdateInput 整个函数体都不执行。**把泵挂在它上面，等于挂在一个
+        /// 永远提前 return 的方法上**，回放泵一帧都不会被调用。
+        ///
+        /// 连带影响：即使那个门打开了，注入 AsyncInputManager.keyQueue 也只在
+        /// 异步输入开启时才有人读——所以注入方式一并改成了 Win32 SendInput
+        /// （见 KeyboardSimulation）。
+        ///
+        /// PlayerControl_Update 是"游玩中每帧"的统一点，且不受异步输入开关影响
+        /// （它在 !isActive 时调 Simulated_PlayerControl_Update，那是玩家的
+        /// 模拟输入，与我们无关）。
+        ///
+        /// 同一个补丁也挂到 Countdown_Update / Checkpoint_Update：倒计时与检查点
+        /// 阶段 PlayerControl_Update 不会被调用，而回放从倒计时就该开始。
+        /// 照 Spectre（Features/Replay/Patch_Playback.cs 的
+        /// Patch_PlayerControlUpdate，三个 [SpectrePatch] 挂同一方法）。
         /// </summary>
-        [GamePatch(typeof(scrController), "UpdateInput", PatchKind.Prefix, "playback")]
-        private static void PumpPrefix()
+        [GamePatch(typeof(scrController), "PlayerControl_Update", PatchKind.Postfix, "playback")]
+        [GamePatch(typeof(scrController), "Countdown_Update", PatchKind.Postfix, "playback")]
+        [GamePatch(typeof(scrController), "Checkpoint_Update", PatchKind.Postfix, "playback")]
+        private static void PumpPostfix()
         {
             try
             {

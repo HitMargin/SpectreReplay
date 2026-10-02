@@ -1,47 +1,50 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using SkyHook;
+using System.Runtime.InteropServices;
 using UnityEngine;
 using SpectreReplay.Patching;
+using SpectreReplay.Features.Playback;
 
 namespace SpectreReplay.Features.Recording
 {
     /// <summary>
     /// 按键采集器。
     ///
-    /// 时间基准的关键：SkyHook 给的是**绝对时钟**（GetTimeInTicks，100ns 单位），
-    /// 与游戏帧无关。所以事件排队再晚到帧里处理，落到歌曲时间轴上的位置也不变——
-    /// 这是"高精度输入"的全部价值所在。若改成在帧里轮询 Input.GetKeyDown，
-    /// 误差就是整个帧时长（60FPS 下最坏 ±16ms，谱面上就是半个判定）。
+    /// **用 Win32 GetKeyboardState 轮询，不用 SkyHook 事件。**
     ///
-    /// 换算公式（与游戏自己的 GetHitMarginInSec 同构）：
-    ///     songPos = (eventTicks + dspNow - wallNow) / 1e7 - conductor.dspTimeSong - addoffset
-    /// 逐帧只取**一对**基准（dspTime 与系统时钟），因为取得越接近越准，
-    /// 而一帧内多次取只会引入额外的抖动。
+    /// 为什么换：SkyHook 的按键事件是给**异步输入**用的驱动，它只在玩家
+    /// 自己勾选了异步输入时才真正被游戏驱动起来（Persistence 的
+    /// useAsynchronousInput，默认关闭）。不开异步输入时 KeyUpdated
+    /// 几乎不产生事件——实测 50.9 秒的一局只录到 1 个按键。
+    /// Spectre 也因此把主录制路径放在 GetKeyboardState 轮询上
+    /// （Features/Replay/ReplayRecorder.cs:94），SkyHook 只是可选增强。
+    ///
+    /// 代价：时间精度等于一帧（60FPS 下最坏 ±16ms）。
+    /// 换来的是"任何玩家、任何设置下都能录到"——这才是能用的下限。
+    ///
+    /// 时间基准：<c>scrConductor.songposition_minusi</c>，
+    /// 与游戏自己的判定口径一致。
     /// </summary>
     internal static class KeyRecorder
     {
-        private sealed class RawEvent
-        {
-            internal long Ticks;
-            internal ushort Key;
-            internal int Label;
-            internal bool IsPressed;
-        }
+        /// <summary>
+        /// 读 256 个虚拟键的当前状态。第 i 字节的 0x80 位 = 第 i 键是否按下。
+        /// 照 Spectre 的 KeyboardSimulation.GetKeyboardState。
+        ///
+        /// 必须传够 256 字节：Win32 会按缓冲区长度写入，给小了就是内存越界。
+        /// 声明里用 IntPtr 接长度，交给系统自己读数组长度，不留人为错误的机会。
+        /// </summary>
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern int GetKeyboardState(byte[] pbKeyState);
 
-        // SkyHook 回调在游戏自己的输入线程上跑，不是主线程。
-        // 单个 Queue<T> 的并发入队+出队在 .NET/Mono 上是安全的；这里之所以
-        // 还额外加锁，是因为回调侧要读 _reject（主线程写）。
-        private static readonly Queue<RawEvent> Pending = new Queue<RawEvent>();
-        private static readonly List<RawEvent> Batch = new List<RawEvent>(256);
-        private static readonly object Gate = new object();
+        private static readonly byte[] PrevState = new byte[256];
+        private static readonly byte[] CurrState = new byte[256];
 
         private static readonly ReplayData Current = new ReplayData();
 
         private static bool _recording;
-        private static bool _hookReady;
-        private static bool _rejectMouse = true;
+        private static bool _pollingReady;
 
         internal static bool IsRecording => _recording;
         internal static ReplayData Data => Current;
@@ -53,11 +56,10 @@ namespace SpectreReplay.Features.Recording
             {
                 return;
             }
-            EnsureHook();
-            lock (Gate)
-            {
-                Pending.Clear();
-            }
+            EnsurePolling();
+            // 清掉上一局遗留的按键状态：否则新一局开始时 PrevState 里还留着
+            // 上一局按住的键，第一帧差分会把它们误判成"刚松开"。
+            System.Array.Clear(PrevState, 0, 256);
             Reset(Current, conductor, floor);
             _recording = true;
             Debug.Log("[SpectreReplay] 开始录制");
@@ -74,10 +76,8 @@ namespace SpectreReplay.Features.Recording
                 return null;
             }
             _recording = false;
-            lock (Gate)
-            {
-                DrainInto(Current, null);
-            }
+            // 收尾再差分一次：最后一次按键到通关之间的按键也要记进去。
+            Capture(scrConductor.instance);
             Current.Length = SongPositionOfNow();
             if (Current.IsEmpty || !autoSave)
             {
@@ -182,159 +182,120 @@ namespace SpectreReplay.Features.Recording
             return null;
         }
 
-        // ── SkyHook 回调 ────────────────────────────────────────
-        private static void EnsureHook()
+        // ── Win32 轮询采集 ────────────────────────────────────
+        /// <summary>
+        /// 校验 Win32 键盘状态读取可用。
+        ///
+        /// 用一次真实调用来验，而不是看 P/Invoke 声明对不对：user32.dll 在
+        /// 非 Windows 平台根本不存在，声明错了也只有真调一次才会炸。
+        /// 失败只记一次日志，之后每局都会重试（不能像原来那样置个永久标志
+        /// 就再也不试——静态字段跨场景活着，第一次时机不对就永久失效）。
+        /// </summary>
+        private static void EnsurePolling()
         {
-            if (_hookReady)
+            if (_pollingReady)
             {
                 return;
             }
             try
             {
-                // KeyUpdated 确实是静态字段、类型 UnityEvent<SkyHookEvent>
-                // （反射核实过），所以 AddListener 是对的用法。
-                //
-                // **但原先 _hookReady = true 是在这行之前置位的**，于是：
-                //   · KeyUpdated 为 null 时 `?.` 静默跳过 → 什么都没注册，
-                //     但 _hookReady 已经是 true → **之后再也不会尝试**
-                //   · 而 _hookReady 是 static，跨场景一直活着，
-                //     第一次在资源没就绪的时机调用就永久失效了
-                //
-                // 现象是"几乎录不到按键"（实测 50 秒只录到 1 个），
-                // 而且没有任何报错。现在**注册成功才置位**，并把结果记进日志。
-                var ev = SkyHookManager.KeyUpdated;
-                if (ev == null)
-                {
-                    Debug.LogWarning("[SpectreReplay] SkyHook 的 KeyUpdated 为 null"
-                        + "（资源未就绪），本次先不挂按键采集，下一局会再试");
-                    return;
-                }
-                ev.AddListener(OnKey);
-                // StartHook 是静态方法；isHookActive 是实例属性，要走单例取。
-                var mgr = SkyHookManager.Instance;
-                if (mgr == null || !mgr.isHookActive)
-                {
-                    SkyHookManager.StartHook();
-                }
-                // 到这儿才算真的挂上了。
-                _hookReady = true;
-                Debug.Log("[SpectreReplay] SkyHook 按键采集已挂上"
-                    + "（hookActive=" + (SkyHookManager.Instance?.isHookActive ?? false) + "）");
+                GetKeyboardState(CurrState);
+                _pollingReady = true;
+                Debug.Log("[SpectreReplay] 键盘轮询采集可用"
+                    + "（GetKeyboardState 已验证）");
             }
             catch (Exception ex)
             {
-                Debug.LogError("[SpectreReplay] SkyHook 初始化失败，本次退化为无 SkyHook 输入："
-                    + ex.Message);
-                _hookReady = false;
-            }
-        }
-
-        private static void OnKey(SkyHookEvent ev)
-        {
-            // SkyHookEvent 是**结构体**（值类型），ev 永远不可能是 null。
-            // 这里原来写着 `!ReferenceEquals(ev, null)` —— 该表达式恒为 false，
-            // 于是每次进来都在第一个分支 return，**一个按键都录不进去**。
-            // 现象是：日志里有「开始录制」，通关后 Replays 目录却空��一个文件
-            // （End 判到 Current.IsEmpty 就直接不落盘，不报错、不留痕）。
-            //
-            // 对照 Spectre 的 Features/Replay/AsyncKeyRecorder.cs：它直接从
-            // 队列取出 SkyHookEvent 就用，没有任何 null 检查。
-            if (!_recording)
-            {
-                return;
-            }
-            // 鼠标键不参与：它们没有"判定"语义，录进去只会让回放时的视角乱跳。
-            if (_rejectMouse && IsMouse(ev.Label))
-            {
-                return;
-            }
-            var e = new RawEvent
-            {
-                Ticks = ev.GetTimeInTicks(),
-                Key = ev.Key,
-                Label = (int)ev.Label,
-                IsPressed = ev.Type == SkyHook.EventType.KeyPressed,
-            };
-            lock (Gate)
-            {
-                Pending.Enqueue(e);
-            }
-        }
-
-        private static bool IsMouse(KeyLabel label)
-            => label == KeyLabel.MouseLeft || label == KeyLabel.MouseRight
-            || label == KeyLabel.MouseX2 || label == KeyLabel.MouseMiddle;
-
-        // ── 每帧推进 ────────────────────────────────────────────
-        /// <summary>由补丁在 UpdateInput 之后调用：把排队的原始事件换算成歌曲时间。</summary>
-        internal static void Pump(scrConductor conductor)
-        {
-            if (!_recording || conductor == null || conductor.song == null)
-            {
-                lock (Gate)
-                {
-                    Pending.Clear();
-                }
-                return;
-            }
-            lock (Gate)
-            {
-                DrainInto(Current, conductor);
+                Debug.LogError("[SpectreReplay] 无法读取键盘状态，本局录不到按键："
+                    + ex.Message + "（下一局会再试）");
+                _pollingReady = false;
             }
         }
 
         /// <summary>
-        /// 队列 → ReplayData 的换算。必须在 Gate 内调用。
-        /// 单遍完成：先把待处理事件按时间戳排好，再逐个映射成歌曲时间。
-        /// 一帧内 dsp/墙钟基准只取一次——取得越近越准，多次取只会多引入抖动。
+        /// 采样一次键盘状态并差分，把变化的键记进 ReplayData。
+        ///
+        /// 照 Spectre 的 ReplayRecorder.RecordKeyboardState：GetKeyboardState
+        /// 返回 256 字节，第 i 字节的 0x80 位表示第 i 个虚拟键当前是否按下。
+        /// 与上一帧差分，0→1 记按下、1→0 记松开。
+        ///
+        /// 一帧内只取一次基准；同一帧被多个补丁点调用时靠 _polled 挡掉，
+        /// 否则会连续差分两次、同一对按键被记成四次。
         /// </summary>
-        private static void DrainInto(ReplayData d, scrConductor conductor)
+        private static void Capture(scrConductor conductor)
         {
-            if (Pending.Count == 0)
+            if (!_recording || !_pollingReady)
             {
                 return;
             }
-            Batch.Clear();
-            while (Pending.TryDequeue(out RawEvent e))
+            if (conductor == null)
             {
-                Batch.Add(e);
+                return;
             }
-            Batch.Sort((a, b) => a.Ticks.CompareTo(b.Ticks));
-
-            long wallNow = DateTime.Now.Ticks;
-            double dspNowTicks = AudioSettings.dspTime * 1e7;
-            double songOrigin = conductor == null ? 0.0 : SongOriginSeconds(conductor);
-
-            for (int i = 0; i < Batch.Count; i++)
+            if (_lastFrame == Time.frameCount)
             {
-                RawEvent e = Batch[i];
-                double pos = (e.Ticks + dspNowTicks - wallNow) / 1e7 - songOrigin;
-                if (pos < 0)
-                {
-                    pos = 0;      // 玩家在开局前就按了：钳到 0，不丢
-                }
-                d.Keys.Add(new ReplayKeyEvent
-                {
-                    Key = e.Key,
-                    Label = e.Label,
-                    IsPressed = e.IsPressed,
-                    SongPosition = pos,
-                });
+                return;
             }
-            Batch.Clear();
-        }
+            _lastFrame = Time.frameCount;
 
-        /// <summary>歌曲时间轴原点在墙钟上的位置（秒）。</summary>
-        private static double SongOriginSeconds(scrConductor conductor)
-        {
+            double songPos;
             try
             {
-                return conductor.dspTimeSong + conductor.addoffset;
+                songPos = conductor.songposition_minusi;
             }
             catch
             {
-                return 0;
+                return;
             }
+            if (songPos < 0)
+            {
+                songPos = 0;      // 开局前就按了：钳到 0，不丢
+            }
+            try
+            {
+                GetKeyboardState(CurrState);
+            }
+            catch
+            {
+                return;
+            }
+
+            for (int i = 1; i < 256; i++)
+            {
+                bool down = (CurrState[i] & 0x80) != 0;
+                bool was = (PrevState[i] & 0x80) != 0;
+                if (down == was)
+                {
+                    continue;
+                }
+                // Shift/Ctrl/Alt/Esc 不录：回放时按住修饰键会与玩家自己的
+                // 按键叠加，Esc 还会被游戏当成暂停。照 Spectre 的 BlockedKeys。
+                ushort key = (ushort)i;
+                if (Playback.KeyboardSimulation.IsBlockedKey(key))
+                {
+                    continue;
+                }
+                Current.Keys.Add(new ReplayKeyEvent
+                {
+                    Key = key,
+                    Label = 0,
+                    IsPressed = down,
+                    SongPosition = songPos,
+                });
+            }
+            // PrevState 必须无条件整体更新：被跳过的键（BlockedKeys）这一帧
+            // 没记事件，但状态照样要跟上，否则它"松开"的那一刻会被误记一次。
+            System.Array.Copy(CurrState, PrevState, 256);
+        }
+
+        /// <summary>一帧只采样一次。多点共用同一个守卫。</summary>
+        private static int _lastFrame = -1;
+
+        // ── 每帧推进 ────────────────────────────────────────────
+        /// <summary>由补丁在游玩循环的每帧更新里调用。</summary>
+        internal static void Pump(scrConductor conductor)
+        {
+            Capture(conductor);
         }
 
         internal static double SongPositionOfNow()
