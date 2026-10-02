@@ -75,27 +75,28 @@ namespace SpectreReplay.Features.Recording
         /// （scrController.cs:1259 / 1480 / 1498），其中 1480 在
         /// WaitForStartCo 协程里——**关卡刚加载完就会调一次**。
         /// "进关"和"重开"走同一个方法，无条件收尾的结果就是
-        /// 玩家刚开始玩，界面已经显示"渲染完成"。
+        /// 玩家刚开始玩，界面已经显示"渲染完成"（实测只录到 27 帧 / 3 秒）。
         ///
-        /// 因此收尾后必须确认渲染会话是否真的还活着：
-        /// 关卡加载的**那次** rewind 之后，会话已经不存在了（不是被它结束的，
-        /// 而是 LevelWatcher 还没来得及 Begin）；而玩家中途按 R 重开时，
-        /// 会话仍在跑，那才是要结束的。判据用会话本身，不用 KeyRecorder
-        /// ——上面那行 End() 已经把 _recording 置 false，拿它判会恒为假。
+        /// 判据：**关卡刚开始时跳过一次。**
+        /// 渲染会话由 LevelWatcher 在探测到"进入关卡"时开启，而那次 Start_Rewind
+        /// 往往紧跟其后。把"会话是否在跑"当判据是不够的——它此刻**正在跑**，
+        /// 于是照样被收尾。真正能区分的是"这次 rewind 是不是本次会话的
+        /// 第一次"：第一次属于进关，跳过；之后的才是玩家按 R 的真重开。
         /// </summary>
         [GamePatch(typeof(scrController), "Start_Rewind", PatchKind.Postfix, "recording")]
         private static void RewindPostfix()
         {
             try
             {
-                // 一次尝试 = 一个回放文件。失败后重开就把上一段收尾落盘，
-                // 用户的每次尝试能单独回看，而不是所有尝试挤在一个文件里。
-                KeyRecorder.End(Settings.AutoSave);
-                // 只在录制会话真的还活着时才收尾：进关那次 rewind 时
-                // 会话尚未建立或已被正常流程收掉，这里不动它，视频继续录。
-                if (VideoRender.LiveSession.IsRunning)
+                // 本次会话的第一次 rewind = 关卡加载完成，不是重开。
+                // 只跳渲染，不跳录制：录制数据此时本来就是空的。
+                if (!VideoRender.LiveSession.ConsumeFirstRewind())
                 {
-                    VideoRender.RenderService.OnLevelEnd();
+                    KeyRecorder.End(Settings.AutoSave);
+                    if (VideoRender.LiveSession.IsRunning)
+                    {
+                        VideoRender.RenderService.OnLevelEnd();
+                    }
                 }
             }
             catch (Exception ex)

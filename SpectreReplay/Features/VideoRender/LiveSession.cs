@@ -54,6 +54,38 @@ namespace SpectreReplay.Features.VideoRender
         /// <summary>全局是否有会话在跑。手动触发按钮据此决定要不要新开一个。</summary>
         internal static bool IsRunning => _instance != null && _instance._capturing;
 
+        private bool _sawRewind;
+
+        /// <summary>
+        /// 问一句"这次 Start_Rewind 是不是本会话的第一次"，并把答案记掉。
+        ///
+        /// **为什么需要它：** scrController.Start_Rewind 不只表示"玩家按了重开"，
+        /// 它在关卡刚加载完时也会被调一次（scrController.cs:1480，
+        /// WaitForStartCo 协程里）。而渲染会话是在**进入关卡**时开启的，
+        /// 那次加载完成的 rewind 紧跟其后——此时会话正在跑，
+        /// 于是"看到会话在跑就收尾"的判据照样会把它结束掉。
+        /// 现象是玩家刚开始玩就显示"渲染完成"（实测 27 帧 / 3 秒）。
+        ///
+        /// 返回 true 表示"跳过一次，别收尾"。之后玩家真按 R 重开时
+        /// 返回 false，收尾照常进行。
+        /// </summary>
+        internal static bool ConsumeFirstRewind()
+        {
+            var s = _instance;
+            if (s == null)
+            {
+                // 会话都不在（没开渲染，或已被别处收掉）：这次 rewind 与它无关，
+                // 交给调用方按正常重开处理。
+                return false;
+            }
+            if (s._sawRewind)
+            {
+                return false;
+            }
+            s._sawRewind = true;
+            return true;
+        }
+
         // ── 生命周期 ────────────────────────────────────────────
         internal static void Begin()
         {
@@ -204,6 +236,7 @@ namespace SpectreReplay.Features.VideoRender
                 _skipped = 0;
                 _capturing = true;
                 cancelled = false;
+                _sawRewind = false;   // 新会话：重新开始数"第一次 rewind"
 
                 RenderStatus.Current = RenderStatus.State.Live;
                 RenderStatus.LastError = "";

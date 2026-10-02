@@ -19,6 +19,8 @@
 //   · HardTextCheck   用户可见的中文有没有被写死
 //   · PatchTargetCheck 补丁有没有挂在会被前置 return 挡掉的方法上
 //     （回放与录制曾经因为这个而**完全不工作**且毫无异常，日志里看不出来）
+//   · LevelLifecycleCheck 进关的那次 rewind 有没有被误判成「玩家重开」
+//     （「刚开始玩就显示渲染完成」出现过两轮，根因各不相同）
 //
 // 界面本身只能靠游戏里开一次 UMM 窗口看。这是 GUILayout 的代价，
 // 换来的是不用再维护 Canvas/EventSystem/ScrollRect/TMP 那一整套。
@@ -49,7 +51,12 @@ namespace UiPreview
             int patchFail = PatchTargetCheck.Run(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
 
-            int total = replayFail + ffFail + locFail + hardFail + patchFail;
+            // 关卡生命周期：进关的重 wind 必须与玩家重开区分开。
+            // 这一类 bug 每次根因都不同，只能靠断言钉住判定规则。
+            int levelFail = LevelLifecycleCheck.Run();
+
+            int total = replayFail + ffFail + locFail + hardFail + patchFail
+                + levelFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"
