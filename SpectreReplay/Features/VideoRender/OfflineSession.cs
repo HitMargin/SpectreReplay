@@ -45,6 +45,15 @@ namespace SpectreReplay.Features.VideoRender
         private bool _cancelled;
 
         /// <summary>
+        /// 开录时的墙上时钟（Time.realtimeSinceStartup）。
+        ///
+        /// 只用来算 ETA，所以允许用 Unity 的时间——这个模式不是实时录制，
+        /// 不存在编辑器暂停导致的漂移问题（那才是 LiveSession 坚持用
+        /// Stopwatch 的原因，见 LiveSession.cs 的文件头）。
+        /// </summary>
+        private float _startWall;
+
+        /// <summary>
         /// 离线渲染的音频。编码器是共享的 -an（视频轨不带声音），
         /// 所以必须自己录一份再合回去——**之前这里什么都没有**，
         /// 于是离线渲染出来的视频是彻底无声的，而界面还显示"完成"。
@@ -170,6 +179,7 @@ namespace SpectreReplay.Features.VideoRender
                 _frameIndex = 0;
                 _capturing = true;
                 _cancelled = false;
+                _startWall = Time.realtimeSinceStartup;
                 PinActive = true;
                 PinnedSongPosition = 0.0;
                 // NaN = 还没收到过本帧真实位置。判据要能认出它：
@@ -179,6 +189,7 @@ namespace SpectreReplay.Features.VideoRender
                 RenderStatus.FramesTotal = _totalFrames;
                 RenderStatus.FramesDone = 0;
                 RenderStatus.Progress = 0;
+                RenderStatus.EtaSeconds = -1;
                 RenderStatus.LastError = "";
                 UnityEngine.Debug.Log("[SpectreReplay] 离线渲染开始：" + _outputPath
                     + "（" + _totalFrames + " 帧 @ " + _fps + "fps）");
@@ -231,6 +242,16 @@ namespace SpectreReplay.Features.VideoRender
             }
             RenderStatus.FramesDone = _frameIndex;
             RenderStatus.Progress = (float)_frameIndex / _totalFrames;
+            // 预计剩余秒数：按已跑的平均每帧耗时外推。
+            // 这个字段原先**全仓没有任何一处写它**，于是 RenderStatus.Describe()
+            // 里那句 `EtaSeconds >= 0 ? "ETA …"` 永远不成立，离线渲染看不到
+            // 任何剩余时间。离线一局几分钟，明知道还要等却看不到还剩多久，
+            // 是这类工具最典型的"功能在、但没用"。
+            double elapsed = Time.realtimeSinceStartup - _startWall;
+            RenderStatus.EtaSeconds = elapsed > 0.05
+                ? elapsed / Math.Max(1, _frameIndex)
+                    * Math.Max(0, _totalFrames - _frameIndex)
+                : -1;
         }
 
         /// <summary>

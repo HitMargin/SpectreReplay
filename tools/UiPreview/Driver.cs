@@ -57,6 +57,13 @@
 //     别的机器上就飘，而屏蔽 FailAction 会让"按错键"不再失败、
 //     录出来的按键全是命中的。有一条真去反射游戏程序集，确认那些
 //     目标在本版本上的形状（`scrMisc.IsValidHit` r150 已删）
+//   · UiLogicCheck        设置界面的**语义**：死开关、恒定无效的按钮、
+//     状态行有没有覆盖全部情况、文本框有没有按每一键存一次、进度条
+//     有没有它依据的总帧数。这一组是在用户报「你这个UI逻辑不合理」
+//     之后补的——那之前 116 条断言全绿，11 个界面缺陷一条都没抓到：
+//     全是"代码在、但没接上界面"的那种。断言一律落在控制流形状上，
+//     不落"某字符串出现过"，因为后者对假开关永远绿。
+//     这一组一条几何都不断言：GUILayout 是声明式的，离线复刻等于重写引擎
 //
 // 界面本身只能靠游戏里开一次 UMM 窗口看。这是 GUILayout 的代价，
 // 换来的是不用再维护 Canvas/EventSystem/ScrollRect/TMP 那一整套。
@@ -147,10 +154,17 @@ namespace UiPreview
             int parityFail = FeatureParityCheck.Run(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
 
+            // 设置界面的语义：上一轮 11 个缺陷全是"代码在、没接上界面"，
+            // 而当时 116 条断言全绿。判据取控制流形状——"某字符串出现过"
+            // 对假开关与摆设按钮永远绿。
+            int uiLogicFail = UiLogicCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+
             int total = replayFail + ffFail + locFail + hardFail + patchFail
                 + levelFail + probeFail + avFail + validFail + hitFail
                 + compatFail + frameFail + guardFail + stateFail + timingFail
-                + clockFail + lifecycleFail + barrierFail + parityFail;
+                + clockFail + lifecycleFail + barrierFail + parityFail
+                + uiLogicFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"

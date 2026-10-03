@@ -27,8 +27,10 @@ namespace SpectreReplay.Pages
                 v => Commit(() => Settings.RecordingOn = v));
             OnGui.Row("record.autosave", Settings.AutoSave,
                 v => Commit(() => Settings.AutoSave = v));
-            OnGui.Row("record.asyncinput", Settings.AsyncInput,
-                v => Commit(() => Settings.AsyncInput = v));
+
+            // 原先这里有一行 AsyncInput（"使用高精度输入（SkyHook）"）。已删：
+            // 它只被存被读、没有任何一处影响录制行为，勾它等于没勾。
+            // 详见 Config\Settings.cs 里那段注释。
 
             OnGui.Group("record.hotkeys");
             // 按任意键改键。做这一段是因为之前把热键全删了之后，
@@ -93,13 +95,28 @@ namespace SpectreReplay.Pages
         private static void DrawPlaybackState()
         {
             // PlaybackEngine 是静态类：只能按类型名访问，不能 var 出来。
-            if (!Features.Playback.PlaybackEngine.IsPlaying)
+            //
+            // **这一段以前在 !IsPlaying 时直接 return。** 后果是：没载入回放时
+            // 「当前」这一组整个不画，玩家看到的是"这页上面什么都没有"——
+            // 分不清是回放没载入、载入了没生效、还是校验把它拒了。而这三件事
+            // 的处理方式完全不同（前者去回放页点载入，后者去开那关，后者
+            // 只能重录）。
+            //
+            // 现在**任何时候都画**：没载入时明说"还没载入"，载入失败时把
+            // PlaybackEngine.LastError 摆出来（它之前只进日志）。
+            bool playing = Features.Playback.PlaybackEngine.IsPlaying;
+            OnGui.Group("playback.current");
+            if (!playing)
             {
+                string err = Features.Playback.PlaybackEngine.LastError;
+                GUILayout.Label(string.IsNullOrEmpty(err)
+                    ? Loc.T("playback.idle")
+                    : Loc.F("playback.idle_err", err));
                 return;
             }
+
             string name = System.IO.Path.GetFileNameWithoutExtension(
                 Features.Playback.PlaybackEngine.CurrentPath ?? "");
-            OnGui.Group("playback.current");
             GUILayout.Label(Features.Playback.PlaybackEngine.IsPending
                 ? Loc.F("playback.ready", name)
                 : Loc.F("playback.armed", name));
@@ -213,14 +230,55 @@ namespace SpectreReplay.Pages
             OnGui.Row("render.on", Settings.RenderOn,
                 v => Commit(() => Settings.RenderOn = v));
 
-            // 状态与操作按钮紧跟在开关后面，不放页面最底下：这一页有
-            // 十几行，「开始渲染」是主操作，不该藏在最后。
             OnGui.Group("render.status");
+            // 状态行在**选项之上**：这一页有十行多，「现在在干什么」「怎么
+            // 触发」是玩家进这一页要问的第一个问题，不该排在最后。
             GUILayout.Label(Features.VideoRender.RenderStatus.Describe());
-            OnGui.Button("render.start",
-                () => Features.VideoRender.RenderService.StartManual(), true);
-            OnGui.Button("render.cancel",
-                () => Features.VideoRender.RenderService.Cancel(), false);
+            DrawRenderProgress();
+
+            // **实时模式下不画「开始渲染」按钮。**
+            //
+            // 这一条改动看着小，其实修的是一个语义 bug：RenderService 里
+            // OnLevelStart() 在**进关那一刻**就已经 Begin() 了，所以正常流程
+            // 里这个按钮永远是个空操作（IsRunning 已经为真，Begin 直接返回）。
+            // 玩家点它一下什么也没发生，只会当成"渲染坏了"。而"边玩边录"
+            // 根本不需要手动开始——进关就开、结算就收，这是它唯一的卖点。
+            // 画一个恒定无效的按钮比不画更糟。
+            bool live = Settings.Mode == Settings.RenderMode.Live;
+            bool running = Features.VideoRender.LiveSession.IsRunning
+                || Features.VideoRender.OfflineSession.IsRunning;
+            if (live)
+            {
+                OnGui.Note("render.note.live");
+            }
+            else
+            {
+                // 离线渲染需要一个回放文件。原来这个文件是**静默取的**：
+                // LatestReplay() 按修改时间挑最新的那一个，玩家无从知道
+                // 自己点下去渲染的是哪一局——渲染完发现"这不是我要的那局"
+                // 已经浪费了几分钟。现在把目标文件名明写出来。
+                string target = Features.VideoRender.RenderService.LatestReplay();
+                if (string.IsNullOrEmpty(target))
+                {
+                    OnGui.Note("render.offline_noreplay");
+                }
+                else
+                {
+                    OnGui.NoteText(Loc.F("render.offline_target",
+                        System.IO.Path.GetFileNameWithoutExtension(target)));
+                    OnGui.Button("render.start",
+                        () => Features.VideoRender.RenderService.StartManual(), true);
+                }
+                OnGui.Note("render.note.offline");
+            }
+
+            // 取消只在真的在跑的时候给。常年摆着一个按不动的「取消」，
+            // 和上面那个恒定无效的「开始」是同一类毛病。
+            if (running)
+            {
+                OnGui.Button("render.cancel",
+                    () => Features.VideoRender.RenderService.Cancel(), false);
+            }
 
             OnGui.Group("render.options");
             OnGui.RowDropdown("render.mode", new[]
@@ -228,9 +286,6 @@ namespace SpectreReplay.Pages
                 Loc.T("render.mode.live"),
                 Loc.T("render.mode.offline"),
             }, (int)Settings.Mode, i => Commit(() => Settings.Mode = (Settings.RenderMode)i));
-            OnGui.NoteText(Settings.Mode == Settings.RenderMode.Live
-                ? Loc.T("render.note.live")
-                : Loc.T("render.note.offline"));
 
             OnGui.RowSlider("render.fps", Settings.Fps, 24f, 144f,
                 v => ((int)v) + " fps",
@@ -268,8 +323,52 @@ namespace SpectreReplay.Pages
 
             OnGui.Row("render.duplicate_when_late", Settings.DuplicateWhenLate,
                 v => Commit(() => Settings.DuplicateWhenLate = v));
-            OnGui.RowInput("render.outdir",
-                v => Commit(() => Settings.OutputDir = v));
+            OnGui.RowInput("render.outdir");
+        }
+
+        /// <summary>
+        /// 离线渲染的进度条。
+        ///
+        /// **只在这一种情况下画**：离线渲染的总帧数事先已知
+        /// （回放长度 × 帧率），才谈得上"还剩多少"。
+        ///
+        /// 实时录制**故意不画**。它那边的 `RenderStatus.Progress` 不是进度，
+        /// 是"出帧有没有跟上目标帧率"（`_frameIndex / (elapsed * fps)`，
+        /// 见 LiveSession.UpdateStatus）——正常跟随时恒等于 1。拿它填进度条
+        /// 会得到一条**永远是满的**横杠，比没有更误导。实时录制用
+        /// RenderStatus.Describe() 里的"已录 N 秒"就够说明白了。
+        ///
+        /// （原先 RenderStatus 里有个 BarFill 属性负责这个二选一，但零调用
+        /// 点；这里直接用 FramesTotal 判空，判据和用途写在代码旁边。）
+        /// </summary>
+        private static void DrawRenderProgress()
+        {
+            // 判空必须先看总帧数，不能靠"算出来的 fill 是不是 0"。
+            //
+            // **这里第一版写漏了，闸门 ⑥c 抓出来的。** FramesTotal 是 int，
+            // 除法会把它提升成 float，于是 0/0 得到 NaN 而不是抛异常；
+            // 而 Mathf.Clamp01 用的是 `<` / `>` 比较，NaN 两边都假，
+            // 于是 NaN 被原样返回，`fill <= 0f` 同样为假——
+            // 结果是拿 NaN 宽度去 GUI.DrawTexture，Unity 会抛
+            // ArgumentException 打断整个 OnGUI，一帧就把窗口画崩。
+            // 表现是"点开渲染页窗口直接没了"，且只在总帧数为 0 时发生，
+            // 也就是**恰好是最容易复现的那一次**（还没开始渲染就翻到这页）。
+            int total = Features.VideoRender.RenderStatus.FramesTotal;
+            if (total <= 0)
+            {
+                return;
+            }
+            float fill = Mathf.Clamp01((float)
+                Features.VideoRender.RenderStatus.FramesDone / total);
+            Rect r = GUILayoutUtility.GetRect(OnGui.LabelW + 200f, 18f,
+                GUILayout.ExpandWidth(false));
+            var old = GUI.color;
+            GUI.color = new Color(0.24f, 0.62f, 0.92f);
+            GUI.DrawTexture(new Rect(r.x, r.y, r.width * Mathf.Clamp01(fill), r.height),
+                Texture2D.whiteTexture);
+            GUI.color = old;
+            GUI.Box(r, GUIContent.none, GUI.skin.box);
+            GUI.Label(r, (fill * 100f).ToString("F0") + "%");
         }
 
         // ── 关于 ────────────────────────────────────────────────

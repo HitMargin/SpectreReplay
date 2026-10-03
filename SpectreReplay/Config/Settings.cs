@@ -25,8 +25,15 @@ namespace SpectreReplay
         /// <summary>打完/中断后自动保存回放文件。</summary>
         internal static bool AutoSave = true;
 
-        /// <summary>用 SkyHook 拿高精度输入（比 Unity 的 Update 轮询准得多）。</summary>
-        internal static bool AsyncInput = true;
+        // **这里原来有一个 `AsyncInput` 开关（"使用高精度输入（SkyHook）"），
+        // 已经删掉。** 它从来没有被任何代码读过一次：录制主路径走 Win32
+        // GetKeyboardState 逐帧轮询（见 KeyRecorder.cs 的文件头，那里写了
+        // 为什么：50.9 秒只录到 1 个键，SkyHook 只在玩家自己勾了游戏的
+        // 异步输入时才驱动），勾它只是让人以为输入精度被调过了。
+        //
+        // 删掉它而不是实现它，理由是后者会引出"两套输入"的问题：
+        // 录出来的按键得保证在**别的机器上重放也一致**，而高精度钩子
+        // 依赖窗口焦点与时序，跨机器飘移。那种回放在别人机器上必错。
 
         // ── 渲染模式 ──────────────────────────────────────────
         internal enum RenderMode
@@ -101,11 +108,23 @@ namespace SpectreReplay
             }
         }
 
+        /// <summary>
+        /// 回放目录。**固定在模组根目录下，不看 OutputDir。**
+        ///
+        /// 原先这里是个三元：`OutputDir` 为空走一处、不为空走另一处，
+        /// 而两处返回的路径**完全一样**。那不是"两种情况都能处理"，
+        /// 是一段写着"我考虑过 OutputDir"的死代码——看的人会以为
+        /// 输出目录也能改回放位置，改了却没反应。
+        ///
+        /// 现在只留一句，并且把理由写在这里：`OutputDir` 是**视频**的
+        /// 出口（见下面的 `VideoDir`），回放必须待在模组自己的目录里，
+        /// 因为离线渲染要按路径去读它，而 VideoDir 是允许指向盘符之外的
+        /// 任意位置的——把回放跟着它走，重启一次游戏换台机器就没了。
+        /// </summary>
         internal static string ReplayDir =>
-            string.IsNullOrEmpty(OutputDir)
-                ? Path.Combine(RootDir ?? ".", "Replays")
-                : Path.Combine(RootDir ?? ".", "Replays");
+            Path.Combine(RootDir ?? ".", "Replays");
 
+        /// <summary>视频输出目录。OutputDir 为空时才用模目录下的 Videos。</summary>
         internal static string VideoDir =>
             string.IsNullOrEmpty(OutputDir)
                 ? Path.Combine(RootDir ?? ".", "Videos")
@@ -173,7 +192,6 @@ namespace SpectreReplay
             Settings.RecordingOn = GetBool(d, "RecordingOn", Settings.RecordingOn);
             Settings.RenderOn = GetBool(d, "RenderOn", Settings.RenderOn);
             Settings.AutoSave = GetBool(d, "AutoSave", Settings.AutoSave);
-            Settings.AsyncInput = GetBool(d, "AsyncInput", Settings.AsyncInput);
             Settings.Mode = (Settings.RenderMode)GetInt(d, "Mode", (int)Settings.Mode);
             Settings.Surface = GetInt(d, "Surface", Settings.Surface);
             Settings.Width = GetInt(d, "Width", Settings.Width);
@@ -225,7 +243,6 @@ namespace SpectreReplay
                     { "RecordingOn", Settings.RecordingOn },
                     { "RenderOn", Settings.RenderOn },
                     { "AutoSave", Settings.AutoSave },
-                    { "AsyncInput", Settings.AsyncInput },
                     { "Mode", (int)Settings.Mode },
                     { "Surface", Settings.Surface },
                     { "Width", Settings.Width },

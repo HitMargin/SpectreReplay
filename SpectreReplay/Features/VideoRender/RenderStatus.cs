@@ -31,21 +31,31 @@ namespace SpectreReplay.Features.VideoRender
 
         /// <summary>
         /// 离线渲染的总帧数。实时录制是"边玩边出"、总长事先未知，
-        /// 所以留 0，由 <see cref="BarFill"/> 判空后走另一条算法。
+        /// 所以**恒为 0**（LiveSession 开录与收尾各清一次）。
+        ///
+        /// 界面靠这个字段判空来决定画不画进度条：
+        /// <c>FramesTotal &gt; 0</c> 才有"还剩多少"可言。
+        ///
+        /// 这里原先还有一个 <c>BarFill</c> 属性做那个二选一
+        /// （有总帧数就用帧数比、没有就用 Progress），但它**零调用点**——
+        /// 于是离线渲染的进度条从来没被画出来过。更糟的是那个二选一在
+        /// Live 模式下会给出**恒为满格**的结果：实时的 Progress 是
+        /// "出帧跟上了目标帧率没有"（正常恒为 1），不是进度。
+        /// 现在判据留在调用方（Pages.DrawRenderProgress），语义写在那边。
         /// </summary>
         public static int FramesTotal;
 
         public static string LastOutput = "";
         public static string LastError = "";
 
-        /// <summary>离线渲染的预计剩余秒数；负数表示还没算出来。</summary>
+        /// <summary>
+        /// 离线渲染的预计剩余秒数；负数表示还没算出来。
+        ///
+        /// 原先**全仓没有一处写它**，于是 Describe() 里那句
+        /// <c>EtaSeconds &gt;= 0 ? "ETA …"</c> 永远不成立。
+        /// 唯一写点：OfflineSession.Update。
+        /// </summary>
         public static double EtaSeconds = -1;
-
-        public static float BarFill =>
-            FramesTotal > 0
-                ? System.Math.Min(1f, (float)FramesDone / FramesTotal)
-                : Progress;
-
 
         // 状态文字的挂载改由 Pages.BuildRender 通过 PanelHost.RegisterLive 完成
 

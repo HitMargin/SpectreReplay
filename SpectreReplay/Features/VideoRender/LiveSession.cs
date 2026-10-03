@@ -267,6 +267,13 @@ namespace SpectreReplay.Features.VideoRender
                 RenderStatus.LastError = "";
                 RenderStatus.Progress = 0;
                 RenderStatus.FramesDone = 0;
+                // 总帧数实时事先未知，**必须显式清零**。不清的话上一趟
+                // 离线渲染留下的 FramesTotal 还在，而 Pages.DrawRenderProgress
+                // 的判据正是 `FramesTotal > 0` —— 于是开始录实时之后那条
+                // 进度条会立刻出现，拿"已录帧数 / 上一局的总帧数"当进度，
+                // 瞬间就满格。看着像渲染坏了。
+                RenderStatus.FramesTotal = 0;
+                RenderStatus.EtaSeconds = -1;
                 Debug.Log("[SpectreReplay] 开始实时录制 " + w + "x" + h + "@"
                     + Settings.Fps + " → " + _outputPath);
                 Ui.Status.Say("status.render_start");
@@ -344,6 +351,9 @@ namespace SpectreReplay.Features.VideoRender
                 RenderStatus.Current = RenderStatus.State.Done;
                 RenderStatus.LastOutput = finalPath;
                 RenderStatus.FramesDone = _frameIndex;
+                // 收尾后 FramesTotal 继续保持 0（实时模式事先未知总数），
+                // 免得界面拿一个陈旧的总帧数去算进度条。
+                RenderStatus.FramesTotal = 0;
                 Debug.Log("[SpectreReplay] 录制完成：" + finalPath
                     + "（" + _frameIndex + " 帧，补 " + _duplicated + " 帧，跳 " + _skipped + " 帧，"
                     + (int)_clock.Elapsed.TotalSeconds + "s）");

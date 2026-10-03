@@ -122,11 +122,18 @@ namespace SpectreReplay.Ui
         }
 
         /// <summary>
-        /// 顶部那行"正在渲染多少"。
+        /// 顶部那行"现在在干什么"。
         ///
-        /// 事件提示已经走游戏自带的 Notification（浮在游戏画面上，那个才
-        /// 是玩家真正会看到的地方）。这里只留渲染进度——它是**持续变化**的量，
-        /// 每帧刷一条浮层通知既吵又占资源，画在设置页顶部更合适。
+        /// **这一行以前只会画渲染进度，别的什么都不画。** 后果是：开着录制
+        /// 打了一整局，设置页顶部**一片空白**——玩家看到的是"我明明勾了
+        /// 录制，怎么什么都没发生"。而 `status.idle` / `status.recording` /
+        /// `status.playing` 这几条文案早就写好了，却从来没人引用。
+        ///
+        /// 现在改成一条真正的总状态行：渲染中显示百分比，其余情况显示
+        /// 当前在做的事（录制中 / 回放中 / 回放已装好 / 空闲）。
+        ///
+        /// 事件提示仍然走游戏自带的 Notification（浮在游戏画面上，那个才是
+        /// 玩家真正会看到的地方）；这里只留**持续状态**，不刷通知。
         /// </summary>
         private static void DrawStatus()
         {
@@ -137,12 +144,34 @@ namespace SpectreReplay.Ui
             bool rendering = state != (int)Features.VideoRender.RenderStatus.State.Idle
                 && state != (int)Features.VideoRender.RenderStatus.State.Done
                 && state != (int)Features.VideoRender.RenderStatus.State.Failed;
-            if (!rendering)
+
+            string text;
+            if (rendering)
             {
-                return;
+                text = string.Format(Loc.T("status.rendering"),
+                    (p * 100f).ToString("F0") + "%");
             }
-            GUILayout.Label(string.Format(Loc.T("status.rendering"),
-                (p * 100f).ToString("F0") + "%"), GUILayout.Height(20f));
+            else if (Features.Recording.KeyRecorder.IsRecording)
+            {
+                text = Loc.T("status.recording");
+            }
+            else if (Features.Playback.PlaybackEngine.IsPlaying)
+            {
+                text = Features.Playback.PlaybackEngine.IsPending
+                    ? Loc.T("status.pending_short")
+                    : Loc.T("status.playing");
+            }
+            else if (Settings.RecordingOn || Settings.RenderOn)
+            {
+                text = Loc.T("status.idle");
+            }
+            else
+            {
+                // 两个总开关都关着：这时什么都不录也不渲，但功能层还挂着，
+                // 属于"看起来正常、其实整条链是空的"，必须说明白。
+                text = Loc.T("status.all_off");
+            }
+            GUILayout.Label(text, GUILayout.Height(20f));
         }
 
         /// <summary>
@@ -474,18 +503,57 @@ namespace SpectreReplay.Ui
             GUILayout.EndHorizontal();
         }
 
-        /// <summary>文本输入行。改动在失焦或按回车时提交。</summary>
-        internal static void RowInput(string labelKey, Action<string> onChange)
+        /// <summary>
+        /// 文本框的控件名。回车提交靠它认焦点。
+        ///
+        /// **刻意不含点号。** LocCheck.CollectUsedKeys() 用正则
+        /// `"([a-z][a-z0-9]*\.[a-z0-9_.]+)"` 扫页面源码收集文案键，
+        /// 点号接小写单词长得和真正的文案键一模一样：这里要是写成
+        /// 模块名加句点，闸门就会把它当成一个漏翻的键报"两种语言都没有"。
+        /// 而且它读的是**整个文件、连注释一起读**，所以连在注释里举例
+        /// 都不行。控件名不需要点号，不点就两不误伤。
+        /// </summary>
+        private const string RowInputControlName = "OutDirBox";
+
+        /// <summary>
+        /// 文本输入行。**改动先落到草稿，回车才提交。**
+        ///
+        /// 原先每次按键都直接提交，一个字符一次 `ConfigStore.Save()` +
+        /// `PatchLoader.Refresh()`。看着只是"多个循环"，实际后果有三个：
+        ///   · 玩家想删掉整个路径（Ctrl+A 然后退格）时，会先存进一堆
+        ///     中间态，其中某一个还可能被立刻用掉（比如提交后
+        ///     `VideoDir` 立刻变成一个不存在的目录）；
+        ///   · 每存一次都写一次 `_dirty`，磁盘写入被按键频率放大；
+        ///   · 「按什么键改什么键」和文本框共存时，中间态会漏进
+        ///     `KeyboardSimulation` 的按键判定。
+        ///
+        /// 现在草稿和已提交值分开：只有**值真的变了**才提交，
+        /// 而 IMGUI 每帧跑两趟，所以 `_textDraft != now` 这个条件本身
+        /// 已经保证只在玩家敲键盘时成立一次。
+        /// </summary>
+        internal static void RowInput(string labelKey)
         {
             GUILayout.BeginHorizontal();
             GUILayout.Label(Loc.T(labelKey), GUILayout.Width(LabelW));
-            string now = GUILayout.TextField(_textDraft ?? "", GUILayout.Width(380f));
-            if (now != _textDraft)
-            {
-                _textDraft = now;
-                onChange(now);
-            }
+            // SetNextControlName + GetNameOfFocusedControl 是 Unity 自己
+            // 留下的成对接口：前者给**即将画的下一个控件**起名，后者问
+            // 焦点在谁身上。不用它就得自己维护 control id，而 IMGUI 一帧
+            // 跑两趟、id 又取决于前后控件，自行推断很容易在 Repaint 那趟
+            // 失焦——那正好是玩家看不见的一趟，症状是"偶尔按回车没反应"。
+            GUI.SetNextControlName(RowInputControlName);
+            _textDraft = GUILayout.TextField(_textDraft ?? "",
+                GUILayout.Width(380f));
+            bool enter = Event.current != null
+                && Event.current.type == EventType.KeyDown
+                && Event.current.keyCode == KeyCode.Return
+                && GUI.GetNameOfFocusedControl() == RowInputControlName;
             GUILayout.EndHorizontal();
+
+            if (enter)
+            {
+                CommitText();
+                GUI.FocusControl(null);
+            }
         }
 
         /// <summary>提交文本框内容。关窗口时也会调。</summary>
@@ -497,13 +565,5 @@ namespace SpectreReplay.Ui
                 Settings.Commit();
             }
         }
-
-        /// <summary>供 Pages 在改了设置之后重画用。IMGUI 每帧重画，本身无需重画。</summary>
-        internal static void Refresh()
-        {
-        }
-
-        /// <summary>预留给未来的"当前状态"文本。</summary>
-        internal static string Describe() => string.Empty;
     }
 }

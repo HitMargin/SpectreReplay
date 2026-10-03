@@ -1256,6 +1256,136 @@ Spectre 改用新 API 名 we'd 毫无反应。**两个方向都要钉。**
 
 ---
 
+## 七之三、UI 逻辑：116 条全绿而 11 个缺陷一条没抓到（偏差 25）
+
+用户报的是**「你这个 UI 逻辑不合理」**。这一节记的不是"改了什么"，
+而是**为什么闸门全绿却漏掉了整整一轮界面问题**——那才是值得写下来的部分。
+
+### 缺陷清单（11 条，按严重度）
+
+| # | 缺陷 | 玩家的现象 | 修法 |
+|---|---|---|---|
+| 1 | `Settings.AsyncInput` 死开关（只存不读） | 勾了「使用高精度输入（SkyHook）」，什么都不会变 | 删字段 + 删配置读写 + 删界面行 + 删文案 |
+| 2 | `DrawStatus` 只画渲染进度 | **开着录制打一整局，设置页顶部一片空白** | 改成 if/else 链：渲染中/录制中/回放中/待播/空闲/全关 |
+| 3 | 渲染页 Live 分支的「开始渲染」是摆设 | 正常流程下点它永远什么都不发生 | Live 支不给按钮，只留一句说明；离线支才给 |
+| 4 | `RenderService.Busy` / `MarkBusy` 零调用点 | `StartManual` 开头的 `if (Busy) return` 恒不成立 | 删死代码（不是补实现） |
+| 5 | `RenderStatus.BarFill` 零调用点 | 进度条永远满格（Live 的 Progress 恒为 1） | 删；进度条改用 `FramesTotal > 0` 判空，实时模式不画 |
+| 6 | `ReplayDir` 的 `OutputDir` 分支两支相同 | 看着像"输出目录也能改回放位置"，改了没反应 | 删伪分支，理由写进注释 |
+| 7 | `DrawPlaybackState` 开头 `if (!IsPlaying) return;` | 没载入回放时整块消失，分不清是没载入还是载入失败 | 分组无条件绘制；空态说"没载入"，失败态摆 `LastError` |
+| 8 | `RowInput` 每敲一键提交一次 | 删路径时中间态被逐个存盘并立刻用掉 | 草稿 + 回车提交（`SetNextControlName` 认焦点） |
+| 9 | `OnGui.Refresh()` / `OnGui.Describe()` 两个空桩 | 无（零调用点） | 删 |
+| 10 | `RenderStatus.EtaSeconds` 全仓无人写 | 离线渲染明知还要等几分钟，看不到还剩多久 | `OfflineSession` 加 `_startWall` 并写一次带条件的真赋值 |
+| 11 | `FramesTotal` 只在离线写，实时不清零 | 上次离线留下的总帧数让实时进度条瞬间满格 | 实时开录与收尾各清零一次 |
+
+**"代码在、但没接到界面上"是这一轮的共同形态**：缺陷 1/4/5/6/9/10
+全仓 grep 就能看出是死代码；2/3/7/8 是逻辑本身自洽、只是**说谎**——
+顶栏明明有录制却什么都不画，播放按钮明明在却永远是空操作。
+**这一类对任何"检查代码存在/不存在什么"的闸门都是隐形的。**
+
+### 闸门为什么一条都没抓到
+
+三条原因，每条都能独立解释这一轮：
+
+1. **没有界面层的断言。** 原有 116 条覆盖的是：数据往返、ffmpeg 参数、
+   判定复现、补丁挂载顺序、版本兼容、六目录封禁。**界面那层只有
+   `LocCheck`（文案齐不齐）和 `HardTextCheck`（有没有写死中文）**，
+   两者都只管**字符串在不在**，管不了**控制流的形状**。
+2. **`LocCheck` 反而把新文案也变成了盲区。** `status.idle` /
+   `status.recording` / `status.playing` / `status.pending_replay`
+   四条文案从建库起就在 `Loc.cs` 里，两种语言都齐全，闸门每次都绿——
+   而它们**一次也没被引用过**。文案齐 ≠ 界面说得上话。
+3. **`OnGui` 与 `Pages` 之间没有任何契约。** 两边各自编译通过就万事大吉，
+   而"顶栏该不该画、按钮该不该给"恰恰是两个文件之间的约定。
+
+### 断言（`UiLogicCheck`，六组 20 条）
+
+判据一律落在**控制流形状**上，不落"某字符串出现过"——后者对假开关
+与摆设按钮永远绿。具体：
+
+| 组 | 断言 | 抓什么 |
+|---|---|---|
+| ① `NoDeadSwitches` | 5 条 | `AsyncInput` 的字段、配置读、配置写、界面行、文案键**五处都得没有** |
+| ② `StatusLineCoversEveryCase` | 3 条 | 不许再有 `if (!rendering) return;`；四个来源逐个点名；四条文案都**被引用** |
+| ③ `RenderPageButtonsAreNotDecorative` | 5 条 | live 支**不许出现** `render.start`；离线支必须先写目标再给按钮；必须有 `offline_noreplay`；`if (running)` 里同时出现 `OfflineSession.IsRunning` 与 `LiveSession.IsRunning`；`StartManual` 必须返回 `bool` 且 live 支 `return false` |
+| ④ `PlaybackPageNeverGoesBlank` | 2 条 | `playback.current` 分组必须早于第一个 `return;`；空态与失败态**各自取用** `idle` 与 `idle_err`（不接受别的键） |
+| ⑤ `TextInputDoesNotCommitEveryKeystroke` | 3 条 | 不许有 `Action<string>` 回调；提交必须在 `KeyDown`+`Return`+`GetNameOfFocusedControl()==RowInputControlName`；控件名不得含点号 |
+| ⑥ `RenderProgressHasARealTotal` | 4 条 | 离线写 `FramesTotal`；实时**两处**清零；界面必须 `int total = …FramesTotal; if (total <= 0) return;`；离线必须写**带条件的** `EtaSeconds` |
+
+**⑥c 是这 20 条里唯一一条抓到真 bug 的**：第一版判据写"用
+`FramesTotal > 0` 判空"，闸门报红，回去读代码发现真代码有 bug——
+`fill = Clamp01((float)FramesDone / FramesTotal)` 里 `0/0` 得 **NaN**，
+`Mathf.Clamp01` 的 `<` / `>` 对 NaN 全为假所以 NaN 原样返回，
+`fill <= 0f` 也为假，于是 NaN 一路进 `GUI.DrawTexture(r.width * NaN)`
+抛 `ArgumentException` 打断整个 OnGUI。**症状是点开渲染页窗口直接没了，
+且恰好发生在"还没开始渲染就翻到这一页"**——最容易撞上的时候。
+判据与代码都是这轮改的。
+
+### 变异（MUT-AS … MUT-BZ，17 条）
+
+17 条全部按预期走完（`MUT-BZ` 是反向对照，要求**保持全绿**）：
+
+| 变异 | 内容 | 被哪条抓到 |
+|---|---|---|
+| MUT-AS | 加回 `AsyncInput` 字段 | ①a |
+| MUT-AT | 加回 `GetBool(d, "AsyncInput", …)` | ①b + ①c |
+| MUT-AU | 加回 `{ "AsyncInput", … }` 写盘 | ①c |
+| MUT-AV | 顶栏退回 `if (!rendering) { return; }` | ②a |
+| MUT-AW | 漏掉「录制中」那一支 | ②b |
+| MUT-AX | 把 `render.start` 复制进 live 支 | ③a |
+| MUT-AY | 离线支的目标文案换成 `Loc.T("render.start")` | ③b |
+| MUT-AZ | `if (running)` → `if (true)` | ③d |
+| MUT-BA | `StartManual` 退回 `void` | ③e |
+| MUT-BB | 把 `playback.current` 分组挪回早退**之后** | ④a |
+| MUT-BC | 空状态文案换成一个拼错的键 | ④b（另被 LocCheck 抓到 3 条） |
+| MUT-BD | 文本框退回每键提交 | ⑤a |
+| MUT-BE | 控件名改回含点号 | ⑤c |
+| MUT-BF | 进度条 `int total = 1;`（拿掉判空） | ⑥c |
+| MUT-BG | 实时只留**开录那一处**清零 | ⑥b |
+| MUT-BH | `EtaSeconds = -1;` 钉死 | ⑥d |
+| MUT-BZ | 把三个封禁词写进**注释**，要求保持全绿 | 无（反向对照成立） |
+
+### 这一轮自己踩的四个坑（都属于"假通过"）
+
+**① 一次 exit 0 的假证明。** 修 `mutate.ps1` 时我用
+`[IO.File]::ReadAllLines` + `$keep=$l[0..481]` 截断重写，**把脚本尾部的
+执行器与 exit 逻辑一起截掉了**，剩下 482 行只有变异定义没有 runner。
+于是接着跑 MUT-AS…MUT-AW 时 `Backup` 改了源文件、后面没有 `Cleanup`，
+**5 个源文件被留在变异态**，`$env:TEMP` 下留了 4 个备份。
+更严重的是它**伪装成通过**：`MUT-AS` 报 `exit=0 … 失败 4`，看着像
+"变异被检出"，其实那 4 条红是**先前遗留的变异态**造成的。
+差点把一条假证明写进文档。⇒ **`exit=0` 必须配"失败条名确实是本次变异
+的目标"才算数**，条名对不上就是假通过。
+
+**② 一次变异把源码写坏，而闸门没反应。** `ReplaceExact` 是逐行
+`Contains`/`Replace` 后**原样写回单行**——我给替换值拼了多行 + `` `n ``，
+于是在文件里留下裸换行符，源码当场坏掉。源文本判据读不动坏源码时
+**可能一条都不红**，`exit 0` 于是又是一次假通过。
+⇒ **跨行结构的变异一律按行列表改**（参照脚本里原有的 `MUT-T` 写法），
+且改完要核实结构前提（本轮 `MUT-BB` 就是先 throw"分组不在早退之前"
+才没搬错方向）。
+
+**③ 一个锚点在同一文件里出现两次。** `MUT-BG` 想只改实时收尾那一处
+`RenderStatus.FramesTotal = 0;`，而两处文本完全一样 ⇒ `ReplaceExact`
+报"命中 2 次"、exit 2。已改成按行号改，并在动手前**核实方向**
+（第二处后面必须挨着「录制完成」日志），方向判反会把它证明成另一件事。
+
+**④ 一个变异揭示了判据本身的漏洞。** `MUT-BH` 第一版把
+`EtaSeconds = elapsed > 0.05 ? … : -1;` 改成 `-1; if (elapsed > 0.05) …`
+——结果是 **exit 1，闸门保持全绿**。原因：⑥d 只查 `EtaSeconds\s*=`，
+而"钉死成 -1"照样满足。**"有一个赋值"和"这个赋值有意义"是两件事。**
+已把 ⑥d 改成要求一次带条件的真赋值（`(?!\-1\s*;)[^;]*[<>]`）。
+
+### 顺带记下的一个文案坑
+
+`LocCheck.CollectUsedKeys()` 用正则 `"([a-z][a-z0-9]*\.[a-z0-9_.]+)"`
+扫 `Pages.cs` 与 `OnGui.cs` 的**原文**收集文案键——它**读的是整个文件、
+连注释一起读**。于是 `private const string RowInputControlName = "…"`
+里任何形如 `小写.小写` 的字符串都会变成一条"漏翻文案键"，
+**连在注释里举例都不行**。控件名因此定成 `"OutDirBox"`（不含点号），
+而这要求本身被 ⑤c 钉住（MUT-BE 把它改回 `"render.outdir"`，闸门红）。
+
+---
+
 ## 八、按严重度逐项修复，已全部完成
 
 按严重度逐项修复，每项补离线断言并做变异验证。**已全部完成**：
@@ -1275,6 +1405,7 @@ Spectre 改用新 API 名 we'd 毫无反应。**两个方向都要钉。**
 13. ~~偏差 23（退出关卡时的拆除链 + 空 Feature 语义）~~ ✅
 14. ~~偏差 24（回放期 hitbox 死亡绕过 `noFail`）~~ ✅ `9642b4e`
 15. ~~其余六个特性目录：把"不补"的结论钉成反向断言~~ ✅
+16. ~~偏差 25（UI 逻辑 11 条：死开关、顶栏空白、摆设按钮、每键提交…）~~ ✅ 本轮
 
 ---
 
@@ -1319,6 +1450,10 @@ CustomJudge / JudgeBar / ResultsPlus / Perf）核完一条缺口都没有，
   （详见第七节的"变异脚本自己也坏过两次"）。
 - **封禁词判据区分大小写**，被 `FeatureGate.IsEnabled("ScrMisc")` 绕过一次
   （MUT-AM）。已改成忽略大小写，实测零误伤。
+- **整轮 UI 逻辑缺陷（偏差 25）在 116 条断言全绿的情况下全部漏网**，
+  而那一轮唯一抓到的新真 bug 是**进度条的 NaN**（`0/0` → `Clamp01`
+  对 NaN 失效 → `DrawTexture` 抛异常打断整个 OnGUI）。
+  原因不是断言写得不好，而是**闸门没有界面层**——详见七之三。
 
 **一类是"清单本身有洞"**：偏差 20。清单列的是我当时已知的偏差，
 而重列 Spectre 的特性文件才看见 `ReplayAnalyzer` 这个整块缺失——
@@ -1341,6 +1476,7 @@ CustomJudge / JudgeBar / ResultsPlus / Perf）核完一条缺口都没有，
 | 22 回放期未禁 UpdateFreeroam | ✅ 本轮 |
 | 23 退出时的拆除链 | ✅ 本轮（修的是"只有按钮能停"） |
 | 24 hitbox 死亡绕过 noFail | ✅ `9642b4e`（修的是"屏障压根不存在"） |
+| 25 UI 逻辑 11 条 | ✅ 本轮（修的是"代码在、但没接到界面上"；另附进度条 NaN 真 bug） |
 | 其余六个特性目录 | ✅ 本轮钉成反向断言（**结论是不补**，见七之二） |
 | 3 / 14 音频取 clip、校验 | ✅ 更早轮次 |
 | 16 / 17 哈希陷阱 | ✅ 已在 `FfmpegArgs` 侧按不变文化处理 |
@@ -1360,7 +1496,7 @@ CustomJudge / JudgeBar / ResultsPlus / Perf）核完一条缺口都没有，
   墙钟、游标读游戏暂停即停，两者天然不会错位。**属于"核过确认不用补"，
   不是待办。**
 
-### 仍然成立的四条限制
+### 仍然成立的五条限制
 
 1. **离屏闸门不覆盖 GEOMETRY/CLICKS**——`GUILayout` 是声明式的，
    复刻不出布局与事件派发。
@@ -1373,6 +1509,12 @@ CustomJudge / JudgeBar / ResultsPlus / Perf）核完一条缺口都没有，
 4. **① 判据扫的是"**去注释后**的代码"，所以注释里可以自由讨论某个 API**
    （那正是"为什么不补"的记录方式）。代价是：有人把真正的调用**拼进
    注释里的字符串**再反射执行，那条路是通的——但那已经不是"顺手补一段"
-   了，而是有人刻意绕闸门。MUT-AR 就是守这一半的：
-   它把封禁词写进注释并要求闸门**保持全绿**，
+   了，而是有人刻意绕闸门。MUT-AR 与 MUT-BZ 就是守这一半的：
+   它们把封禁词写进注释并要求闸门**保持全绿**，
    证明"必要说明不会误伤"这半边也在跑。
+5. **`UiLogicCheck` 判的是控制流形状，不是玩家看到的画面。**
+   它能钉住"实时支里不许有开始渲染按钮"，钉不住"这个按钮点下去
+   有没有反应"——IMGUI 是声明式的，闸门没有布局也没有事件派发。
+   尤其 `RowInput` 那三条：它们能证明提交**只在回车时发生**，
+   证明不了"玩家按了回车真的提交了"（失焦提交、焦点在别的控件上
+   这些情况都得真机点一遍）。

@@ -14,38 +14,42 @@ namespace SpectreReplay.Features.VideoRender
     /// </summary>
     internal static class RenderService
     {
-        internal static bool Busy { get; private set; }
-
         // ── 对外入口 ──────────────────────────────────────────
-        internal static void StartManual()
+        //
+        // 这里原先有一个 `Busy` 属性和一个 `MarkBusy(bool)` 方法，全仓
+        // **零调用点**——而 StartManual 开头的 `if (Busy) return;` 正靠它
+        // 把门。结果那道门从来不开：两次点击「开始渲染」会真的开两个
+        // 会话。现在两个都删了，把门换成**真的**判据（两个会话各自的
+        // IsRunning），语义和现实就对上了。
+        //
+        // 返回值 = 这次点击有没有真的启动什么。UI 用它决定要不要提示。
+        internal static bool StartManual()
         {
-            if (Busy)
-            {
-                return;
-            }
             if (Settings.Mode == Settings.RenderMode.Live)
             {
-                // 实时模式不是"点一下就开始录"——它在进关时自动开。
-                // 这里手动触发的是"用刚打完的这一次游玩重录"，
-                // 也就是把实时会话重新拉起来，不重跑关卡。
-                if (!LiveSession.IsRunning)
-                {
-                    LiveSession.Begin();
-                }
+                // 实时模式不提供手动开始。进关那一刻 OnLevelStart() 已经
+                // Begin() 了，所以"手动"这一下在正常流程里没有任何语义。
+                // 保留这个分支是为了将来"用刚打完的这一次重录"这类需求；
+                // 现在它如实报告"什么都没干"，而不是假装开了个会。
+                return false;
             }
-            else
+
+            // 离线模式需要一个回放文件。取最近那一个：离线渲染的前提本来
+            // 就已经在关卡里，再让用户去挑文件是多余的一步。**UI 会把选中
+            // 的文件名写出来**（Pages 里 Loc.F("render.offline_target", …)），
+            // 所以"取最新"这个隐式选择现在是可见的。
+            string recent = LatestReplay();
+            if (string.IsNullOrEmpty(recent))
             {
-                // 离线模式需要一个回放文件：取最近那一个。
-                // 离线渲染的前提本来就已经在关卡里，再让用户去挑文件是多余的一步。
-                string recent = LatestReplay();
-                if (string.IsNullOrEmpty(recent))
-                {
-                    RenderStatus.Current = RenderStatus.State.Failed;
-                    RenderStatus.LastError = Loc.T("render.err.no_replay");
-                    return;
-                }
-                OfflineSession.Start(recent);
+                RenderStatus.Current = RenderStatus.State.Failed;
+                RenderStatus.LastError = Loc.T("render.err.no_replay");
+                return false;
             }
+            if (OfflineSession.IsRunning || LiveSession.IsRunning)
+            {
+                return false;
+            }
+            return OfflineSession.Start(recent);
         }
 
         /// <summary>按修改时间取最新的 .srp；找不到返回空串。</summary>
@@ -79,8 +83,8 @@ namespace SpectreReplay.Features.VideoRender
 
         internal static void Cancel()
         {
-            // 判据用会话本身而不是 Busy 字段：Busy 只在 Begin/End 这条路径上被写，
-            // 而实时会话可能在 Busy 还没被置位时就已经跑起来了（启动失败也会留下状态）。
+            // 判据用会话本身（IsRunning）。原先这里靠一个从不被调用的
+            // Busy 字段，那道门恒开，所以取消永远会掉进 OfflineSession。
             if (LiveSession.IsRunning)
             {
                 LiveSession.Cancel();
@@ -105,16 +109,6 @@ namespace SpectreReplay.Features.VideoRender
             {
                 LiveSession.End();
             }
-        }
-
-        internal static void MarkBusy(bool busy)
-        {
-            Busy = busy;
-            RenderStatus.Current = busy
-                ? (Settings.Mode == Settings.RenderMode.Live
-                    ? RenderStatus.State.Live
-                    : RenderStatus.State.Offline)
-                : RenderStatus.State.Idle;
         }
     }
 }

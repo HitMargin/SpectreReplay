@@ -17,18 +17,12 @@ namespace SpectreReplay.Ui
         private static readonly System.Collections.Generic.Dictionary<string, string> Zh =
             new System.Collections.Generic.Dictionary<string, string>
             {
-                { "cat.record", "录制" },
-                { "cat.playback", "回放" },
-                { "cat.render", "视频渲染" },
-                { "cat.about", "关于" },
-
                 { "page.record", "录制" },
                 { "page.playback", "回放" },
                 { "page.render", "视频渲染" },
                 { "page.about", "关于" },
 
                 { "record.autosave", "自动保存回放" },
-                { "record.asyncinput", "使用高精度输入（SkyHook）" },
                 { "record.recording", "录制中" },
                 { "record.note", "录制时按下按键即可。回放文件保存在 Mods/SpectreReplay/Replays/。" },
                 { "record.howto", "① 在这里设好参数（快捷键：F7 打开本窗口）② 进关卡正常玩，按键会被记下来 ③ 通关后自动存成回放文件 ④ 在「回放」页载入，或在「视频渲染」页出片。" },
@@ -38,6 +32,8 @@ namespace SpectreReplay.Ui
                 { "ui.presskey", "按下任意键…" },
                 { "ui.nokey", "未绑定" },
                 { "playback.current", "当前" },
+                { "playback.idle", "还没载入回放。在下面的列表里点「回放」即可。" },
+                { "playback.idle_err", "上一次的载入失败了：{0}" },
                 { "playback.empty", "还没有回放文件。打一局关卡就会自动保存。" },
                 { "playback.stop", "停止回放" },
                 { "playback.note", "回放由录制时的按键序列驱动，可用于复盘与练习。" },
@@ -49,7 +45,6 @@ namespace SpectreReplay.Ui
                 { "playback.timing_summary", "已分析 {0} 击（偏早 {1} / 偏晚 {2}），中位数 {3}" },
                 { "playback.timing_detail", "均值 {0}，标准差 {1}，范围 {2} ~ {3}" },
                 { "playback.timing_skipped", "另有 {0} 击未计入（自动命中或取不到谱面数据）。" },
-                { "playback.unusable", "这个回放里有 {0} 个按键，文件多半是空的。重新打一局再试。" },
                 { "playback.err.no_data", "没有可校验的回放数据。" },
                 { "playback.err.wrong_level", "关卡不匹配：这份回放录自「{0}」。请打开那一关。" },
                 { "playback.err.floor_changed", "谱面已被修改：这份回放是在旧版谱面上录的，按键位置会全部错位。" },
@@ -81,9 +76,10 @@ namespace SpectreReplay.Ui
                 { "render.outdir", "输出目录" },
                 { "render.start", "开始渲染" },
                 { "render.cancel", "取消" },
-                { "render.progress", "渲染进度" },
                 { "render.note.live", "边玩边录：进入关卡自动开始，结算后自动完成。不需要再跑一遍关卡。" },
                 { "render.note.offline", "离线渲染：重跑一遍回放逐帧捕获，耗时更长但画面与原回放完全一致。" },
+                { "render.offline_target", "将渲染这份回放：{0}" },
+                { "render.offline_noreplay", "没有可用的回放文件：先打一局关卡（会自动保存），或到「回放」页确认目录里有 .srp。" },
                 { "about.note", "SpectreReplay 是独立模组，不依赖 Spectre，两者可同时启用。" },
 
                 // ── 状态提示 ──────────────────────────────────────
@@ -93,8 +89,11 @@ namespace SpectreReplay.Ui
                 // 靠它自己场景里的 Notification 预制体——我们不能依赖那个资源，
                 // 改在自己的设置页顶部常驻一行，见 OnGui.DrawStatus。
                 { "status.idle", "空闲：没在录制，也没在渲染。" },
+                { "status.all_off", "录制与渲染都已关闭：进关也不会记录任何东西。" },
                 { "status.recording", "正在录制本局按键…" },
                 { "status.playing", "回放进行中…" },
+                // 顶栏用的是这条：它没有 {0}，顶栏不该去拼一个文件名出来。
+                { "status.pending_short", "回放已装好，重开关卡就会播放。" },
                 { "status.pending_replay", "回放已装好：{0}。重新开始这关（或从关卡列表再进一次）就会自动播放。" },
                 { "status.rendering", "正在渲染…{0}" },
                 { "status.saved", "回放已保存：{0}" },
@@ -103,9 +102,7 @@ namespace SpectreReplay.Ui
                 { "status.loaded_none", "没有可载入的回放文件。" },
                 { "status.stopped", "回放已停止。" },
                 { "status.render_done", "渲染完成：{0}" },
-                { "status.render_fail", "渲染失败：{0}" },
                 { "status.render_start", "开始渲染…" },
-                { "status.cancelled", "已取消。" },
 
                 { "render.duplicate_when_late", "跟不上时复制上一帧" },
                 { "playback.files", "回放文件" },
@@ -140,18 +137,12 @@ namespace SpectreReplay.Ui
         private static readonly System.Collections.Generic.Dictionary<string, string> En =
             new System.Collections.Generic.Dictionary<string, string>
             {
-                { "cat.record", "Recording" },
-                { "cat.playback", "Playback" },
-                { "cat.render", "Video" },
-                { "cat.about", "About" },
-
                 { "page.record", "Recording" },
                 { "page.playback", "Playback" },
                 { "page.render", "Video Render" },
                 { "page.about", "About" },
 
                 { "record.autosave", "Auto-save replays" },
-                { "record.asyncinput", "High-precision input (SkyHook)" },
                 { "record.recording", "Recording" },
                 { "record.note", "Keys pressed while playing are captured. Replays are stored in Mods/SpectreReplay/Replays/." },
                 { "record.howto", "1) Set options here (press F7 to open this window) 2) Play a level normally - your keys are recorded 3) Finishing saves a replay file 4) Load it on the Playback tab, or render it on the Video Render tab." },
@@ -161,6 +152,8 @@ namespace SpectreReplay.Ui
                 { "ui.presskey", "Press any key..." },
                 { "ui.nokey", "Not bound" },
                 { "playback.current", "Current" },
+                { "playback.idle", "No replay loaded. Press \"Replay\" on a file below." },
+                { "playback.idle_err", "The last load failed: {0}" },
                 { "playback.empty", "No replays yet. Play a level and one is saved automatically." },
                 { "playback.stop", "Stop" },
                 { "playback.note", "Playback is driven by the recorded key stream." },
@@ -172,7 +165,6 @@ namespace SpectreReplay.Ui
                 { "playback.timing_summary", "Analyzed {0} hits (early {1} / late {2}), median {3}" },
                 { "playback.timing_detail", "Mean {0}, sigma {1}, range {2} ~ {3}" },
                 { "playback.timing_skipped", "{0} more hits not counted (auto hits or missing chart data)." },
-                { "playback.unusable", "This replay holds {0} keys, so the file is most likely empty. Play the level again and retry." },
                 { "playback.err.no_data", "No replay data to validate." },
                 { "playback.err.wrong_level", "Wrong level: this replay was recorded on \"{0}\". Open that one." },
                 { "playback.err.floor_changed", "The chart has changed since this replay was recorded; every key would land on the wrong tile." },
@@ -207,11 +199,15 @@ namespace SpectreReplay.Ui
                 { "render.progress", "Progress" },
                 { "render.note.live", "Record-while-playing: starts automatically when you enter a level and finishes on results. The level is not replayed." },
                 { "render.note.offline", "Offline: replays the level frame by frame. Slower, but pixel-identical to the replay." },
+                { "render.offline_target", "Will render this replay: {0}" },
+                { "render.offline_noreplay", "No replay file to render. Play a level first (it saves automatically), or check the Playback tab for .srp files." },
                 { "about.note", "SpectreReplay is standalone and does not require Spectre; both can be enabled at once." },
 
                 { "status.idle", "Idle: not recording, not rendering." },
+                { "status.all_off", "Recording and rendering are both off: playing a level records nothing." },
                 { "status.recording", "Recording your keys..." },
                 { "status.playing", "Replay in progress..." },
+                { "status.pending_short", "Replay is loaded. Restart the level to play it." },
                 { "status.pending_replay", "Replay loaded: {0}. Restart this level (or re-enter it from the level list) to play it automatically." },
                 { "status.rendering", "Rendering... {0}" },
                 { "status.saved", "Replay saved: {0}" },
@@ -220,9 +216,7 @@ namespace SpectreReplay.Ui
                 { "status.loaded_none", "No replay file available." },
                 { "status.stopped", "Replay stopped." },
                 { "status.render_done", "Render finished: {0}" },
-                { "status.render_fail", "Render failed: {0}" },
                 { "status.render_start", "Rendering started..." },
-                { "status.cancelled", "Cancelled." },
 
                 { "render.duplicate_when_late", "Duplicate last frame when behind" },
                 { "playback.files", "Replays" },
