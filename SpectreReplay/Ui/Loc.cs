@@ -267,7 +267,7 @@ namespace SpectreReplay.Ui
         /// <summary>
         /// 按游戏的语言设置选中文或英文。游戏把语言放在
         /// <c>RDString.language</c>（public static SystemLanguage）。
-        /// 面板每次打开都调一次：玩家在设置里换语言后，模组界���跟着变。
+        /// 面板每次打开都调一次：玩家在设置里换语言后，模组界面跟着变。
         /// </summary>
         internal static void RefreshLanguage()
         {

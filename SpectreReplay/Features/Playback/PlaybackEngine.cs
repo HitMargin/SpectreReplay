@@ -41,7 +41,7 @@ namespace SpectreReplay.Features.Playback
         //
         // · NoFailBackup      回放强制 noFail=true，否则回放里的"失败"
         //                     会真的把玩家卡住（行星不前进）
-        // · HitMarginBackup   回放期间判定窗口放宽，否则注��的按键
+        // · HitMarginBackup   回放期间判定窗口放宽，否则注入的按键
         //                     落在录制容差之外时会被判失败
         private static bool _noFailBackup;
         private static bool _noFailBackupValid;
@@ -287,7 +287,7 @@ namespace SpectreReplay.Features.Playback
         ///
         /// 两处，都照 Spectre（Patch_Lifecycle.cs:219-225）：
         ///
-        /// ① <c>noFail = true</c> —— 回放是按录制数据推进的，注���的按键
+        /// ① <c>noFail = true</c> —— 回放是按录制数据推进的，注入的按键
         ///    不可能每次都落在玩家的判定窗口内。一旦判失败，行星就停在原地
         ///    不前进，表现为「回放卡住了」。强制 noFail 是 Spectre 的做法。
         ///
@@ -297,7 +297,7 @@ namespace SpectreReplay.Features.Playback
         ///    飘字与判定结果因此与录制一致。
         ///    读不到（v1 旧文件没有这个字段）时退回最宽松
         ///    （(HitMarginLimit)0 = 不设限），与 Spectre 的默认值一致
-        ///    （SpectreState.cs:183）——那时注���的按键必须全部收下，
+        ///    （SpectreState.cs:183）——那时注入的按键必须全部收下，
         ///    否则回放会中途卡住。
         ///
         /// 备份**只在第一次生效**，否则重播一次就把"备份值"覆盖成了

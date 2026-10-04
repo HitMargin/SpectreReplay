@@ -231,7 +231,7 @@ namespace SpectreReplay.Ui
 
         /// <summary>
         /// 分组标题样式。加粗 + 留白，与下面的控件行拉开层次——
-        /// 照 Spectre ��的 FeaturesBase（它用 fontStyle=Bold 的 GUIStyle）做法。
+        /// 照 Spectre 的 FeaturesBase（它用 fontStyle=Bold 的 GUIStyle）的做法。
         /// 纯 Label 的话所有文字一样重，十几行连成一片看不出哪里是块。
         /// </summary>
         private static GUIStyle _boldLabel;

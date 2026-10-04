@@ -79,7 +79,7 @@ namespace SpectreReplay
         //
         // 但**不能就此不提供任何快捷键**：Spectre 的保存回放键挂在
         // scrConductor.Update 上、每帧查 Input.GetKeyDown（见它的
-        // Features/Replay/Patch_Misc.cs）。没有这一下，玩家打��局只能被动
+        // Features/Replay/Patch_Misc.cs）。没有这一下，玩家打一局只能被动
         // 等自动保存，想主动存就得关掉设置重开——模组等于不好用。
 
         /// <summary>

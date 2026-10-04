@@ -518,7 +518,7 @@ switch ($Which) {
     }
     'MUT-AV' {
         # ②a：顶栏退回「只在渲染时才画」。这就是"开着录制打一整局，
-        # 设置页顶部一片空白"。返��成早退之后 ②a 与 ②b 同时红。
+        # 设置页顶部一片空白"。返回改成早退之后 ②a 与 ②b 同时红。
         Backup $ONGUI
         ReplaceExact $ONGUI `
             '            if (rendering)' `
