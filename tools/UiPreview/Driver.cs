@@ -117,7 +117,9 @@ namespace UiPreview
             int compatFail = CompatCheck.Run(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
 
-            // 帧来源的请求/回调配对：pending 只在真的排上回读之后才置位。
+            // 帧来源的请求/回调配对：pending 只在真的排上回读之后才置位，
+            // 且**先置位再发请求**——整屏取帧的回调是同步的，顺序反了会
+            // 永久卡在第 1 帧（成片是静帧，不报错不停机）。
             int frameFail = FrameSourceCheck.Run(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
 

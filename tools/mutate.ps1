@@ -116,6 +116,8 @@ $LIVE      = 'Features\VideoRender\LiveSession.cs'
 $PAGES     = 'Pages\Pages.cs'
 $ONGUI     = 'Ui\OnGui.cs'
 $SERVICE   = 'Features\VideoRender\RenderService.cs'
+$DATA      = 'Features\Recording\ReplayData.cs'
+$GATE      = 'Features\VideoRender\ReadbackGate.cs'
 
 switch ($Which) {
     # 写端（Set 侧）整个删掉，只留读端 —— 上一版的"只做一半"
@@ -781,6 +783,92 @@ switch ($Which) {
             }
         }
         SetLines $ONGUI $out
+    }
+    # ── 回放文件 v4：两段实体的写入顺序退回旧样子 ──────────────
+    #
+    # 旧样子是「状态轨 → Keys」，而读端一直是「Keys → 状态轨」。
+    # 这不是"少测一种组合"，是**每一局真实录制出来的回放都读不对**：
+    # 读端从「读 Keys」那一步起整体错位，而它不一定抛异常——
+    # 两段实体的字节数够读时，文件"读得回来、回放能开、渲染能跑"，
+    # 只是整局数据全错。原来 136 条断言一条都没抓到，因为往返用例
+    # 被拆成了互斥的两组（一组只有按键、一组只有状态轨），
+    # 写端与读端各自跳过空段、恰好对上。真实的一局两条轨都有。
+    #
+    # 这里必须**按行搬整块**：只在文件里交换两段实体的先后。
+    # 搬完仍是合法 C#（预览器链接真实源码、当场编译），不会把
+    # "变异把代码改坏了"伪装成"断言被检出"。
+    'MUT-CA' {
+        Backup $DATA
+        $lines = @(Lines $DATA)
+        $hitK = $lines | Select-String -SimpleMatch 'foreach (var k in data.Keys)' |
+            Select-Object -First 1
+        $hitH = $lines | Select-String -SimpleMatch 'foreach (var h in data.Hits)' |
+            Select-Object -First 1
+        if (-not $hitK -or -not $hitH) { throw 'MUT-CA：找不到两段实体的写入循环' }
+        $kAt = $hitK.LineNumber - 1
+        $hAt = $hitH.LineNumber - 1
+        if (-not ($kAt -lt $hAt)) {
+            throw ('MUT-CA：期望写端是 Keys 在前（Keys 在第 ' + $kAt +
+                ' 行、状态轨在第 ' + $hAt + ' 行），代码结构与预期不符')
+        }
+        function BlockEnd([string[]]$ls, [int]$from) {
+            $depth = 0
+            for ($i = $from; $i -lt $ls.Count; $i++) {
+                $depth += ([regex]::Matches($ls[$i], '\{')).Count
+                $depth -= ([regex]::Matches($ls[$i], '\}')).Count
+                if ($depth -le 0 -and $i -gt $from) { return $i }
+            }
+            throw 'MUT-CA：括号没配平'
+        }
+        $kEnd = BlockEnd $lines $kAt
+        $hEnd = BlockEnd $lines $hAt
+        $out = @()
+        $out += $lines[0..($kAt - 1)]              # 头部（含 hitCount 与说明注释）
+        $out += $lines[$hAt..$hEnd]                # 状态轨整块搬到前面
+        $out += $lines[($kEnd + 1)..($hAt - 1)]    # 中间什么都没变
+        $out += $lines[$kAt..$kEnd]                # Keys 整块搬到后面
+        $out += $lines[($hEnd + 1)..($lines.Count - 1)]
+        SetLines $DATA $out
+    }
+    # ── 回读闸门：把"先置位"退回"先发请求"（整屏模式永久卡在第 1 帧） ──
+    #
+    # 整屏取帧那条路（ReadPixels）的回调是**同步**的：request() 还没返回，
+    # 回调就已经在里面跑完并把在飞标记清掉了。置位若写在 request() 之后，
+    # 就落在清位之后 —— 再没有人清它，第 2 帧起一帧都排不上。
+    # 表现：Live 模式成片是第一帧的静止画面（时长与音轨都对，看着能用、
+    # 内容全错），离线模式只产出 1 帧，且全程不报错、不停机。
+    #
+    # 这条只改**置位的位置**，改成原来的形状，其余一字不动：
+    # 它必须被行为断言 ①（同步回调之后闸门是否放开）抓到，
+    # 而结构断言 ⑤/⑥ 在变异下应当保持绿——源码形状本来就"像对的"。
+    'MUT-CB' {
+        Backup $GATE
+        $lines = @(Lines $GATE)
+        $setAt = -1
+        $retAt = -1
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Trim() -eq '_pending = true;') { $setAt = $i }
+            if ($lines[$i].Trim() -eq 'return queued;') { $retAt = $i }
+        }
+        if ($setAt -lt 0 -or $retAt -lt 0 -or $retAt -le $setAt) {
+            throw ('MUT-CB：找不到 TryStart 的置位与返回（置位在第 ' + $setAt +
+                ' 行、返回在第 ' + $retAt + ' 行），代码结构与预期不符')
+        }
+        $out = @()
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($i -eq $setAt) {
+                $out += '            // MUT-CB：置位搬到了请求返回之后（原来的形状）'
+                continue
+            }
+            if ($i -eq $retAt) {
+                $out += '            if (queued)'
+                $out += '            {'
+                $out += '                _pending = true;   // MUT-CB'
+                $out += '            }'
+            }
+            $out += $lines[$i]
+        }
+        SetLines $GATE $out
     }
     default { throw "未知变异 $Which" }
 }

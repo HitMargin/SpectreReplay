@@ -42,6 +42,12 @@
     <!-- ffmpeg 参数拼装也是纯函数：链接真实源码后可以直接调游戏自带的
          ffmpeg.exe 真跑一遍。参数拼错不会报错，只会静默地不出片。 -->
     <Compile Include="..\..\SpectreReplay\Features\VideoRender\FfmpegArgs.cs" Link="Real\FfmpegArgs.cs" />
+    <!-- 回读闸门：整屏取帧那条路的回调是**同步**的（ReadPixels 当场算完），
+         "先发请求再按结果置位"会让置位落在清位之后、闸门永久锁死——
+         第 2 帧起一帧都排不上，成片是第一帧的静止画面，且不报错不停机。
+         这是纯时序问题，读源码怎么看都像对的，只能链接真实源码按同步顺序
+         实测一遍；所以把它抽成了不碰引擎的纯类。 -->
+    <Compile Include="..\..\SpectreReplay\Features\VideoRender\ReadbackGate.cs" Link="Real\ReadbackGate.cs" />
     <!-- 命中误差换算同理：链接真实源码（照 Spectre 的 ReplayAnalyzer）。
          那个逆运算式里有 π 与 60 的换算，错了会得到一个"看着合理"的
          毫秒数——不报错，只是结论完全反了。 -->

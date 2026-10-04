@@ -30,6 +30,7 @@ namespace UiPreview
             fail += RoundTrip("③ 空回放", dir, "empty", Sample(0, 0));
             fail += RoundTrip("④ 单个判定点", dir, "one", Sample(1, 1));
             fail += HitsRoundTrip(dir);
+            fail += BothTracksRoundTrip(dir);
             fail += ReadsV1(dir);
             fail += ReadsV3(dir);
             fail += RejectsAbsurdHitCount(dir);
@@ -129,6 +130,88 @@ namespace UiPreview
             {
                 Console.WriteLine("    ✗ 状态轨往返 抛异常 "
                     + $"{ex.GetType().Name}: {ex.Message}");
+                return 1;
+            }
+        }
+
+        /// <summary>
+        /// **两条轨同时有数据的往返**——真实的一局必然如此。
+        ///
+        /// 原来这一组用例被拆成了互斥的两组：Sample() 只装 Keys、
+        /// HitsRoundTrip() 只装 Hits。于是 Write 把状态轨实体写在 Keys
+        /// **之前**、Read 却先读 Keys 再读状态轨，这个顺序颠倒
+        /// 在闸门里一条红都没有——任何一组用例里都只有一段实体，
+        /// 写端与读端各自「跳过空段」，恰好对上。
+        ///
+        /// 这不是「少测一种组合」，而是**每一局真实录制的回放都是坏的**：
+        /// 写出来的 v4 文件，读端从「读 Keys」那一步起整体错位。
+        ///
+        /// 最恶劣的地方在于它**不一定抛异常**。两段实体的字节数
+        /// （状态轨 37 B/条、按键 15 B/条）满足 37*hitCount >= 15*keyCount 时，
+        /// 读端只是在垃圾上走了一遍：文件读得回来、回放开得起来、
+        /// 渲染跑得下去，只是整局数据全是错的。所以这里两条轨都要逐字段比。
+        /// </summary>
+        private static int BothTracksRoundTrip(string dir)
+        {
+            string path = Path.Combine(dir, "both.srp");
+            try
+            {
+                var src = Sample(3, 2);          // 5 个按键
+                for (int i = 0; i < 3; i++)
+                {
+                    src.Hits.Add(new ReplayHitContext
+                    {
+                        Angle = 90f * (i + 1),
+                        CachedAngle = 1000.5 * (i + 1),
+                        TargetExitAngle = -250.25 * (i + 1),
+                        NoFailHit = i % 2 == 0,
+                        IsAuto = i == 1,
+                        NextFloorAuto = i != 1,
+                        RdcAuto = i == 2,
+                        MidspinInfiniteMargin = i % 2 == 1,
+                        OverloadCounter = 0.125f * (i + 1),
+                        CurrentFloorId = 7 + i,
+                        FreeRoamSection = i == 2 ? 4 : 0,
+                    });
+                }
+                ReplayFile.Write(path, src);
+                var back = ReplayFile.Read(path);
+                var bad = new List<string>();
+                if (back.Keys.Count != src.Keys.Count)
+                {
+                    bad.Add("Keys 项数错（" + back.Keys.Count + " vs " + src.Keys.Count + "）");
+                }
+                if (back.Hits.Count != src.Hits.Count)
+                {
+                    bad.Add("Hits 项数错（" + back.Hits.Count + " vs " + src.Hits.Count + "）");
+                }
+                foreach (var p in Compare(src, back)) { bad.Add(p); }
+                if (back.Hits.Count == src.Hits.Count)
+                {
+                    for (int i = 0; i < src.Hits.Count; i++)
+                    {
+                        foreach (var p in CompareHit(src.Hits[i], back.Hits[i], i))
+                        {
+                            bad.Add(p);
+                        }
+                    }
+                }
+                if (bad.Count == 0)
+                {
+                    Console.WriteLine("    ✓ ⑧ 双轨同时在时逐字段往返一致"
+                        + "（5 个按键 + 3 条状态轨，真实一局的形状）");
+                    return 0;
+                }
+                foreach (var p in bad)
+                {
+                    Console.WriteLine("    ✗ 双轨往返 " + p);
+                }
+                return bad.Count;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("    ✗ 双轨往返：抛异常 "
+                    + ex.GetType().Name + ": " + ex.Message);
                 return 1;
             }
         }

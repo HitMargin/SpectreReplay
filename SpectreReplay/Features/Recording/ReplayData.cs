@@ -277,8 +277,29 @@ namespace SpectreReplay.Features.Recording
                         w.Write(t);
                     }
                 }
-                // 状态轨的实体段。放最后，读端也可以最后才解析——
-                // 就算这里有脏数据，前面的 Margins/Keys 已经读完了。
+                // ── 两段实体：先 Keys，后状态轨。**顺序绝不能反。** ──────
+                //
+                // 这里原来把状态轨写在 Keys 之前，而读端是先 Keys 后状态轨，
+                // 两边的顺序是反的。而它**不一定抛异常**：状态轨 37 B/条、
+                // 按键 15 B/条，只要够读，读端就在垃圾上走完一遍——
+                // 文件读得回来、回放开得起来、渲染跑得下去，只是整局数据全错。
+                //
+                // 之所以一直没被发现，是因为往返用例被拆成了互斥的两组
+                // （一组只有按键、一组只有状态轨），写端与读端各自跳过空段，
+                // 恰好对上。**真实的一局两条轨都有。**
+                //
+                // Keys 必须紧跟在 MarginTimes 之后：v1~v3 的文件就是这样，
+                // 而读端对老版本不读状态轨——Keys 的位置一动，老文件全废。
+                // 状态轨是 v4 新加的段，位置只能在**最末**。
+                foreach (var k in data.Keys)
+                {
+                    w.Write(k.Key);
+                    w.Write(k.Label);
+                    w.Write(k.IsPressed);
+                    w.Write(k.SongPosition);
+                }
+                // 状态轨的实体段。放最后，读端也最后才解析——
+                // 就算这里有脏数据，前面的 Keys 已经读完了。
                 foreach (var h in data.Hits)
                 {
                     w.Write(h.Angle);
@@ -292,13 +313,6 @@ namespace SpectreReplay.Features.Recording
                     w.Write(h.OverloadCounter);
                     w.Write(h.CurrentFloorId);
                     w.Write(h.FreeRoamSection);
-                }
-                foreach (var k in data.Keys)
-                {
-                    w.Write(k.Key);
-                    w.Write(k.Label);
-                    w.Write(k.IsPressed);
-                    w.Write(k.SongPosition);
                 }
             }
         }
@@ -403,11 +417,11 @@ namespace SpectreReplay.Features.Recording
                         SongPosition = r.ReadDouble(),
                     });
                 }
-                // 状态轨实体段在 Keys 之后（见 Write 里的说明）。
+                // 状态轨实体段在 Keys 之后。
                 //
-                // 读取顺序必须与写入顺序**完全一致**。这里与 Keys 的顺序
-                // 是反的（写：Hits → Keys；读：Keys → Hits），因为 Keys
-                // 是格式里最老的一段、位置不能动——动它就要求 v1 也要改。
+                // 读取顺序必须与写入顺序**完全一致**——写端现在是
+                // Keys → 状态轨，两边对齐（这里曾经写反，而且注释还
+                // 自相矛盾地宣称"顺序必须完全一致，但这里是反的"）。
                 if (hitCount > 0)
                 {
                     d.Hits.Capacity = hitCount;

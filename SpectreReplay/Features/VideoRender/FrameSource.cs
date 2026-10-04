@@ -26,7 +26,13 @@ namespace SpectreReplay.Features.VideoRender
         private readonly int _height;
         private RenderTexture _rt;
         private Texture2D _readback;
-        private bool _readbackPending;
+
+        /// <summary>
+        /// 回读的"在飞"闸门。**多路回读的互斥、以及"这次到底排上了吗"的判定
+        /// 都在它里面**（见 ReadbackGate 的说明：整屏取帧的回调是同步的，
+        /// 置位与清位的先后顺序错了就会永久卡死，且不报错、不停机）。
+        /// </summary>
+        private readonly ReadbackGate _gate = new ReadbackGate();
 
         internal int Width => _width;
         internal int Height => _height;
@@ -102,30 +108,30 @@ namespace SpectreReplay.Features.VideoRender
         /// </summary>
         internal bool Request()
         {
-            if (_readbackPending)
-            {
-                return false;
-            }
-            // **只有真的排上了才置 _readbackPending 并返回 true。**
+            // **置位与判定都在闸门里，这里不再自己碰"在飞"状态。**
             //
-            // 这里的"真的"必须由被调方回传，不能在这里自己置位：
-            // RequestCleanCamera 开头有一条提前返回——游戏相机列表为空
-            // （切场景瞬间、切到编辑器、关卡加载中都会出现）就 return，
-            // 那时**没有排任何回读**。可 Request() 仍然返回了 true，
-            // 调用方于是以为"已排队，等回调"就 return 去了。
+            // 原来这里是这个形状：
+            //     bool queued = _surface == FrameSurface.WholeScreen
+            //         ? RequestWholeScreen() : RequestCleanCamera();
+            //     if (queued) { _readbackPending = true; }
+            // 它在**异步**那条路（CleanCamera → AsyncGPUReadback.Request）
+            // 上是对的，在**同步**那条路（WholeScreen → ReadPixels）上则整个反了：
+            // RequestWholeScreen() 内部会同步调到 OnWholeScreenReady，
+            // 回调里先把 _readbackPending 清成 false，等它返回 true、
+            // 回到这里，置位才发生 —— 置位落在清位之后，再没有人清它。
             //
-            // 后果是那一帧再也不会有回调，而 _readbackPending 也没被置上：
-            // 下一帧 Request() 又能排上，所以整个录制**不会停**，但每一帧
-            // 都在等一个**永远不会来的**回调。表现是画面停在黑帧、
-            // 音频照走、帧栅格不动——成片是黑的，而日志里什么都没有。
-            bool queued = _surface == FrameSurface.WholeScreen
-                ? RequestWholeScreen()
-                : RequestCleanCamera();
-            if (queued)
+            // 后果：第 2 帧起 Request() 恒返回 false。Live 模式成片是
+            // **第一帧的静止画面**（时长与音轨都对，看着能用、内容全错），
+            // 离线模式编码器只收到 1 帧。全程不报错、不停机、日志全无。
+            //
+            // 闸门先置位再发请求，同步与异步两种回调顺序都成立；
+            // 请求返回 false（相机列表为空 / 窗口尺寸为 0，即"什么都没排上"）
+            // 时它会把置位收回去 —— 那种情况下调用方也不会去等回调。
+            if (_surface == FrameSurface.WholeScreen)
             {
-                _readbackPending = true;
+                return _gate.TryStart(RequestWholeScreen);
             }
-            return queued;
+            return _gate.TryStart(RequestCleanCamera);
         }
 
         private bool RequestCleanCamera()
@@ -189,7 +195,9 @@ namespace SpectreReplay.Features.VideoRender
 
         private void OnReadback(UnityEngine.Rendering.AsyncGPUReadbackRequest request)
         {
-            _readbackPending = false;
+            // 先放开闸门再交帧：交帧本身可能抛（PendingSink 是外部代码），
+            // 把闸门留在锁死状态就等于整个录制停在第 N 帧。
+            _gate.Complete();
             if (request.hasError || PendingSink == null)
             {
                 return;
@@ -209,7 +217,9 @@ namespace SpectreReplay.Features.VideoRender
 
         private void OnWholeScreenReady(byte[] bytes, int w, int h)
         {
-            _readbackPending = false;
+            // **这条回调是同步的**：RequestWholeScreen 还没返回，
+            // 这里就已经跑完了。闸门因此必须先置位再发请求（见 ReadbackGate）。
+            _gate.Complete();
             PendingSink?.Invoke(bytes, w, h);
         }
 

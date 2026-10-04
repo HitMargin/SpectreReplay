@@ -208,7 +208,7 @@ namespace SpectreReplay.Ui
             GUI.Box(r, GUIContent.none, GUI.skin.box);
             GUI.color = new Color(1f, 0.94f, 0.94f);
             GUI.Label(new Rect(r.x + 8f, r.y + 3f, r.width - 16f, 20f),
-                Loc.T("ui.patchFailed") + "  (" + PatchFailures + ")", style);
+                Loc.T("ui.patchfailed") + "  (" + PatchFailures + ")", style);
             GUI.color = oldColor;
             GUI.backgroundColor = oldBox;
         }
@@ -392,7 +392,7 @@ namespace SpectreReplay.Ui
             GUILayout.Label(Loc.T(labelKey), GUILayout.Width(LabelW));
             int cur = get();
             string text = _capturing == GetCaptureId(labelKey)
-                ? Loc.T("ui.pressKey")
+                ? Loc.T("ui.presskey")
                 : (cur > 0 ? KeyName((KeyCode)cur) : Loc.T("ui.noKey"));
             if (GUILayout.Button(text, GUILayout.Width(200f), GUILayout.Height(24f)))
             {
