@@ -84,7 +84,7 @@ namespace SpectreReplay.Ui
             _visible = true;
             // 每次打开都重取一次：目录里的 .srp 可能刚被录出来，
             // 而文本框的草稿上一轮可能还留着玩家没提交完的编辑。
-            _textDraft = Settings.OutputDir;
+            _textDraft = Settings.RenderOutputDir;
         }
 
         internal static void OnHide(ModEntry modEntry)
@@ -106,7 +106,7 @@ namespace SpectreReplay.Ui
             // 面板刚打开时先把文本框填上，之后由玩家编辑
             if (_textDraft == null)
             {
-                _textDraft = Settings.OutputDir;
+                _textDraft = Settings.RenderOutputDir;
             }
 
             // IMGUI 一帧跑两趟（Layout/Repaint），_openSeq 若跨趟自增，
@@ -137,41 +137,33 @@ namespace SpectreReplay.Ui
         /// </summary>
         private static void DrawStatus()
         {
-            // 进度直接读 RenderStatus.Progress——那边本来就有人在维护，
-            // 我不该在 Status 里再存一份（存两份必然会走偏）。
-            float p = Features.VideoRender.RenderStatus.Progress;
-            int state = (int)Features.VideoRender.RenderStatus.Current;
-            bool rendering = state != (int)Features.VideoRender.RenderStatus.State.Idle
-                && state != (int)Features.VideoRender.RenderStatus.State.Done
-                && state != (int)Features.VideoRender.RenderStatus.State.Failed;
-
-            string text;
-            if (rendering)
+            // 状态行：渲染中显示进度，其余显示录制/回放/空闲（移植 Spectre 状态）
+            if (Features.VideoRender.VideoRender.Active)
             {
-                text = string.Format(Loc.T("status.rendering"),
-                    (p * 100f).ToString("F0") + "%");
+                var snap = Features.VideoRender.VideoRender.Current;
+                string stage = !string.IsNullOrEmpty(snap.Stage) ? snap.Stage : "";
+                string pct = snap.FramesTotal > 0
+                    ? "  " + (snap.Progress * 100f).ToString("F0") + "%"
+                    : "";
+                GUILayout.Label(stage + pct, GUILayout.Height(20f));
+                return;
             }
-            else if (Features.Recording.KeyRecorder.IsRecording)
+            if (SpectreReplay.SpectreState.is_recording)
             {
-                text = Loc.T("status.recording");
+                GUILayout.Label(Loc.T("status.recording"), GUILayout.Height(20f));
+                return;
             }
-            else if (Features.Playback.PlaybackEngine.IsPlaying)
+            if (SpectreReplay.SpectreState.is_playing)
             {
-                text = Features.Playback.PlaybackEngine.IsPending
-                    ? Loc.T("status.pending_short")
-                    : Loc.T("status.playing");
+                GUILayout.Label(Loc.T("status.playing"), GUILayout.Height(20f));
+                return;
             }
-            else if (Settings.RecordingOn || Settings.RenderOn)
+            if (Settings.ReplayOn)
             {
-                text = Loc.T("status.idle");
+                GUILayout.Label(Loc.T("status.idle"), GUILayout.Height(20f));
+                return;
             }
-            else
-            {
-                // 两个总开关都关着：这时什么都不录也不渲，但功能层还挂着，
-                // 属于"看起来正常、其实整条链是空的"，必须说明白。
-                text = Loc.T("status.all_off");
-            }
-            GUILayout.Label(text, GUILayout.Height(20f));
+            GUILayout.Label(Loc.T("status.all_off"), GUILayout.Height(20f));
         }
 
         /// <summary>
@@ -393,7 +385,7 @@ namespace SpectreReplay.Ui
             int cur = get();
             string text = _capturing == GetCaptureId(labelKey)
                 ? Loc.T("ui.presskey")
-                : (cur > 0 ? KeyName((KeyCode)cur) : Loc.T("ui.noKey"));
+                : (cur > 0 ? KeyName((KeyCode)cur) : Loc.T("ui.nokey"));
             if (GUILayout.Button(text, GUILayout.Width(200f), GUILayout.Height(24f)))
             {
                 int id = GetCaptureId(labelKey);
@@ -436,7 +428,7 @@ namespace SpectreReplay.Ui
                 }
                 _capturing = 0;
                 set((int)k);
-                Settings.Commit();
+                Settings.CommitSafe();
                 return;
             }
         }
@@ -559,10 +551,10 @@ namespace SpectreReplay.Ui
         /// <summary>提交文本框内容。关窗口时也会调。</summary>
         internal static void CommitText()
         {
-            if (_textDraft != null && _textDraft != Settings.OutputDir)
+            if (_textDraft != null && _textDraft != Settings.RenderOutputDir)
             {
-                Settings.OutputDir = _textDraft;
-                Settings.Commit();
+                Settings.RenderOutputDir = _textDraft;
+                Settings.CommitSafe();
             }
         }
     }

@@ -1,388 +1,536 @@
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Threading;
 using System.IO;
+using System.Text;
+using System.Threading;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
-namespace SpectreReplay.Features.VideoRender
+namespace SpectreReplay.Features.VideoRender;
+
+// ffmpeg 管道编码器：主线程只入队帧数据，stdin 写入在后台线程完成；
+// 帧队列有界形成反压 —— 编码跟不上时渲染自然等待，不影响成片时间轴。
+internal sealed class VideoEncoder : IDisposable
 {
-    /// <summary>画面来源。两种取法的取舍见 <see cref="FrameSource"/>。</summary>
-    internal enum FrameSurface
+    internal enum Quality { Balanced = 0, Fastest = 1, Sharpest = 2, CpuOnly = 3 }
+
+    // 输出容器。webm 只认 VP8/VP9 视频 + Vorbis/Opus 音频，走 libvpx-vp9 重编码；
+    // 其余容器沿用 H.264（NVENC 探测可用时）+ AAC。
+    internal enum OutContainer { Mp4 = 0, Mkv = 1, WebM = 2, Mov = 3 }
+
+    internal static string ExtensionOf(OutContainer c) => c switch
     {
-        /// <summary>官方相机链渲染到自建纹理：原生分辨率、不含界面、干净。</summary>
-        CleanCamera = 0,
-        /// <summary>帧末截取最终合成画面：含 Screen-Space Overlay（进度条等），分辨率跟窗口。</summary>
-        WholeScreen = 1,
+        OutContainer.Mkv => ".mkv",
+        OutContainer.WebM => ".webm",
+        OutContainer.Mov => ".mov",
+        _ => ".mp4",
+    };
+
+    private sealed class PendingFrame
+    {
+        public byte[] Data;
+        public int Length;
+        public int Repeat;
+        public Action<byte[]> Recycle;
     }
 
-    /// <summary>
-    /// ffmpeg 管道编码器。
-    ///
-    /// 线程模型（这是全流程最容易出错的地方）：
-    ///   主线程   —— 只做 GPU 回读 + 把像素拷进租来的缓冲 + 入队，不碰 stdin
-    ///   泵线程   —— 从队列取帧，写进 ffmpeg 的 stdin，写完把缓冲还回池
-    /// 这样主线程永远不会被编码阻塞；而缓冲的租还必须跨线程安全，
-    /// 所以池用 lock 保护（见 FrameBufferPool）。
-    ///
-    //// stdin 写死会卡死 ffmpeg 时（磁盘满、编码器内部挂起），
-    /// 主线程会卡在 <see cref="Submit"/> 的反压等待里。这一层的保护**不在这里**，
-    /// 而在 <c>Submit</c> 的 <see cref="SubmitWaitMs"/> 超时：等满就抛，
-    /// 调用方据此收摊报失败。理由见那个常量的注释——按"队列长度是否变化"
-    /// 计时的那类看门狗，在渲染收尾阶段会**必然误判**。
-    /// </summary>
-    internal sealed class VideoEncoder : IDisposable
+    private const int ProbeRetryMs = 30_000;
+    private static readonly object ProbeLock = new object();
+    // 探测缓存策略（设置页每个 IMGUI 帧都会询问，冷却期挡住反复拉起探测进程）：
+    // - PATH 定位 / PATH 探测：负结果（没找到/超时）冷却 ProbeRetryMs 后重试，
+    //   用户中途安装 ffmpeg 无需重启游戏；正结果会话内有效
+    // - NVENC：结果与 exePath 绑定，换编码器路径自动失效。负结果不设冷却重试——
+    //   它意味着当前驱动没有硬件编码能力，会话内不会改变
+    private static bool nvencWorks;
+    private static string nvencProbedExe;
+    private static bool pathWorks;
+    private static int pathFailTick = int.MinValue;
+    // File.Exists 定位缓存（调用方均在主线程）：具体路径是正结果直接复用；
+    // "ffmpeg" 是 PATH 回退的负结果，进冷却期
+    private static string locatedEncoder;
+    private static int locateFailTick = int.MinValue;
+
+    // 负缓存是否仍在冷却期（TickCount 差值按无符号比较，回绕安全）
+    private static bool Cooling(int failTick)
+        => failTick != int.MinValue && (uint)(Environment.TickCount - failTick) < (uint)ProbeRetryMs;
+
+    private readonly string exePath;
+    private readonly string rawVideoPath;
+    private readonly string finalVideoPath;
+    private readonly int width;
+    private readonly int height;
+    private readonly int fps;
+    private readonly Quality quality;
+    private readonly int qualityTier;
+    private readonly bool flipRows;
+    private readonly OutContainer container;
+
+    private Process pipe;
+    private BlockingCollection<PendingFrame> queue;
+    private Thread pump;
+    private Exception pumpFailure;
+
+    internal string EncoderName { get; private set; } = "unknown";
+
+    // 帧队列容量（Begin 时按 256 MiB 预算定）：调用方据此对齐回读缓冲池上限，
+    // 否则编码满载时每帧回收的 30+ 个大数组只有 8 个进池、其余全丢 LOH
+    internal int QueueCapacity { get; private set; }
+
+    internal VideoEncoder(string exePath, string rawVideoPath, string finalVideoPath,
+        int width, int height, int fps, Quality quality, int qualityTier, bool flipRows,
+        OutContainer container = OutContainer.Mp4)
     {
-        private Process _proc;
-        private System.Threading.Thread _pump;
-        private readonly BlockingQueue _queue;
-        private readonly FrameBufferPool _pool;
-        private volatile bool _stopRequested;
-        private volatile bool _finished;
-        private Exception _failure;
-        private int _written;
+        this.exePath = exePath;
+        this.rawVideoPath = rawVideoPath;
+        this.finalVideoPath = finalVideoPath;
+        this.width = width;
+        this.height = height;
+        this.fps = Math.Max(1, fps);
+        this.quality = quality;
+        this.qualityTier = Math.Max(0, Math.Min(3, qualityTier));
+        this.flipRows = flipRows;
+        this.container = container;
+    }
 
-        internal int FramesWritten => _written;
-        internal string Error { get; private set; } = "";
-
-        private VideoEncoder(FrameBufferPool pool, int frameBytes)
+    // 依次探测模组目录、游戏根目录；找不到再交给系统 PATH（结果缓存，见 locatedEncoder）
+    internal static string LocateEncoder()
+    {
+        if (locatedEncoder != null)
         {
-            _pool = pool;
-            // 容量按帧大小算：1920×1080 单帧 8 MB，256 MiB 预算 → 32 帧。
-            // 照 Spectre（VideoEncoder.cs:181 的 268435456 / (w*h*4)，夹到 [2,64]）。
-            // 原先固定 4，1080p 下只有 32 MB 缓冲，编码稍慢就频繁顶满。
-            int cap = frameBytes > 0 ? 268435456 / frameBytes : 4;
-            _queue = new BlockingQueue(pool, null, cap);
+            bool cachedNegative = locatedEncoder == "ffmpeg";
+            if (!cachedNegative || Cooling(locateFailTick))
+                return locatedEncoder;
         }
-
-        internal static VideoEncoder Start(FrameBufferPool pool, int width, int height,
-            int fps, EncoderMode encoder, QualityMode quality, ContainerMode container,
-            bool flipRows, string outputPath, string ffmpegPath)
+        try
         {
-            var e = new VideoEncoder(pool, width * height * 4);
-            e.Launch(width, height, fps, encoder, quality, container, flipRows,
-                outputPath, ffmpegPath);
-            return e;
-        }
-
-        private void Launch(int width, int height, int fps, EncoderMode encoder,
-            QualityMode quality, ContainerMode container, bool flipRows,
-            string outputPath, string ffmpegPath)
-        {
-            var psi = new ProcessStartInfo(ffmpegPath)
+            string modDir = Main.mod.Path;
+            string gameRoot = Path.GetFullPath(Path.Combine(modDir, "..", "..", ".."));
+            string[] candidates =
             {
-                RedirectStandardInput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
+                Path.Combine(modDir, "ffmpeg.exe"),
+                Path.Combine(gameRoot, "ffmpeg.exe")
             };
-            foreach (string a in BuildArgs(width, height, fps, encoder, quality, container, flipRows, outputPath))
-            {
-                psi.ArgumentList.Add(a);
-            }
-
-            _proc = Process.Start(psi);
-            if (_proc == null)
-            {
-                throw new IOException(string.Format(Ui.Loc.T("render.err.ffmpeg_start"), ffmpegPath));
-            }
-            // ffmpeg 的 stderr 不读会写满管道缓冲区后卡死，必须有人接着读。
-            _proc.BeginErrorReadLine();
-            _proc.ErrorDataReceived += (_, __) => { };
-
-            // _queue / _pool 已在构造函数里建好，这里只起泵线程
-            _pump = new System.Threading.Thread(Pump)
-            {
-                IsBackground = true,
-                Name = "SpectreReplay.ffmpeg",
-            };
-            _pump.Start();
-        }
-
-        private static string[] BuildArgs(int width, int height, int fps,
-            EncoderMode encoder, QualityMode quality, ContainerMode container,
-            bool flipRows, string outPath)
-            => FfmpegArgs.Build(width, height, fps, encoder, quality, container,
-                flipRows, outPath);
-
-        /// <summary>
-        /// 主线程调用：把一帧像素交出去。
-        ///
-        /// 队列满时会**阻塞等待**（反压），这是有意的——见 BlockingQueue
-        /// 类注释：丢帧会让音频栅格与帧序号永久错位。
-        ///
-        /// 返回 false 表示等待超时或已停止，调用方**不得推进帧序号**：
-        /// 帧没进队列，就不能算作"已产出"，否则音频栅格会跟着前进，
-        /// 而视频里永远不会有这一帧——正是我们要避免的错位。
-        /// </summary>
-        internal bool Submit(byte[] pixels)
-        {
-            if (_stopRequested || _finished)
-            {
-                return false;
-            }
-            if (_proc == null || _proc.HasExited)
-            {
-                // ffmpeg 已经死了：继续入队只会把队列填满后一直阻塞。
-                // 立刻失败，让调用方停在这帧而不是空等。
-                Error = Ui.Loc.T("render.err.encoder_gone");
-                _failure = _failure
-                    ?? new InvalidOperationException(Error);
-                _stopRequested = true;
-                return false;
-            }
-            return _queue.Enqueue(pixels, SubmitWaitMs);
-        }
-
-        /// <summary>
-        /// 单帧入队最长等待。**这就是整个编码器唯一的卡死保护。**
-        ///
-        /// 取 Spectre 的量级（VideoEncoder.cs:197-223 用 120 秒）。这个值不是
-        /// "正常情况下的等待时长"——正常情况下编码器远快于实时，队列永远不满，
-        /// Enqueue 立刻返回。它只在 ffmpeg 停止消费 stdin 时才被耗尽，
-        /// 用来把"静默挂死"变成"可诊断的失败"。
-        ///
-        /// Spectre 的注释把这一点讲得很直白（原 :192-196）：不设此阈值，
-        /// ffmpeg 停止读 stdin 时 Submit 会无限自旋，整次渲染**静默挂死**。
-        ///
-        /// 为什么泵线程那边不需要第二个看门狗：见 <see cref="Pump"/> 里的说明，
-        /// 那类看门狗在收尾阶段会必然误判。
-        /// </summary>
-        private const int SubmitWaitMs = 120_000;
-
-        private void Pump()
-        {
-            try
-            {
-                while (!_stopRequested)
+            foreach (string candidate in candidates)
+                if (File.Exists(candidate))
                 {
-                    byte[] frame = _queue.Dequeue(50);
-                    if (frame == null)
-                    {
-                        // 空队列就是正常状态：上游这一帧还没产出，
-                        // 或者已经全部送完、正在等收尾。
-                        //
-                        // **这里刻意不设看门狗。** 曾经的写法是"超过 20 秒
-                        // 没有新帧进来就 break"，而它会在渲染**收尾阶段必然误判**：
-                        // 最后一帧送出去之后 ffmpeg 还要排空管道、封装、写文件，
-                        // 这段时间里上游不会再有任何 Submit——队列长度就是不变，
-                        // 20 秒一到就把**成功的渲染**报成失败。
-                        //
-                        // 而收尾恰恰是最容易出问题的阶段，报错又发生在用户已经
-                        // 耐心等完之后，体验是"画面明明在动，最后告诉我失败"。
-                        //
-                        // 真卡死的情形由 <see cref="SubmitWaitMs"/> 兜：
-                        // 那是主线程在**队列满**上的等待（反压），
-                        // ffmpeg 不读 stdin 时必然顶满队列，于是一定会超时。
-                        // 泵线程空转只是浪费一个后台线程，不会让用户看到坏结果。
-                        continue;
-                    }
-                    _proc.StandardInput.BaseStream.Write(frame, 0, frame.Length);
-                    _proc.StandardInput.BaseStream.Flush();
-                    _pool.Return(frame);
-                    _written++;
+                    locatedEncoder = candidate;
+                    return locatedEncoder;
                 }
-            }
-            catch (Exception ex)
-            {
-                _failure = ex;
-            }
-            finally
-            {
-                _finished = true;
-                TryCloseStdin();
-            }
         }
-
-        private void TryCloseStdin()
+        catch (Exception ex)
         {
+            Debug.Log("[Spectre] encoder locate failed: " + ex.Message);
+        }
+        locatedEncoder = "ffmpeg";
+        locateFailTick = Environment.TickCount;
+        return locatedEncoder;
+    }
+
+    // PATH 上是否有可用的 ffmpeg（探测结果缓存）
+    internal static bool PathProbeSucceeded()
+    {
+        lock (ProbeLock)
+        {
+            if (pathWorks)
+                return true;
+            if (Cooling(pathFailTick))
+                return false;
             try
             {
-                _proc?.StandardInput?.Close();
+                var info = new ProcessStartInfo
+                {
+                    FileName = "ffmpeg",
+                    Arguments = "-version",
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                using (Process p = Process.Start(info))
+                {
+                    // WaitForExit(timeout) 返回 false 表示超时未退出，此时读 ExitCode 会抛异常；
+                    // 超时按失败计并进冷却期，稍后重试而不是整个会话判死（慢盘/杀软扫描场景）
+                    bool exited = p != null && p.WaitForExit(5000);
+                    if (!exited)
+                    {
+                        try { p?.Kill(); } catch { }
+                    }
+                    pathWorks = exited && p.ExitCode == 0;
+                }
             }
             catch
             {
-                // 关闭失败无所谓，后面的 WaitForExit 才是判据
+                pathWorks = false;
             }
+            if (!pathWorks)
+                pathFailTick = Environment.TickCount;
+            return pathWorks;
         }
+    }
 
-        /// <summary>收尾：停泵、关 stdin、等 ffmpeg 退出。返回是否成功。</summary>
-        internal bool Finish(int timeoutMs = 120_000)
+    internal void Begin()
+    {
+        string args = "-y -f rawvideo -pixel_format rgba"
+            + " -video_size " + width + "x" + height
+            + " -framerate " + fps
+            + " -i - -an -vf " + Quote(RowFilter())
+            + " " + EncoderArguments()
+            + " -pix_fmt yuv420p -colorspace bt709 -color_primaries bt709 -color_trc bt709 "
+            + Quote(rawVideoPath);
+        pipe = Spawn(args, redirectInput: true);
+        // 帧队列缓存上限约 256 MiB
+        QueueCapacity = Math.Max(2, Math.Min(64, 268435456 / (width * height * 4)));
+        queue = new BlockingCollection<PendingFrame>(QueueCapacity);
+        pumpFailure = null;
+        pump = new Thread(PumpLoop)
         {
-            _stopRequested = true;
-            if (_pump != null && _pump.IsAlive)
-            {
-                _pump.Join(3000);
-            }
-            TryCloseStdin();
+            IsBackground = true,
+            Name = "SpectreReplay.VideoEncoderPipe"
+        };
+        pump.Start();
+    }
+
+    // 队列满时自旋等待；取消检查交给回调。
+    // 另加卡死看门狗：ffmpeg 若停止读 stdin（磁盘满/编码器挂起），泵线程会堵在
+    // 管道 Write 上，队列随之填满——此时若用户不点取消，Submit 会无限自旋，
+    // 协程永远到不了带超时的 FinishVideo，整次渲染静默挂死（与本文件其余路径
+    // 的"超时即失败上报"策略不一致）。连续入队失败超过阈值即判定编码器卡死。
+    private const int SubmitStallTimeoutMs = 120_000;
+    private const int SubmitRetryMs = 50;
+
+    internal void Submit(byte[] data, int length, int repeat, Action<byte[]> recycle, Func<bool> canceled)
+    {
+        var frame = new PendingFrame
+        {
+            Data = data,
+            Length = length,
+            Repeat = Math.Max(1, repeat),
+            Recycle = recycle
+        };
+        var waitedMs = 0;
+        while (true)
+        {
+            if (canceled != null && canceled())
+                throw new OperationCanceledException("canceled");
+            if (pipe == null || pipe.HasExited)
+                throw new InvalidOperationException("encoder process exited unexpectedly");
+            if (pumpFailure != null)
+                throw new InvalidOperationException("encoder pump failed", pumpFailure);
+            if (queue.TryAdd(frame, SubmitRetryMs))
+                return;
+            waitedMs += SubmitRetryMs;
+            if (waitedMs >= SubmitStallTimeoutMs)
+                throw new TimeoutException("encoder stalled: frame queue full for "
+                    + (SubmitStallTimeoutMs / 1000) + "s (ffmpeg stopped consuming stdin?)");
+        }
+    }
+
+    // 关闭管道收尾：等待写线程排空并让 ffmpeg 正常退出
+    internal void FinishVideo()
+    {
+        if (pipe == null)
+            return;
+        queue.CompleteAdding();
+        // 泵线程排空队列；若 ffmpeg 停止读 stdin，泵会堵在满管道的 Write 上，
+        // 无限 Join 会把主线程挂死——限时轮询逃生（见 JoinPump）
+        if (!JoinPump(TimeSpan.FromMinutes(10)))
+        {
+            try { pipe.Kill(); } catch { }
+            try { pump.Join(3000); } catch { }
+            throw new InvalidOperationException("video encode stalled while draining (timeout)");
+        }
+        if (pumpFailure != null)
+            throw new InvalidOperationException("encoder pump failed", pumpFailure);
+        pipe.StandardInput.Close();
+        // 收尾只剩尾部 GOP flush + trailer，正常秒级完成；10 分钟兜底防 ffmpeg 卡死
+        // （磁盘满/编码器挂起）把主线程永久挂死，超时 Kill 走既有失败上报链路
+        if (!pipe.WaitForExit(600_000))
+        {
+            try { pipe.Kill(); } catch { }
+            try { pipe.WaitForExit(3000); } catch { }
+            throw new InvalidOperationException("video encode stalled at finalize (timeout)");
+        }
+        if (pipe.ExitCode != 0)
+            throw new InvalidOperationException("video encode failed, exit code " + pipe.ExitCode);
+        pipe.Dispose();
+        pipe = null;
+        queue.Dispose();
+        queue = null;
+        pump = null;
+    }
+
+    // 限时等待泵线程排空退出：ffmpeg 已死时管道断开、阻塞中的 Write 随即抛错，
+    // 泵必然很快收场（再宽限 3 秒）；活着但停止消费（锁文件/驱动挂起等）只能
+    // 等限时到头，由调用方 Kill 解除泵的阻塞再走失败链路
+    private bool JoinPump(TimeSpan limit)
+    {
+        DateTime deadline = DateTime.UtcNow + limit;
+        while (!pump.Join(1000))
+        {
+            if (pipe.HasExited)
+                return pump.Join(3000);
+            if (DateTime.UtcNow >= deadline)
+                return false;
+        }
+        return true;
+    }
+
+    // 视频轨与混音轨合成最终文件。webm 只能 Opus/Vorbis 音频（强制 48k，Opus 不收其他采样率）；
+    // faststart 是 movenc 系（mp4/mov）专属旗标，mkv/webm 不带
+    internal void MuxWith(string wavPath)
+    {
+        if (!File.Exists(wavPath))
+            throw new InvalidOperationException("mixdown file missing: " + wavPath);
+        bool webm = container == OutContainer.WebM;
+        string audio = webm ? "-c:a libopus -b:a 192k -ar 48000" : "-c:a aac -b:a 320k";
+        string faststart = container == OutContainer.Mp4 || container == OutContainer.Mov
+            ? " -movflags +faststart" : "";
+        string args = "-y -i " + Quote(rawVideoPath) + " -i " + Quote(wavPath)
+            + " -map 0:v:0 -map 1:a:0 -c:v copy " + audio + " -ac 2" + faststart
+            + " " + Quote(finalVideoPath);
+        RunAndWait(exePath, args);
+    }
+
+    public void Dispose()
+    {
+        if (pipe != null)
+        {
             try
             {
-                if (_proc != null && !_proc.WaitForExit(timeoutMs))
+                if (!pipe.HasExited)
                 {
-                    _proc.Kill();
-                    Error = Ui.Loc.T("render.err.ffmpeg_timeout");
-                    return false;
+                    // Kill 异步：等它真正退出，否则临时文件仍被占用
+                    pipe.Kill();
+                    pipe.WaitForExit(3000);
                 }
             }
-            catch (Exception ex)
-            {
-                Error = ex.Message;
-                return false;
-            }
-            if (_failure != null && !(_failure is System.IO.IOException))
-            {
-                Error = _failure.Message;
-                return false;
-            }
-            return _proc != null && _proc.ExitCode == 0;
+            catch { }
+            pipe.Dispose();
+            pipe = null;
         }
-
-        public void Dispose()
+        if (queue != null)
         {
+            if (!queue.IsAddingCompleted) queue.CompleteAdding();
+            queue.Dispose();
+            queue = null;
+        }
+    }
+
+    private void PumpLoop()
+    {
+        try
+        {
+            foreach (PendingFrame frame in queue.GetConsumingEnumerable())
+            {
+                try
+                {
+                    for (int i = 0; i < frame.Repeat; i++)
+                        pipe.StandardInput.BaseStream.Write(frame.Data, 0, frame.Length);
+                }
+                finally
+                {
+                    frame.Recycle?.Invoke(frame.Data);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            pumpFailure = ex;
+        }
+    }
+
+    // 相机纹理回读的行序与视频相反时补一次翻转；pad 把奇数宽高补偶数（yuv420p 要求）；
+    // RGB→YUV 显式走 BT.709 矩阵——swscale 对无标记 RGB 默认 BT.601，HD 播放器按 709 解读会偏色
+    private string RowFilter()
+    {
+        const string pad = "pad=ceil(iw/2)*2:ceil(ih/2)*2";
+        const string color = ",scale=out_color_matrix=bt709,format=yuv420p";
+        return (flipRows ? "vflip," : "") + pad + color;
+    }
+
+    /// <summary>本次渲染会用到的编解码器。**唯一判定来源**：
+    /// EncoderArguments 拼参数与 DescribeEncoder 给 UI 显示都从这里取，
+    /// 两边各写一份判定的话，将来加编码器只改一处会让 UI 显示出错的档位。</summary>
+    private enum Codec { Vp9, Nvenc, X264 }
+
+    private static Codec PickCodec(Quality quality, OutContainer container)
+    {
+        // webm 容器只认 VP8/VP9 + Vorbis/Opus：NVENC 无 VP9 编码器，固定走 libvpx-vp9。
+        if (container == OutContainer.WebM) return Codec.Vp9;
+        if (quality != Quality.CpuOnly && NvencWorksFor(LocateEncoder())) return Codec.Nvenc;
+        return Codec.X264;
+    }
+
+    /// <summary>本次渲染实际会用到的编码器名（不含档位）。纯查询，不改状态：
+    /// UI 用它告诉用户"选 fastest 但其实跑在 CPU 上"这类静默降级——
+    /// 原先 EncoderName 算了却没人读，降级完全无声。</summary>
+    internal static string DescribeEncoder(Quality quality, OutContainer container)
+    {
+        switch (PickCodec(quality, container))
+        {
+            case Codec.Vp9: return "libvpx-vp9 (CPU)";
+            case Codec.Nvenc: return "h264_nvenc (GPU)";
+            default: return "libx264 (CPU)";
+        }
+    }
+
+    private string EncoderArguments()
+    {
+        int gop = Math.Max(1, fps * 2);
+        // cpu-used 档位映射画质档（越大越快越糙）；-row-mt 多线程编码，不开会慢数倍。
+        // 直出有意走码率模式而非转换器的 crf 质量模式：逐帧喂流的场景下
+        // 码率三件套让体积/耗时可控可预估，且随画质档与帧率同比缩放
+        switch (PickCodec(quality, container))
+        {
+            case Codec.Vp9:
+            {
+                string cpuUsed = quality == Quality.Fastest ? "5" : quality == Quality.Sharpest ? "2" : "4";
+                EncoderName = "libvpx-vp9";
+                return "-c:v libvpx-vp9 -deadline good -cpu-used " + cpuUsed + " -row-mt 1 "
+                    + RateControl(false) + " -g " + gop;
+            }
+            case Codec.Nvenc:
+            {
+                string nvPreset = quality == Quality.Fastest ? "p1" : quality == Quality.Sharpest ? "p6" : "p4";
+                string tune = quality == Quality.Fastest ? "ll" : "hq";
+                EncoderName = "h264_nvenc " + nvPreset;
+                return "-c:v h264_nvenc -preset " + nvPreset + " -tune " + tune
+                    + " " + RateControl(true) + " -g " + gop;
+            }
+            default:
+            {
+                string x264Preset = quality == Quality.Fastest ? "ultrafast" : quality == Quality.Sharpest ? "fast" : "veryfast";
+                EncoderName = "libx264 " + x264Preset;
+                return "-c:v libx264 -preset " + Quote(x264Preset) + " " + RateControl(false) + " -g " + gop;
+            }
+        }
+    }
+
+    // 码率按像素量估算（1080p60 标准档约 20 Mbps），画质档位乘系数（低0.5/标准1/高1.6/极致2.4），
+    // 低帧率打七五折；极致档上限放宽到 160M
+    private string RateControl(bool nvenc)
+    {
+        double megapixels = width * (double)height / 1000000.0;
+        double scale = qualityTier == 0 ? 0.5 : qualityTier == 2 ? 1.6 : qualityTier == 3 ? 2.4 : 1.0;
+        int target = (int)Math.Round(megapixels * 10.0 * scale);
+        if (fps <= 30) target = target * 3 / 4;
+        else if (fps > 60) target = target * fps / 60; // 高帧率码率同比放大，保持单帧画质
+        int floor = qualityTier == 0 ? 4 : 8;
+        int cap = qualityTier == 3 ? 160 : 100;
+        target = Math.Max(floor, Math.Min(cap, target));
+        int ceiling = target * 3 / 2;
+        int bucket = target * 2;
+        if (nvenc)
+        {
+            int cq = qualityTier == 0 ? 23 : qualityTier == 2 ? 18 : qualityTier == 3 ? 16 : 20;
+            return "-rc vbr -cq " + cq + " -b:v " + target + "M -maxrate " + ceiling + "M -bufsize " + bucket + "M";
+        }
+        return "-b:v " + target + "M -maxrate " + ceiling + "M -bufsize " + bucket + "M";
+    }
+
+    private bool NvencWorks() => NvencWorksFor(exePath);
+
+    /// <summary>按 ffmpeg 路径探测 NVENC。静态版供 UI 侧 DescribeEncoder 复用同一份缓存，
+    /// 避免为了显示一行提示就起第二个探测（探测本身要起进程、等最多 5 秒）。</summary>
+    private static bool NvencWorksFor(string exe)
+    {
+        lock (ProbeLock)
+        {
+            if (nvencProbedExe == exe)
+                return nvencWorks;
             try
             {
-                _proc?.Kill();
-                _proc?.Dispose();
+                var info = new ProcessStartInfo
+                {
+                    FileName = exe,
+                    Arguments = "-hide_banner -loglevel error -y -f lavfi"
+                        + " -i color=size=256x256:rate=1:duration=0.1"
+                        + " -c:v h264_nvenc -frames:v 1 -f null -",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true
+                };
+                using (Process probe = Process.Start(info))
+                {
+                    if (probe == null)
+                        nvencWorks = false;
+                    else if (!probe.WaitForExit(5000))
+                    {
+                        try { probe.Kill(); } catch { }
+                        nvencWorks = false;
+                    }
+                    else
+                        nvencWorks = probe.ExitCode == 0;
+                }
             }
             catch
             {
-                // 析构路径不抛
+                nvencWorks = false;
             }
+            nvencProbedExe = exe;
+            return nvencWorks;
         }
-
     }
 
-    /// <summary>
-    /// 帧缓冲池。主线程租、泵线程还，必须加锁。
-    /// </summary>
-    internal sealed class FrameBufferPool
+    // 跑一条 ffmpeg 命令并等待退出，非零/启动失败抛异常（stderr 附在消息里）。
+    // 静态供 VideoConverter 复用同一套错误处理
+    // ffmpeg 调用的超时上限。转码是离线操作（输入已在本地、无网络依赖），
+    // 正常耗时与文件大小成正比；30 分钟对应数 GB 的 4K VP9 重编码仍有极大余量，
+    // 超时基本只可能是"真卡住了"（磁盘满/解码器死锁/IO 阻塞）
+    private const int RunAndWaitTimeoutMs = 30 * 60 * 1000;
+
+    internal static void RunAndWait(string exePath, string arguments)
     {
-        private readonly System.Collections.Generic.Stack<byte[]> _free;
-        private readonly int _frameSize;
-        private readonly object _gate = new object();
-        private readonly Action _onReturn;
-
-        internal FrameBufferPool(int frameSize, Action onReturn)
+        var info = new ProcessStartInfo
         {
-            _frameSize = frameSize;
-            _onReturn = onReturn;
-            _free = new System.Collections.Generic.Stack<byte[]>(8);
-        }
-
-        internal byte[] Rent()
+            FileName = exePath,
+            Arguments = "-hide_banner -loglevel warning " + arguments,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardError = true,
+            RedirectStandardOutput = true
+        };
+        StringBuilder stderr = new StringBuilder();
+        using (Process mux = Process.Start(info))
         {
-            lock (_gate)
+            if (mux == null)
+                throw new InvalidOperationException("failed to start encoder");
+            mux.ErrorDataReceived += (_, e) => { if (e.Data != null) stderr.AppendLine(e.Data); };
+            mux.OutputDataReceived += (_, e) => { };
+            mux.BeginErrorReadLine();
+            mux.BeginOutputReadLine();
+            // 必须带超时：WaitForExit() 无参会无限等待。ffmpeg 卡死（磁盘满/解码器
+            // 死锁/IO 阻塞）时工作线程会永久阻塞在这里，ConvertState.Running 永远
+            // 不会置 false —— UI 停在"转换中"且 VideoConverter 没有取消通道，
+            // 用户只能重启游戏。渲染管线的同类调用都带超时，这里补齐。
+            if (!mux.WaitForExit(RunAndWaitTimeoutMs))
             {
-                return _free.Count > 0 ? _free.Pop() : new byte[_frameSize];
+                try { mux.Kill(); } catch { }
+                try { mux.WaitForExit(5000); } catch { }
+                throw new TimeoutException("ffmpeg timed out after "
+                    + (RunAndWaitTimeoutMs / 60000) + " min (mux/convert)");
             }
-        }
-
-        internal void Return(byte[] buf)
-        {
-            lock (_gate)
-            {
-                if (_free.Count < 16)
-                {
-                    _free.Push(buf);
-                }
-            }
-            _onReturn?.Invoke();
+            if (mux.ExitCode != 0)
+                throw new InvalidOperationException("mux failed, exit code " + mux.ExitCode + ": " + stderr);
         }
     }
 
-    /// <summary>
-    /// 有界队列。**满了阻塞等待，不丢帧。**
-    ///
-    /// ── 为什么不能丢帧（曾经的实现：满了就 _pool.Return(item) 丢掉）──
-    /// 输出帧序号与音频帧栅格是一一对应的：LiveSession 每产出一帧就调一次
-    /// PushAudioForFrame，把音频栅格推进到与该帧对齐。丢一帧的后果不是
-    /// 「视频掉一张图」，而是**音画从那一刻起永久错位**——音频照样前进，
-    /// 视频少了一张对应的图，帧序号与音频游标从此对不上，之后每一帧都错。
-    /// 而 LiveSession 的补帧策略（复制上一帧）修不了这个：
-    /// 它保证视频帧数连续，却保证不了音频配对关系。
-    ///
-    /// Spectre 的注释把这条写成了原则（VideoEncoder.cs:12-13）：
-    /// 「有界队列 = 反压：编码跟不上时主线程等待，**不影响成片时间轴**」。
-    ///
-    /// ── 代价与兜底 ──────────────────────────────────────────
-    /// 代价是编码慢时主线程被阻塞。对边玩边录而言，掉几帧听起来比卡一下好，
-    /// 但那只在**画面本身不重要**时成立；音画错位的代价比卡顿大得多，
-    /// 而且卡顿只影响当下这一段，错位会毁掉整个成片的后半段。
-    ///
-    /// 阻塞必须有上限，否则 ffmpeg 一旦停止读 stdin（磁盘满、编码器挂起、
-    /// 进程悄悄死掉），主线程会永远等下去，整个游戏卡死不可玩。
-    /// 所以 Enqueue 带超时：超时后**仍不丢帧**，而是记一次警告并继续等
-    /// ——真正的止损交给 Finish() 的看门狗与退出码判定，
-    /// 那两处能准确告诉你 ffmpeg 到底怎么了。
-    /// </summary>
-    internal sealed class BlockingQueue
+    private Process Spawn(string arguments, bool redirectInput)
     {
-        private readonly System.Collections.Generic.Queue<byte[]> _q =
-            new System.Collections.Generic.Queue<byte[]>(64);
-        private readonly FrameBufferPool _pool;
-        private readonly Action _onWrite;
-        private readonly object _gate = new object();
-        private readonly System.Threading.SemaphoreSlim _space;
-
-        /// <summary>
-        /// 队列上限。按 256 MiB 预算算，与 Spectre 一致
-        /// （VideoEncoder.cs:181：268435456 / (w*h*4)），再夹到 [2,64]。
-        ///
-        /// 原先固定 4：1920×1080 单帧 8 MB，4 帧仅 32 MB 缓冲，
-        /// 编码稍慢就立刻顶满，频繁触发阻塞。Spectre 同分辨率下容量是 32。
-        /// </summary>
-        internal BlockingQueue(FrameBufferPool pool, Action onWrite, int capacity)
+        var info = new ProcessStartInfo
         {
-            _pool = pool;
-            _onWrite = onWrite;
-            Capacity = Math.Max(2, Math.Min(64, capacity));
-            _space = new System.Threading.SemaphoreSlim(Capacity, Capacity);
-        }
-
-        internal int Capacity { get; }
-
-        internal int Count { get { lock (_gate) { return _q.Count; } } }
-
-        /// <summary>
-        /// 入队。**队列满则阻塞等待，绝不丢帧**（理由见类注释）。
-        ///
-        /// 返回 false 表示等待超时——调用方应停止推进而不是继续，
-        /// 因为继续只会让队列越来越满、每一帧都要等满超时。
-        /// 帧**没有**被丢弃：它仍在调用方手里，调用方决定放弃。
-        /// </summary>
-        internal bool Enqueue(byte[] item, int timeoutMs)
-        {
-            if (timeoutMs > 0 && !_space.Wait(timeoutMs))
-            {
-                return false;
-            }
-            lock (_gate)
-            {
-                _q.Enqueue(item);
-            }
-            _onWrite?.Invoke();
-            return true;
-        }
-
-        internal byte[] Dequeue(int timeoutMs)
-        {
-            var deadline = Environment.TickCount + timeoutMs;
-            while (true)
-            {
-                lock (_gate)
-                {
-                    if (_q.Count > 0)
-                    {
-                        var v = _q.Dequeue();
-                        _space.Release();
-                        return v;
-                    }
-                }
-                if (Environment.TickCount > deadline)
-                {
-                    return null;
-                }
-                System.Threading.Thread.Sleep(1);
-            }
-        }
+            FileName = exePath,
+            Arguments = "-hide_banner -loglevel warning " + arguments,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardInput = redirectInput
+        };
+        Process started = Process.Start(info);
+        if (started == null)
+            throw new InvalidOperationException("failed to start encoder");
+        return started;
     }
+
+    private static string Quote(string value)
+        => "\"" + value.Replace("\"", "\\\"") + "\"";
 }

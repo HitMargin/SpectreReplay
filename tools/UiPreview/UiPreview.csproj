@@ -1,16 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    离线预览器：不启动游戏也能看到 UI 长什么样、并检查文字溢出。
-
-    它链接**真实的** SpectreReplay\Ui\Gfx.cs 与 PageBuilder.cs，
-    只把 UnityEngine / TMPro / UnityEngine.UI 换成 Stubs.cs 里的桩件。
-    桩件只实现真实代码用到的那部分 API —— 桩件一旦比真实 Unity 更宽松，
-    这个验证就没有意义了。
-
-    Pages 那一层不链接：它反过来依赖 Features 下的回放/渲染引擎。
-    这里内联一份与 Pages.cs 顺序一致的页面内容；若两者不同步，
-    预览就会与实际不符，所以改页面时两边都要动。
+    离线预览器 / 离线闸门：不启动游戏也能验的那部分。
+    移植 Spectre 的 replay + video render 之后，可链接的纯逻辑真源码是
+    Features\Replay 下的编解码/数据类（不碰引擎 / 只依赖 System）：
+      ReplayEncoder / ReplayDecoder / ReplayBinaryIO / ReplayCrypto /
+      ReplayKeys / ReplayConstants / ReplayDataModels / Replay.cs
+      以及 Features\VideoRender\VideoEncoder.cs（ffmpeg 参数拼装，纯 .NET）。
   -->
 
   <PropertyGroup>
@@ -28,30 +25,20 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- 链接真实源码（本目录下的 .cs 由 SDK 默认包含，不要重复列出）-->
+    <!-- 文案表（Loc）链接真实源码 -->
     <Compile Include="..\..\SpectreReplay\Ui\Loc.cs" Link="Real\Loc.cs" />
-    <!-- 回放文件格式也链接真实源码做往返测试。这个文件只依赖 System，
-         不碰引擎，所以能直接跑——数据格式坏掉的话回放和渲染全都废，
-         而这种 bug 只在真机上读到文件时才暴露。 -->
-    <Compile Include="..\..\SpectreReplay\Features\Recording\ReplayData.cs" Link="Real\ReplayData.cs" />
-    <!-- 命中去重的判据也链接真实源码。它原先内联在 KeyRecorder 里，
-         而 KeyRecorder 碰引擎、没法链进预览器——于是闸门里只能**复刻**
-         一份判据，那等于自己测自己：把真代码改错，闸门照样全绿。
-         拆成纯逻辑文件后，这里验的就是真代码。 -->
-    <Compile Include="..\..\SpectreReplay\Features\Recording\HitDedupe.cs" Link="Real\HitDedupe.cs" />
-    <!-- ffmpeg 参数拼装也是纯函数：链接真实源码后可以直接调游戏自带的
-         ffmpeg.exe 真跑一遍。参数拼错不会报错，只会静默地不出片。 -->
-    <Compile Include="..\..\SpectreReplay\Features\VideoRender\FfmpegArgs.cs" Link="Real\FfmpegArgs.cs" />
-    <!-- 回读闸门：整屏取帧那条路的回调是**同步**的（ReadPixels 当场算完），
-         "先发请求再按结果置位"会让置位落在清位之后、闸门永久锁死——
-         第 2 帧起一帧都排不上，成片是第一帧的静止画面，且不报错不停机。
-         这是纯时序问题，读源码怎么看都像对的，只能链接真实源码按同步顺序
-         实测一遍；所以把它抽成了不碰引擎的纯类。 -->
-    <Compile Include="..\..\SpectreReplay\Features\VideoRender\ReadbackGate.cs" Link="Real\ReadbackGate.cs" />
-    <!-- 命中误差换算同理：链接真实源码（照 Spectre 的 ReplayAnalyzer）。
-         那个逆运算式里有 π 与 60 的换算，错了会得到一个"看着合理"的
-         毫秒数——不报错，只是结论完全反了。 -->
-    <Compile Include="..\..\SpectreReplay\Features\Playback\HitTimingAnalyzer.cs" Link="Real\HitTimingAnalyzer.cs" />
+    <!-- 回放文件格式编解码：纯 System，可直接跑往返测试 -->
+    <Compile Include="..\..\SpectreReplay\Features\Replay\Replay.cs" Link="Real\Replay.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayKeys.cs" Link="Real\ReplayKeys.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayConstants.cs" Link="Real\ReplayConstants.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayDataModels.cs" Link="Real\ReplayDataModels.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\keyEvent.cs" Link="Real\keyEvent.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\HitContext.cs" Link="Real\HitContext.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayEncoder.cs" Link="Real\ReplayEncoder.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayDecoder.cs" Link="Real\ReplayDecoder.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayBinaryIO.cs" Link="Real\ReplayBinaryIO.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayCrypto.cs" Link="Real\ReplayCrypto.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\LegacyReplayData.cs" Link="Real\LegacyReplayData.cs" />
   </ItemGroup>
 
   <ItemGroup>

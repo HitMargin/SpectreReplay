@@ -19,6 +19,7 @@ namespace UiPreview
         private static readonly string[] Skip =
         {
             "Loc.cs",                       // 文案表本身
+            "LocalizationManager.cs",       // 移植 Spectre 的 14 语言文案表，同 Loc.cs 性质
         };
 
         /// <summary>
@@ -31,6 +32,8 @@ namespace UiPreview
         private static readonly Dictionary<string, string> DiagnosticOnly =
             new Dictionary<string, string>
         {
+            { "AudioRecorder.cs",
+                "[Header(…)] 是 Unity Inspector 属性面板标注，玩家在游戏内看不到" },
             { "PatchLoader.cs",
                 "Failures 列表只流向 Debug.LogWarning，玩家在界面上看不到" },
             { "UiFonts.cs",
@@ -49,6 +52,8 @@ namespace UiPreview
             // PlaybackClamps 的挡命中框告警走的是 Player.log：这条在正常游玩
             // 里**不该**出现，出现即说明有一关真的用到了激光/尖刺，值得查录制。
             // 玩家在界面上看不到，也不需要看到——它不是他能处理的。
+            { "SpectrePatchHub.cs",
+                "补丁链日志（AsyncLog）只写 Player.log / UMM 窗口，玩家在界面上看不到" },
             { "PlaybackClamps.cs",
                 "回放期挡下激光/尖刺等 hitbox 死亡的告警只写 Player.log" },
         };
