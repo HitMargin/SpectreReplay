@@ -31,11 +31,17 @@ public class AudioRecorder : MonoBehaviour
 
     private bool isHashFinalized = false;
 
-    // 跨线程标志：主线程在 StopRecording（line ~311）与 Cleanup 里置 false，
+    // 跨线程标志：主线程在 StopRecording 与 Cleanup 里置 false，
     // 处理线程在 StreamProcessingLoop 的 while 条件里读。**必须 volatile**——
     // 非 volatile 的字段读可以被 JIT 缓存/重排，处理线程可能迟迟看不到停止标志，
-    // 于是 Join(1000) 超时后主线程就带着仍在运行的线程去 FinalizeWavFile，
-    // 出现"一边关流一边写流"的竞态，且录制无法正常停止。
+    // 于是 Join(1000) 超时后主线程还得干等它。
+    //
+    // **注意 volatile 只保证可见性，不保证互斥。** 真正避免"一边关流一边写流"
+    // 的是 FinalizeWavFile 的调用点持有了 bufferLock（StopRecording 里
+    // `lock (bufferLock) { ... FinalizeWavFile(); }`）——采集线程写盘也持这把锁，
+    // 所以 Join 超时后主线程会在锁上等当前 chunk 做完，而不是并发写。
+    // 采集线程每轮只睡 10ms、整个循环体有 try/catch 兜底，等待有上界，
+    // 不会死锁。改这块时**别把 volatile 当成锁来用**。
     private volatile bool isRecording = false;
 
     // 同理：主线程赋值，处理线程在循环里判空后调用 GetData

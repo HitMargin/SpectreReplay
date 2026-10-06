@@ -681,6 +681,17 @@ internal static class SpectrePatchHub
     private static readonly List<string> ApplyFailures = new();
     private static bool failureSummaryShown;
 
+    /// <summary>
+    /// 未挂载的补丁数。给设置页顶部那行警示用——挂不上 = 对应功能静默消失，
+    /// 玩家只会觉得"这个开关点了没反应"，而原因只在日志里。
+    /// 通知（ShowApplyFailureSummary）瞬时弹一次，关了就没；这一行常驻，
+    /// 玩家什么时候打开设置页都能看见。
+    /// </summary>
+    public static int ApplyFailureCount
+    {
+        get { lock (_lock) { return ApplyFailures.Count; } }
+    }
+
     private static void RecordApplyFailure(string specId, string error)
     {
         lock (_lock)

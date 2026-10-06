@@ -17,7 +17,44 @@ namespace UiPreview
             int hardFail = HardTextCheck.Run(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
             int replayFail = ReplayCheck.Run();
-            int total = locFail + hardFail + replayFail;
+            int wavFail = WavRoundTripCheck.Run();
+            int runtimeFail = LocRuntimeCheck.Run();
+            int portedFail = PortedCompletenessCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+            int shapeFail = UiLogicShapeCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+            int missingKeyFail = MissingRuntimeKeyCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+            int keybdFail = KeybdSoundTickCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+            int cfgFail = ConfigMigrationCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+            int patchFail = PatchTargetCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+            int reflectFail = ReflectionTargetCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+            // LevelProbeCheck 记录三次错判据的历史 + 钉住"移植后仍用场景名"。
+            // 它曾是一份从未注册的孤儿检查（存在但一次都不跑）——
+            // 所以任何 *.cs 加进 tools\UiPreview 后，必须在这里登记，
+            // 否则它既不跑也不会有人发现。
+            int levelFail = LevelProbeCheck.Run();
+            int xthreadFail = CrossThreadFieldCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+            int cryptoFail = ReplayCryptoCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+            int enumFail = EnumParseGuardCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+            int loadMarkerFail = LoadMarkerCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+            int locFallbackFail = LocFallbackCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+            int injectFail = InstanceInjectionCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+            int logPrefixFail = LogPrefixCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+            int orphanFail = PortedCompletenessCheck.NoOrphanChecks(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+            int total = locFail + hardFail + replayFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + injectFail + logPrefixFail + orphanFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"

@@ -92,7 +92,18 @@ internal static class ReplayRecorder
         if (!forceSync && UseAsyncInput)
             return;
         KeyboardSimulation.GetKeyboardState(CurrKeyState);
+        // **必须自己确认导体可用。** 本方法由 Won_Update / UpdateInput 的补丁
+        // 直接调用，而那两个补丁**没有 try**（Patch_Won_Update.Postfix 只对
+        // __instance 判了空）：conductor 在结算转场/场景卸载期间会被销毁，
+        // 那时解引用抛的是 NRE，会直接灌进游戏自己的 Won_Update，而不是被本模组
+        // 吞掉——表现为转场瞬间游戏报错、这一帧的按键与结算处理一起中断。
+        // 回放侧（ReplayPlayer）早就为同一理由加了同样的判断，录制侧漏了。
+        //
+        // 拿不到导体时直接返回：CurrKeyState 本帧已采样过，下一帧会重新采样，
+        // 不会留下错位的 PrevKeyState。
         var conductor = ADOBase.conductor;
+        if (conductor == null)
+            return;
         var events = data.KeyEvent_list;
         for (int i = 1; i < 256; i++)
         {

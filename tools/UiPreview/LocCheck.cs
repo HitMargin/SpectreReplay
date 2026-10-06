@@ -110,7 +110,33 @@ namespace UiPreview
             }
             if (fail == 0)
             {
-                Console.WriteLine("    ✓ 所有键在两种语言下都齐");
+                Console.WriteLine("    ✓ 页面引用的键在两种语言下都齐");
+            }
+
+            // 表对账：两张字典的键集合必须一致。上面只查了“页面引用到的键”，
+            // 于是两张表**互相缺**的那类漂移永远查不出来（实测 render.progress
+            // 只有英文有、中文没有）。这类不一致的后果是：将来有人引用它时，
+            // 中文界面会静默退到英文或直接露出键名，而改的人根本不知道自己漏了。
+            // 全量对账比“等被引用”更早发现，代价是零。
+            var onlyZh = new List<string>();
+            var onlyEn = new List<string>();
+            foreach (var k in zh.Keys) if (!en.ContainsKey(k)) onlyZh.Add(k);
+            foreach (var k in en.Keys) if (!zh.ContainsKey(k)) onlyEn.Add(k);
+            onlyZh.Sort(StringComparer.Ordinal);
+            onlyEn.Sort(StringComparer.Ordinal);
+            foreach (var k in onlyZh)
+            {
+                Console.WriteLine($"    ✗ 只有中文表有：{k}  ← 英文界面下会退到中文");
+                fail++;
+            }
+            foreach (var k in onlyEn)
+            {
+                Console.WriteLine($"    ✗ 只有英文表有：{k}  ← 中文界面下会退到英文");
+                fail++;
+            }
+            if (onlyZh.Count == 0 && onlyEn.Count == 0)
+            {
+                Console.WriteLine($"    ✓ 两张表键集合一致（各 {zh.Count} 条）");
             }
 
             // 两种语言下都解析一遍，确认不会露出键名

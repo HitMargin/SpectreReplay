@@ -55,8 +55,16 @@ internal static class ReplayAnalyzer
         Difficulty savedDifficulty = GCS.difficulty;
         float savedSpeedTrial = GCS.currentSpeedTrial;
         bool contextChanged = false;
+        // **必须拒掉数字串。** `Enum.TryParse("99", out var v)` 会成功并给出
+        // `(Difficulty)99` 这种越界值——BoundaryRaw 内部是
+        // `== Lenient ? … : == Strict ? … : 默认`，越界值不会抛，只会悄无声息
+        // 落进"Normal"那一支，于是窗口宽度按错误的难度算出来。回放文件是玩家
+        // 可编辑的文本，"JudgeMode": "99" 完全可能出现。
+        // 判据：先 Enum.IsDefined 确认落点合法，再赋值。不合法就跳过（保留"现在"
+        // 的难度）——与下面 SpeedTrail 的保守退化同一思路。
         if (data.strings.TryGetValue(JudgeMode, out string judgeMode)
-            && Enum.TryParse(judgeMode, out Difficulty recorded))
+            && Enum.TryParse(judgeMode, out Difficulty recorded)
+            && Enum.IsDefined(typeof(Difficulty), recorded))
         {
             GCS.difficulty = recorded;
             contextChanged = true;

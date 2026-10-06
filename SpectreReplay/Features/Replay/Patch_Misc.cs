@@ -35,12 +35,24 @@ internal class Patch_TogglePauseGame
 // ——— scrConductor.Update ————————————————————————————————————
 internal class Patch_ConductorUpdate
 {
+    // 三种"该收摊了"的状态：失败(Fail/Fail2) 与通关(Won)。
+    // **为什么必须写成具名常量而不直接写 5/6/7**：States 的真实顺序是
+    //   0 None, 1 Start, 2 Countdown, 3 Checkpoint, 4 PlayerControl,
+    //   5 Fail, 6 Fail2, 7 Won
+    // （见 adofai-libs\source\Assembly-CSharp\States.cs，2026-10-06 round 43 核对）。
+    // Checkpoint=3 / PlayerControl=4 这个排法特别容易让人按"Fail=6"来数——
+    // 数错一位就会在"玩家还在打"时误开保存入口，或漏掉真正的失败态。
+    // internal：Patch_CancelSaveKey 用的是同一组判定，两处必须永远一致。
+    internal const int StateFail = 5;
+    internal const int StateFail2 = 6;
+    internal const int StateWon = 7;
+
     [SpectrePatch(typeof(scrConductor), "Update", PatchType.Postfix, Feature = FeatureKeys.ReplayManualSave)]
     internal static void Postfix()
     {
         if (!Input.GetKeyDown(save_button)) return;
         int state = (int)(States)scrController.instance.stateMachine.GetState();
-        if (state != 6 && state != 5 && state != 7) return;
+        if (state != StateFail && state != StateFail2 && state != StateWon) return;
         if (!PendingSave) return;
 
         PlayActions.StopRecording();
@@ -56,7 +68,10 @@ internal class Patch_CancelSaveKey
     {
         if (!Input.GetKeyDown(cancel_save_button)) return;
         int state = (int)(States)scrController.instance.stateMachine.GetState();
-        if (state != 6 && state != 5 && state != 7) return;
+        // 与 Patch_ConductorUpdate 同一组状态：Fail/Fail2/Won（数字含义见上）
+        if (state != Patch_ConductorUpdate.StateFail
+            && state != Patch_ConductorUpdate.StateFail2
+            && state != Patch_ConductorUpdate.StateWon) return;
         if (!PendingSave)
         {
             // 原来这里直接 return：用户按下取消键却毫无反应，会以为按键没绑上或

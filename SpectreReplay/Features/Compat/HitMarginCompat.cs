@@ -230,7 +230,7 @@ internal static class HitMarginCompat
     }
 
     /// <summary>
-    /// 判定配色/文案的槽位（0..9，与 <c>JudgeTextDefaults.DefaultColors</c> 同序）。
+    /// 判定配色/文案的槽位（0..9，与 <see cref="Settings.VanillaMarginColors"/> 同序）。
     /// 旧版 10 槽直接就是枚举序；r150 枚举重排且拆出三档 Perfect，
     /// 必须按名归并回旧槽位，否则整排颜色错位。
     /// 归并规则：三档 Perfect（XPerfect/PerfectMinus/PerfectPlus）共用旧 Perfect 槽；

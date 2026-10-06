@@ -107,7 +107,7 @@ internal static class MainThread
                 if (backlog > BacklogWarnThreshold && !_backlogWarned)
                 {
                     _backlogWarned = true;
-                    Debug.LogWarning("[Spectre] 主线程队列积压 " + backlog
+                    Debug.LogWarning("[SpectreReplay] 主线程队列积压 " + backlog
                         + " 项（阈值 " + BacklogWarnThreshold + "）：某处在高频入队，"
                         + "动作会被分摊到多帧执行；若卡顿请检查调用方");
                 }

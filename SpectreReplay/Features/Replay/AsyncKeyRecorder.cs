@@ -49,11 +49,23 @@ internal static class AsyncKeyRecorder
         if (!Pending.TryPeek(out _))
             return;
 
+        // **取基准之前必须确认导体可用。** 换算式的每一项都挂在导体上，而
+        // scrController.UpdateInput 在结算转场/场景卸载期间仍会跑，此时
+        // ADOBase.conductor 可能已经销毁、或 song 尚未就绪。
+        //
+        // 这个判断的位置很关键：必须放在**出队之前**。原实现先 while 把 Pending
+        // 全部搬进 FrameBuffer、再在循环体里解引用，异常被外层补丁的 catch 吞掉
+        // ——事件已经从队列里拿走了，于是那一批按键彻底丢失，而玩家只看到
+        // "我明明按了却没录上"。这里提前返回则事件留在队列里，下一帧导体就绪后
+        // 照常换算（SkyHook 时间戳是绝对 tick，晚一帧换算不影响精度）。
+        scrConductor conductor = ADOBase.conductor;
+        if (conductor == null || conductor.song == null)
+            return;
+
         // SkyHook 时间戳是绝对 tick，与基准何时取样无关；一帧只取一对基准，
         // dspTime 与系统时钟取得越近换算越准
         long nowTicks = DateTime.Now.Ticks;
         long dspNowTicks = (long)(AudioSettings.dspTime * 10000000.0);
-        scrConductor conductor = ADOBase.conductor;
 
         FrameBuffer.Clear();
         while (Pending.TryDequeue(out SkyHookEvent ev))

@@ -3,61 +3,103 @@
 跑一遍：
 
 ```powershell
-powershell -File tools\verify.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify.ps1
 ```
 
-四件事绑成一次判定，任何一项红就返回非零：主项目构建、离线验证套件、
-线上 dll 与构建产物的 sha256 一致、`D:\Projects\Spectre` 工作区干净。
+五个参数：`-SkipBuild` / `-SkipPreview` / `-SkipDeploy`（游戏在跑时 dll 会被锁，
+用 `-SkipDeploy` 跳过部署那一节）/ `-SkipAudits`（跳过只读审计那一节）。
 
-## 覆盖了什么
+五件事绑成一次判定，任何一项红就返回非零：主项目构建、离线验证套件、
+**只读审计**（5 个离线审计脚本）、线上 dll 与构建产物的 sha256 一致、
+`D:\Projects\Spectre` 工作区干净。
 
-| 组 | 条数 | 验的是什么 |
-|---|---:|---|
-| 点击命中（四页） | 56 | 每个控件中心点命中自己；含反向对照（空白处、侧栏、标题栏不激活任何控件、面板外命中遮罩、遮罩确实是按钮） |
-| 滚动后点击 | 22 | 滚到底之后把折叠线以下的控件再点一遍 |
-| ffmpeg 参数（真跑） | 8 | 链接真实 `FfmpegArgs`/`AudioMux`，调**游戏自带那个 ffmpeg.exe**，喂真 BGRA 帧，验证产物里真的有音轨；含反向对照 |
-| 字体回退链 | 9 | 跑真实 `UiFonts.Resolve` 的五条路径 + 回退链 + 兜底路径在游戏清单里真实存在 |
-| 孤儿组件 | 5 | 定义了却从没 `AddComponent` 的 `MonoBehaviour` |
-| 回放文件往返 | 5 | 链接真实 `ReplayData.cs`，写进去再读回来逐字段比对 |
-| 文案完整性 | 3 | 页面用到的每个键在两种语言下都齐、能解析、不返回键名本身 |
-| EventSystem 唯一性 | 3 | 三种时序下场景里只留一个事件系统 |
-| 设置改动后重画 | 2 | 改字号后文字跟着变；换热键后标题栏提示与实际一致 |
-| 配置往返 | 1 | 页面写的 / 保存的 / 读回的三份清单一致（18 个设置） |
-| 硬编码文案 | 1 | 没有被写死的、玩家可见的中文 |
-| 文字溢出 | — | 中英文各渲染一遍，文字不超出所在矩形 |
+> **当前 57 条断言 0 失败**（2026-10-06 实测）。这个数字会随轮次变，
+> 引用前先跑一遍 `verify.ps1` 看真实条数。
 
-预览器同时渲染 **8 张图**（4 页 × 2 语言），用来看。
+## 套件构成
+
+闸门在 `tools\UiPreview`，`Driver.cs` 汇总所有 `*Check.cs`。**新增 .cs 检查文件
+会被 `EnableDefaultCompileItems` 自动收进来，但必须在 `Driver.cs` 里登记
+`<类名>.Run(...)`**——不登记就是孤儿检查，一次都不跑而闸门只会更绿
+（`PortedCompletenessCheck.NoOrphanChecks` 守这件事，变异 `MUT-L2`）。
+
+| 组 | 验的是什么 |
+|---|---|
+| LocCheck | 页面引用的键在两种语言下都齐；两张表键集合一致；中文/英文都能解析成文案、不返回键名本身 |
+| HardTextCheck | 没有被写死的用户可见中文；文案表文件里没有漏网的中文字符串 |
+| ReplayCheck | 链接真实 ReplayEncoder/Decoder 的回放格式往返（五种数据形状含巨大 count 被干净拒绝） |
+| WavRoundTripCheck | 键盘音 WAV 的写读往返：写侧头部契约**取自真源码**、读侧接受范围覆盖写侧产出、拒 6 种坏头（非 PCM/位深 12,64/声道 0,负/FormatTag 0）、四种合法位深全接受、位深下限常量与判定一致 |
+| LocRuntimeCheck | 34 个运行时键（`GetLocalizedText` 那套）在全部 14 种语言下都齐 |
+| PortedCompletenessCheck | 移植搬来的模块都真有调用点：HitErrorData 采集、CalibAdvice 消费、ReplayAnalyzer 显示、DescribeEncoder 降级提示、playback.ready 装弹提示、VideoConverter 入口、转换容器与 render.format 同源、回放列表覆盖全部可读格式、键盘音三项有界面入口（⑨a/⑨b）、**回放驱动开关有界面入口（⑩/⑩b，`Settings.LegacyEngine` 名字骗人但它管的是按键模拟链路）**、没有孤儿检查 |
+| UiLogicShapeCheck | 界面控制流形状：停止录制不许借用「取消保存」文案、文本框宽度走 Gui.CtrlW、分组边框不许用 GetLastRect |
+| MissingRuntimeKeyCheck | 运行时键必须有定义（`GetLocalizedText` 查不到时 `return key`，玩家会看到原始键名） |
+| KeybdSoundTickCheck | 键盘音起始时间戳：起录块不许导体判空后 return、必须能补真值、回放侧拒非正基准 |
+| ConfigMigrationCheck | 旧配置迁移：迁移真的被调用、不误判新版文件、每个旧键都有归属 |
+| PatchTargetCheck | 补丁目标在**真程序集**上存在且形参对得上；解析覆盖率 == 源码声明数 |
+| ReflectionTargetCheck | 按名字取的游戏成员存在：`Notification.SetupNotification` 形参、`Time` 5 属性 getter、`AudioSettings` 3 属性 |
+| LevelProbeCheck | 关卡探测判据：现判据认得出 scnGame/scnEditor；三个历史错判据仍然错；认得出 4 个非游玩场景；移植后仍用场景名不许退回 `gameworld` |
+| CrossThreadFieldCheck | 9 个跨线程字段都带 `volatile`（UI 线程读、编码线程写） |
+| ReplayCryptoCheck | 加密往返、密文无明文 magic、错密钥被拒、**与真实 Spectre 模组的 .sprp 文件实测互通** |
+| EnumParseGuardCheck | 持久化枚举带 `Enum.IsDefined` 护栏（`Enum.TryParse("99")` 会成功并给出越界值） |
+| LoadMarkerCheck | `Load()` 第一句是 Debug.Log 启动行且**在 try 之前**（异常路径也带得到） |
+| LocFallbackCheck | 文案回退链每一级都活着：两张表对称、缺键时静默降级到另一种语言、双缺才露键名 |
+| InstanceInjectionCheck | 16 处 `__instance` 全部作用于**实例方法**（Harmony 只对非静态目标注入） |
+| LogPrefixCheck | 全部日志用 `[SpectreReplay]` 前缀（真实 Spectre 模组也装着会跑，前缀是区分来源的唯一依据） |
+
+**总数 57 条**（2026-10-06 实测 57 ✓ / 0 ✗）。这个数字会随轮次变，
+引用前先跑一遍 `verify.ps1` 看真实条数。
+
+> 口径已核实（round 34）：**打印的 ✓ 行数就等于断言条数**——当前每个判据
+> 都印自己的一行。早期"✓ 行数 ≠ 断言单元数"的说法已过时。
+
+每加一条断言，**必须用 `tools\mutate.ps1 -Which MUT-X` 证明它会红**（自动还原）。
+已累计 10 条以上假断言、2 条假变异——形态见 `docs\SPECTRE_COMPARISON.md`
+与记忆库的「六条铁律」。`-ExpectGreen` 是反向对照（证明"全绿"本身可达）。
+`tools\mutate-regression.ps1` 全量回归 40 条变异（证明本身会腐化）。
+
+## 只读审计（闸门第 3 节，`-SkipAudits` 可跳过）
+
+| 脚本 | 验什么 |
+|---|---|
+| `tools\harmony-shape-audit.ps1` | 补丁方法签名形状：Prefix 返回 void/bool、Finalizer 返回 Exception、Transpiler 返回 `IEnumerable<CodeInstruction>` |
+| `tools\instance-injection-audit.ps1` | `__instance` 只对实例方法（同上 InstanceInjectionCheck，另给非 C# 视角） |
+| `tools\patch-sig-audit.ps1` | 普通形参与目标方法同名同型 |
+| `tools\result-injection-audit.ps1` | `__result` 的目标都有返回类型（void 上配 `__result` 拿不到值） |
+| `tools\deadcode-audit.ps1` | 零调用点的静态方法，按「设计使然 / Spectre 有调用方但按裁决不补 / 自己造成的」三分，**退出码只对第三类敏感** |
+
+审计脚本在闸门里**只印一行摘要**，出问题才贴详情（`deadcode-audit` 是报告型脚本，
+一次吐上百行，全量贴会把真正的 ✗ 埋掉）。
+
+## 手动真跑脚本（不在闸门里，需手动跑）
+
+改编码/转换参数后跑，它们调**游戏自带那个真 ffmpeg.exe**：
+
+| 脚本 | 验什么 |
+|---|---|
+| `tools\ffmpeg-probe.ps1` | 编码参数四容器端到端：真 BGRA → 滤镜链 → 中间文件 → mux，产物音画双流俱在；奇数宽高 33×25 跑通 `pad`（裸 `vflip` 会 exit -542398533、产物 0 字节） |
+| `tools\convert-probe.ps1` | 转换参数四容器；**目标为 mov 时视频必须重编码**——mov 复用 movenc 且拒绝 VP9 |
+| `tools\deadcode-audit.ps1` | 零调用点的静态方法（同时也在闸门第 3 节跑，报告型） |
 
 ## 验不了的
 
-只有两件，而且只有这两件：
+只有一件，而且只有这一件：
 
-1. **TMP 字形在真机上的观感**。字形覆盖可以验（字体回退链那组），
-   但 SDF 着色器渲染出来什么样，屏幕上才看得见。
-2. **点击与滚轮的真实手感**。命中谁可以验（点击命中那 56 条），
-   但 Unity `EventSystem` 实际派发的时序、以及拖动滑条跟手不跟手，
-   离屏模拟不出来。
-
-除此之外的都验过了。
-
-## 桩件保真度
-
-断言的可信度取决于桩件是否忠实于真实 Unity。审过两轮，修了三处：
-
-- `SetParent` 从不设置 `parent` → `Destroy` 的"从父节点摘除"从未生效，
-  被销毁的节点一直留在树上；`Destroy` 也只标记顶层，而真实 Unity 会
-  销毁整棵子树。
-- `Walk`/`HitTest` 不看 `activeSelf` → 未激活的子树（下拉的模板）照样
-  进树、照样画、照样吃射线，真实 Unity 不会。
-- `HitTest` 不认裁剪 → 折叠线以下的控件在真机上被 `RectMask2D` 裁掉、
-  点不到，预览却照样"命中"，等于用假答案盖住那半页的所有毛病。
-
-再往深处审之前，先想清楚"这个差异会让断言更严还是更松"——两个方向的
-假故障都出现过（一个漏报一个误报）。
+**回放与视频渲染的最终效果只能在游戏里实跑确认。** 闸门守的是"不会静默废掉
+整条链路"那类规则（用真 ffmpeg 跑参数、用真程序集反射核对补丁目标），
+不是"画面好看"。当前 `Params.xml` 里 `com.spectre.replay` 仍是
+`Enabled="false"`，`Load()` 一次都没跑过。
 
 ## 改完记得跑
 
-预览器绿灯**不等于**主项目能编译：预览器是 `net10.0-windows`，
-只链接 `Ui\` 下的一部分与两个纯逻辑文件；主项目是 `netstandard2.1`。
-两者编译的不是同一份源码集——踩过两次编译不过却以为绿灯的坑。
+预览器绿灯**不等于**主项目能编译：预览器是 `net10.0-windows`，只链接
+`Ui\Loc.cs`、`Features\Replay` 下若干纯逻辑文件与检查自身；主项目是
+`netstandard2.1`。两者编译的不是同一份源码集。
 `verify.ps1` 把两边绑在一起就是为了这个。
+
+另外两个会反复咬人的工具坑（改之前必读）：
+
+1. `edit` 工具写 `tools\*.ps1` 会剥掉 UTF-8 BOM，PowerShell 5.1 按 ANSI 读会
+   中文乱码报 ParserError，且常伪装成"被测对象全有问题"（脚本读到 0 字节）。
+2. 注释剥离器（`HardTextCheck.StripComments` 与 `SrcUtil.Clean`）必须让
+   `inStr` 优先于 `inChar`——字符串内的撇号（如 `"the game's"`）若切了
+   `inChar`，其后整个文件的注释都剥不掉。

@@ -54,8 +54,14 @@ namespace UiPreview
                 { inBlock = true; i++; continue; }
                 if (esc) { esc = false; sb.Append(c); continue; }
                 if (c == '\\') { esc = true; sb.Append(c); continue; }
-                if (c == '"') inStr = !inStr;
-                else if (c == '\'') inChar = !inChar;
+                // **字符串内的单引号不是字符字面量的定界符。**
+                // 与 HardTextCheck 曾栽的是同一个坑：撇号（英文日志文案里极常见，
+                // 如 "the game's UpdateHoldKeys"）若在 inStr 期间也切换 inChar，
+                // 会让之后整个文件的注释都因 `!inChar` 守卫而剥不掉，
+                // 于是"不许出现 X"那类判据把注释里的说明文字当成缺陷（常红）。
+                if (c == '"') { inStr = !inStr; sb.Append(c); continue; }
+                if (inStr) { sb.Append(c); continue; }
+                if (c == '\'') inChar = !inChar;
                 sb.Append(c);
             }
             return sb.ToString();

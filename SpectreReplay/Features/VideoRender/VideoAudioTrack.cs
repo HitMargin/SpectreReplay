@@ -56,10 +56,10 @@ internal sealed class VideoAudioTrack : IDisposable
                 DeathReason = "AudioRenderer.Start returned false";
                 return;
             }
-            Debug.Log("[Spectre] mixdown: first start failed once, retry succeeded");
+            Debug.Log("[SpectreReplay] mixdown: first start failed once, retry succeeded");
         }
         capturing = true;
-        Debug.Log("[Spectre] mixdown started. sampleRate=" + SampleRate
+        Debug.Log("[SpectreReplay] mixdown started. sampleRate=" + SampleRate
             + " channels=" + Channels
             + " dspBufferSize=" + AudioSettings.GetConfiguration().dspBufferSize);
     }
@@ -85,7 +85,7 @@ internal sealed class VideoAudioTrack : IDisposable
         if (!rendered && _bucketedOk)
         {
             _bucketedOk = false;
-            Debug.LogWarning("[Spectre] mixdown: bucketed render buffer rejected, "
+            Debug.LogWarning("[SpectreReplay] mixdown: bucketed render buffer rejected, "
                 + "falling back to exact-size buffer per frame");
             target = ExactBuffer(floats);
             rendered = AudioRenderer.Render(target);
@@ -141,7 +141,7 @@ internal sealed class VideoAudioTrack : IDisposable
     {
         silentFrames++;
         if (silentFrames == 1 || silentFrames % fps == 0)
-            Debug.Log("[Spectre] mixdown silent. frame=" + frameNo + " consecutive=" + silentFrames);
+            Debug.Log("[SpectreReplay] mixdown silent. frame=" + frameNo + " consecutive=" + silentFrames);
         // 每静默满 1 秒重启一次，预算内不判死
         if (silentFrames >= fps && restarts < RestartBudget)
         {
@@ -157,7 +157,7 @@ internal sealed class VideoAudioTrack : IDisposable
                 }
                 return;
             }
-            Debug.Log("[Spectre] mixdown restarted, attempt " + restarts);
+            Debug.Log("[SpectreReplay] mixdown restarted, attempt " + restarts);
             return;
         }
         if (restarts >= RestartBudget && silentFrames >= giveUpFrames)
@@ -205,7 +205,7 @@ internal sealed class VideoAudioTrack : IDisposable
         if (dataSize + 36 > riffMax && !_sizeWarned)
         {
             _sizeWarned = true;
-            Debug.LogWarning("[Spectre] mixdown: WAV 超过 4GB 上限（" + (dataSize / 1024 / 1024) + "MB），"
+            Debug.LogWarning("[SpectreReplay] mixdown: WAV 超过 4GB 上限（" + (dataSize / 1024 / 1024) + "MB），"
                 + "头部长度字段已钳到上限，音频尾部可能被截断");
         }
         file.Write(BitConverter.GetBytes(0x46464952), 0, 4);             // "RIFF"

@@ -35,7 +35,7 @@ internal static class UiConfigManager
         }
         catch (System.Exception ex)
         {
-            Debug.LogWarning("[Spectre] UI 配置读取失败: " + ex.Message);
+            Debug.LogWarning("[SpectreReplay] UI 配置读取失败: " + ex.Message);
         }
     }
 
@@ -72,7 +72,7 @@ internal static class UiConfigManager
         }
         catch (System.Exception ex)
         {
-            Debug.LogWarning("[Spectre] UI 配置写入失败: " + ex.Message);
+            Debug.LogWarning("[SpectreReplay] UI 配置写入失败: " + ex.Message);
             return false;
         }
     }

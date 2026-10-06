@@ -88,13 +88,13 @@ internal static class UnscaledDeltaPin
                 // Invoke"成功"却建立错误 detour = 原生崩溃无法兜——宁可判无效降级
                 if (createDetour != null && !DetourSignatureLooksRight(createDetour))
                 {
-                    Debug.LogWarning("[Spectre] unscaled time pin: CreateDetour signature unexpected, skipping");
+                    Debug.LogWarning("[SpectreReplay] unscaled time pin: CreateDetour signature unexpected, skipping");
                     createDetour = null;
                 }
             }
             if (createDetour == null || factory == null)
             {
-                Debug.LogWarning("[Spectre] unscaled time pin unavailable: MonoMod.Core detour API not found");
+                Debug.LogWarning("[SpectreReplay] unscaled time pin unavailable: MonoMod.Core detour API not found");
                 return;
             }
 
@@ -112,7 +112,7 @@ internal static class UnscaledDeltaPin
         }
         catch (Exception ex)
         {
-            Debug.LogWarning("[Spectre] unscaled time pin unavailable: " + ex.Message);
+            Debug.LogWarning("[SpectreReplay] unscaled time pin unavailable: " + ex.Message);
             Uninstall();
         }
     }
@@ -134,7 +134,7 @@ internal static class UnscaledDeltaPin
         foreach (IDisposable d in detours)
         {
             try { d.Dispose(); }
-            catch (Exception ex) { Debug.Log("[Spectre] unscaled time pin undo failed: " + ex.Message); }
+            catch (Exception ex) { Debug.Log("[SpectreReplay] unscaled time pin undo failed: " + ex.Message); }
         }
         detours.Clear();
     }
@@ -150,7 +150,7 @@ internal static class UnscaledDeltaPin
         }
         catch (Exception ex) when (!critical)
         {
-            Debug.Log("[Spectre] unscaled time pin skipped " + propertyName + ": " + ex.Message);
+            Debug.Log("[SpectreReplay] unscaled time pin skipped " + propertyName + ": " + ex.Message);
         }
     }
 

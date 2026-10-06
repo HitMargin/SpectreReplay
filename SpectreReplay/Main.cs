@@ -31,7 +31,17 @@ namespace SpectreReplay
                 modEntry.OnGUI = Ui.OnGui.OnGUI;
                 modEntry.OnShowGUI = Ui.OnGui.OnShow;
                 modEntry.OnHideGUI = Ui.OnGui.OnHide;
-                modEntry.OnSaveGUI = Ui.OnGui.OnHide;
+                // **Save 不能接 OnHide。** UMM 底部的 Save 走 SaveSettingsAndParams()，
+                // 它只调 OnSaveGUI，既不关窗口、也不隐藏我们的设置页
+                // （UnityModManager.decompiled.cs:3706-3709 / :6326-6343）。
+                // 原先接 OnHide，而 OnHide 第一句是 `_visible = false`——
+                // 玩家一点 Save，整块设置内容当场变成空白。
+                modEntry.OnSaveGUI = Ui.OnGui.OnSave;
+                // 退出时补上拖动滑条期间被推迟的落盘（见 Pages.Commit）。
+                // 没有这一下，"拖完滑条直接退游戏"= 这次改动白改，而现象是
+                // "设置保存会丢"——正是这一轮要摁死的第三个毛病，不能自己再开一个口子。
+                Application.quitting -= OnQuitting;
+                Application.quitting += OnQuitting;
                 modEntry.OnToggle = OnToggle;
             }
             catch (Exception ex)
@@ -42,10 +52,25 @@ namespace SpectreReplay
             }
         }
 
+        /// <summary>进程退出前的最后一道落盘。只做能做的：写配置文件。</summary>
+        private static void OnQuitting()
+        {
+            try
+            {
+                Ui.OnGui.FlushConfig();
+            }
+            catch (Exception ex)
+            {
+                UnityEngine.Debug.LogWarning("[SpectreReplay] 退出落盘失败：" + ex.Message);
+            }
+        }
+
         private static bool OnToggle(ModEntry modEntry, bool isToggled)
         {
             if (!isToggled)
             {
+                // 关模组等于设置页没了：把拖动期间攒下的改动先写掉
+                Ui.OnGui.FlushConfig();
                 SpectreState.SetGetKeyAsyncEnabled(false);
                 SpectrePatchHub.UnpatchAll();
                 PatchManager.UnpatchAll();
@@ -71,6 +96,12 @@ namespace SpectreReplay
                 SpectrePatchHub.SetFeatureToggle(FeatureKeys.ReplayManualSave, () => Settings.ReplayOn && Settings.ManualSave);
                 SpectrePatchHub.SetFeatureToggle(FeatureKeys.ReplayCancelSave, () => Settings.ReplayOn && Settings.CancelSave);
                 SpectrePatchHub.SetFeatureToggle(FeatureKeys.ReplayAsyncInput, () => Settings.ReplayOn && Settings.GetDataFromAsyncInput);
+                // 命中误差采集 + 校准建议。**这两个必须注册**：ResultsPlus/CalibAdvice
+                // 下的补丁（Patch_HitError 的四个）没有开关时按"未注册 = 关闭"处理，
+                // 一个都不会挂载 —— 而 HitErrorData/CalibrationAdvisor 的数据链
+                // 就此断在源头，表现为"校准建议永远出不来"且日志无异常。
+                SpectrePatchHub.SetFeatureToggle(FeatureKeys.ResultsPlus, () => Settings.ResultsPlusOn || Settings.CalibAdviceOn);
+                SpectrePatchHub.SetFeatureToggle(FeatureKeys.CalibAdvice, () => Settings.CalibAdviceOn);
                 SpectrePatchHub.SetMasterToggle(() => Settings.UiPowerOn);
                 SpectrePatchHub.Refresh();
 
@@ -80,6 +111,9 @@ namespace SpectreReplay
                 SpectreState.PlayActions.SwitchToRecordMode();
 
                 SpectrePatchHub.ShowApplyFailureSummary();
+                // 挂失败的补丁还要在设置页**常驻**说一句：通知弹一次就没了，
+                // 而玩家往往是"发现某个开关点了没反应"才去翻设置页。
+                Ui.OnGui.PatchFailures = SpectrePatchHub.ApplyFailureCount;
                 return true;
             }
             catch (Exception ex)

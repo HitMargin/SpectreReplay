@@ -96,7 +96,7 @@ internal static class KeyboardSimulation
             // 隔离（游戏以管理员身份运行、注入方不是，反之亦然）——此时
             // GetLastError 返回 5 (ERROR_ACCESS_DENIED)，一眼可辨。
             int err = Marshal.GetLastWin32Error();
-            Debug.LogWarning($"[Spectre] SendInput 部分失败：已处理 {result}/{inputs.Length} 个按键"
+            Debug.LogWarning($"[SpectreReplay] SendInput 部分失败：已处理 {result}/{inputs.Length} 个按键"
                 + $"（Win32 错误码 {err}"
                 + (err == 5 ? " = ERROR_ACCESS_DENIED：游戏与注入进程的权限级别不一致，"
                               + "请用相同权限（通常都提权或都不提权）运行游戏" : "")

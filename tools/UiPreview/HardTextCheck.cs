@@ -127,6 +127,7 @@ namespace UiPreview
             {
                 Console.WriteLine($"    ✓ 扫了 {scanned} 个文件，没有被写死的用户可见中文");
             }
+            fail += LeakedLiterals(projectRoot);
             return fail;
         }
 
@@ -166,6 +167,71 @@ namespace UiPreview
         private static string Trim(string s)
             => s.Length <= 34 ? s : s.Substring(0, 32) + "…";
 
+        /// <summary>
+        /// 文案表文件（<see cref="Skip"/> 里那两个）在主检查里是**整文件豁免**的——
+        /// 它们的正文本来就是一整片中文字符串。豁免的代价是：这两个文件里**任何**
+        /// 中文都被放过，包括压根不在文案表里、会被界面直接显示的那种。
+        ///
+        /// 真实案例：Loc.cs 里的 `internal const string Hint = "F9 开关界面 · ESC 关闭"`
+        /// 是头部副标题，英文界面下直接显示中文；而整文件豁免让它永远不会变红，
+        /// 连“玩家在英文界面看到中文”这个主检查存在的唯一理由都绕过去了。
+        ///
+        /// 判据：中文串必须落在文案表条目的位置上——
+        ///     { "键", "值" }   或   ["键"] = "值"
+        /// 其余位置（字段初值、方法实参、拼接等）一律算泄漏。
+        /// </summary>
+        private static int LeakedLiterals(string projectRoot)
+        {
+            Console.WriteLine("  ── 文案表文件里的漏网字符串 ──");
+            int fail = 0, scanned = 0, entries = 0;
+            foreach (string name in Skip)
+            {
+                string found = null;
+                foreach (string f in Directory.GetFiles(projectRoot, name, SearchOption.AllDirectories))
+                {
+                    if (f.Contains(@"\obj\") || f.Contains(@"\bin\") || f.Contains("tools")) continue;
+                    found = f; break;
+                }
+                if (found == null)
+                {
+                    Console.WriteLine("    ✗ 找不到文案表文件 " + name);
+                    fail++;
+                    continue;
+                }
+                scanned++;
+                string[] lines = StripComments(File.ReadAllText(found)).Split('\n');
+                for (int li = 0; li < lines.Length; li++)
+                {
+                    string line = lines[li];
+                    int idx = 0;
+                    while (true)
+                    {
+                        int q = line.IndexOf('"', idx);
+                        if (q < 0) break;
+                        int end = SkipString(line, q);
+                        string lit = line.Substring(q + 1, Math.Max(0, end - q - 1));
+                        idx = end + 1;
+                        if (lit.Length < 2 || !Regex.IsMatch(lit, @"[\u4e00-\u9fff]")) continue;
+                        // 往回看这个字面量是不是表项的值：
+                        //   { "键", "值"    或    ["键"] = "值"
+                        string prefix = line.Substring(0, q);
+                        if (Regex.IsMatch(prefix, @"(\{\s*""[^""]*""\s*,\s*|\[""[^""]*""\]\s*=\s*)$"))
+                        {
+                            entries++;
+                            continue;
+                        }
+                        Console.WriteLine($"    ✗ {Path.GetFileName(found)}:{li + 1}  «{Trim(lit)}»"
+                            + "  ← 含中文却不在文案表里，会直接显示给玩家");
+                        fail++;
+                    }
+                }
+            }
+            if (fail == 0)
+            {
+                Console.WriteLine($"    ✓ {scanned} 个文案表文件、{entries} 条表项，没有漏网的中文字符串");
+            }
+            return fail;
+        }
         /// <summary>去掉行注释与块注释，保留行数不变便于报行号。</summary>
         private static string StripComments(string src)
         {
@@ -197,10 +263,20 @@ namespace UiPreview
                     inBlock = true; i++;
                     continue;
                 }
-                if (!esc && c == '"') inStr = !inStr;
-                else if (!esc && c == '\'') inChar = !inChar;
-                else if (esc) esc = false;
-                else if (c == '\\') esc = true;
+                if (esc) { esc = false; sb.Append(c); continue; }
+                if (c == '\\') { esc = true; sb.Append(c); continue; }
+                // **字符串内的单引号不是字符字面量的定界符。**
+                // 原实现把 inStr 与 inChar 当成两个互不相关的开关，于是一行
+                //   Debug.Log("[Spectre] replay hit the game's UpdateHoldKeys ...")
+                // 里的撇号就把 inChar 置真——此后整个文件的 // 与 /* 都因
+                // `!inStr && !inChar` 守卫而被跳过，**注释不再被剥掉**，
+                // 注释里带 ASCII 引号的中文短语全被当成界面文案误报
+                // （实测 Patch_Playback.cs:59 的「还没开始录」就是这么来的）。
+                // 撇号在英文日志文案里极其常见，所以这不是边缘情况：
+                // 它让硬编码中文检查对含英文日志的文件整段失效。
+                if (c == '"') { inStr = !inStr; sb.Append(c); continue; }
+                if (inStr) { sb.Append(c); continue; }
+                if (c == '\'') inChar = !inChar;
                 sb.Append(c);
             }
             return sb.ToString();

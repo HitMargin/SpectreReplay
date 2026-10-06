@@ -176,5 +176,17 @@
   <ItemGroup>
     <Compile Remove="**\obj\**\*" />
     <Compile Remove="**\bin\**\*" />
+    <!-- 自研引擎遗址。它当前在仓库根目录、与 .slnx 同级，**不在本项目的 glob 范围内**
+         （SDK 的 **\*.cs 只覆盖 SpectreReplay\ 这棵子树），所以即便没有这一行也不会被编译。
+         但"靠目录位置隔离"太脆：哪天有人把 _legacy_srp 挪进 SpectreReplay\（顺手整理
+         目录这种事很常见），7533 行停用代码会被静默编进 dll，而首个症状是与现役代码的
+         **重复类型错误**（legacy 的 VideoEncoder / AudioRecorder / GameCompat 与真代码同名），
+         很容易被误读成"移植时漏改"。这一行把"靠位置"变成"靠声明"。
+         注意：这里的路径是相对本 csproj 所在目录的，_legacy_srp 现在在外层，
+         所以这条 Remove 现在是空操作——它是为了防将来被挪进来。 -->
+    <Compile Remove="_legacy_srp\**\*" />
+    <Compile Remove="..\_legacy_srp\**\*" />
+    <None Include="_legacy_srp\**\*.cs" />
+    <None Include="..\_legacy_srp\**\*.cs" />
   </ItemGroup>
 </Project>

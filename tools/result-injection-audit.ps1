@@ -1,0 +1,67 @@
+﻿<#
+  用了 `__result` 的 Postfix / passthrough Prefix，其目标方法是否真有返回值。
+  Harmony 的 __result 只在目标方法非 void 时才注得进值；给 void 方法配 __result
+  = 永远拿到默认值（同类"静默拿错值"家族）。
+#>
+$ErrorActionPreference = 'Stop'
+$root = Split-Path -Parent $PSScriptRoot
+$src = Join-Path $root 'SpectreReplay'
+$asm = [Reflection.Assembly]::LoadFrom('D:\Projects\adofai-libs\Assembly-CSharp.dll')
+# 读不到源目录时 Get-ChildItem 会去递归遍历父目录、在无关路径抛 AccessDenied
+# （round 38 实测），报错指不到"路径指错了"这个根因。先在此处拦住。
+if (-not (Test-Path $src)) {
+    Write-Output "✗ 源目录不存在：$src"
+    exit 3
+}
+$files = @(Get-ChildItem $src -Recurse -File -Filter *.cs -ErrorAction Stop |
+    Where-Object { $_.FullName -notmatch '\\(obj|bin)\\' -and $_.FullName -notmatch '_legacy' -and $_.FullName -notmatch '\\tools\\' })
+if ($files.Count -eq 0) {
+    Write-Output "✗ 在 $src 下没扫到任何 .cs——计数为 0 之前先证明自己扫到了（假干净比误报危险）"
+    exit 3
+}
+
+Write-Output "=== 用了 __result 的补丁，其目标方法的返回类型 ==="
+foreach ($f in $files) {
+    $t = [IO.File]::ReadAllText($f.FullName)
+    if ($t -notmatch '__result') { continue }
+    $rel = $f.FullName.Replace("$src\", '')
+    $lines = $t -split "`n"
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -notmatch '\[SpectrePatch\(') { continue }
+        $attr = $lines[$i].Substring($lines[$i].IndexOf('[SpectrePatch('))
+        for ($j = $i + 1; $j -lt $lines.Count -and $j -lt $i + 4; $j++) {
+            $attr += ' ' + $lines[$j]
+            if ($lines[$j] -match '\)\s*$') { break }
+        }
+        $mType = [regex]::Match($attr, 'typeof\(\s*([\w\.]+)\s*\)')
+        if (-not $mType.Success) { continue }
+        $tn = $mType.Groups[1].Value
+        $mn = [regex]::Match($attr, '"([^"]+)"')
+        $m = ''
+        if ($mn.Success) { $m = $mn.Groups[1].Value }
+        else {
+            $nn = [regex]::Match($attr, 'nameof\(\s*[\w\.]+\.(\w+)\s*\)')
+            if ($nn.Success) { $m = $nn.Groups[1].Value }
+        }
+        if (-not $m) { continue }
+        $sig = ''
+        for ($j = $i + 1; $j -lt $lines.Count -and $j -lt $i + 6; $j++) {
+            $sm = [regex]::Match($lines[$j], 'internal\s+static\s+[\w\<\>\[\]\?\.]+\s+\w+\s*\(([^)]*)\)')
+            if ($sm.Success) { $sig = $sm.Groups[1].Value; break }
+        }
+        if ($sig -notmatch '__result') { continue }
+
+        $type = $asm.GetType($tn)
+        $ret = '类型未找到'
+        if ($type) {
+            $pi = $type.GetProperty($m, [Reflection.BindingFlags]::Public -bor [Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Instance)
+            if ($pi) { $ret = "property:" + $pi.PropertyType.Name }
+            else {
+                $mi = $type.GetMethod($m, [Reflection.BindingFlags]::Public -bor [Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Instance -bor [Reflection.BindingFlags]::Static)
+                if ($mi) { $ret = if ($mi.ReturnType.Name -eq 'Void') { 'VOID <<< __result 拿不到值' } else { $mi.ReturnType.Name } }
+            }
+        }
+        Write-Output ("  {0}" -f $rel)
+        Write-Output ("    目标 {0}.{1}   返回={2}" -f $tn, $m, $ret)
+    }
+}

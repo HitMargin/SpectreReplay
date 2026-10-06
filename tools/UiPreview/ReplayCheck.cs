@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using SpectreReplay.Features.Replay;
 
 namespace UiPreview
@@ -19,6 +20,7 @@ namespace UiPreview
             fail += RoundTrip("⑵ 只有键轨（无命中）", Sample(0, 0, 5));
             fail += RoundTrip("⑶ 空回放", Sample(0, 0, 0));
             fail += RoundTrip("⑷ 只有命中无按键", Sample(3, 3, 0));
+            fail += RejectsGarbage();
             if (fail == 0) Console.WriteLine("    ✓ 回放格式往返全部一致");
             return fail;
         }
@@ -64,6 +66,87 @@ namespace UiPreview
                 Console.WriteLine("    ✗ " + name + "：抛异常 " + ex.GetType().Name + ": " + ex.Message);
                 return 1;
             }
+        }
+
+        /// <summary>
+        /// 损坏文件必须被干净拒绝：编码一局真实数据（格式完全合法），
+        /// 解压后把 KeyEvents 段的 count 字节改成巨大值再重新压缩——
+        /// 只有 ReadCount 的越界防护在位时抛出 InvalidDataException 才算通过；
+        /// 其余任何结果（解出成功 / 别的异常）都是防护缺失（红）。
+        /// </summary>
+        private static int RejectsGarbage()
+        {
+            try
+            {
+                Replay src = Sample(1, 1, 9);
+                byte[] full = ReplayEncoder.Encode(src);
+                byte[] payload = GzipDecompressTest(full);
+
+                // KeyEvents 段的 magic（小端 0x746E65764579654B = "KeyEvent"）
+                byte[] keyMagic = { 0x4B, 0x65, 0x79, 0x45, 0x76, 0x65, 0x6E, 0x74 };
+                int at = IndexOfBytes(payload, keyMagic);
+                if (at < 0)
+                {
+                    Console.WriteLine("    ✗ ⑸ 找不到 KeyEvents 段，测试无效");
+                    return 1;
+                }
+                int countPos = at + 8 + 4; // magic(8) + ver(4) 之后就是 count
+                if (countPos + 4 > payload.Length)
+                {
+                    Console.WriteLine("    ✗ ⑸ 流太短，测试无效");
+                    return 1;
+                }
+                byte[] huge = BitConverter.GetBytes(0x7FFFFFFF);
+                Array.Copy(huge, 0, payload, countPos, 4);
+
+                byte[] recompressed = GzipCompressTest(payload);
+                var got = ReplayDecoder.Decode(recompressed);
+                Console.WriteLine("    ✗ ⑸ 巨大 count 未被拒绝，反而解出了 "
+                    + got.KeyEvents.Count + " 个事件");
+                return 1;
+            }
+            catch (InvalidDataException)
+            {
+                Console.WriteLine("    ✓ ⑸ 巨大 count 被干净拒绝（InvalidDataException）");
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("    ✗ ⑸ 巨大 count 未被 InvalidDataException 拒绝："
+                    + ex.GetType().Name + ": " + ex.Message);
+                return 1;
+            }
+        }
+
+        private static byte[] GzipDecompressTest(byte[] data)
+        {
+            using var input = new System.IO.MemoryStream(data);
+            using var gz = new System.IO.Compression.GZipStream(input,
+                System.IO.Compression.CompressionMode.Decompress);
+            using var output = new System.IO.MemoryStream();
+            gz.CopyTo(output);
+            return output.ToArray();
+        }
+
+        private static byte[] GzipCompressTest(byte[] data)
+        {
+            using var output = new System.IO.MemoryStream();
+            using (var gz = new System.IO.Compression.GZipStream(output,
+                       System.IO.Compression.CompressionLevel.Optimal))
+                gz.Write(data, 0, data.Length);
+            return output.ToArray();
+        }
+
+        private static int IndexOfBytes(byte[] hay, byte[] needle)
+        {
+            for (int i = 0; i <= hay.Length - needle.Length; i++)
+            {
+                bool match = true;
+                for (int j = 0; j < needle.Length; j++)
+                    if (hay[i + j] != needle[j]) { match = false; break; }
+                if (match) return i;
+            }
+            return -1;
         }
 
         private static Replay Sample(int hits, int keys, int seedBias)

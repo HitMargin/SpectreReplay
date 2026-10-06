@@ -85,7 +85,7 @@ internal static class Patch_RenderClockConductor
 
         if (dspPin == null || timeDPin == null || timeFPin == null || deltaPin == null)
             throw new InvalidOperationException(
-                "[Spectre] RenderClock transpiler: replacement method not found (AccessTools.Method returned null)");
+                "[SpectreReplay] RenderClock transpiler: replacement method not found (AccessTools.Method returned null)");
 
         int replaced = 0;
         foreach (CodeInstruction instruction in instructions)
@@ -115,7 +115,7 @@ internal static class Patch_RenderClockConductor
 
         if (replaced == 0)
             throw new InvalidOperationException(
-                $"[Spectre] RenderClock transpiler: no time-source calls found in {methodName} — game Update likely changed");
+                $"[SpectreReplay] RenderClock transpiler: no time-source calls found in {methodName} — game Update likely changed");
         RenderClockSource.TranspilerReady = true;
     }
 }
@@ -123,23 +123,42 @@ internal static class Patch_RenderClockConductor
 /// <summary>
 /// 异步输入的 GetSongPosition：直接从 RenderClock 算（与 conductor 同一时间轴），
 /// 替代旧方案的 AdjustAngle 跳过（Patch_VideoLockAsyncAngle 可退役）。
+///
+/// **2026-10-06 修掉一个继承自 Spectre 的潜伏缺陷：形参名不能写 `__instance`。**
+/// `AsyncInputUtils.GetSongPosition` 是**静态方法**（真实签名
+/// `GetSongPosition(scrConductor conductor, long nowTick)`），而 Harmony 的
+/// `__instance` 只在"原方法非静态"时注入——它内部是个**合成形参**
+/// （`MethodBodyReader+ThisParameter`，派生自 ParameterInfo），不是按名字匹配的。
+/// 静态方法上声明 `__instance` 的后果是它拿到不到导体，恒为 null。
+///
+/// 具体到这段代码的危害：`__instance == null` 分支会 `__result = 0.0; return false`
+/// ⇒ **GetSongPosition 恒返回 0**。它唯一的调用者是 `AsyncInputUtils.GetAngle`
+/// （AsyncInputUtils.cs:23），而 `GetAngle` 的唯一调用者是
+/// `scrPlanet.AsyncRefreshAngles()`（scrPlanet.cs:555），后者又只被
+/// `AsyncInputUtils.AdjustAngle`（:31）调用——**而 AdjustAngle 正是我们渲染期
+/// 禁用的那个**（Patch_VideoLockAsyncAngle）。所以这条链目前被另一条补丁挡着，
+/// 缺陷暂时不发作；但它是**潜伏**的：哪天有人重开 AdjustAngle、或别处调
+/// GetSongPosition，就会静默拿到 0 而不是报错。
+///
+/// 修法：改用**原方法的真实形参名 `conductor`**（Harmony 按名注入普通参数）。
+/// 这不是风格问题——名字写错时补丁照样挂得上、照样跑，只是永远拿到 null。
 /// </summary>
 internal static class Patch_RenderClockAsyncPosition
 {
     [SpectrePatch(typeof(AsyncInputUtils), "GetSongPosition", PatchType.Prefix)]
-    internal static bool Prefix(scrConductor __instance, ref double __result)
+    internal static bool Prefix(scrConductor conductor, ref double __result)
     {
         if (!RenderClockSource.ControlsTime)
             return true; // 非渲染期走原版
-        if (__instance == null || __instance.song == null)
+        if (conductor == null || conductor.song == null)
         {
             __result = 0.0;
             return false;
         }
         __result = RenderClockSource.ActiveClock.SongPosition(
-            __instance.dspTimeSong,
-            __instance.song.pitch,
-            __instance.addoffset,
+            conductor.dspTimeSong,
+            conductor.song.pitch,
+            conductor.addoffset,
             0.0);
         return false;
     }

@@ -1,8 +1,38 @@
 # Spectre → SpectreReplay 对照分析
 
+> ## ⚠️ 阅读前必读：本文大部分内容已随架构替换而失效（2026-10-04 起）
+>
+> **提交 `f96aa86`「整体移植 Spectre 的 replay 与视频渲染，废弃自研引擎」把整个
+> replay + video render 换成了 Spectre 的源码。** 自研引擎（`PlaybackEngine` /
+> `PlaybackClamps` / `KeyRecorder` / `LevelWatcher` / `LiveSession` /
+> `OfflineSession` / `PatchLoader` / `HitStateReplayer` / `PlaybackValidator` /
+> `RenderService`）**已全部移入 `_legacy_srp\` 停用，主项目里一个都不在了**。
+>
+> 因此下面这些偏差描述的代码**已经不存在于运行路径**，它们的"已修"结论
+> 只对旧架构成立，读的时候不要当成现状：
+>
+> | 失效条目 | 原因 |
+> |---|---|
+> | 偏差 18（`UpdateHoldKeys` Finalizer） | 兜底在 `PlaybackClamps`，已停用；Spectre 侧对应物是 `Patch_Playback.cs` 的 `Patch_HoldKeysCrashGuard`（已随移植带入） |
+> | 偏差 19（noFail / hitMarginLimit / IgnoreMarkFail 夹逼） | 在 `PlaybackClamps` 与 `PlaybackEngine`；Spectre 侧是 `Patch_Misc.cs` 的 `Patch_MarkFail` / `Patch_LightUp`（已随移植带入） |
+> | 偏差 22（未禁 `UpdateFreeroam`） | `HitStateReplayer` 的事；Spectre 侧是 `Patch_Misc.cs` 的 `Patch_UpdateFreeroam`（已随移植带入） |
+> | 偏差 23（`Stop()` 只有按钮一个调用点） | `PlaybackEngine` 的事；Spectre 侧是 `Patch_Lifecycle.cs` 的四条拆除链（已随移植带入） |
+> | 偏差 24（hitbox 死亡绕过 noFail） | 屏障在 `PlaybackClamps.cs`，已停用 |
+> | 偏差 15 / 10 / 6 / 7 / 8 / 9 | 全部关于 `PatchLoader` + 自研 `VideoEncoder` / `FrameSource`，均已替换 |
+> | 第七节「累计的变异验证」（MUT-A…MUT-BZ） | 那一轮变异的对象已停用；现行变异见 `tools\mutate.ps1`（MUT-P*/U*/K1/A*/C*/T1/R1/L*/V*） |
+>
+> **仍然有效的部分**：偏差 1 / 1b / 2 / 3 / 3a / 4 / 14 / 16 / 17 / 20 的分析与论证
+> （架构差异、按键注入、音频来源、前置校验、哈希陷阱、命中误差分析），
+> 以及第七之二节「其余六个特性目录为什么判定为不补」的结论。
+>
+> **现行架构与闸门现状看这两份**：`docs\verify.md`（50 条断言与用法，
+> 数字随轮次变，引用前先跑一遍 `verify.ps1`）、记忆库项目条目（SpectreReplay）。
+
 > 本文基于对 `D:\Projects\Spectre` 的通读（66,775 行 / 560 文件），
 > 每条结论都给出 Spectre 侧的 `文件:行号` 依据。
 > Spectre 项目**只读**，本文不修改它。
+>
+> 写于自研引擎时代（2026-10-02 ~ 10-03），保留作为历史记录。
 
 ## 一、Spectre 项目全貌
 

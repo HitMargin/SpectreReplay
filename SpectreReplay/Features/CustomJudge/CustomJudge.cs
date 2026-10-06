@@ -466,7 +466,7 @@ internal static class CustomJudge
         }
         catch (Exception ex)
         {
-            Debug.Log("[Spectre] custom judge profile save failed: " + ex.Message);
+            Debug.Log("[SpectreReplay] custom judge profile save failed: " + ex.Message);
             return false;
         }
     }
@@ -526,7 +526,7 @@ internal static class CustomJudge
         }
         catch (Exception ex)
         {
-            Debug.Log("[Spectre] custom judge profile load failed: " + ex.Message);
+            Debug.Log("[SpectreReplay] custom judge profile load failed: " + ex.Message);
             return false;
         }
     }

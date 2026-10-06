@@ -27,7 +27,7 @@ internal static class GameCompat
     private static void WarnOnce(string key, Exception e)
     {
         if (Warned.Add(key))
-            Debug.LogWarning($"[Spectre] 兼容层 {key} 失败，已降级：{e.GetType().Name} {e.Message}");
+            Debug.LogWarning($"[SpectreReplay] 兼容层 {key} 失败，已降级：{e.GetType().Name} {e.Message}");
     }
 
     private static MethodInfo Find(Type type, string name, params Type[] paramTypes)

@@ -200,11 +200,11 @@ internal sealed class VideoRenderJob : MonoBehaviour
             clock = new RenderClock(fps);
             clock.AnchorDsp(AudioSettings.dspTime);
             RenderClockSource.ActiveClock = clock;
-            Debug.Log("[Spectre] renderClock: deterministic RenderClock path (transpiler active)");
+            Debug.Log("[SpectreReplay] renderClock: deterministic RenderClock path (transpiler active)");
         }
         else
         {
-            Debug.Log("[Spectre] renderClock: audio-cursor Pin path (transpiler unavailable, fallback)");
+            Debug.Log("[SpectreReplay] renderClock: audio-cursor Pin path (transpiler unavailable, fallback)");
         }
 
         VideoRender.PinTimeline(audioAnchor);
@@ -308,11 +308,22 @@ internal sealed class VideoRenderJob : MonoBehaviour
             if (frameIndex % (fps * 5) == 0)
             {
                 double ideal = frameIndex / (double)fps;
-                double unpinned = (AudioSettings.dspTime - conductor.dspTimeSong - (double)scrConductor.calibration_i)
-                                  * conductor.song.pitch - conductor.addoffset;
-                Debug.Log($"[Spectre] renderClock f={frameIndex} audio={clockSeconds:0.0000}s ideal={ideal:0.0000}s "
+                // **这一段必须自己做空值防护。** 上面 :261 已经因为"跨结算转场时
+                // conductor/song 会被销毁"而加了同样的判断，这里漏了：一旦转场后
+                // 恰好撞上 5 秒巡检，NRE 会被 Drive() 接住并转成 NotifyFailed ——
+                // 结果是**一行诊断日志把整场渲染判死**，而且用户看到的是一句英文
+                // "Object reference not set..."，跟渲染本身毫无关系。
+                // 诊断只该是诊断：取不到就少打两个字段，绝不该影响作业。
+                bool live = conductor != null && conductor.song != null;
+                double unpinned = live
+                    ? (AudioSettings.dspTime - conductor.dspTimeSong - (double)scrConductor.calibration_i)
+                      * conductor.song.pitch - conductor.addoffset
+                    : double.NaN;
+                Debug.Log($"[SpectreReplay] renderClock f={frameIndex} audio={clockSeconds:0.0000}s ideal={ideal:0.0000}s "
                           + $"drift={(clockSeconds - ideal) * 1000.0:0.0}ms sr={mixdown.SampleRate} "
-                          + $"pitch={conductor.song.pitch:0.00} pin={VideoRender.PinnedSongPosition:0.000} dspPos={unpinned:0.000}");
+                          + (live
+                              ? $"pitch={conductor.song.pitch:0.00} pin={VideoRender.PinnedSongPosition:0.000} dspPos={unpinned:0.000}"
+                              : $"pitch=- pin={VideoRender.PinnedSongPosition:0.000} dspPos=n/a (conductor gone)"));
             }
 
             Flush();
@@ -322,7 +333,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
             if (endFrame < 0 && wasPlaying && !playing)
             {
                 endFrame = frameIndex + tailFrames;
-                Debug.Log("[Spectre] replay exhausted at frame " + frameIndex + ", tail to " + endFrame);
+                Debug.Log("[SpectreReplay] replay exhausted at frame " + frameIndex + ", tail to " + endFrame);
             }
             wasPlaying = playing;
 
@@ -371,7 +382,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
             throw;
         }
         TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.done") + "\n" + outputPath, 5f);
-        Debug.Log("[Spectre] replay video complete: " + outputPath);
+        Debug.Log("[SpectreReplay] replay video complete: " + outputPath);
         ReportEnd(SpectreAPI.RenderEndStatus.Completed, outputPath, null);
     }
 
@@ -387,14 +398,14 @@ internal sealed class VideoRenderJob : MonoBehaviour
             string audioCopy = Path.Combine(dir, stem + "_audioonly" + Path.GetExtension(wavPath));
             File.Copy(rawVideoPath, videoCopy, overwrite: true);
             File.Copy(wavPath, audioCopy, overwrite: true);
-            Debug.Log("[Spectre] mux 失败但已抢救原始流: " + videoCopy + "\n  " + audioCopy
+            Debug.Log("[SpectreReplay] mux 失败但已抢救原始流: " + videoCopy + "\n  " + audioCopy
                 + "\n  手动合成: ffmpeg -i \"" + videoCopy + "\" -i \"" + audioCopy
                 + "\" -c:v copy -c:a aac -shortest \"" + target + "\""
                 + "\n  失败原因: " + cause.Message);
         }
         catch (Exception ex)
         {
-            Debug.Log("[Spectre] mux 抢救也失败了（原始流随临时目录清理丢失）: " + ex.Message);
+            Debug.Log("[SpectreReplay] mux 抢救也失败了（原始流随临时目录清理丢失）: " + ex.Message);
         }
     }
 
@@ -436,7 +447,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
         {
             if (failed || pixels == null)
             {
-                Debug.LogWarning("[Spectre] readback failed at frame " + index + ", black frame substituted");
+                Debug.LogWarning("[SpectreReplay] readback failed at frame " + index + ", black frame substituted");
                 encoder.Submit(blackout, blackout.Length, 1, null, () => cancelRequested);
             }
             else
@@ -486,7 +497,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
         try { Directory.CreateDirectory(dir); }
         catch (Exception ex)
         {
-            Debug.Log("[Spectre] 渲染输出目录无法创建: \"" + dir + "\" —— "
+            Debug.Log("[SpectreReplay] 渲染输出目录无法创建: \"" + dir + "\" —— "
                 + ex.GetType().Name + ": " + ex.Message
                 + "（请检查 设置→视频渲染 的输出目录是否可写、路径是否合法）");
         }
@@ -523,7 +534,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
         }
         catch (Exception ex)
         {
-            Debug.Log("[Spectre] 渲染临时目录重置失败: \"" + tempDir + "\" —— "
+            Debug.Log("[SpectreReplay] 渲染临时目录重置失败: \"" + tempDir + "\" —— "
                 + ex.GetType().Name + ": " + ex.Message);
         }
         // 中间文件按容器选扩展：muxer 按扩展名选，VP9 流写进 .mp4 在 ffmpeg 4.x 是
@@ -574,7 +585,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
     {
         VideoRender.Current.Error = message;
         TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.failed") + "\n" + message, 5f, NotifType.Warning);
-        Debug.Log("[Spectre] replay render failed: " + message);
+        Debug.Log("[SpectreReplay] replay render failed: " + message);
         ReportEnd(SpectreAPI.RenderEndStatus.Failed, null, message);
     }
 
@@ -627,7 +638,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
             }
             catch (Exception ex)
             {
-                Debug.Log("[Spectre] render temp cleanup failed: " + ex.Message);
+                Debug.Log("[SpectreReplay] render temp cleanup failed: " + ex.Message);
             }
         }
         VideoRender.CloseJob();
@@ -685,7 +696,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
         }
         videoRealClock = System.Diagnostics.Stopwatch.StartNew();
         if (pinnedVideos.Count > 0)
-            Debug.Log("[Spectre] renderClock: " + pinnedVideos.Count + " VideoPlayer(s) speed-matched to render clock");
+            Debug.Log("[SpectreReplay] renderClock: " + pinnedVideos.Count + " VideoPlayer(s) speed-matched to render clock");
     }
 
     private void StepPinnedVideos(double gameSeconds)

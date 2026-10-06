@@ -69,7 +69,11 @@ internal sealed class VideoEncoder : IDisposable
     private Process pipe;
     private BlockingCollection<PendingFrame> queue;
     private Thread pump;
-    private Exception pumpFailure;
+    // **必须 volatile**：泵线程写、主线程在 Submit 里读。非 volatile 时主线程
+    // 可能一直读到缓存里的 null，于是一个已经死掉的泵还会被继续 Submit
+    // （虽然 pipe.HasExited 与队列 CompleteAdding 最终会兜住，但那已经是
+    // 又等了一个 SubmitStallTimeoutMs=120s 之后的事）。
+    private volatile Exception pumpFailure;
 
     internal string EncoderName { get; private set; } = "unknown";
 
@@ -120,7 +124,7 @@ internal sealed class VideoEncoder : IDisposable
         }
         catch (Exception ex)
         {
-            Debug.Log("[Spectre] encoder locate failed: " + ex.Message);
+            Debug.Log("[SpectreReplay] encoder locate failed: " + ex.Message);
         }
         locatedEncoder = "ffmpeg";
         locateFailTick = Environment.TickCount;

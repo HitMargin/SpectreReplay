@@ -89,6 +89,17 @@ namespace SpectreReplay.Ui
             _btnPrimary = new GUIStyle(GUI.skin.button) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
         }
 
+        // 样式对外只读出口。OnGui / Pages 拿它画自己的行，而不是各自 new GUIStyle
+        // ——重复构造既费时，也会绕过 Ensure 的缓存判据（UMM 的 ScaleGUI 换字体后
+        // 那些自建样式不会跟着更新字号）。
+        internal static GUIStyle LabelStyle { get { Ensure(); return _label; } }
+        internal static GUIStyle BoldStyle { get { Ensure(); return _bold; } }
+        internal static GUIStyle H2Style { get { Ensure(); return _h2; } }
+        internal static GUIStyle NoteStyle { get { Ensure(); return _note; } }
+        internal static GUIStyle SmallStyle { get { Ensure(); return _small; } }
+        internal static GUIStyle ButtonStyle { get { Ensure(); return _btn; } }
+        internal static GUIStyle PrimaryButtonStyle { get { Ensure(); return _btnPrimary; } }
+
         // ── 原子绘制 ──────────────────────────────────────────
 
         /// <summary>纯色填充。只在 Repaint 趟真的画。</summary>
@@ -154,25 +165,76 @@ namespace SpectreReplay.Ui
 
             Color oldBg = GUI.backgroundColor;
             GUI.backgroundColor = CardBg;
+
+            // 卡片体的边框/左侧色条。**量法上的两个坑**（这条最难查：不报错，
+            // 只是描边画错位置，而"偏一点"很难联想到是 IMGUI 语义）：
+            //
+            //  坑 1：GetLastRect() 返回的是"最后一个**控件**的布局矩形"，
+            //        不是外层组的矩形，也不含组的 padding。原来的写法在
+            //        EndVertical() 之后调它，拿到的是 body 里最后一个子控件——
+            //        于是卡片边框画在那个子控件的位置上，卡片矮一截。
+            //  坑 2：紧跟在 Begin* 之后调 GetLastRect() 会直接抛
+            //        "You cannot call GetLast immediately after beginning a group"。
+            //
+            // 这里改成：进组前取一次全宽标尺记 y，body 跑完后再取一次。
+            // 两次都在**已经被布局过**的位置上调用，语义确定。
+            // 只取 y 不做额外 Space：GetRect 本身不吃布局高度（height=1 的标尺
+            // 是原有代码就在用的手法）。
+            float top = GUILayoutUtility.GetRect(1f, 1f, GUILayout.ExpandWidth(true)).y;
+            float bottom = float.NaN;
+
             GUILayout.BeginVertical(_pad);
             try
             {
                 body?.Invoke();
+
+                // 这一行必须在 EndVertical 之前：此时整个组的高度已经定下来了。
+                // 放在 End 之后读到的会是最后一个子控件（坑 1）。
+                bottom = GUILayoutUtility.GetRect(1f, 1f, GUILayout.ExpandWidth(true)).yMax;
+
+                if (Event.current != null && Event.current.type == EventType.Repaint
+                    && !float.IsNaN(bottom) && bottom - top > 4f)
+                {
+                    Rect card = new Rect(head.x, top, head.width, bottom - top);
+                    Frame(card, LineCol);
+                    Fill(new Rect(card.x, card.y, 3f, card.height), accent);
+                }
             }
             finally
             {
                 GUILayout.EndVertical();
                 GUI.backgroundColor = oldBg;
-                // 描边画在卡片体边缘：card 有 12px 内边距，不会盖住内容。
-                if (Event.current != null && Event.current.type == EventType.Repaint)
-                {
-                    Rect body2 = GUILayoutUtility.GetLastRect();
-                    if (body2.width > 4f && body2.height > 4f)
-                    {
-                        Frame(body2, LineCol);
-                        Fill(new Rect(body2.x, body2.y, 3f, body2.height), accent);
-                    }
-                }
+            }
+        }
+
+        /// <summary>一行"标签 + 说明"，用于把关键信息摆成表格状。</summary>
+        internal static void KeyValue(string labelKey, string value, Color valueColor)
+        {
+            Ensure();
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(Loc.T(labelKey), _label, GUILayout.Width(LabelW));
+            Text(GUILayoutUtility.GetRect(1f, 20f, GUILayout.ExpandWidth(true)), value, valueColor, _label);
+            GUILayout.EndHorizontal();
+        }
+
+        /// <summary>一条进度条。total&lt;=0 时直接返回，避免 0/0 得到 NaN 宽度
+        /// ——NaN 传给 GUI.DrawTexture 会抛 ArgumentException 打断整个 OnGUI，
+        /// 而 UMM 对 OnGUI 异常的处理是"把整个设置面板收掉"。
+        /// </summary>
+        internal static void ProgressBar(float fill, string caption)
+        {
+            Ensure();
+            Rect r = GUILayoutUtility.GetRect(1f, 18f, GUILayout.ExpandWidth(true));
+            Fill(r, new Color(1f, 1f, 1f, 0.10f));
+            float w = r.width * Mathf.Clamp01(fill);
+            if (w > 0f)
+            {
+                Fill(new Rect(r.x, r.y, w, r.height), Accent);
+            }
+            Frame(r, LineCol);
+            if (!string.IsNullOrEmpty(caption))
+            {
+                Text(r, caption, TextCol, _smallC);
             }
         }
 
@@ -184,13 +246,6 @@ namespace SpectreReplay.Ui
             Fill(r, new Color(c.r, c.g, c.b, 0.16f));
             Frame(r, new Color(c.r, c.g, c.b, 0.55f));
             Text(r, s, c, _smallC);
-        }
-
-        /// <summary>状态点：一个 8x8 的实心方块（IMGUI 画不出圆，方块反而更清楚）。</summary>
-        internal static void Dot(Rect r, Color c)
-        {
-            float s = Mathf.Min(8f, Mathf.Min(r.width, r.height));
-            Fill(new Rect(r.x + (r.width - s) * 0.5f, r.y + (r.height - s) * 0.5f, s, s), c);
         }
 
         /// <summary>品牌头：大标题 + 副标题 + 右侧徽章。</summary>
@@ -234,12 +289,14 @@ namespace SpectreReplay.Ui
                 value ? track.x + track.width - k - 3f : track.x + 3f,
                 track.y + 3f, k, k);
             Fill(knob, value ? Color.white : new Color(0.75f, 0.78f, 0.82f, 1f));
-            Text(track, value ? "开" : "关", value ? Accent : DimCol, _smallC);
+            Text(track, Loc.T(value ? "ui.on" : "ui.off"), value ? Accent : DimCol, _smallC);
             GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
-            if (clicked && clicked != value)
+            // clicked 是本次点击事件，不是新值：早先写成 `clicked != value`
+            // 时，value 已经是 true 就永远不成立——开关只能打开、关不掉。
+            if (clicked)
             {
-                onChange?.Invoke(clicked);
+                onChange?.Invoke(!value);
             }
         }
     }

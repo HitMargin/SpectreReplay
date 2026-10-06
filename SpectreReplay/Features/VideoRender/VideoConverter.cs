@@ -41,7 +41,7 @@ internal static class VideoConverter
             catch (Exception ex)
             {
                 state.Error = ex;
-                Debug.Log("[Spectre] video convert failed: " + ex);
+                Debug.Log("[SpectreReplay] video convert failed: " + ex);
             }
             finally
             {
@@ -129,10 +129,23 @@ internal static class VideoConverter
                 }
                 else
                 {
-                    // webm/mkv 源编解码不可知：VP9 视频流可 copy（tag vp09），
-                    // 音频可能是 Opus——in-mp4 兼容性差，统一转 AAC 保播放兼容
-                    videoArgs = "-c:v copy";
-                    audioArgs = "-c:a aac -b:a 320k";
+                    // webm/mkv 源编解码不可知。**mov 与 mp4 在这里不能一视同仁**：
+                    // mov 复用 mp4 的 muxer（movenc），但它拒绝 VP9——实测把
+                    // VP9+Opus 的 mkv copy 进 .mov，ffmpeg 在写 header 就直接
+                    // exit -22「Could not write header (incorrect codec parameters ?)」。
+                    // 而同一个源 copy 进 .mp4 是成功的。照旧用 copy 的话，
+                    // "目标是 mov" 这条分支对任何 webm/mkv 源都必然失败。
+                    // 所以 mov 一律重编码成 H.264；mp4 仍可 copy（实测通过）。
+                    if (target == VideoEncoder.OutContainer.Mov)
+                    {
+                        videoArgs = "-c:v libx264 -preset veryfast -crf 23";
+                        audioArgs = "-c:a aac -b:a 320k";
+                    }
+                    else
+                    {
+                        videoArgs = "-c:v copy";
+                        audioArgs = "-c:a aac -b:a 320k";
+                    }
                 }
                 break;
             default:
@@ -177,7 +190,7 @@ internal static class VideoConverter
         }
         catch (Exception ex)
         {
-            Debug.Log("[Spectre] video convert attempt failed: " + ex.Message);
+            Debug.Log("[SpectreReplay] video convert attempt failed: " + ex.Message);
             return false;
         }
     }

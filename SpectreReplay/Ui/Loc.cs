@@ -12,7 +12,11 @@ namespace SpectreReplay.Ui
     internal static class Loc
     {
         internal const string Brand = "Spectre Replay";
-        internal const string Hint = "F9 开关界面 · ESC 关闭";
+        /// <summary>头部副标题。**走文案表**：原先写死成中文常量，英文界面下会直接显示
+        /// 中文，而 Loc.cs 在硬编码检查里整文件豁免——这条永远不会被闸门抓到。
+        /// 另外那句话本身也是错的：写的是 F9，而 F9 是「手动保存回放」的键，
+        /// UMM 的开关窗口热键默认是 Ctrl+F10。</summary>
+        internal static string Hint => T("ui.hint");
 
         private static readonly System.Collections.Generic.Dictionary<string, string> Zh =
             new System.Collections.Generic.Dictionary<string, string>
@@ -24,20 +28,40 @@ namespace SpectreReplay.Ui
 
                 { "record.autosave", "自动保存回放" },
                 { "record.recording", "录制中" },
-                { "record.note", "录制时按下按键即可。回放文件保存在 Mods/SpectreReplay/Replays/。" },
-                { "record.howto", "① 在这里设好参数（快捷键：F7 打开本窗口）② 进关卡正常玩，按键会被记下来 ③ 通关后自动存成回放文件 ④ 在「回放」页载入，或在「视频渲染」页出片。" },
+                { "record.note", "录制时按下按键即可。回放文件保存在下方「回放目录」所示的文件夹里。" },
+                { "record.howto", "① 在这里设好参数（快捷键：Ctrl+F10 打开本窗口）② 进关卡正常玩，按键会被记下来 ③ 通关后自动存成回放文件 ④ 在「回放」页载入，或在「视频渲染」页出片。" },
                 { "record.hotkeys", "快捷键" },
                 { "record.savekey", "保存回放" },
                 { "record.cancelsavekey", "取消保存" },
+                { "record.completesave", "只保存完整通关" },
+                { "record.dontsavewhenauto", "全自动局不保存" },
+                { "record.dontsavewhenmiss", "有失误不保存" },
+                { "record.latesave", "出关时再保存" },
+                { "record.failsave", "失败时也保存" },
+                { "record.backup", "额外存一份备份" },
+                { "record.limitkey", "限制按键数" },
+                { "record.manualsave", "F9 手动保存" },
+                { "record.asyncinput", "从异步输入取按键" },
+                { "record.followlang", "界面语言跟随游戏" },
+                { "record.keybd", "键盘音" },
+                { "record.keybd.record", "录制键盘音" },
+                { "record.keybd.volume", "键盘音音量" },
+                { "record.keybd.offset", "时间偏移" },
+                { "record.keybd.note", "键盘音就是回放时按下去的“嗒嗒”声。时间偏移用于校准它整体的早晚：声音偏早就往负调，偏晚就往正调，单位毫秒。" },
+                { "record.stop", "停止录制" },
                 { "ui.presskey", "按下任意键…" },
                 { "ui.nokey", "未绑定" },
                 { "ui.patchfailed", "补丁未挂载（对应功能可能失效）" },
                 { "ui.on", "开" },
                 { "ui.off", "关" },
+                { "ui.hint", "Ctrl+F10 开关界面 · ESC 关闭" },
                 { "playback.current", "当前" },
                 { "playback.idle", "还没载入回放。在下面的列表里点「回放」即可。" },
                 { "playback.idle_err", "上一次的载入失败了：{0}" },
                 { "playback.empty", "还没有回放文件。打一局关卡就会自动保存。" },
+                { "playback.drive", "回放驱动" },
+                { "playback.simulate", "模拟按键" },
+                { "playback.drive.note", "关掉后回放仍然会播放、但不再往游戏里送按键——星球不会动。停止回放时也不会松开已按住的键，所以只在排查「按键冲突」时关它。" },
                 { "playback.stop", "停止回放" },
                 { "playback.note", "回放由录制时的按键序列驱动，可用于复盘与练习。" },
                 { "playback.ready", "已装好：{0}——重新开始这关就会自动播放。" },
@@ -73,10 +97,18 @@ namespace SpectreReplay.Ui
                 { "render.surface.clean", "纯净相机（不含界面）" },
                 { "render.surface.screen", "游戏画面（含界面）" },
                 { "render.codec", "编码器" },
+                { "render.codec.current", "实际编码器" },
                 { "render.quality", "画质" },
                 { "render.format", "输出格式" },
                 { "render.tail", "结尾多录秒数" },
                 { "render.outdir", "输出目录" },
+                { "convert.title", "转换已有视频" },
+                { "convert.hint", "把上面输出目录里的视频转成所选格式。已在目标格式的文件会跳过；mp4/mov 之间通常秒级完成，转 webm 需要重编码（较慢）。" },
+                { "convert.button", "开始转换" },
+                { "convert.running", "正在转换 {0}/{1}（已转 {2}，跳过 {3}，失败 {4}）" },
+                { "convert.done", "转换完成：{0} 个已转，{1} 个跳过，{2} 个失败。" },
+                { "convert.err.no_ffmpeg", "找不到 ffmpeg，无法转换。" },
+                { "convert.err.no_dir", "输出目录不存在或还没有视频。" },
                 { "render.start", "开始渲染" },
                 { "render.cancel", "取消" },
                 { "render.note.live", "边玩边录：进入关卡自动开始，结算后自动完成。不需要再跑一遍关卡。" },
@@ -84,6 +116,14 @@ namespace SpectreReplay.Ui
                 { "render.offline_target", "将渲染这份回放：{0}" },
                 { "render.offline_noreplay", "没有可用的回放文件：先打一局关卡（会自动保存），或到「回放」页确认目录里有 .srp。" },
                 { "about.note", "SpectreReplay 是独立模组，不依赖 Spectre，两者可同时启用。" },
+                { "about.version", "版本" },
+                { "about.path", "保存目录" },
+                { "about.engine", "回放引擎" },
+                { "about.engine.value", "Spectre 回放（录制 / 回放 / 视频渲染）" },
+                { "record.savedir", "回放目录" },
+                { "render.active", "渲染中" },
+                { "render.eta", "预计剩余 {0}" },
+                { "render.progress", "进度" },
 
                 // ── 状态提示 ──────────────────────────────────────
                 // 之前一个都没有：录制开始了没人知道、回放载入了没人知道、
@@ -110,7 +150,9 @@ namespace SpectreReplay.Ui
                 { "render.duplicate_when_late", "跟不上时复制上一帧" },
                 { "playback.files", "回放文件" },
                 { "playback.replay", "回放" },
+                { "playback.loaded", "已载入" },
                 { "render.on", "启用视频渲染" },
+                { "render.enable", "视频渲染" },
                 { "render.status", "状态" },
                 { "render.err.ffmpeg_start", "无法启动 ffmpeg：{0}" },
                 { "render.err.ffmpeg_timeout", "ffmpeg 超时未退出" },
@@ -147,20 +189,40 @@ namespace SpectreReplay.Ui
 
                 { "record.autosave", "Auto-save replays" },
                 { "record.recording", "Recording" },
-                { "record.note", "Keys pressed while playing are captured. Replays are stored in Mods/SpectreReplay/Replays/." },
-                { "record.howto", "1) Set options here (press F7 to open this window) 2) Play a level normally - your keys are recorded 3) Finishing saves a replay file 4) Load it on the Playback tab, or render it on the Video Render tab." },
+                { "record.note", "Keys pressed while playing are captured. Replays are saved in the folder shown under \"Replay folder\" below." },
+                { "record.howto", "1) Set options here (press Ctrl+F10 to open this window) 2) Play a level normally - your keys are recorded 3) Finishing saves a replay file 4) Load it on the Playback tab, or render it on the Video Render tab." },
                 { "record.hotkeys", "Hotkeys" },
                 { "record.savekey", "Save replay" },
                 { "record.cancelsavekey", "Cancel save" },
+                { "record.completesave", "Only save full clears" },
+                { "record.dontsavewhenauto", "Skip auto-played levels" },
+                { "record.dontsavewhenmiss", "Skip runs with a miss" },
+                { "record.latesave", "Save when leaving the level" },
+                { "record.failsave", "Also save on failure" },
+                { "record.backup", "Keep an extra backup copy" },
+                { "record.limitkey", "Limit key count" },
+                { "record.manualsave", "F9 manual save" },
+                { "record.asyncinput", "Read keys from async input" },
+                { "record.followlang", "Panel language follows game" },
+                { "record.keybd", "Keyboard sound" },
+                { "record.keybd.record", "Record keyboard sound" },
+                { "record.keybd.volume", "Keyboard sound volume" },
+                { "record.keybd.offset", "Time offset" },
+                { "record.keybd.note", "Keyboard sound is the tap played back when a key was pressed. Time offset calibrates it as a whole: shift negative if it is early, positive if late, in milliseconds." },
+                { "record.stop", "Stop recording" },
                 { "ui.presskey", "Press any key..." },
                 { "ui.nokey", "Not bound" },
                 { "ui.patchfailed", "Some patches failed to apply (features may be off)" },
                 { "ui.on", "On" },
                 { "ui.off", "Off" },
+                { "ui.hint", "Ctrl+F10 opens this panel · ESC closes" },
                 { "playback.current", "Current" },
                 { "playback.idle", "No replay loaded. Press \"Replay\" on a file below." },
                 { "playback.idle_err", "The last load failed: {0}" },
                 { "playback.empty", "No replays yet. Play a level and one is saved automatically." },
+                { "playback.drive", "Playback driver" },
+                { "playback.simulate", "Simulate key presses" },
+                { "playback.drive.note", "With this off, playback still runs but no keys are sent to the game, so the planet will not move. Held keys are also not released when playback stops, so keep it on unless you are debugging a key conflict." },
                 { "playback.stop", "Stop" },
                 { "playback.note", "Playback is driven by the recorded key stream." },
                 { "playback.ready", "Ready: {0} — restart this level to play it automatically." },
@@ -196,10 +258,18 @@ namespace SpectreReplay.Ui
                 { "render.surface.clean", "Clean camera (no UI)" },
                 { "render.surface.screen", "Game screen (with UI)" },
                 { "render.codec", "Encoder" },
+                { "render.codec.current", "Actual encoder" },
                 { "render.quality", "Quality" },
                 { "render.format", "Output format" },
                 { "render.tail", "Extra tail seconds" },
                 { "render.outdir", "Output folder" },
+                { "convert.title", "Convert existing videos" },
+                { "convert.hint", "Converts videos in the output folder above to the selected format. Files already in the target format are skipped; mp4/mov swaps are usually instant, while webm requires re-encoding (slower)." },
+                { "convert.button", "Start converting" },
+                { "convert.running", "Converting {0}/{1} (done {2}, skipped {3}, failed {4})" },
+                { "convert.done", "Conversion finished: {0} converted, {1} skipped, {2} failed." },
+                { "convert.err.no_ffmpeg", "ffmpeg not found; cannot convert." },
+                { "convert.err.no_dir", "Output folder does not exist or has no videos yet." },
                 { "render.start", "Render" },
                 { "render.cancel", "Cancel" },
                 { "render.progress", "Progress" },
@@ -208,6 +278,13 @@ namespace SpectreReplay.Ui
                 { "render.offline_target", "Will render this replay: {0}" },
                 { "render.offline_noreplay", "No replay file to render. Play a level first (it saves automatically), or check the Playback tab for .srp files." },
                 { "about.note", "SpectreReplay is standalone and does not require Spectre; both can be enabled at once." },
+                { "about.version", "Version" },
+                { "about.path", "Save folder" },
+                { "about.engine", "Replay engine" },
+                { "about.engine.value", "Spectre replay (record / playback / video render)" },
+                { "record.savedir", "Replay folder" },
+                { "render.active", "Rendering" },
+                { "render.eta", "About {0} left" },
 
                 { "status.idle", "Idle: not recording, not rendering." },
                 { "status.all_off", "Recording and rendering are both off: playing a level records nothing." },
@@ -227,7 +304,9 @@ namespace SpectreReplay.Ui
                 { "render.duplicate_when_late", "Duplicate last frame when behind" },
                 { "playback.files", "Replays" },
                 { "playback.replay", "Replay" },
+                { "playback.loaded", "Loaded" },
                 { "render.on", "Enable video render" },
+                { "render.enable", "Video render" },
                 { "render.status", "Status" },
                 { "render.err.ffmpeg_start", "Cannot start ffmpeg: {0}" },
                 { "render.err.ffmpeg_timeout", "ffmpeg timed out and did not exit" },
@@ -253,8 +332,6 @@ namespace SpectreReplay.Ui
                 { "render.state.failed", "Failed" },
                 { "render.state.cancelled", "Cancelled" },
             };
-
-        internal static string Cat(string category) => T("cat." + category);
 
         /// <summary>
         /// 界面用哪种语言。<see cref="RefreshLanguage"/> 会按游戏当前语言改它。
@@ -329,25 +406,6 @@ namespace SpectreReplay.Ui
             {
                 return t;
             }
-        }
-
-        /// <summary>
-        /// 当前语言下界面会显示的全部文案，拼成一段。
-        ///
-        /// 用来一次性检查"字体里有没有这些字"。游戏只收录自己用到的字形，
-        /// 模组写的字只要有一个不在里面，TMP 就画空白——不报错、界面上
-        /// 只是那句话缺了几个字。这种毛病靠看是看不出来的。
-        /// </summary>
-        internal static string AllText()
-        {
-            var src = UseChinese ? Zh : En;
-            var sb = new System.Text.StringBuilder(1024);
-            sb.Append(Brand).Append(' ').Append(Hint);
-            foreach (var kv in src)
-            {
-                sb.Append(kv.Key).Append(' ').Append(kv.Value).Append(' ');
-            }
-            return sb.ToString();
         }
     }
 }

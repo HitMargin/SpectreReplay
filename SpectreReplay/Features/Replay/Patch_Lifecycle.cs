@@ -218,9 +218,16 @@ internal class Patch_StartRewind
             }
             else Debug.Log("Debug模式跳过校验");
 
+            // 默认值 (HitMarginLimit)0 = None，是"最宽松"的保守侧。
+            // **必须 Enum.IsDefined 拒掉数字串**：`Enum.TryParse("99")` 会成功并
+            // 产出 (HitMarginLimit)99，而这个值会被**直接赋给 GCS.hitMarginLimit**——
+            // scrFloor.LightUp 与判定路径都会读它。越界值不会抛异常，只会让
+            // 判定窗口按一个不存在的档位走，且回放照常开始。回放文件是玩家可编辑的
+            // 文本，这一项比 ReplayAnalyzer 里那处更敏感（那里只影响显示宽度）。
             StoredHitMarginLimit = (HitMarginLimit)0;
             if (data.strings.ContainsKey(HitMarginLimitKey)
-                && Enum.TryParse<HitMarginLimit>(data.strings[HitMarginLimitKey], out var result))
+                && Enum.TryParse<HitMarginLimit>(data.strings[HitMarginLimitKey], out var result)
+                && Enum.IsDefined(typeof(HitMarginLimit), result))
                 StoredHitMarginLimit = result;
             GCS.hitMarginLimit = StoredHitMarginLimit;
             CachedNoFail = scrController.instance.noFail;

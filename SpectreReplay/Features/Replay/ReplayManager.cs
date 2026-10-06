@@ -52,6 +52,28 @@ internal static class ReplayManager
             Directory.CreateDirectory(dir);
     }
 
+    /// <summary>
+    /// `LoadReplayAuto` 能读的全部扩展名（含不解密的那些变体）。
+    ///
+    /// **为什么需要这个属性**：回放列表原先只 glob `ReplayConstants.Extension`
+    /// （.sprp，也就是默认的 New 格式）。可本类是**三种格式全能读**的——
+    /// `.sprp` 走 <see cref="ReplayDecoder"/>、`.crpl2` 走
+    /// <see cref="ReplayCrp2Codec.OptimizedBinaryToCompact"/>、`.crpl` 走
+    /// JSON 反序列化（<see cref="LoadReplay"/>）。只列一种的后果是另外两种
+    /// 文件在界面上完全不存在：玩家从 Spectre 拷来的、或改用 Crp2 格式录的
+    /// 回放都点不了。
+    ///
+    /// 扩展名知识集中在这一处（与 SaveReplay* 各方法的 ext 同行维护），
+    /// 别处不写死字面量——格式一改，写死的那边会静默失效。
+    /// </summary>
+    internal static readonly string[] ReadableExtensions =
+    {
+        ".crpl2", ".pcrpl2",   // Crp2（优化二进制 + CRP2 magic）
+        ".crpl",  ".pcrpl",    // Json（旧版）
+        ReplayConstants.Extension,           // .sprp  New（默认）
+        ReplayConstants.ExtensionNoEncrypt,  // .psprp New 不解密
+    };
+
     internal static bool SaveReplay(LegacyReplayData replayData, string filePath, bool no_encryption = false)
         => SaveReplay(replayData, filePath, ReplaySaveFormat.New, no_encryption);
 
@@ -188,7 +210,7 @@ internal static class ReplayManager
         replayData = new LegacyReplayData();
         if (!File.Exists(filePath))
         {
-            Debug.LogError("[Spectre] 回放文件不存在: \"" + filePath + "\"");
+            Debug.LogError("[SpectreReplay] 回放文件不存在: \"" + filePath + "\"");
             return false;
         }
         byte[] raw = File.ReadAllBytes(filePath);
@@ -200,7 +222,7 @@ internal static class ReplayManager
                 // 用户主动点开的文件解不开：最可能是选错文件、文件损坏，
                 // 或该回放是用另一把密钥录的。原来只留一行英文日志，
                 // 用户既看不懂也不知道下一步该干什么。
-                Debug.LogError("[Spectre] 回放解密失败: \"" + filePath + "\" —— "
+                Debug.LogError("[SpectreReplay] 回放解密失败: \"" + filePath + "\" —— "
                     + "文件可能已损坏、不是回放文件，或是用不同密钥录制的（密钥由本程序集内的 SHA256(\"qwerty\") 派生，不随版本变化）");
                 return false;
             }
@@ -222,7 +244,7 @@ internal static class ReplayManager
                     replayData = direct;
                 else
                 {
-                    Debug.LogError("[Spectre] 回放文件结构无法识别: \"" + filePath
+                    Debug.LogError("[SpectreReplay] 回放文件结构无法识别: \"" + filePath
                         + "\" —— 既不是新版（compact/optimized）也不是旧版 JSON 回放格式");
                     return false;
                 }

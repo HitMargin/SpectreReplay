@@ -14,7 +14,8 @@
 param(
     [switch]$SkipBuild,
     [switch]$SkipPreview,
-    [switch]$SkipDeploy
+    [switch]$SkipDeploy,
+    [switch]$SkipAudits
 )
 
 $ErrorActionPreference = 'Stop'
@@ -26,6 +27,67 @@ function Step($name, [scriptblock]$body) {
     Write-Host "── $name " -ForegroundColor Cyan -NoNewline
     Write-Host ('─' * [Math]::Max(0, 60 - $name.Length))
     & $body
+}
+
+# 只读审计脚本（离线、不起游戏、不改任何文件）。
+# **每个都必须登记在这里**：2026-10-06 抓到一次真孤儿——四个补丁审计脚本
+# （harmony-shape / instance-injection / patch-sig / result-injection）写完后
+# 只在当轮手工跑过，从没进过闸门。不登记 = 一次都不自动跑 = 等于没写，
+# 而闸门只会更绿。LevelProbeCheck 也栽过同样的跟头。
+#
+# **输出只留摘要。** deadcode-audit 是"报告型"脚本，一次吐 100 行；
+# 全量贴进闸门会把真正的 ✗ 埋掉（第一次接进来就这样，绿色的部署摘要被
+# 一百行灰字推到屏幕外）。判据：正常时只印一行摘要，出问题时才贴详情——
+# 而"出问题"由退出码判定，不靠人眼扫输出。
+function RunAudits {
+    $audits = @(
+        @{ Name = 'harmony-shape-audit.ps1';      Label = 'Harmony 补丁签名形状（32 处）' }
+        @{ Name = 'instance-injection-audit.ps1'; Label = '__instance 只对实例方法（16 处）' }
+        @{ Name = 'patch-sig-audit.ps1';          Label = '普通形参与目标同名同型（7 处）' }
+        @{ Name = 'result-injection-audit.ps1';   Label = '__result 目标均有返回类型（3 处）' }
+        @{ Name = 'deadcode-audit.ps1';           Label = '零调用点静态方法（报告型）' }
+        @{ Name = 'settings-ui-audit.ps1';        Label = '设置项是否有界面入口（报告型）' }
+        # port-diff-audit **是真门禁，不是报告型**：它拿一份「有意偏离上游登记表」
+        # 逐条比对，挂不上的差异直接 exit 1。加了它，"抄错上游"从此会被抓到，
+        # 而"我们有意改的"必须先在登记表里加一行（含原因）——这正是 round 59/60
+        # 立的约定。它也曾一度是孤儿工具（写完只在当轮手工跑过），见 MUT 之外的教训：
+        # 任何新脚本不加进这个表就等于没写。
+        @{ Name = 'port-diff-audit.ps1';           Label = '移植保真度（每处差异须挂修改记录）' }
+    )
+    foreach ($a in $audits) {
+        $p = Join-Path $root "tools\$($a.Name)"
+        if (-not (Test-Path $p)) {
+            Write-Host "  ✗ 审计脚本不存在：$($a.Name)（注册表与磁盘不一致）" -ForegroundColor Red
+            $script:fail++
+            continue
+        }
+        $tmp = [IO.Path]::GetTempFileName()
+        try {
+            & powershell -NoProfile -ExecutionPolicy Bypass -File $p > $tmp 2>&1
+            $code = $LASTEXITCODE
+            $out = @(Get-Content $tmp -ErrorAction SilentlyContinue)
+            if ($code -eq 0) {
+                # 取脚本自己印的统计行，凑成一行摘要
+                $summary = (($out | Where-Object { $_ -match '全部通过|共 \d+ 个|不合规' } | Select-Object -First 2) -join '；')
+                if ([string]::IsNullOrWhiteSpace($summary)) { $summary = '退出码 0' }
+                Write-Host ("  ✓ {0}  →  {1}" -f $a.Label, $summary.Trim()) -ForegroundColor DarkGray
+            } else {
+                Write-Host "  ✗ $($a.Label)  →  退出码 $code" -ForegroundColor Red
+                # 报告型审计（deadcode / settings-ui）失败时**只贴统计行**，不贴全表：
+                # 它们动辄上百行，全贴会把真正的 ✗ 埋掉，也不会有人读。
+                # 统计行认 "=== " 与几个分类关键字；匹配不到才退回复印末 12 行。
+                $detail = @($out | Where-Object { $_ -match '^=== |wired|UI 壳|无界面但被消费|零读取|不合规|全部通过' })
+                if ($detail.Count -eq 0) { $detail = @($out | Select-Object -Last 12) }
+                $detail | Select-Object -Last 12 | ForEach-Object { Write-Host ('      ' + $_) }
+                $script:fail++
+            }
+        } catch {
+            Write-Host "  ✗ $($a.Label)  →  抛异常：$($_.Exception.Message)" -ForegroundColor Red
+            $script:fail++
+        } finally {
+            Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 Step '主项目构建' {
@@ -77,6 +139,10 @@ if (-not $SkipPreview) {
         Write-Host ('  断言 ' + ($good.Count + $bad.Count) + ' 条，失败 ' + $bad.Count)
         if ($bad.Count -gt 0) { $script:fail++ }
     }
+}
+
+if (-not $SkipAudits) {
+    Step '只读审计（Harmony 形参 / 死代码）' { RunAudits }
 }
 
 Step '部署一致性' {

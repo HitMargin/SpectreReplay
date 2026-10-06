@@ -4,11 +4,6 @@ using System.IO;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
-using System.Collections.Generic;
-using System.IO;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using UnityEngine;
 
 namespace SpectreReplay;
 
@@ -161,6 +156,7 @@ public static class ConfigManager
         public int render_output_format { get; set; }
         public int render_capture_mode { get; set; }
         public float render_tail { get; set; }
+        public bool render_on { get; set; }
         public float judgebar_anim_duration { get; set; }
         public float judgebar_sensitivity { get; set; }
         public float judgebar_life { get; set; }
@@ -224,7 +220,7 @@ public static class ConfigManager
         // 的结果（不会为 null），但 SaveSettings 是对外 API，这里显式兜住。
         if (string.IsNullOrEmpty(filePath))
         {
-            Debug.LogWarning("[Spectre] 配置保存被跳过：未指定配置路径");
+            Debug.LogWarning("[SpectreReplay] 配置保存被跳过：未指定配置路径");
             return false;
         }
         configPath = filePath;
@@ -337,6 +333,7 @@ public static class ConfigManager
                 render_output_format = Settings.RenderOutputFormat,
                 render_capture_mode = Settings.RenderCaptureMode,
                 render_tail = Settings.RenderTailSeconds,
+                render_on = Settings.RenderOn,
                 judgebar_anim_duration = Settings.JudgeBarAnimationDuration,
                 judgebar_sensitivity = Settings.JudgeBarSensitivity,
                 judgebar_life = Settings.JudgeBarTickLife,
@@ -392,7 +389,7 @@ public static class ConfigManager
         }
         catch (Exception ex)
         {
-            Debug.Log("[Spectre] 档位表取值失败，本次配置将不带 CustomJudge 段: "
+            Debug.Log("[SpectreReplay] 档位表取值失败，本次配置将不带 CustomJudge 段: "
                 + ex.GetType().Name + " " + ex.Message);
             customJudge = null;
         }
@@ -410,7 +407,7 @@ public static class ConfigManager
         }
         catch (Exception ex)
         {
-            Debug.Log("[Spectre] 配置序列化失败（本次设置改动未落盘）: " + ex.GetType().Name + " " + ex.Message);
+            Debug.Log("[SpectreReplay] 配置序列化失败（本次设置改动未落盘）: " + ex.GetType().Name + " " + ex.Message);
             return false;
         }
         string directoryName = Path.GetDirectoryName(filePath);
@@ -430,11 +427,129 @@ public static class ConfigManager
         catch (Exception ex)
         {
             // 只记日志：抛出去对用户没有帮助（UI 已经关掉了），反而会打断清理链
-            Debug.Log("[Spectre] 配置保存失败（本次设置改动未落盘，重启后会丢失）: "
+            Debug.Log("[SpectreReplay] 配置保存失败（本次设置改动未落盘，重启后会丢失）: "
                 + ex.GetType().Name + " " + ex.Message);
             return false;
         }
         return true;
+    }
+
+    /// <summary>
+    /// 把自研引擎时代的扁平 Configs.json 升级成现在的分区结构。
+    ///
+    /// **为什么需要它。** 旧结构是顶层 PascalCase（RecordingOn / Surface / Width /
+    /// Fps / Encoder / DuplicateWhenLate…），新结构是 Sets/Ints/Strings 分区。
+    /// 部署脚本从不覆盖 Configs.json，所以升级用户磁盘上一直躺着旧文件。
+    /// 读取侧全是 `?? Settings.X`，缺键就落默认值——不崩溃，但**玩家原来的
+    /// 选择被静默改回默认**（旧文件 Surface=1 没人读，实际变成 RenderCaptureMode=0）。
+    ///
+    /// 判据：有旧键且没有新分区。两个结构互斥，不会误判新版文件。
+    /// 迁移后立刻落盘，否则这次会话改的东西下次启动又按旧文件读一遍。
+    /// </summary>
+    private static void MigrateLegacyConfig(JObject json)
+    {
+        // 新版分区任一存在即视为新文件，不做任何事
+        if (json["Sets"] != null || json["Ints"] != null || json["Strings"] != null)
+            return;
+        // 旧版识别键：Surface / Fps / Encoder 三者是自研引擎独有的命名
+        bool legacy = json["Surface"] != null || json["Fps"] != null
+                   || json["Encoder"] != null || json["RecordingOn"] != null;
+        if (!legacy)
+            return;
+
+        Debug.Log("[SpectreReplay] 检测到旧版（自研引擎）配置文件，正在迁移到新结构");
+
+        var sets = new JObject();
+        var ints = new JObject();
+        var strs = new JObject();
+
+        // ── 布尔开关 ──
+        // ReplayOn ← RecordingOn（同一个总开关，旧名叫 RecordingOn）
+        MigrateBool(json, sets, "RecordingOn", "ReplayOn", Settings.ReplayOn);
+        MigrateBool(json, sets, "RenderOn", "RenderOn", Settings.RenderOn);
+        MigrateBool(json, sets, "AsyncInput", "GetDataFromAsyncInput", Settings.GetDataFromAsyncInput);
+        // AutoSave 新旧同名，只是从顶层搬进 Sets 分区
+        MigrateBool(json, sets, "AutoSave", "AutoSave", Settings.AutoSave);
+        // DuplicateWhenLate = 晚了也照录（自研引擎的容错），Spectre 侧无对应字段，
+        // 旧语义"允许重复按键"在本版恒开，不需要映射——丢弃即可。
+
+        // ── 整数 / 枚举 ──
+        MigrateInt(json, ints, "SaveKey", "save_button", Settings.SaveButton);
+        MigrateInt(json, ints, "CancelSaveKey", "cancel_save_button", Settings.CancelSaveButton);
+        MigrateInt(json, ints, "Surface", "render_capture_mode", Settings.RenderCaptureMode);
+        MigrateInt(json, ints, "Width", "render_width", Settings.RenderWidth);
+        MigrateInt(json, ints, "Height", "render_height", Settings.RenderHeight);
+        MigrateInt(json, ints, "Fps", "render_fps", Settings.RenderFps);
+        MigrateInt(json, ints, "Encoder", "render_encoder", Settings.RenderEncoderMode);
+        MigrateInt(json, ints, "Quality", "render_quality", Settings.RenderQualityMode);
+        MigrateInt(json, ints, "Container", "render_output_format", Settings.RenderOutputFormat);
+        // Mode 是自研引擎的"实时/离线"模式选择；新版只有离线一条路，无需映射。
+
+        // ── 浮点 ──
+        MigrateFloat(json, ints, "TailSeconds", "render_tail", Settings.RenderTailSeconds);
+
+        // ── 字符串 ──
+        // OutputDir：旧键名 OutputDir，新键名 render_output_dir（新旧不同名，是唯一
+        // 一个字符串项）。旧文件里它是顶层字符串，不是分区内的值。
+        var outDir = json["OutputDir"]?.Type == JTokenType.String
+            ? json["OutputDir"].Value<string>() : null;
+        if (!string.IsNullOrEmpty(outDir))
+            strs["render_output_dir"] = outDir;
+
+        json["Sets"] = sets;
+        json["Ints"] = ints;
+        json["Strings"] = strs;
+        // 旧键留着不删：它在新结构里不被读取，删掉反而让"回退到旧版"不可能。
+        // 新结构的 ?? 语义保证旧键永远不影响新字段。
+
+        try
+        {
+            File.WriteAllText(configPath, json.ToString(Formatting.Indented));
+            Debug.Log("[SpectreReplay] 旧配置已迁移并落盘");
+        }
+        catch (Exception ex)
+        {
+            // 迁移失败不阻断启动：内存里已改好，本次会话照新值跑；
+            // 下次启动会再迁移一次（幂等）。
+            Debug.LogWarning("[SpectreReplay] 旧配置迁移后落盘失败（本次会话仍按新值运行）: " + ex.Message);
+        }
+    }
+
+    private static void MigrateBool(JObject json, JObject target, string oldKey, string newKey, bool current)
+    {
+        var t = json[oldKey];
+        if (t != null && t.Type == JTokenType.Boolean)
+            target[newKey] = t.Value<bool>();
+    }
+
+    private static void MigrateInt(JObject json, JObject target, string oldKey, string newKey, int current)
+    {
+        var t = json[oldKey];
+        if (t == null) return;
+        try
+        {
+            if (t.Type == JTokenType.Integer || t.Type == JTokenType.Float)
+                target[newKey] = t.Value<int>();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("[SpectreReplay] 旧配置 " + oldKey + " 值无法转换，已跳过: " + ex.Message);
+        }
+    }
+
+    private static void MigrateFloat(JObject json, JObject target, string oldKey, string newKey, float current)
+    {
+        var t = json[oldKey];
+        if (t == null) return;
+        try
+        {
+            if (t.Type == JTokenType.Integer || t.Type == JTokenType.Float)
+                target[newKey] = t.Value<float>();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("[SpectreReplay] 旧配置 " + oldKey + " 值无法转换，已跳过: " + ex.Message);
+        }
     }
 
     public static void LoadConfigs(string filePath)
@@ -443,18 +558,32 @@ public static class ConfigManager
         // （之后 SaveSettings 会读到它）。File.Exists(null) 本身不抛，但状态不该被写坏。
         if (string.IsNullOrEmpty(filePath))
         {
-            Debug.LogWarning("[Spectre] 配置载入被跳过：未指定配置路径");
+            Debug.LogWarning("[SpectreReplay] 配置载入被跳过：未指定配置路径");
             return;
         }
         configPath = filePath;
         if (!File.Exists(filePath))
         {
-            Debug.Log("[Spectre] 配置文件不存在（用默认设置启动）: " + filePath);
+            Debug.Log("[SpectreReplay] 配置文件不存在（用默认设置启动）: " + filePath);
             return;
         }
         try
         {
             var json = JObject.Parse(File.ReadAllText(filePath));
+            // ── 旧版配置迁移（自研引擎时代 → Spectre 整体移植后）─────────────
+            //
+            // 旧 Configs.json 是**扁平**结构（顶层 PascalCase：RecordingOn /
+            // Surface / Width / Fps / Encoder / DuplicateWhenLate…），新结构是
+            // Sets/Ints/Strings 分区。部署脚本从不覆盖 Configs.json，
+            // 所以升级用户的磁盘上躺着的一直是旧文件。
+            //
+            // 不迁移的后果不是崩溃（读取侧全是 `?? Settings.X`，读到缺键就落默认值），
+            // 而是**玩家原来的选择被静默改回默认**：比如旧文件里 Surface=1（整屏取帧）
+            // 没人读，实际变成 RenderCaptureMode=0（纯净相机），玩家只觉得
+            // "我设过的东西怎么自己变了"，而日志里一行都没有。
+            //
+            // 判据用"有旧键且没有新分区"——两个结构互斥，不会误判。
+            MigrateLegacyConfig(json);
             // 分区隔离：Configs.json 是用户会手工编辑的文件，某个值写成别的类型
             // （把 true 写成 "是"、把数字写成带引号的字符串）会让该分区的 Value<T> 抛
             // JsonReaderException。若整个 LoadConfigs 共用一个 try，这一个坏值会连带
@@ -559,7 +688,7 @@ public static class ConfigManager
             }
             catch (Exception ex)
             {
-                Debug.Log("[Spectre] 配置分区 \"Sets\" 载入失败（其余分区不受影响）: " + ex.Message);
+                Debug.Log("[SpectreReplay] 配置分区 \"Sets\" 载入失败（其余分区不受影响）: " + ex.Message);
             }
             try
             {
@@ -588,6 +717,7 @@ public static class ConfigManager
                 Settings.RenderOutputFormat = Mathf.Clamp(ints.Value<int?>("render_output_format") ?? Settings.RenderOutputFormat, 0, 3);
                 Settings.RenderCaptureMode = Mathf.Clamp(ints.Value<int?>("render_capture_mode") ?? Settings.RenderCaptureMode, 0, 1);
                 Settings.RenderTailSeconds = Mathf.Clamp(ints.Value<float?>("render_tail") ?? Settings.RenderTailSeconds, 0f, 15f);
+                Settings.RenderOn = ints.Value<bool?>("render_on") ?? Settings.RenderOn;
                 Settings.JudgeBarAnimationDuration = Mathf.Clamp(ints.Value<float?>("judgebar_anim_duration") ?? Settings.JudgeBarAnimationDuration, 0f, 1f);
                 Settings.JudgeBarSensitivity = Mathf.Clamp(ints.Value<float?>("judgebar_sensitivity") ?? Settings.JudgeBarSensitivity, 0f, 1f);
                 Settings.JudgeBarTickLife = Mathf.Clamp(ints.Value<float?>("judgebar_life") ?? Settings.JudgeBarTickLife, 0f, 10f);
@@ -602,7 +732,7 @@ public static class ConfigManager
             }
             catch (Exception ex)
             {
-                Debug.Log("[Spectre] 配置分区 \"Ints\" 载入失败（其余分区不受影响）: " + ex.Message);
+                Debug.Log("[SpectreReplay] 配置分区 \"Ints\" 载入失败（其余分区不受影响）: " + ex.Message);
             }
             try
             {
@@ -625,7 +755,7 @@ public static class ConfigManager
             }
             catch (Exception ex)
             {
-                Debug.Log("[Spectre] 配置分区 \"Strings\" 载入失败（其余分区不受影响）: " + ex.Message);
+                Debug.Log("[SpectreReplay] 配置分区 \"Strings\" 载入失败（其余分区不受影响）: " + ex.Message);
             }
             try
             {
@@ -645,7 +775,7 @@ public static class ConfigManager
             }
             catch (Exception ex)
             {
-                Debug.Log("[Spectre] 配置分区 \"StringLists\" 载入失败（其余分区不受影响）: " + ex.Message);
+                Debug.Log("[SpectreReplay] 配置分区 \"StringLists\" 载入失败（其余分区不受影响）: " + ex.Message);
             }
             try
             {
@@ -721,7 +851,7 @@ public static class ConfigManager
             }
             catch (Exception ex)
             {
-                Debug.Log("[Spectre] 配置分区 \"Colors\" 载入失败（其余分区不受影响）: " + ex.Message);
+                Debug.Log("[SpectreReplay] 配置分区 \"Colors\" 载入失败（其余分区不受影响）: " + ex.Message);
             }
             // CustomJudge 分区自身已带 try（内部结构不同），无需再包一层
             var cj = json["CustomJudge"];
@@ -735,19 +865,19 @@ public static class ConfigManager
                 }
                 catch (System.Exception ex)
                 {
-                    Debug.Log("[Spectre] 自定义判定配置解析失败（档位表回退默认值）: " + ex.Message);
+                    Debug.Log("[SpectreReplay] 自定义判定配置解析失败（档位表回退默认值）: " + ex.Message);
                 }
             }
-            Debug.Log("[Spectre] 配置载入成功");
+            Debug.Log("[SpectreReplay] 配置载入成功");
         }
         catch (JsonException ex)
         {
-            Debug.Log("[Spectre] 配置文件 JSON 解析失败（已回退默认设置）: " + ex.Message);
+            Debug.Log("[SpectreReplay] 配置文件 JSON 解析失败（已回退默认设置）: " + ex.Message);
         }
         catch (IOException ex)
         {
             // 文件被占用/读取失败不该炸穿 mod 加载，落默认值即可
-            Debug.Log("[Spectre] 配置文件读取失败（已回退默认设置）: " + ex.Message);
+            Debug.Log("[SpectreReplay] 配置文件读取失败（已回退默认设置）: " + ex.Message);
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -755,13 +885,13 @@ public static class ConfigManager
             // （权限/ACL 受限的配置文件、从别的机器拷来的只读文件都会走这里）。
             // Main.Load 没有全局 try/catch，异常穿透就等于整个 mod 加载失败 ——
             // 比"用默认设置启动"严重得多，故必须单独兜住。
-            Debug.Log("[Spectre] 配置文件访问被拒（权限不足）: " + ex.Message);
+            Debug.Log("[SpectreReplay] 配置文件访问被拒（权限不足）: " + ex.Message);
         }
         catch (System.Exception ex)
         {
             // 兜底：路径非法（ArgumentException）、反序列化器内部的其他异常等。
             // 配置文件损坏/不可读时降级为默认设置，绝不让 mod 起不来。
-            Debug.Log("[Spectre] 配置载入失败（已回退默认设置）: " + ex);
+            Debug.Log("[SpectreReplay] 配置载入失败（已回退默认设置）: " + ex);
         }
     }
 

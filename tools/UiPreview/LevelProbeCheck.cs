@@ -1,24 +1,17 @@
 // 「在不在关卡里」的判据检查。
 //
-// 这个判据错了三次，每次错法不同，但都在同一处：
+// **这条检查的存在理由已经变了**（2026-10-06 复核）。
+// 原先它盯的是自研引擎的 LevelWatcher/LiveSession 里那个布尔探针；整体移植
+// Spectre 之后，那套判据连同类代码一起进了 `_legacy_srp` 停用——现在主项目里
+// **根本没有 gameworld 探针**，Patch_Lifecycle 直接拿场景名判断
+// （Patch_Lifecycle.cs:203/:268/:317）。也就是说这条检查的"被测对象"已经没了。
 //
-//   第一版  gameworld && song != null && playerOne != null
-//           → playerOne 是 players[0] 索引属性，空表时抛异常；
-//             单帧抖动就被当成掉出关卡 → 录 3 秒就没了
-//   第二版  加上 currentState != States.None
-//           → currentState 由 scrController.Update(:1675) 赋值，Start 状态
-//             要等玩家按下开始键才切过去，倒计时期间恒为 None
-//             → **整局都不录，功能直接废掉**
-//   第三版  回到 gameworld && song != null
-//           → gameworld 只在**玩家首次命中之后**才置 true
-//             （scrController.cs:2872，在 UpdateFreeroam 末尾）
-//             → 同样整局都不录
-//
-// 三次的共同点：都在找一个"表示在关卡里的布尔量"，而这些布尔量
-// 描述的其实是**玩到哪一步**。它们全都晚于"进关"这个时刻。
-//
-// 唯一稳定回答这个问题的是**场景名**：Spectre 也是这么判的
-//（Patch_Lifecycle.cs:80-99 直接读 SceneManager.GetActiveScene().name）。
+// 它仍然值得跑，原因有两个：
+//   ① 那三次错判据的历史值得留档——它们全都错在"找一个表示在关卡里的布尔量"，
+//      而那些量描述的是**玩到哪一步**，全都晚于"进关"这个时刻。
+//      下一个加"需不需要在关卡里"判断的人，会从同一口井里打水。
+//   ② 它复刻的三个错判据正好是**反向断言**的教材：断言"旧做法错"，
+//      而不是"新做法对"。哪天有人把判据改回去，立刻红。
 //
 // 下面把三种错判据的真实时序摊开，逐个断言它们在"玩家刚开始玩"时
 // 会给出错误答案——这样这条检查守的是**判据的选择**，不是某段代码。
@@ -100,7 +93,35 @@ namespace UiPreview
             fail += OldMissesLevel("第三版 gameworld+song",
                 V3_GameWorldAndSong);
             fail += NowIgnoresMenuScenes();
+            fail += PortedCodeUsesSceneName();
             return fail;
+        }
+
+        /// <summary>
+        /// 移植后的主项目必须继续用**场景名**判断，不许退回布尔量探针。
+        ///
+        /// 判据落在源码形状上：Patch_Lifecycle 里要出现场景名比较，
+        /// 且不许出现 `gameworld` 当"在不在关卡里"的依据。
+        /// （ReplayPlayer 里那两处 gameworld 读的是别的语义——误差条与相机，
+        ///  不是关卡探测，与这条判据无关，所以只查 Patch_Lifecycle。）
+        /// </summary>
+        private static int PortedCodeUsesSceneName()
+        {
+            string path = System.IO.Path.Combine(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"),
+                "Features", "Replay", "Patch_Lifecycle.cs");
+            if (!System.IO.File.Exists(path))
+            {
+                Console.WriteLine("    ✗ ④ 找不到 Patch_Lifecycle.cs");
+                return 1;
+            }
+            string code = System.IO.File.ReadAllText(path);
+            bool usesScene = code.Contains("GetActiveScene().name", StringComparison.Ordinal);
+            bool usesGameworld = code.Contains("gameworld", StringComparison.Ordinal);
+            bool ok = usesScene && !usesGameworld;
+            Console.WriteLine($"    {(ok ? "✓" : "✗")} ④ 移植后的判据仍是场景名"
+                + (usesGameworld ? "  ← 出现了 gameworld，退回旧错了三次的那条路" : ""));
+            return ok ? 0 : 1;
         }
 
         private static int NowDetectsLevel(string scene, string label)

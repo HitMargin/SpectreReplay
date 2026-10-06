@@ -39,7 +39,7 @@ internal class Patch_HoldKeysCrashGuard
     {
         if (__exception == null || !is_playing || !(__exception is ArgumentOutOfRangeException))
             return __exception;
-        Debug.Log("[Spectre] replay hit the game's UpdateHoldKeys index bug (midspin keyTimes), swallowed");
+        Debug.Log("[SpectreReplay] replay hit the game's UpdateHoldKeys index bug (midspin keyTimes), swallowed");
         return null;
     }
 }
@@ -56,6 +56,12 @@ internal class Patch_PlayerControlUpdate
         if (__instance == (UnityEngine.Object)null) return;
 
         // Start keyboard sound recording
+        // 门控判据必须是"还没开始录"，**不能**用 "还没记下起始时间戳"：
+        // 起录那一帧 conductor 可能正好为空（切场景/关卡加载中），此时若以
+        // 缺 tick 为条件就会每帧重试 StartRecording——而 IsRecording 已经是 true，
+        // 于是每一帧都在调 Start，麦克风被反复重启，录出来是一堆碎片。
+        // 现在的形状：IsRecording 兜底只允许起录一次；起录后若那一帧拿不到
+        // conductor，**记 0 而不是 return**，下面每帧都会把缺 0 的 tick 补上。
         if (is_recording && Settings.KeybdSoundRecordActive
             && !AudioRecorder.Instance.IsRecording
             && !data.doubles.ContainsKey(KeybdSoundStartTick))
@@ -71,18 +77,27 @@ internal class Patch_PlayerControlUpdate
             catch (Exception ex)
             {
                 // 清不掉不阻断录音：旧文件顶多是音频不对，录了总比不录好
-                Debug.LogWarning("[Spectre] 清理陈旧 tmp.wav 失败（本次录音可能挂上旧音频）: " + ex.Message);
+                Debug.LogWarning("[SpectreReplay] 清理陈旧 tmp.wav 失败（本次录音可能挂上旧音频）: " + ex.Message);
             }
             AudioRecorder.Instance.StartRecording(filePath, Settings.MicrophoneDeviceName);
-            // conductor 为空/已销毁时（场景切换的中间态）不能记起始时间戳：整个方法在
-            // 倒计时/检查点阶段每帧执行，缺这一句就是每帧一次 NullReferenceException。
-            // 记不上的后果只是这次录音没有起始时间戳（对齐时退化为整段），远好于刷屏异常。
-            scrConductor startConductor = ADOBase.conductor;
-            if (startConductor == null)
-            {
-                return;
-            }
-            data.doubles[KeybdSoundStartTick] = startConductor.songposition_minusi;
+            // 起录帧拿不到导体是常态（倒计时/检查点阶段切场景）。**不能在这里 return**：
+            // 那会同时跳过本帧的 Record_kbdstate，更糟的是 tick 永远缺着——回放侧
+            // Patch_Playback:187 判到没有 KeybdSoundStartTick 就静默 return，
+            // 键盘声整段消失且没有任何提示（HasKeybdSound 仍为 true，没有别处会报）。
+            // 记 0 占位：它让下面"缺 tick 就补"的分支接管，导体就绪后立刻补真值。
+            data.doubles[KeybdSoundStartTick] = 0.0;
+        }
+
+        // 补起始时间戳：起录帧没有导体时留下的是 0，这里每帧试着换成真值。
+        // 只补一次（非 0 即视为已记），不覆盖已记下的真值。
+        if (is_recording && Settings.KeybdSoundRecordActive
+            && AudioRecorder.Instance.IsRecording
+            && data.doubles.TryGetValue(KeybdSoundStartTick, out double pendingTick)
+            && pendingTick == 0.0)
+        {
+            scrConductor tickConductor = ADOBase.conductor;
+            if (tickConductor != null)
+                data.doubles[KeybdSoundStartTick] = tickConductor.songposition_minusi;
         }
 
         if (is_recording && Application.isFocused) Record_kbdstate();
@@ -186,6 +201,15 @@ internal class Patch_PlayerControlUpdate
 
         if (!data.doubles.TryGetValue(KeybdSoundStartTick, out double keybdStartTick))
             return;
+        // tick 为 0 = 起录帧没拿到导体、之后也一直没补上（极端情况：整个倒计时
+        // 阶段导体都未就绪）。此时拿 0 当基准会把 wav 从头对齐到歌曲中段，
+        // 键盘声整体前移一大段且听起来"像在乱响"——不如整段不播。
+        // HasKeybdSound 一并清掉，避免每帧白算。
+        if (keybdStartTick <= 0.0)
+        {
+            HasKeybdSound = false;
+            return;
+        }
 
         // conductor / song 为空时直接返回：本补丁挂在 PlayerControl_Update 这类每帧
         // 调用的 Postfix 上，缺这一句就是每帧一次异常（同上面对 loaded_clip 的处理）。

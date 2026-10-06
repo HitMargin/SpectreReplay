@@ -62,6 +62,13 @@ internal static class VideoRender
     {
         if (Job != null)
             return;
+        // 总开关。设置页那行「启用视频渲染」就是它。原先没有这个字段、
+        // 那一行绑的是 ReplayOn：关掉渲染会连录制一起关掉，而且关不掉渲染本身。
+        if (!Settings.RenderOn)
+        {
+            TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.disabled"), 3f, NotifType.Warning);
+            return;
+        }
         if (SpectreState.data == null || SpectreState.data.HitContext_list.Count == 0)
         {
             TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.need_replay"), 3f, NotifType.Warning);

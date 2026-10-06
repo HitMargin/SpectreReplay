@@ -296,6 +296,15 @@ public static class Settings
     public static bool[][] PlanetColorPartsOn = InitPlanetPartsOn();
 
     // ── ReplayVideo settings ───────────────────────────
+    /// <summary>
+    /// 视频渲染总开关。
+    ///
+    /// **原先没有这个字段，设置页那行「启用视频渲染」绑的是 ReplayOn。**
+    /// 后果有两层：一是关掉"视频渲染"会把**录制/回放**一起关掉（同一个字段
+    /// 在录制页绑的是同一样东西），二是这一页根本没有能单独关渲染的开关——
+    /// 玩家以为关的是渲染，实际关掉的是整条回放链。
+    /// </summary>
+    public static bool RenderOn = true;
     public static int RenderCaptureMode = 0;  // 0 纯净相机 1 游戏画面(含UI)
     public static int RenderWidth = 1920;
     public static int RenderHeight = 1080;
