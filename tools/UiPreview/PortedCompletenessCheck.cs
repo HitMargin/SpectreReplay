@@ -56,14 +56,44 @@ namespace UiPreview
             fail += Check(projectRoot, "⑥ 批量转格式要有入口（VideoConverter 不能再零调用点）",
                 new[] { "Pages\\Pages.cs" },
                 new[] { "VideoConverter.Start" });
-            // ⑦ 转换的目标容器必须与 render.format 同源。
-            //    两处各选一个容器的话，"选 webm 却转出 mp4" 必然发生——
-            //    而那种错法界面完全看不出（文件确实生成了，只是格式不对）。
-            //    **判据必须限定在 VideoConverter.Start 调用那一行**：
-            //    整文件搜 "RenderOutputFormat" 是假断言——DrawRenderOptions 里的
-            //    render.format 下拉也用这个名字，把转换处写死成 Mp4 后它照样在（MUT-V2 实测）。
-            fail += CheckPredicate(projectRoot, "⑦ 转换目标容器必须来自 render.format（不许第二处来源）",
+            // ⑦ 转换的目标容器必须来自 **Settings.ConvertTarget**。
+            //
+            //    **2026-10-12 用户拍板方案 B，本条判据被推翻并改写（记录在此，
+            //    免得下一个会话以为它是自己冒出来的）。**
+            //    原先的判据是「转换目标必须来自 render.format，不许第二处来源」，
+            //    理由是怕"选了 webm 却转出 mp4"。但那个复用带来一个更实际的问题：
+            //    渲染格式是"这局录成什么"，转换格式是"把已有的一堆转成什么"——
+            //    复用同一个值会让"渲染 mp4、顺手把旧视频转 mkv"做不到，只能来回改。
+            //    上游 Spectre 也是分开的（`_videoConvertTarget`）。
+            //    "转错格式"的风险改由**界面那一行自己显示当前目标**来消除。
+            //
+            //    判据仍限定在 VideoConverter.Start 调用那一行：整文件搜
+            //    "ConvertTarget" 是假断言——DrawConvertSection 里的下拉也用这个名字，
+            //    把转换处写死成 Mp4 后它照样在（原 MUT-V2 实测过这个形态）。
+            fail += CheckPredicate(projectRoot, "⑦ 转换目标容器必须来自 Settings.ConvertTarget",
                 "Pages\\Pages.cs", ConverterContainerFromSetting);
+            // ⑦b 转换目标必须是**可编辑**的，不能退回只读展示。
+            //
+            //    2026-10-12 用户截图报「格式转换不能选择格式」——那一行当时是
+            //    `Gui.KeyValue("render.format", …)`：界面上有一行、看着像能选，
+            //    实际只显示不可改。这是「数据在、链路通、界面缺」那一族的
+            //    **第 4 例**，且是最隐蔽的子形态（前 3 例是"完全没有界面行"，
+            //    这一族是"有行但只读"）。
+            //
+            //    判据：转换区块里必须有一个真的绑 setter 的控件。
+            //    只查 "convert.target" 出现过是假判据——只读的 KeyValue
+            //    用的也是同一个文案键（这正是 MUT-V3 要复现的形态）。
+            fail += CheckPredicate(projectRoot, "⑦b 转换目标必须可编辑（不许退回只读展示）",
+                "Pages\\Pages.cs", ConvertTargetIsEditable);
+            // ⑦c 转换目标必须**双向**落盘（既写出去、也读回来）。
+            //
+            //    **不能写成"文件里出现过 convert_target"**：那会漏掉只写不读
+            //    （存了但读不回来）或只读不写（能记住但存不下去）两种形态——
+            //    而 MUT-V4 去掉的恰恰是"读"那一半，只查存在的话它照样绿，
+            //    是条假判据（本项目反复踩过这个形态）。
+            //    判据：DTO 里要有一个字段声明，且赋值与读取两处都在。
+            fail += CheckPredicate(projectRoot, "⑦c 转换目标必须双向持久化（写了也要读回来）",
+                "State\\ConfigManager.cs", ConvertTargetIsPersisted);
             // ⑧ 回放列表必须列出**全部可读格式**，不能只列默认那一种。
             //    LoadReplayAuto 三种格式全能读（.sprp/.crpl2/.crpl），而列表原先
             //    只 glob .sprp——另外两种文件"磁盘上有、界面上没有"，玩家从
@@ -117,14 +147,205 @@ namespace UiPreview
             fail += Check(projectRoot, "⑩b 回放页要有该开关的控件",
                 new[] { "Pages\\Pages.cs" },
                 new[] { "playback.simulate" });
+            // ⑪ 保存目录（Settings.SavePath）必须有界面入口。**与 ⑨/⑩ 同族，
+            //   而且是最容易被忽略的一个**：它只有一个只读的 Gui.KeyValue 把
+            //   路径显示出来，看着"界面上有这一项"，但没有任何控件能改它。
+            //   数据在（Settings.cs:57）、链路通（ConfigManager 落盘、
+            //   SpectreState.cs:243/266/277 真的按它写回放与键盘音），
+            //   玩家却只能去手改 Configs.json，且从界面上看不出有这一项。
+            //   这与上一轮「输出目录」是同一张脸：一个黑框、一个只读文本，
+            //   都长着"有界面"的样子。
+            fail += Check(projectRoot, "⑪ 保存目录有定义、有真消费方",
+                new[] { "State\\Settings.cs", "State\\SpectreState.cs" },
+                new[] { "SavePath" });
+            fail += Check(projectRoot, "⑪b 录制页要有「更改保存目录」的控件（不能只是只读展示）",
+                new[] { "Pages\\Pages.cs" },
+                new[] { "record.changedir" });
+            // ⑫ 回放页要有「打开这一关」——从已载入回放直达它录自的那一关。
+            //    2026-10-12 用户报「为什么缺少打开定位关卡的按钮」。
+            //    **为什么它必需**：回放只在"重开/换关/进关"时才启动
+            //    （scrController.Start_Rewind），所以玩家载入回放后必须自己再进
+            //    那一关。练习谱/自制谱找回去很麻烦——上游有这颗按钮
+            //    （SpectreUiPages.More.cs:98-121），我们移植时丢了。
+            //    拆两条：⑫ 管"跳转逻辑存在且有正确判据"，⑫b 管"界面真的给了入口"。
+            fail += Check(projectRoot, "⑫ 打开关卡要读 level_path 并区分官方/编辑器",
+                new[] { "Pages\\Pages.cs", "State\\SpectreState.cs" },
+                new[] { "LevelPath", "OpenReplayLevel" });
+            // ⑫b 回放页要有「打开这一关」的**按钮**。
+            //     **不能只查 "playback.openlevel" 这个子串**：它同时是
+            //     playback.openlevel.official / .missing 的前缀，而那两条只是
+            //     提示文字（Label）。只查子串的话，把按钮整个删掉、
+            //     只留两条提示，判据照样绿——是条假断言（本项目反复踩过）。
+            //     判据：必须存在一个 **Button 调用**，其文案含 playback.openlevel。
+            fail += CheckPredicate(projectRoot, "⑫b 回放页要有「打开这一关」的按钮（不能只剩提示文字）",
+                "Pages\\Pages.cs", HasOpenLevelButton);
+            // ⑬ 编辑器跳转必须等场景就绪再定位起始砖。
+            //    **这条最容易漏**：编辑器试玩从"当前选中砖"起跳，不定位就会从
+            //    第 0 块开始，整份回放的按键位置全错——而界面看不出任何异常，
+            //    只是"回放放出来完全不对"。判据取三件必须同时成立的事：
+            //    等 isLoading 熄灭、用 SelectFloor、cameraJump 为 true
+            //    （渲染作业里是 false，那是离线专用，不能照搬）。
+            fail += CheckPredicate(projectRoot, "⑬ 编辑器跳转必须等就绪后定位起始砖（cameraJump=true）",
+                "State\\SpectreState.cs", EditorLocateWaitsForReady);
+            // ⑭ 命中分布图必须有缓存。它每帧都要画，而贴图不受 GC 管理——
+            //    每帧 new 会持续泄漏显存（与 RoundedTex 同一条理由）。
+            //
+            //    **判据不能只查 "_tex != null" 出现过**：那个子串在 Reset()
+            //    里也有一份，把 Get() 里的复用分支删掉后判据照样绿
+            //    ——第一版就是这么假绿的（MUT-V8 实测）。必须**限定在 Get()
+            //    方法体内**，要求"复用分支既判了 _tex 非空、又真的把它返回"。
+            fail += CheckPredicate(projectRoot, "⑭ 命中分布图必须复用缓存贴图（不许每帧重建）",
+                "Ui\\HitScatter.cs", ScatterReusesCache);
             if (fail == 0)
                 Console.WriteLine("    ✓ 随移植搬来的模块都已被接上");
             return fail;
         }
 
         /// <summary>
-        /// VideoConverter.Start 的调用行必须用 RenderOutputFormat 推导容器。
-        /// 只在调用行上判：整文件判会被 render.format 下拉那一处蒙混过去。
+        /// 命中分布图是否真的**复用**缓存贴图。
+        ///
+        /// 做法：定位 <c>Get(</c> 的声明，在它的方法体范围内（往后 40 行）
+        /// 要求两件事同时成立：①有一个"判 _tex 非空"的分支 ②该分支返回 _tex。
+        ///
+        /// **为什么必须限定方法体**：`_tex != null` 这个子串在 <c>Reset()</c>
+        /// 里也有一份——整文件 Contains 的话，把 Get() 的复用分支删掉，
+        /// 判据仍然绿（第一版实测如此，MUT-V8 证明了它是假判据）。
+        /// </summary>
+        private static bool ScatterReusesCache(string code)
+        {
+            int at = code.IndexOf("internal static Texture2D Get(", StringComparison.Ordinal);
+            if (at < 0) return false;
+            string[] lines = code.Substring(at).Replace("\r\n", "\n").Split('\n');
+            bool tested = false, returned = false;
+            for (int i = 0; i < lines.Length && i < 40; i++)
+            {
+                string line = lines[i];
+                // 复用分支的判据：既提到 _tex 非空，也提到缓存命中
+                if (line.Contains("_tex != null", StringComparison.Ordinal)
+                    && line.Contains("ReferenceEquals", StringComparison.Ordinal)) tested = true;
+                if (line.Contains("return _tex;", StringComparison.Ordinal)) returned = true;
+            }
+            return tested && returned;
+        }
+
+        /// <summary>
+        /// 是否存在一个**按钮**，其文案是「打开这一关」那一族。
+        ///
+        /// 判据必须同时看到 <c>GUILayout.Button</c> 与 <c>playback.openlevel</c>
+        /// 在**同一行**：那一族的另外两条（.official / .missing）走的是
+        /// <c>GUILayout.Label</c>，是纯提示，不能算"给了入口"。
+        /// </summary>
+        private static bool HasOpenLevelButton(string code)
+        {
+            foreach (string raw in code.Replace("\r\n", "\n").Split('\n'))
+            {
+                string line = raw.TrimStart();
+                if (line.StartsWith("//", StringComparison.Ordinal)
+                    || line.StartsWith("*", StringComparison.Ordinal)) continue;
+                if (line.Contains("GUILayout.Button", StringComparison.Ordinal)
+                    && line.Contains("playback.openlevel", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 编辑器跳转是否**等场景就绪再定位起始砖**。
+        ///
+        /// 三件必须同时成立（缺任何一件，回放位置都会错而界面无异常）：
+        ///   ① 等到 <c>!editor.isLoading</c>（谱面还没加载完就 SelectFloor 会抛/无效）
+        ///   ② 真的调了 <c>SelectFloor</c>
+        ///   ③ <c>cameraJump: true</c>（交互式定位要跟镜头；渲染作业用 false 是离线专用）
+        ///
+        /// 判据按"整段协程体"扫，不逐行——这三句顺序与写法都可能变。
+        /// </summary>
+        private static bool EditorLocateWaitsForReady(string code)
+        {
+            // **必须锚在"声明"而不是"第一次出现"**：本文件里这个符号先出现在
+            // 调用处（MainThread.StartCoroutine(...)），从那里往后看 40 行
+            // 根本够不到方法体——第一版就是这么假红的。
+            int at = code.IndexOf("System.Collections.IEnumerator SelectEditorFloorWhenReady",
+                StringComparison.Ordinal);
+            if (at < 0)
+            {
+                at = code.IndexOf("IEnumerator SelectEditorFloorWhenReady", StringComparison.Ordinal);
+            }
+            if (at < 0) return false;
+            string[] lines = code.Substring(at).Replace("\r\n", "\n").Split('\n');
+            bool waited = false, selected = false, cameraJump = false;
+            for (int i = 0; i < lines.Length && i < 40; i++)
+            {
+                string line = lines[i];
+                if (line.Contains("isLoading", StringComparison.Ordinal)
+                    && line.Contains("!", StringComparison.Ordinal)) waited = true;
+                if (line.Contains("SelectFloor(", StringComparison.Ordinal)) selected = true;
+                if (line.Contains("cameraJump: true", StringComparison.Ordinal)) cameraJump = true;
+            }
+            return waited && selected && cameraJump;
+        }
+
+        /// <summary>
+        /// 转换目标是否是**可编辑**控件（而不是只读展示）。
+        ///
+        /// 判据：<c>convert.target</c> 那一行的调用里出现了写回
+        /// （<c>ConvertTarget = i</c>），且该行是控件调用（RowDropdown/Row 等）
+        /// 而不是 <c>Gui.KeyValue</c>。
+        ///
+        /// **为什么不能只查文案键出现过**：只读的 `Gui.KeyValue("convert.target", …)`
+        /// 用的是同一个键——那正是 2026-10-12 用户报的形态（MUT-V3 复现它）。
+        /// </summary>
+        private static bool ConvertTargetIsEditable(string code)
+        {
+            string[] lines = code.Replace("\r\n", "\n").Split('\n');
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (!lines[i].Contains("convert.target", StringComparison.Ordinal)) continue;
+                // 往后看几行：控件的回调参数常写在下一行
+                for (int j = i; j < lines.Length && j < i + 4; j++)
+                {
+                    // 只读展示 ⇒ 不是可编辑控件
+                    if (lines[j].Contains("Gui.KeyValue", StringComparison.Ordinal)) return false;
+                    if (lines[j].Contains("ConvertTarget = ", StringComparison.Ordinal)) return true;
+                    if (j > i && lines[j].Contains(";", StringComparison.Ordinal)) break;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 转换目标是否**双向**持久化：DTO 有字段、赋值一处、读取一处。
+        ///
+        /// 三种缺一不可，因为它们是三种不同的故障：
+        ///   缺字段   ⇒ 序列化根本装不下它
+        ///   缺赋值   ⇒ 存的时候没写进去（改了但存不下来）
+        ///   缺读取   ⇒ 读的时候没取回来（存了但记不住）
+        /// 只查"出现过 convert_target"会把后两种放过（MUT-V4 去掉的就是"读取"）。
+        /// </summary>
+        private static bool ConvertTargetIsPersisted(string code)
+        {
+            bool field = false, write = false, read = false;
+            foreach (string raw in code.Replace("\r\n", "\n").Split('\n'))
+            {
+                string line = raw.Trim();
+                if (line.StartsWith("//") || line.StartsWith("*")) continue;
+                if (line.Contains("convert_target { get; set; }", StringComparison.Ordinal)) field = true;
+                // 写：convert_target = Settings.ConvertTarget,
+                if (line.Contains("convert_target = Settings.ConvertTarget", StringComparison.Ordinal)) write = true;
+                // 读：Settings.ConvertTarget = Mathf.Clamp(ints.Value<int?>("convert_target") …
+                if (line.Contains("Settings.ConvertTarget =", StringComparison.Ordinal)
+                    && line.Contains("\"convert_target\"", StringComparison.Ordinal)) read = true;
+            }
+            return field && write && read;
+        }
+
+        /// <summary>
+        /// VideoConverter.Start 的调用行必须用 <c>Settings.ConvertTarget</c> 推导容器。
+        /// 只在调用行上判：整文件判会被 DrawConvertSection 里的目标下拉蒙混过去。
+        ///
+        /// **2026-10-12 判据对象从 RenderOutputFormat 改为 ConvertTarget**
+        /// （用户拍板方案 B，两者解耦）。改的是"必须来自哪个设置"，不是"要不要判"。
         /// </summary>
         private static bool ConverterContainerFromSetting(string code)
         {
@@ -135,11 +356,11 @@ namespace UiPreview
                 if (line.StartsWith("//") || line.StartsWith("*")) continue;
                 if (!line.Contains("VideoConverter.Start", StringComparison.Ordinal)) continue;
                 // 调用可能跨行：_convertState = VideoConverter.Start(dir,
-                //               (VideoEncoder.OutContainer)Mathf.Clamp(RenderOutputFormat, 0, 3), ff);
+                //               (VideoEncoder.OutContainer)Mathf.Clamp(ConvertTarget, 0, 3), ff);
                 // 所以从调用行起往后看几行，直到这一句结束（分号）。
                 for (int j = i; j < lines.Length && j < i + 4; j++)
                 {
-                    if (lines[j].Contains("RenderOutputFormat", StringComparison.Ordinal))
+                    if (lines[j].Contains("ConvertTarget", StringComparison.Ordinal))
                         return true;
                     if (j > i && lines[j].Contains(";", StringComparison.Ordinal))
                         break;

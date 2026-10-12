@@ -111,6 +111,20 @@ $knownDeviations = @(
     @{ Pat = 'Ui.OnGui.PatchFailures';               Why = '补丁挂载失败在设置页展示（我们自写补丁层）' }
     @{ Pat = 'song.pitch';                           Why = 'round 25 具名 conductor 后的连带引用（conductor.song.pitch）' }
     @{ Pat = 'ex.Message';                           Why = 'round 31 日志前缀改名的连带面（异常信息拼进日志）' }
+    # ── 2026-10-12 RenderClock transpiler 静默让位 ──────────────────
+    # 上游在 replaced == 0 时一律抛「game Update likely changed」。我们改了：
+    # 先物化指令列表，探测是否已有别的 mod 的 RenderClockSource 调用，
+    # 是则静默让位（不置 TranspilerReady，渲染走 audio-cursor 兜底）。
+    # 背景：Spectre 与 SpectreReplay 同时启用时，Spectre 的同类 transpiler
+    # 先占了 scrConductor.Update，我们只会得到 replaced == 0，而那句诊断
+    # 把原因说成游戏改了 Update——排查方向整个被带偏。
+    # （注释里别用 ASCII 双引号：PowerShell 在注释中仍会把它当字符串定界符，
+    #  引号不成对就会报 Missing closing quote / subexpression。）
+    @{ Pat = 'var body';                             Why = '2026-10-12 静默让位：指令必须先物化才能探测（foreach+yield 是惰性的）' }
+    @{ Pat = 'body.AddRange';                        Why = '同上：物化指令列表' }
+    @{ Pat = 'ci.operand';                           Why = '同上：探测已被别的 mod 替换过的指令' }
+    @{ Pat = 'mi.DeclaringType';                    Why = '同上：按声明类型名认出别的程序集那份 RenderClockSource' }
+    @{ Pat = 'Assembly.GetName';                    Why = '同上：日志里报出是哪个 mod 接管的' }
 )
 
 Write-Output ""

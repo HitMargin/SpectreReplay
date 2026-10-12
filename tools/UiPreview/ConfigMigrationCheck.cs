@@ -10,6 +10,7 @@
 //   ③ 迁移结果立刻被读取侧的 `?? Settings.X` 接受（即键名与 ConfigManager 读取侧一致）
 //   ④ 迁移是幂等的：第二次跑不再改动
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Newtonsoft.Json.Linq;
@@ -42,6 +43,37 @@ namespace UiPreview
         private const string OutputDirOldKey = "OutputDir";
         private const string OutputDirNewKey = "render_output_dir";
 
+        /// <summary>
+        /// 旧版（自研引擎）配置文件里**会出现**的顶层键全集。
+        ///
+        /// **为什么是硬编码的常量而不是\"读线上文件\"。** 线上 Configs.json 在
+        /// 2026-10-11 修好「设置存不下来」之后第一次真的被写出新版结构；此前的
+        /// 判据拿顶层键当旧键逐个要归属，于是 StringLists/Colors/CustomJudge
+        /// 被判成「旧键无归属」三条假红。**旧键是一个外部事实**（旧版引擎写出来
+        /// 的那份文件长什么样），不该由\"线上文件此刻的状态\"决定——那会让判据
+        /// 随着玩家是否保存过一次而变红或变绿。
+        ///
+        /// 与 <see cref="Map"/> 的分工：Map 是\"旧→新的值映射\"（复演用），
+        /// 本表是\"旧文件里有哪些键\"（完整性用）。这里必须包含**有意丢弃**的
+        /// Mode / DuplicateWhenLate——它们在旧文件里确实存在，由调用方按
+        /// intentionallyDropped 排除，而不是从本表里删掉（删掉就看不出它们被
+        /// 有意丢弃了）。
+        /// </summary>
+        private static readonly string[] LegacyKeys =
+        {
+            // 布尔
+            "RecordingOn", "RenderOn", "AsyncInput", "AutoSave",
+            // 整数 / 枚举
+            "SaveKey", "CancelSaveKey", "Surface", "Width", "Height",
+            "Fps", "Encoder", "Quality", "Container",
+            // 浮点
+            "TailSeconds",
+            // 字符串（单独处理，但也是旧文件里的顶层键）
+            OutputDirOldKey,
+            // 有意丢弃（旧文件里有，新版无对应语义）
+            "Mode", "DuplicateWhenLate",
+        };
+
         internal static int Run(string projectRoot)
         {
             Console.WriteLine("  ── 旧配置迁移 ──");
@@ -66,28 +98,70 @@ namespace UiPreview
                 fail++;
             }
 
-            // ② 主项目的映射必须覆盖旧文件里出现的每一个旧键（除 Mode/DuplicateWhenLate 有意丢弃）
-            string live = FindLiveConfig();
-            if (live == null)
-            {
-                Console.WriteLine("    · 线上 Configs.json 不在预期位置，跳过实跑部分");
-                return fail;
-            }
-            var json = JObject.Parse(File.ReadAllText(live));
-            // ② **主项目**的迁移表必须覆盖旧文件里出现的每一个旧键。
-            //    判据落在主项目源码上，且只看 MigrateLegacyConfig 方法体内——
-            //    不能整文件搜键名：ConfigManager.cs 的读写侧本来就到处出现
-            //    "AutoSave"，整文件搜的话删掉迁移那一行照样全绿（MUT-C3 实测）。
-            //    Map 也只是复演变换的副本，拿它代判同样是自已测自己。
+            // ② 主项目的映射必须覆盖**每一个旧键**（除 Mode/DuplicateWhenLate 有意丢弃）。
+            //
+            // 判据落在主项目源码上，且只看 MigrateLegacyConfig 方法体内——不能整文件
+            // 搜键名：ConfigManager.cs 的读写侧本来就到处出现 "AutoSave"，整文件搜的
+            // 话删掉迁移那一行照样全绿（MUT-C3 实测）。Map 也只是复演变换的副本，
+            // 拿它代判同样是自已测自己。
+            //
+            // **判据的输入必须是"确定的旧键集合"，不能是"线上文件当前长什么样"。**
+            // 2026-10-11 修复「设置存不下来」之后，线上 Configs.json 第一次真的被
+            // 写出新版结构（Sets/Ints/Strings/StringLists/Colors/CustomJudge），
+            // 而这条判据仍把顶层键当成旧键逐个要归属 ⇒ StringLists/Colors/CustomJudge
+            // 被判成"旧键无归属"三条假红。更糟的是第 ④ 步：Apply 对新版文件立刻
+            // return，于是"值不变、迁移幂等"整段**静默变成空转**——全绿，但一个问题
+            // 也没验。这两件事是同一个根因：判据把"线上文件的当前状态"当成了输入。
+            //
+            // 现在改成：LegacyKeys 是外部事实（旧文件里真正会出现的键名），判据认它；
+            // 线上文件若恰好还是旧版，则**额外**把它里面的键也逐个核一遍（能抓到
+            // 我们没登记的新旧键）。两条路都不是空转。
             string[] intentionallyDropped = { "Mode", "DuplicateWhenLate" };
             string migrationBody = ExtractMigrationBody(code);
-            foreach (var prop in json.Properties())
+            string live = FindLiveConfig();
+            bool liveIsLegacy = false;
+            JObject json = null;
+            if (live != null)
             {
-                if (intentionallyDropped.Contains(prop.Name)) continue;
-                if (prop.Name == OutputDirOldKey) continue;
-                if (!migrationBody.Contains("\"" + prop.Name + "\"", StringComparison.Ordinal))
+                json = JObject.Parse(File.ReadAllText(live));
+                // 新版判据与主项目 MigrateLegacyConfig 的排除项**必须一致**：
+                // 主项目认 Sets/Ints/Strings 任一存在即新版，这里不能多认也不能少认。
+                liveIsLegacy = json["Sets"] == null && json["Ints"] == null
+                            && json["Strings"] == null;
+                if (!liveIsLegacy)
                 {
-                    Console.WriteLine("    ✗ 旧键 " + prop.Name + " 在主项目迁移表里没有归属"
+                    Console.WriteLine("    · 线上 Configs.json 已是新版结构（迁移已生效），"
+                        + "改验旧键全集");
+                }
+            }
+            else
+            {
+                Console.WriteLine("    · 线上 Configs.json 不在预期位置，改验旧键全集");
+            }
+
+            var legacyProps = new List<string>();
+            foreach (var k in LegacyKeys)
+            {
+                if (intentionallyDropped.Contains(k)) continue;
+                if (k == OutputDirOldKey) continue;
+                legacyProps.Add(k);
+            }
+            if (liveIsLegacy)
+            {
+                // 线上文件还是旧版：它里面出现的每个键都得有归属。这能抓到
+                // LegacyKeys 漏登记的旧键（判据的输入不依赖我们自己的回忆）。
+                foreach (var prop in json.Properties())
+                {
+                    if (intentionallyDropped.Contains(prop.Name)) continue;
+                    if (prop.Name == OutputDirOldKey) continue;
+                    if (!legacyProps.Contains(prop.Name)) legacyProps.Add(prop.Name);
+                }
+            }
+            foreach (var name in legacyProps)
+            {
+                if (!migrationBody.Contains("\"" + name + "\"", StringComparison.Ordinal))
+                {
+                    Console.WriteLine("    ✗ 旧键 " + name + " 在主项目迁移表里没有归属"
                         + "（会被静默丢弃，这项设置重启后变回默认）");
                     fail++;
                 }
@@ -110,10 +184,20 @@ namespace UiPreview
                 fail++;
             }
 
-            // ④ 用真文件跑一遍变换，确认值不变且可重复
+            // ④ 跑一遍变换，确认值不变且可重复。
+            //
+            // **输入不能固定在线上文件上。** Apply 对新版文件第一句就 return，
+            // 于是线上转成新版之后，这整段会**静默空转**——一条 ✗ 都不会印，
+            // 看起来全绿，实际一个问题也没验（与 ② 的三条假红是同一个根因的
+            // 另一副面孔：一个把新版当旧版报错，一个干脆什么都不做）。
+            // 所以：线上还是旧版就用真文件；已是新版（或读不到）就**合成一份
+            // 旧文件**，用非默认值——值不默认才能把"迁移漏搬"照出来：漏搬时
+            // 落到新分区的会是默认值，与合成值不等，第 ④ 步立刻报"值变了"。
             try
             {
-                var work = JObject.Parse(File.ReadAllText(live));
+                JObject work = liveIsLegacy
+                    ? JObject.Parse(File.ReadAllText(live))
+                    : SynthesizeLegacy();
                 var before = work.Properties().ToDictionary(p => p.Name, p => p.Value);
                 Apply(work);
                 var after = JObject.Parse(work.ToString());
@@ -151,7 +235,8 @@ namespace UiPreview
             }
 
             if (fail == 0)
-                Console.WriteLine("    ✓ 旧键全部有归属、值不变、迁移幂等");
+                Console.WriteLine("    ✓ 旧键全部有归属、值不变、迁移幂等"
+                    + (liveIsLegacy ? "（用线上旧文件）" : "（用合成的旧文件）"));
             return fail;
         }
 
@@ -197,6 +282,27 @@ namespace UiPreview
                 }
             }
             return code.Substring(open, i - open);
+        }
+
+        /// <summary>
+        /// 合成一份**旧版**配置，供第 ④ 步在线上文件已是新版时使用。
+        ///
+        /// 值刻意取非默认：迁移若把某个键搬丢，第 ④ 步会是 `got == null`
+        /// （"没有落到新键"）；若搬到别的新键上，值比对会不等。用全默认值的话
+        /// 前者仍能抓、后者容易与巧合相撞，非默认值让两边都确定。
+        /// </summary>
+        private static JObject SynthesizeLegacy()
+        {
+            var j = new JObject();
+            int n = 0;
+            foreach (var (oldKey, newKey, kind) in Map)
+            {
+                if (kind == JTokenType.Boolean) j[oldKey] = (n++ % 2) == 0;
+                else if (kind == JTokenType.Float) j[oldKey] = 12.5;
+                else j[oldKey] = 100 + n++;
+            }
+            j[OutputDirOldKey] = "D:\\probe\\out";
+            return j;
         }
 
         private static string FindLiveConfig()

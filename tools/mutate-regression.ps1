@@ -22,6 +22,11 @@ if ($Filter) { $all = $all | Where-Object { $_ -like "*$Filter*" } }
 # 反向对照（P0）单独处理：它要求全绿
 $expectGreen = @('MUT-P0', 'MUT-AR', 'MUT-BZ')
 
+# 注意：MUT-PORT1 的目标文件没链进离屏套件，跑 UiPreview 永远是"0 失败"。
+# mutate.ps1 会按 $portAuditMutants 自动分派到 tools\port-diff-audit.ps1，
+# 这里**不需要**传 -PortAudit。也**不要**因为它"不跑 UiPreview"就把它挪出回归
+# ——那正是它原先漏检（恒报"断言是假的"、全量回归卡在 40/41）的原因。
+
 $pass = New-Object System.Collections.Generic.List[string]
 $fail = New-Object System.Collections.Generic.List[string]
 $err  = New-Object System.Collections.Generic.List[string]
@@ -53,15 +58,15 @@ Write-Output "================ 全量变异回归结果 ================"
 Write-Output ("通过 {0} / {1}" -f $pass.Count, $all.Count)
 if ($err.Count) {
     Write-Output ""
-    Write-Output "── 变异自身失效 {0} 条（比"断言假"更严重：根本没施加）──" -ForegroundColor Yellow
+    Write-Output ("── 变异自身失效 {0} 条（比「断言假」更严重：根本没施加）──" -f $err.Count)
     $err | ForEach-Object { Write-Output "  $_" }
 }
 if ($fail.Count) {
     Write-Output ""
-    Write-Output "── 断言是假的 {0} 条 ──" -ForegroundColor Red
+    Write-Output ("── 断言是假的 {0} 条 ──" -f $fail.Count)
     $fail | ForEach-Object { Write-Output "  $_" }
 }
 if ($err.Count -eq 0 -and $fail.Count -eq 0) {
-    Write-Output "全部变异按预期工作" -ForegroundColor Green
+    Write-Output "全部变异按预期工作"
 }
 exit ($err.Count + $fail.Count)

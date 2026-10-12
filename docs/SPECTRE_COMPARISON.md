@@ -25,7 +25,7 @@
 > （架构差异、按键注入、音频来源、前置校验、哈希陷阱、命中误差分析），
 > 以及第七之二节「其余六个特性目录为什么判定为不补」的结论。
 >
-> **现行架构与闸门现状看这两份**：`docs\verify.md`（50 条断言与用法，
+> **现行架构与闸门现状看这两份**：`docs\verify.md`（57 条断言与用法，
 > 数字随轮次变，引用前先跑一遍 `verify.ps1`）、记忆库项目条目（SpectreReplay）。
 
 > 本文基于对 `D:\Projects\Spectre` 的通读（66,775 行 / 560 文件），
@@ -1324,7 +1324,7 @@ Spectre 改用新 API 名 we'd 毫无反应。**两个方向都要钉。**
 | 5 | `RenderStatus.BarFill` 零调用点 | 进度条永远满格（Live 的 Progress 恒为 1） | 删；进度条改用 `FramesTotal > 0` 判空，实时模式不画 |
 | 6 | `ReplayDir` 的 `OutputDir` 分支两支相同 | 看着像"输出目录也能改回放位置"，改了没反应 | 删伪分支，理由写进注释 |
 | 7 | `DrawPlaybackState` 开头 `if (!IsPlaying) return;` | 没载入回放时整块消失，分不清是没载入还是载入失败 | 分组无条件绘制；空态说"没载入"，失败态摆 `LastError` |
-| 8 | `RowInput` 每敲一键提交一次 | 删路径时中间态被逐个存盘并立刻用掉 | 草稿 + 回车提交（`SetNextControlName` 认焦点） |
+| 8 | `RowInput` 每敲一键提交一次 | 删路径时中间态被逐个存盘并立刻用掉 | 草稿 + 提交（回车 / 点别处；**控件自绘**，焦点自己管——见下「黑框」一节） |
 | 9 | `OnGui.Refresh()` / `OnGui.Describe()` 两个空桩 | 无（零调用点） | 删 |
 | 10 | `RenderStatus.EtaSeconds` 全仓无人写 | 离线渲染明知还要等几分钟，看不到还剩多久 | `OfflineSession` 加 `_startWall` 并写一次带条件的真赋值 |
 | 11 | `FramesTotal` 只在离线写，实时不清零 | 上次离线留下的总帧数让实时进度条瞬间满格 | 实时开录与收尾各清零一次 |
@@ -1360,7 +1360,7 @@ Spectre 改用新 API 名 we'd 毫无反应。**两个方向都要钉。**
 | ② `StatusLineCoversEveryCase` | 3 条 | 不许再有 `if (!rendering) return;`；四个来源逐个点名；四条文案都**被引用** |
 | ③ `RenderPageButtonsAreNotDecorative` | 5 条 | live 支**不许出现** `render.start`；离线支必须先写目标再给按钮；必须有 `offline_noreplay`；`if (running)` 里同时出现 `OfflineSession.IsRunning` 与 `LiveSession.IsRunning`；`StartManual` 必须返回 `bool` 且 live 支 `return false` |
 | ④ `PlaybackPageNeverGoesBlank` | 2 条 | `playback.current` 分组必须早于第一个 `return;`；空态与失败态**各自取用** `idle` 与 `idle_err`（不接受别的键） |
-| ⑤ `TextInputDoesNotCommitEveryKeystroke` | 3 条 | 不许有 `Action<string>` 回调；提交必须在 `KeyDown`+`Return`+`GetNameOfFocusedControl()==RowInputControlName`；控件名不得含点号 |
+| ⑤ `TextInputDoesNotCommitEveryKeystroke` | 3 条 | 不许有 `Action<string>` 回调；提交必须由**自绘控件**的返回值驱动（`_outDir.Draw(...)` 拿到 `commit` 才 `CommitText()`）；宽度必须走 `Gui.CtrlW` |
 | ⑥ `RenderProgressHasARealTotal` | 4 条 | 离线写 `FramesTotal`；实时**两处**清零；界面必须 `int total = …FramesTotal; if (total <= 0) return;`；离线必须写**带条件的** `EtaSeconds` |
 
 **⑥c 是这 20 条里唯一一条抓到真 bug 的**：第一版判据写"用
@@ -1431,10 +1431,15 @@ Spectre 改用新 API 名 we'd 毫无反应。**两个方向都要钉。**
 
 `LocCheck.CollectUsedKeys()` 用正则 `"([a-z][a-z0-9]*\.[a-z0-9_.]+)"`
 扫 `Pages.cs` 与 `OnGui.cs` 的**原文**收集文案键——它**读的是整个文件、
-连注释一起读**。于是 `private const string RowInputControlName = "…"`
-里任何形如 `小写.小写` 的字符串都会变成一条"漏翻文案键"，
-**连在注释里举例都不行**。控件名因此定成 `"OutDirBox"`（不含点号），
-而这要求本身被 ⑤c 钉住（MUT-BE 把它改回 `"render.outdir"`，闸门红）。
+连注释一起读**。于是任何形如 `小写.小写` 的字符串都会变成一条"漏翻文案键"，
+**连在注释里举例都不行**。
+
+> **2026-10-12 更新：** 当时踩到它的是控件名
+> `private const string RowInputControlName = "…"`（点号接小写单词，长得和
+> 真正的文案键一模一样），于是定成 `"OutDirBox"`，并由 ⑤c 钉住。
+> 该常量已随内建输入框一起删掉（改成自绘控件、焦点自己管，不再需要
+> `SetNextControlName`/`GetNameOfFocusedControl`），**这条坑本身仍然成立**——
+> 以后再往这两个文件里写"带点号的短标识符"，同一个假红会再来一次。
 
 ---
 

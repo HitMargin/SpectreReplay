@@ -56,6 +56,12 @@ namespace UiPreview
                 "补丁链日志（AsyncLog）只写 Player.log / UMM 窗口，玩家在界面上看不到" },
             { "PlaybackClamps.cs",
                 "回放期挡下激光/尖刺等 hitbox 死亡的告警只写 Player.log" },
+            // RenderClock transpiler 的失败/让位说明走 Debug.Log/Player.log：
+            // 它们只在"补丁挂载失败"时出现，而挂载失败本身已经由设置页顶部的
+            // 「补丁未挂载」徽章 + SpectrePatchHub 的汇总行告知玩家（那些走 Loc）。
+            // 这里的细节是给排查者看的，玩家看不到也不需要看到。
+            { "VideoRenderClockPatches.cs",
+                "transpiler 的失败/让位诊断只写 Player.log，界面提示另有 Loc 文案" },
         };
 
         internal static int Run(string projectRoot)

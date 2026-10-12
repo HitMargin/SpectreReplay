@@ -21,10 +21,17 @@
 # 跑完自动还原原文件。
 #
 # 注意：这个文件必须存成 UTF-8 带 BOM（同 verify.ps1）。
+#
+# 目标不在离屏套件里的变异（MUT-PORT1）：执行器按 $portAuditMutants 分派到
+# tools\port-diff-audit.ps1，以它的退出码判定 —— 跑 UiPreview 对它永远是
+# "0 失败"，判不出真假。
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Which,
-    [switch]$ExpectGreen
+    [switch]$ExpectGreen,
+    # MUT-PORT1 这类变异的目标没链进离屏套件，判据在独立审计脚本里。
+    # 执行器默认按 $portAuditMutants 自动分派；此开关用于强制走审计路径。
+    [switch]$PortAudit
 )
 
 $ErrorActionPreference = 'Stop'
@@ -32,6 +39,15 @@ $root = Split-Path -Parent $PSScriptRoot
 $src  = Join-Path $root 'SpectreReplay'
 $utf8 = New-Object Text.UTF8Encoding($false)
 $touched = New-Object System.Collections.ArrayList
+
+# 目标不在离屏套件里的变异：它们改的文件没链进 UiPreview（见 UiPreview.csproj 的
+# 链接清单），于是编译进不去、跑 UiPreview 永远是"0 失败"，被误判成"断言是假的"。
+# 真正抓它们的是独立的 tools\port-diff-audit.ps1，必须分派过去跑。
+# 键 = 变异名；File = 审计报告里应当点名的文件——判据要对准"抓到的是这处漂移"，
+# 光看退出码会把"本来就有别的未登记差异"误当成"这条变异被检出"。
+$portAuditMutants = @{
+    'MUT-PORT1' = @{ File = 'KeyboardSimulation.cs'; Why = 'port-diff-audit：未登记差异' }
+}
 
 # 相对路径的解析根。绝大多数变异改主项目源码（SpectreReplay\ 下），
 # 但也有要改闸门自身的（tools\UiPreview\*.cs）。用 'repo:' 前缀显式指定仓库根，
@@ -209,6 +225,120 @@ switch ($Which) {
         if ($n -ne 1) { throw "MUT-P11：代码行里 playback.ready 命中 $n 次（应为 1）" }
         SetLines 'Pages\Pages.cs' $ls
     }
+    'MUT-P12' {
+        # ⑪b：把"更改保存目录"的控件删掉，退回**只读展示**。
+        #    这是本行的原始形态：界面**看着有这一项**（有一行 Gui.KeyValue 把路径
+        #    摆出来），却没有任何控件能改它。Must 判据是 Loc 键出现在代码行里，
+        #    所以只把那个键换成别的键即可复现"控件不再存在"。
+        #    注意不能改成 record.savedir（那是标签自己的键，仍然合法存在），
+        #    否则判据看着有键、实际是标签的——那就成了同义反复。
+        Backup 'Pages\Pages.cs'
+        $ls = Lines 'Pages\Pages.cs'
+        $n = 0
+        for ($i = 0; $i -lt $ls.Count; $i++) {
+            $t = $ls[$i].TrimStart()
+            if ($t.StartsWith('//') -or $t.StartsWith('*')) { continue }
+            if ($ls[$i] -match 'record\.changedir') {
+                $ls[$i] = $ls[$i] -replace 'record\.changedir', 'record.savedir.pick'
+                $n++
+            }
+        }
+        if ($n -ne 1) { throw "MUT-P12：代码行里 record.changedir 命中 $n 次（应为 1）" }
+        SetLines 'Pages\Pages.cs' $ls
+    }
+    'MUT-P13' {
+        # ⑪：把 SavePath 的真消费方改掉（SpectreState 不再按它写回放），
+        #     于是保存目录变成"有字段、有界面、但写到哪里都不影响"。
+        #     复现的是 ⑪ 判据里"有真消费方"那一半。
+        #    **必须把三处一起改掉**：判据是"符号在该文件里出现过"，只改一处的话
+        #    另外两处（tmp.wav 的写入与改名）还留着 Settings.SavePath，断言照样绿
+        #    ——那这条变异就证明不了判据。三处都在 SpectreState.cs 里。
+        Backup 'State\SpectreState.cs'
+        $ls = Lines 'State\SpectreState.cs'
+        $n = 0
+        for ($i = 0; $i -lt $ls.Count; $i++) {
+            $t = $ls[$i].TrimStart()
+            if ($t.StartsWith('//') -or $t.StartsWith('*')) { continue }
+            if ($ls[$i] -match 'Settings\.SavePath') {
+                $ls[$i] = $ls[$i] -replace 'Settings\.SavePath', 'Main.mod.Path'
+                $n++
+            }
+        }
+        if ($n -ne 3) { throw "MUT-P13：代码行里 Settings.SavePath 命中 $n 次（应为 3）" }
+        SetLines 'State\SpectreState.cs' $ls
+    }
+    'MUT-U6' {
+        # ④：把阻塞式原生选择框**搬回画控件的方法体里**（不再 Defer）。
+        #    这是本行最容易被写成的形态——"点了就弹框"读起来最直观。
+        #    但它是在 IMGUI 的 Layout/Repaint 那一趟中途钻进原生模态窗，
+        #    事件队列配对会错位。判据 ④ 必须因此变红。
+        #    做法：把 Defer 调用换成直接调用，同时保证 PickFolder 仍出现在
+        #    **画控件的方法体**里（判据靠"宿主方法名"识别，所以必须搬进去）。
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' '                MainThread.Defer(PickSaveDirDeferred);' '                FileBrowser.PickFolder(SaveDirText(), null, null, null);'
+    }
+    'MUT-U7' {
+        # ④b：同一形态的**第二个调用点**（渲染输出目录的选择框在 OnGui.RowInput 里）。
+        #     做法与 U6 相同：把 Defer 换成直接调用，让 PickFolder 落在
+        #     **画控件的方法体**（RowInput）里。
+        #     这条单独存在，是因为 U6 只覆盖 Pages.cs——判据 ④ 只查一个文件的话，
+        #     后加的那个调用点根本不会被拦（这正是"修了 A 处忘了 B 处"的形态）。
+        Backup 'Ui\OnGui.cs'
+        ReplaceExact 'Ui\OnGui.cs' '                MainThread.Defer(PickOutDirDeferred);' '                FileBrowser.PickFolder(Settings.SavePath, null, null, null);'
+    }
+    'MUT-U8' {
+        # ⑤：把输入框底色改回**比卡片更暗**——就是 2026-10-12 用户报「键控还是黑的」
+        #     的真实原因。控件确实是自绘的（占位文案都画得出来），错的是颜色：
+        #     凹槽不比平面亮，看着仍是个黑洞。
+        #     这一条能成立是因为该缺陷**在算术上可判**（Rec.709 亮度比较），
+        #     所以判据 ⑤ 必须因此变红。
+        Backup 'Ui\Gui.cs'
+        ReplaceExact 'Ui\Gui.cs' 'internal static readonly Color FieldBg     = new Color(0.21f, 0.24f, 0.30f, 1f);' 'internal static readonly Color FieldBg     = new Color(0.07f, 0.08f, 0.11f, 1f);'
+    }
+    'MUT-U9' {
+        # ⑥：把按钮的自定义样式**去掉**，退回吃内建皮肤（= 用户看到的"原生控件"）。
+        #    注意这**不是**"改用 GUILayout.Button"——参考实现 ADOFAIMacro 也在用
+        #    内建 Button，只是传了带圆角贴图的 GUIStyle（UIUtils.cs:326/674）。
+        #    所以缺陷形态是"没传样式"，变异体也必须照这个形状注入。
+        #    **必须按行号改**：'Gui.ButtonStyle,' 在 Pages.cs 里合法出现 4 次
+        #    （回放/停止/停录/更改目录），ReplaceExact 会命中 4 次直接 throw。
+        Backup 'Pages\Pages.cs'
+        $ls = Lines 'Pages\Pages.cs'
+        $n = 0
+        for ($i = 0; $i -lt $ls.Count; $i++) {
+            $t = $ls[$i].TrimStart()
+            if ($t.StartsWith('//') -or $t.StartsWith('*')) { continue }
+            # 只动「停止录制」那一行（其余三处是别的按钮，判据覆盖的是"有没有样式"）
+            if ($ls[$i] -match 'record\.stop' -and $ls[$i] -match 'Gui\.ButtonStyle') {
+                $ls[$i] = $ls[$i] -replace 'Gui\.ButtonStyle', 'GUIStyle.none'
+                $n++
+            }
+        }
+        if ($n -ne 1) { throw "MUT-U9：record.stop + Gui.ButtonStyle 命中 $n 次（应为 1）" }
+        SetLines 'Pages\Pages.cs' $ls
+    }
+    'MUT-U10' {
+        # ⑥b：滑条退回内建 HorizontalSlider（轨道/滑块贴图来自内建皮肤，
+        #      UMM 只改它的 fixedHeight/border/padding/margin、从不换贴图）。
+        Backup 'Ui\OnGui.cs'
+        ReplaceExact 'Ui\OnGui.cs' '            float now = Gui.Slider(track, value, min, max);' '            float now = GUILayout.HorizontalSlider(value, min, max, GUILayout.Width(Gui.CtrlW));'
+    }
+    'MUT-U11' {
+        # ⑥d：把圆角贴图的缓存命中判据改成**永假**（每帧重建贴图）。
+        #     Unity 贴图不受 GC 管理，控件每帧重画 ⇒ 持续泄漏显存。
+        #
+        #    两个约束（都是本项目踩过的）：
+        #      ① ReplaceExact 是**逐行** .Contains，锚点必须是单行——
+        #         写成多行字符串永远命中 0 次、脚本自己 throw。
+        #      ② 条件不能写成字面 `false`：那会让 `return hit;` 成为不可达代码
+        #         （CS0162），若开了 warnings-as-errors 就变成"编译不过"而非
+        #         "被断言抓到"。用编译器证明不了的永假条件，语义等价又干净。
+        #      `hit` 是 out 参数，无论条件真假都被赋值，不会有未赋值错误。
+        Backup 'Ui\RoundedTex.cs'
+        ReplaceExact 'Ui\RoundedTex.cs' `
+            '            if (Cache.TryGetValue(key, out Texture2D hit) && hit != null)' `
+            '            if (key.W == -1)'
+    }
     # ── 界面控制流 / 接线（UiLogicShapeCheck）─────────────────────
     'MUT-U1' {
         # ① 退回旧样子：停止录制按钮改回借用「取消保存」文案。
@@ -218,24 +348,42 @@ switch ($Which) {
         ReplaceExact 'Pages\Pages.cs' 'Loc.T("record.stop")' 'Loc.T("record.cancelsavekey")'
     }
     'MUT-U2' {
-        # ② 退回旧样子：文本框宽度写死 360，与别的行的控件列（CtrlW=240）不对齐，
-        #    且整页包在 ScrollView 里，窄窗口下 LabelW+360 先溢出。
-        #    **必须按行号改**：'GUILayout.Width(Gui.CtrlW)' 在 OnGui.cs 里合法出现
-        #    5 次（滑条/下拉×2/按键框/文本框），整文件替换会命中 5 次。
+        # ② 退回**旧样子**：整行改回内建的 GUILayout.TextField，宽度写死 360。
+        #    这一条同时复现两个缺陷，正是 2026-10-12 用户截图报的那个：
+        #      (a) 内建输入框吃 ADOFAI 自己的深色皮肤（UMM 只重设
+        #          label/button/slider/toggle，从不碰 GUI.skin.textField）
+        #          ⇒ 深色卡片上是一条黑框；
+        #      (b) 宽度写死 360，与别的行的控件列（CtrlW=240）不对齐，
+        #          且整页包在 ScrollView 里，窄窗口下 LabelW+360 先溢出。
+        #    **必须定位到那一行**：'_outDir.Draw' 在代码里只出现一次，
+        #    而 'GUILayout.Width(Gui.CtrlW)' 合法出现 5 次，整文件替换会命中 5 次。
+        # 替换行必须**自己撑得住编译**：Take 掉的那一句同时声明了 commit 并给
+        # canceled 赋值，所以要一起补上，否则变异体是"编译不过"而不是"被断言抓到"。
         Backup 'Ui\OnGui.cs'
-        $ls = Lines 'Ui\OnGui.cs'
-        $n = 0
-        for ($i = 0; $i -lt $ls.Count; $i++) {
-            $t = $ls[$i].TrimStart()
-            if ($t.StartsWith('//') -or $t.StartsWith('*')) { continue }
-            # 只动 TextField 那一行（RowInput 的控件）
-            if ($ls[$i] -match 'GUILayout\.TextField' -and $ls[$i] -match 'Gui\.CtrlW') {
-                $ls[$i] = $ls[$i] -replace 'Gui\.CtrlW', '360f'
-                $n++
-            }
-        }
-        if ($n -ne 1) { throw "MUT-U2：代码行里 TextField+CtrlW 命中 $n 次（应为 1）" }
-        SetLines 'Ui\OnGui.cs' $ls
+        ReplaceExact 'Ui\OnGui.cs' `
+            '            bool commit = _outDir.Draw(box, Gui.LabelStyle, Loc.T("render.outdir.empty"), out canceled);' `
+            '            _outDir.Text = GUILayout.TextField(_outDir.Text ?? "", GUILayout.Width(360f)); bool commit = false; canceled = false;'
+    }
+    'MUT-U4' {
+        # ② 只复现**皮肤来源**那一半（宽度仍走 Gui.CtrlW，保持合法）：
+        #    把自绘调用换成内建 GUILayout.TextField。UMM 从不重设
+        #    GUI.skin.textField，它会沿用 ADOFAI 的深色皮肤 ⇒ 深色卡片上一条黑框。
+        #    单独造这一条，是为了证明 ② 的"不许用内建输入框"那一句**自己也活着**
+        #    ——U2 同时改了两处，看不出是哪一句在拦。
+        Backup 'Ui\OnGui.cs'
+        ReplaceExact 'Ui\OnGui.cs' `
+            '            bool commit = _outDir.Draw(box, Gui.LabelStyle, Loc.T("render.outdir.empty"), out canceled);' `
+            '            _outDir.Text = GUILayout.TextField(_outDir.Text ?? "", GUILayout.Width(Gui.CtrlW)); bool commit = false; canceled = false;'
+    }
+    'MUT-U5' {
+        # ② 只复现**宽度**那一半（仍是自绘输入框，皮肤来源合法）：
+        #    把取矩形时的宽度改回写死 360。它与别的行的控件列（CtrlW=240）不对齐，
+        #    整页包在 ScrollView 里时窄窗口下先溢出。同 U4：单独造一条才分得清
+        #    是 ② 的哪一句在拦。
+        Backup 'Ui\OnGui.cs'
+        ReplaceExact 'Ui\OnGui.cs' `
+            '            Rect box = GUILayoutUtility.GetRect(Gui.CtrlW, 24f,' `
+            '            Rect box = GUILayoutUtility.GetRect(360f, 24f,'
     }
     'MUT-U3' {
         # ③ 退回旧样子：分组边框改用 GetLastRect()。它返回的是"最后一个控件的
@@ -345,10 +493,95 @@ switch ($Which) {
         ReplaceExact 'Pages\Pages.cs' '_convertState = VideoConverter.Start(dir,' '_convertState = null; // mutated'
     }
     'MUT-V2' {
-        # 转换目标容器引入第二处来源：不看 render.format，写死 mp4。
+        # 转换目标容器**写死**（不看 Settings.ConvertTarget）。
         # 这类错法界面完全看不出——文件确实生成了，只是格式不是玩家选的那个。
+        #
+        # **2026-10-12 随判据 ⑦ 一起改**：方案 B 把转换格式与渲染格式解耦，
+        # 转换处现在读 ConvertTarget 而不是 RenderOutputFormat，锚点必须跟着换。
+        # 否则锚点命中 0 次、脚本自己 throw（exit 2，闸门不红）——本项目踩过。
         Backup 'Pages\Pages.cs'
-        ReplaceExact 'Pages\Pages.cs' '(VideoEncoder.OutContainer)Mathf.Clamp(RenderOutputFormat, 0, 3), ff);' 'VideoEncoder.OutContainer.Mp4, ff);'
+        ReplaceExact 'Pages\Pages.cs' '(VideoEncoder.OutContainer)Mathf.Clamp(ConvertTarget, 0, 3), ff);' 'VideoEncoder.OutContainer.Mp4, ff);'
+    }
+    'MUT-V3' {
+        # 转换目标**退回只读展示**（= 用户 2026-10-12 截图报的那个状态）。
+        # 这一条盯的是"有界面但改不了"那一族缺陷的第 4 例：界面上有一行、
+        # 看着像能选，实际只显示不可改。
+        #    **变异体必须自己编译得过**（本项目踩过：删掉变量声明会变成
+        #    "编译不过"而非"被断言抓到"，证明力归零）。所以不是简单删行，
+        #    而是把可编辑的下拉换成等价的只读 Gui.KeyValue——两行一起换。
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' `
+            '                OnGui.RowDropdown("convert.target", new[] { "mp4", "mkv", "webm", "mov" },' `
+            '                Gui.KeyValue("convert.target", "mp4", Gui.DimCol);'
+        ReplaceExact 'Pages\Pages.cs' `
+            '                    ConvertTarget, i => { ConvertTarget = i; Commit(); });' `
+            '                // removed'
+    }
+    'MUT-V4' {
+        # 转换目标**不落盘**：把 Settings.ConvertTarget 的持久化读回去掉。
+        # 后果：界面上能选、当场生效，但重启后变回默认——正是本项目
+        # 缺陷①「设置存不下来」那一族的形态（选了但记不住）。
+        Backup 'State\ConfigManager.cs'
+        ReplaceExact 'State\ConfigManager.cs' 'Settings.ConvertTarget = Mathf.Clamp(ints.Value<int?>("convert_target") ?? Settings.RenderOutputFormat, 0, 3);' '// dropped'
+    }
+    'MUT-V5' {
+        # ⑫b：把「打开这一关」那颗**按钮**的文案换掉（= 入口不再是打开关卡）。
+        #     这是 2026-10-12 用户报「为什么缺少打开定位关卡的按钮」的那个缺口。
+        #
+        #     **变异体必须编译得过**（本项目踩过）：不能把 if 条件删掉、
+        #     留下后面两行悬空的实参。只换按钮内部的文案键即可——
+        #     语法完整，而那一行不再出现 playback.openlevel。
+        #     注意判据 ⑫b 要求"同一行同时出现 Button 与 playback.openlevel"，
+        #     所以必须动 Button 那一行；只改 .official/.missing 那两条提示
+        #     （它们是 Label）是证明不了判据的。
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' `
+            'if (GUILayout.Button(Loc.T(editorReplay ? "playback.openlevel.editor" : "playback.openlevel"),' `
+            'if (GUILayout.Button(Loc.T(editorReplay ? "playback.idle" : "playback.idle"),'
+    }
+    'MUT-V6' {
+        # ⑬：编辑器跳转**不等场景就绪**就定位起始砖。
+        #     后果：谱面还没加载完就 SelectFloor，要么无效要么抛——
+        #     而界面看不出异常，只是"编辑器打开的位置不对"。
+        Backup 'State\SpectreState.cs'
+        ReplaceExact 'State\SpectreState.cs' 'if (editor != null && !editor.isLoading' 'if (editor != null && true'
+    }
+    'MUT-V7' {
+        # ⑬：编辑器定位把 cameraJump 写成 false（照搬离线渲染那一套）。
+        #     离线渲染里镜头由回放接管所以用 false；交互式定位必须 true，
+        #     否则打开关卡后镜头不跟到起始砖——玩家看到"打开了但视角在别处"。
+        Backup 'State\SpectreState.cs'
+        ReplaceExact 'State\SpectreState.cs' 'editor.SelectFloor(editor.floors[floor], cameraJump: true);' 'editor.SelectFloor(editor.floors[floor], cameraJump: false);'
+    }
+    'MUT-V8' {
+        # ⑭：命中分布图去掉缓存（每帧重建贴图）。
+        #     Unity 贴图不受 GC 管理，而图每帧都画 ⇒ 持续泄漏显存。
+        #     条件不能写成字面 false（会让后续代码变不可达）；用编译器
+        #     证明不了的永假条件。`_tex`/`_builtCount` 都是字段，无未赋值问题。
+        Backup 'Ui\HitScatter.cs'
+        ReplaceExact 'Ui\HitScatter.cs' '            if (_tex != null && ReferenceEquals(_builtFrom, source)' '            if (_builtCount == int.MinValue && ReferenceEquals(_builtFrom, source)'
+    }
+    'MUT-V9' {
+        # ⑦：把"已被别的 mod 接管"的探测判据改坏，让 takeover 识别失效。
+        #    这是 2026-10-12 用户日志里那条误导性失败的原始形态：真因是
+        #    Spectre 的同类 transpiler 先占了 scrConductor.Update，而文案把
+        #    排查方向带到"游戏改了 Update"上去。判据 ⑦ 要求三件套齐
+        #    （先物化 + 探测 + 文案不再断言 game changed），这里动第二件。
+        #    ReplaceExact 是逐行 Contains，锚点必须是单行。
+        Backup 'Features\VideoRender\VideoRenderClockPatches.cs'
+        ReplaceExact 'Features\VideoRender\VideoRenderClockPatches.cs' '                && (mi.DeclaringType?.Name == "RenderClockSource"))' '                && (mi.DeclaringType?.Name == "NopeNope"))'
+    }
+    'MUT-V10' {
+        # ⑦：让"已被接管"的探测**永假**（探测失效，但结构看着原样）。
+        #
+        #    **为什么这个变异换过三次**：最贴近的形态是"把探测搬到 yield 迭代
+        #    之后"，但 ReplaceExact 只能逐行替换，表达不了"搬移代码"。前两版
+        #    （改物化行 / 改 AddRange 行）都因为另一行还在而被判据放过——
+        #    那是**变异写不出来**，不是判据假。诚实记在这里，免得下轮重复试。
+        #    现在改用可表达的等价缺陷：给探测条件再加一个恒假合取项，
+        #    于是"已被接管"这条路再也进不去，行为与探测失效完全一致。
+        Backup 'Features\VideoRender\VideoRenderClockPatches.cs'
+        ReplaceExact 'Features\VideoRender\VideoRenderClockPatches.cs' '                && (mi.DeclaringType?.Name == "RenderClockSource"))' '                && (mi.DeclaringType?.Name == "RenderClockSource") && mi.Name == "NeverMatches"))'
     }
     'MUT-X1' {
         # 跨线程可见性：把泵线程写、主线程读的 pumpFailure 退回普通字段。
@@ -507,8 +740,54 @@ switch ($Which) {
         ReplaceExact 'Features\Replay\KeyboardSimulation.cs' 'internal static class KeyboardSimulation' 'internal static class KeyboardSimulation { /* accidental drift */ internal static int __driftProbe = 1;'
     }
     default {
-        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / MUT-K1 / MUT-A1 / A2 / A3 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-PORT1）"
+        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-PORT1）"
     }
+}
+
+# ── 分派：目标不在离屏套件里的变异，改跑独立审计脚本 ──────────────────
+# 不这么分派的话，那些变异恒报"0 失败"⇒被记成"断言是假的"，而判据根本没被跑到。
+$pa = $portAuditMutants[$Which]
+if ($PortAudit -or $pa) {
+    if (-not $pa) { $pa = @{ File = ''; Why = '（-PortAudit 强制）' } }
+    $audit = Join-Path $root 'tools\port-diff-audit.ps1'
+    if (-not (Test-Path $audit)) {
+        Cleanup
+        Write-Host '✗ 找不到 tools\port-diff-audit.ps1' -ForegroundColor Red
+        exit 2
+    }
+    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $audit 2>&1
+    $code = $LASTEXITCODE
+    Cleanup
+    Write-Host ("已还原 " + $Which) -ForegroundColor Yellow
+    if ($code -eq 3) {
+        Write-Host "✗ port-diff-audit 环境缺失（exit 3）——无法判定 $Which" -ForegroundColor Red
+        exit 2
+    }
+    $txt = ($out | Out-String)
+    $hitFile = ($pa.File -eq '') -or ($txt -match [regex]::Escape($pa.File))
+    $hitKind = $txt -match '未登记差异'
+    # 三条同时成立才算"被检出"：审计非零、报的是未登记差异、且点名本次改的文件。
+    # 只看退出码会把"本来就有别的未登记差异"误当成"这条变异被检出"（假通过）。
+    $detected = ($code -ne 0) -and $hitFile -and $hitKind
+    if ($ExpectGreen) {
+        if (-not $detected) {
+            Write-Host ("✓ $Which 反向对照成立：审计保持通过") -ForegroundColor Green
+            exit 0
+        }
+        Write-Host ("✗ $Which 反向对照被检出") -ForegroundColor Red
+        exit 1
+    }
+    if ($detected) {
+        Write-Host ("✓ $Which 被检出（port-diff-audit exit $code：" + $pa.Why + "）") -ForegroundColor Green
+        exit 0
+    }
+    if ($code -eq 0) {
+        Write-Host ("✗ $Which 没有让审计变红——这条断言是假的（exit 0）") -ForegroundColor Red
+    } else {
+        Write-Host ("✗ $Which 让审计变红，但报的不是本次注入的漂移（未点名 $($pa.File)）") -ForegroundColor Red
+        $out | Select-Object -Last 15 | ForEach-Object { Write-Host ('  ' + $_) }
+    }
+    exit 1
 }
 
 # 跑闸门
