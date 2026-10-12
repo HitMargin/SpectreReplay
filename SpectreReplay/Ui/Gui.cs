@@ -47,6 +47,37 @@ namespace SpectreReplay.Ui
         internal static readonly Color BadCol  = new Color(0.93f, 0.34f, 0.34f, 1f);
         internal static readonly Color PillOff = new Color(1f, 1f, 1f, 0.16f);
         internal static readonly Color BtnOff  = new Color(1f, 1f, 1f, 0.14f);
+        // 按钮面。**必须是"比卡片亮"的实色**（同 FieldBg 那条教训）：
+        // 圆角贴图自带颜色，不再靠 GUI.backgroundColor 染色，所以这里要直接给对。
+        // 注意：GUI.backgroundColor 是**乘算**的，谁要是再对圆角按钮设它，
+        // 颜色会被再乘一遍变暗——所以原来那几处染色点已改成用专门的样式。
+        internal static readonly Color BtnFace  = new Color(0.20f, 0.23f, 0.29f, 1f);
+        internal static readonly Color BtnHover = new Color(0.28f, 0.32f, 0.39f, 1f);
+        // 分段/页签的"未选中"底色（比按钮面再暗一点，让选中态更跳）。
+        // 用**不透明**色而不是半透明白：贴图把颜色烘进去了，半透明会在卡片上
+        // 二次混色，同一组页签在深/浅卡片上看起来不一样。
+        internal static readonly Color BtnQuiet = new Color(0.16f, 0.18f, 0.23f, 1f);
+        // 输入框自绘用的四色。**为什么必须自绘**：UMM 的 PrepareGUI / ScaleGUI
+        // 只重设 label / button / horizontalSlider / horizontalSliderThumb / toggle
+        // （UnityModManager.decompiled.cs:3467-3472 与 :3508-3519），
+        // **从不碰 GUI.skin.textField**——内建输入框会沿用 ADOFAI 自己的深色皮肤，
+        // 在深色卡片上就是一条黑框。
+        //
+        // **底色必须比卡片更亮（2026-10-12 踩过一次）。** 第一版把 FieldBg 定成
+        // (0.07,0.08,0.11)，比 CardBg (0.13,0.15,0.19) **还暗**——玩家看到的仍是
+        // 一个黑洞，与修复前的原生黑框毫无区别，于是"黑框还在"被反馈回来。
+        // 判据不是"颜色是多少"，而是**与卡片的明度差**：凹槽要比承载它的平面亮，
+        // 才读得出"这里可以输入"。描边同理，0.18 太淡，视觉上等于没有边。
+        internal static readonly Color FieldBg     = new Color(0.21f, 0.24f, 0.30f, 1f);
+        internal static readonly Color FieldBorder = new Color(1f, 1f, 1f, 0.30f);
+        internal static readonly Color FieldFocus  = new Color(0.35f, 0.68f, 0.95f, 1f);
+        internal static readonly Color FieldSel    = new Color(0.24f, 0.62f, 0.92f, 0.45f);
+        // 占位文案单独一色：DimCol (0.60,0.66,0.74) 在 (0.21,0.24,0.30) 上偏亮，
+        // 会被误当成"已填好的真路径"。压暗到能读但不抢眼。
+        internal static readonly Color FieldHint   = new Color(0.55f, 0.60f, 0.68f, 1f);
+        // 自绘滑条：轨道凹槽 + 滑块。滑块要比轨道亮得多才抓得住眼睛。
+        internal static readonly Color SliderTrack = new Color(0.14f, 0.16f, 0.21f, 1f);
+        internal static readonly Color SliderThumb = new Color(0.88f, 0.91f, 0.95f, 1f);
 
         /// <summary>标签列的固定宽度。不同语言下标签长短差很多，
         /// 自动排布会让控件列左右跳动，拖滑条时尤其明显。</summary>
@@ -61,7 +92,7 @@ namespace SpectreReplay.Ui
         // 改字号/字体），不重建就会一直用旧字号。
         private static GUISkin _skin;
         private static Font _font;
-        private static GUIStyle _label, _labelC, _bold, _boldC, _h1, _h2, _small, _smallC, _note, _pad, _btn, _btnPrimary;
+        private static GUIStyle _label, _labelC, _bold, _boldC, _h1, _h2, _small, _smallC, _note, _pad, _btn, _btnPrimary, _btnQuiet, _btnAccent;
 
         private static void Ensure()
         {
@@ -85,9 +116,55 @@ namespace SpectreReplay.Ui
             _note     = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.UpperLeft, wordWrap = true, clipping = TextClipping.Clip };
             _pad      = new GUIStyle { padding = new RectOffset(12, 12, 8, 8), margin = new RectOffset(0, 0, 0, 0) };
             _pad.normal.background = Texture2D.whiteTexture;
-            _btn      = new GUIStyle(GUI.skin.button) { alignment = TextAnchor.MiddleCenter };
-            _btnPrimary = new GUIStyle(GUI.skin.button) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
+            _btn      = MakeButton(GUI.skin.button, BtnFace, BtnHover, TextCol, false);
+            _btnPrimary = MakeButton(GUI.skin.button, Accent, Lighten(Accent, 0.15f), Color.white, true);
+            _btnQuiet = MakeButton(GUI.skin.button, BtnQuiet, Lighten(BtnQuiet, 0.10f), DimCol, false);
+            _btnAccent = MakeButton(GUI.skin.button, Accent, Lighten(Accent, 0.15f), Color.white, true);
         }
+
+        /// <summary>
+        /// 圆角按钮样式。**这是"看起来还是原生控件"的正解**：
+        /// UMM 的 ScaleGUI 只改 button 的 padding / fixedHeight，**从不换贴图**，
+        /// 所以原生按钮永远是 Unity 那套方角灰底。圆角只能由贴图本身带
+        /// （见 <see cref="RoundedTex"/>）。
+        ///
+        /// **9-slice 是必须的**：贴图只有 64×64，而按钮宽度可达 220px。
+        /// 不设 <c>border</c> 的话 Unity 会整体拉伸，圆角被横向拉成椭圆——
+        /// 看着像两头尖的胶囊，比不改还难看。设了 border 之后只拉伸中间段。
+        /// border 取 radius+1，让"圆角那几像素"完整落在边角区内。
+        /// </summary>
+        private static GUIStyle MakeButton(GUIStyle basis, Color face, Color hover, Color text, bool bold)
+        {
+            const int Size = 64, Radius = 8;
+            var st = new GUIStyle(basis)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                fontStyle = bold ? FontStyle.Bold : FontStyle.Normal,
+                // 让文字与圆角之间留出呼吸，否则贴边看起来像被裁掉
+                padding = new RectOffset(10, 10, 4, 4),
+            };
+            st.border = new RectOffset(Radius + 1, Radius + 1, Radius + 1, Radius + 1);
+
+            st.normal.background = RoundedTex.Get(Size, Size, Radius, face);
+            st.normal.textColor = text;
+            st.hover.background = RoundedTex.Get(Size, Size, Radius, hover);
+            st.hover.textColor = text;
+            st.active.background = RoundedTex.Get(Size, Size, Radius, Darken(face, 0.12f));
+            st.active.textColor = text;
+            st.focused.background = st.hover.background;
+            st.focused.textColor = text;
+            // onNormal 是"选中态"（SelectionGrid / Toggle 用）。这里用不到，
+            // 但按钮若被当成开关用会读它——统一指到 hover，免得漏出原生灰底。
+            st.onNormal.background = st.hover.background;
+            st.onNormal.textColor = text;
+            return st;
+        }
+
+        private static Color Lighten(Color c, float k)
+            => new Color(Mathf.Min(1f, c.r + k), Mathf.Min(1f, c.g + k), Mathf.Min(1f, c.b + k), c.a);
+
+        private static Color Darken(Color c, float k)
+            => new Color(Mathf.Max(0f, c.r - k), Mathf.Max(0f, c.g - k), Mathf.Max(0f, c.b - k), c.a);
 
         // 样式对外只读出口。OnGui / Pages 拿它画自己的行，而不是各自 new GUIStyle
         // ——重复构造既费时，也会绕过 Ensure 的缓存判据（UMM 的 ScaleGUI 换字体后
@@ -99,6 +176,10 @@ namespace SpectreReplay.Ui
         internal static GUIStyle SmallStyle { get { Ensure(); return _small; } }
         internal static GUIStyle ButtonStyle { get { Ensure(); return _btn; } }
         internal static GUIStyle PrimaryButtonStyle { get { Ensure(); return _btnPrimary; } }
+        /// <summary>压暗的按钮（页签未选中 / 下拉列表项）。</summary>
+        internal static GUIStyle QuietButtonStyle { get { Ensure(); return _btnQuiet; } }
+        /// <summary>强调色按钮（页签选中 / 正在等按键）。</summary>
+        internal static GUIStyle AccentButtonStyle { get { Ensure(); return _btnAccent; } }
 
         // ── 原子绘制 ──────────────────────────────────────────
 
@@ -236,6 +317,92 @@ namespace SpectreReplay.Ui
             {
                 Text(r, caption, TextCol, _smallC);
             }
+        }
+
+        /// <summary>
+        /// 自绘滑条。返回新值（与 <c>GUILayout.HorizontalSlider</c> 同语义）。
+        ///
+        /// **为什么不用原生 HorizontalSlider。** 它的轨道/滑块贴图来自
+        /// <c>GUI.skin.horizontalSlider</c>，而 UMM 的 ScaleGUI 只改那个样式的
+        /// <c>fixedHeight / border / padding / margin</c>，**从不换贴图**
+        /// （UnityModManager.decompiled.cs:3511-3518）——所以它永远是 Unity 默认
+        /// 那套圆头灰条，跟本页自绘的卡片/开关/输入框格格不入。这就是
+        /// 「看起来还是原生控件」里最扎眼的一处。
+        ///
+        /// **交互必须自己处理**，不能只画不响应：原生控件那套 hotControl 语义
+        /// （按下→抢占、拖动→跟随、松开→释放）要照搬，否则会出现"能看不能拖"
+        /// 或"拖到一半跳出别的控件也跟着动"。
+        ///
+        /// 与原生版的一个行为差异：**点击轨道会直接跳到该位置**（原生也这样），
+        /// 而不是只能拖滑块——轨道的命中区比滑块大得多，玩家直觉就是点哪到哪。
+        /// </summary>
+        internal static float Slider(Rect track, float value, float min, float max)
+        {
+            Ensure();
+            if (Event.current == null || max <= min)
+            {
+                return value;
+            }
+
+            const float Thumb = 14f;
+            int id = GUIUtility.GetControlID(FocusType.Passive);
+            Event e = Event.current;
+            // 轨道压成细条，滑块才是视觉主角；命中区仍用整块 track
+            Rect bar = new Rect(track.x, track.y + (track.height - 6f) * 0.5f, track.width, 6f);
+            float span = Mathf.Max(1f, bar.width - Thumb);
+            float k = Mathf.Clamp01((value - min) / (max - min));
+
+            switch (e.GetTypeForControl(id))
+            {
+                case EventType.MouseDown:
+                    if (e.button == 0 && track.Contains(e.mousePosition))
+                    {
+                        GUIUtility.hotControl = id;
+                        k = Mathf.Clamp01((e.mousePosition.x - bar.x - Thumb * 0.5f) / span);
+                        e.Use();
+                    }
+                    break;
+                case EventType.MouseDrag:
+                    if (GUIUtility.hotControl == id)
+                    {
+                        k = Mathf.Clamp01((e.mousePosition.x - bar.x - Thumb * 0.5f) / span);
+                        e.Use();
+                    }
+                    break;
+                case EventType.MouseUp:
+                    if (GUIUtility.hotControl == id)
+                    {
+                        GUIUtility.hotControl = 0;
+                        e.Use();
+                    }
+                    break;
+            }
+
+            if (e.type == EventType.Repaint)
+            {
+                // 先还原一次：调用方（如 RowSlider）可能刚设过 GUI.color，
+                // 留着它会把这里所有贴图整体染色。
+                Color old = GUI.color;
+                GUI.color = Color.white;
+
+                // 轨道与填充用**纯色 Fill**，不用圆角贴图。
+                // 原因是拉伸：贴图只有 16px 宽，而填充条要撑到上百像素，
+                // GUI.DrawTexture 会把左边那两个圆角横向拉成椭圆（"两头尖"）。
+                // 而这条槽只有 6px 高，圆角本来就看不出来——不值得为它做 9-slice。
+                // 真正需要圆角的是滑块：它是 1:1 绘制（32→14 等比缩小），不会被拉歪。
+                Fill(bar, SliderTrack);
+                float fillW = span * k;
+                if (fillW > 1f)
+                {
+                    Fill(new Rect(bar.x, bar.y, fillW, bar.height), Accent);
+                }
+                float tx = bar.x + span * k;
+                GUI.DrawTexture(new Rect(tx, track.y + (track.height - Thumb) * 0.5f, Thumb, Thumb),
+                    RoundedTex.Get(32, 32, (int)(Thumb * 0.5f), SliderThumb));
+                GUI.color = old;
+            }
+
+            return min + k * (max - min);
         }
 
         // ── 徽章 / 标签 ───────────────────────────────────────

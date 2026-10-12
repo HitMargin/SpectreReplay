@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using UnityFileDialog;
 using UnityEngine;
 using UnityModManagerNet;
 using ModEntry = UnityModManagerNet.UnityModManager.ModEntry;
@@ -24,10 +25,13 @@ namespace SpectreReplay.Ui
     ///    每帧回调上，宿主缺失/异常时 _dirty 永远不写，而 UMM 会把 OnSaveGUI
     ///    的异常吞进日志——界面上看不到任何失败，现象就是"保存了但没保存上"。
     ///
-    /// 3. 内容外面必须自己包一层 ScrollView。UMM 只给自己的 tab 包滚动
-    ///    （:3738 / :3950 / :3988），**模组 OnGUI 的调用点没有包**
-    ///    （:3886-3899）。不自己包，内容一旦超过窗口高度，下面的控件就是
-    ///    "画在窗口外"：看得见一半、点不到另一半。
+    /// 3. **绝对不要自己再包一层 ScrollView。** UMM 已经把整个 Mods 页（含模组
+    ///    OnGUI 的调用点）包在它自己的滚动区里：BeginScrollView 在 :3738，我们的
+    ///    OnGUI 在 :3891 被调用，EndScrollView 直到 :3904 才关。再嵌一层会让内层
+    ///    视口高度塌成表头那么高，正文被整片裁掉，而且**不抛任何异常**——
+    ///    UMM 的 Log.txt 里一条 Exception 都没有，现象只是「下面什么都没有」。
+    ///    （这条注释原先写的是反的，说"模组 OnGUI 的调用点没有包"，据此加的那层
+    ///    嵌套滚动就是 2026-10-11 那个"Options 正文不渲染"的直接原因。）
     ///
     /// 4. 每帧开头把下拉序号归零。IMGUI 一帧跑多趟（Layout / Repaint），
     ///    序号跨趟自增会让存下来的"第几个下拉"在第二趟对不上号，
@@ -41,11 +45,18 @@ namespace SpectreReplay.Ui
         /// <summary>当前页（0 起始）。必须存静态字段：见类注释第 4 条。</summary>
         private static int _tab;
 
-        /// <summary>内容滚动位置。见类注释第 3 条。</summary>
-        private static Vector2 _scroll;
+        // （原 _scroll 字段已删：不再自建 ScrollView，位置由 UMM 维护）
 
-        /// <summary>玩家正在改的文本（可能还没提交）。</summary>
-        private static string _textDraft;
+        /// <summary>输出目录输入框。**自绘**（见 <see cref="TextField"/>）——
+        /// 内建的那个输入框是本页唯一没被 UMM 重设皮肤的控件，在深色卡片上
+        /// 会显示成一条黑框（2026-10-12 用户截图报的就是这一行）。</summary>
+        private static readonly TextField _outDir = new TextField();
+
+        /// <summary>输入框是否已从设置载入过。首次打开面板前 OnShow 不一定跑过。</summary>
+        private static bool _outDirLoaded;
+
+        /// <summary>点击选目录后置位，等下一拍再弹选择框（同 Pages.DrawSaveDirRow）。</summary>
+        private static bool _pickOutDirPending;
 
         /// <summary>当前展开的下拉是第几个行（-1 = 没有）。只能存"第几个"。
         /// 存内容或索引都不行：同一帧里可能有几个下拉，闭合一个不能把另一个也关了。</summary>
@@ -79,9 +90,11 @@ namespace SpectreReplay.Ui
         internal static void OnShow(ModEntry modEntry)
         {
             _visible = true;
-            // 每次打开都重取一次：目录里的 .sprp 可能刚被录出来，
-            // 而文本框的草稿上一轮可能还留着玩家没提交完的编辑。
-            _textDraft = Settings.RenderOutputDir;
+            // 每次打开都重取一次：上一轮可能还留着玩家没提交完的编辑，
+            // 而设置本身也可能被别处改过（载入配置、外部编辑 Configs.json）。
+            _outDir.Text = Settings.RenderOutputDir ?? "";
+            _outDir.Editing = false;
+            _outDirLoaded = true;
             Loc.RefreshLanguage();
         }
 
@@ -140,29 +153,32 @@ namespace SpectreReplay.Ui
                 return;
             }
             Loc.RefreshLanguage();
-            if (_textDraft == null)
+            if (!_outDirLoaded)
             {
-                _textDraft = Settings.RenderOutputDir;
+                _outDir.Text = Settings.RenderOutputDir ?? "";
+                _outDirLoaded = true;
             }
 
             _openSeq = 0;
-            // ScrollView 包住**整页**（含头部与标签）：只包正文的话，
-            // 头部滚动条位置会与正文错位。异常用 finally 收尾，
-            // 避免留下未配对的 Begin——UMM 遇到未配对布局会整窗崩掉。
-            _scroll = GUILayout.BeginScrollView(_scroll);
-            try
-            {
-                DrawHeader();
-                DrawPatchWarning();
-                DrawTabs();
-                GUILayout.Space(4f);
-                DrawPage();
-                GUILayout.Space(12f);
-            }
-            finally
-            {
-                GUILayout.EndScrollView();
-            }
+            // **不要再自己包一层 ScrollView。** UMM 已经把整个 Mods 页（含模组
+            // OnGUI 的调用点）包在它自己的滚动区里：
+            //   :3738  BeginScrollView(..., ExpandHeight(false))
+            //   :3891  modEntries2[num3].OnGUI(...)   ← 我们在这里面
+            //   :3904  EndScrollView()
+            // 再嵌一层会让**内层视口高度塌成表头那么高**，正文被整片裁掉——
+            // 现象是「Options 只剩标题和标签、下面什么都没有」，而且不报任何异常
+            // （UMM 的 Log.txt 里连一条 Exception 都没有，这正是它难查的原因）。
+            //
+            // 旧注释曾断言「模组 OnGUI 的调用点没有包」——那是错的：当时只看到
+            // :3738/:3950/:3988 三处 BeginScrollView，没往上核到 :3904 的 End
+            // 在模组调用点**之后**。布局的 Begin/End 配对已由 UMM 自己负责，
+            // 分组配对我们另有 Gui.Section / DrawPage 的 try/finally。
+            DrawHeader();
+            DrawPatchWarning();
+            DrawTabs();
+            GUILayout.Space(4f);
+            DrawPage();
+            GUILayout.Space(12f);
             // 拖动滑条时落盘被推迟（见 Pages.Commit）。放在**画完**之后：
             // 这时 Input.GetMouseButton(0) 反映的是本帧真实状态，松手那一帧
             // 会走到这里把攒下的改动一次写清。
@@ -247,12 +263,15 @@ namespace SpectreReplay.Ui
             for (int i = 0; i < TabKeys.Length; i++)
             {
                 bool on = i == _tab;
-                Color oldBg = GUI.backgroundColor;
                 // 选中页用强调色实底、未选中压暗——比只靠按钮自带的 hover
-                // 更容易分辨"我在哪一页"。用完立刻还原，否则会把 UMM 自己的
-                // 表头与 Save 按钮一起染色（它在调用我们之前刚设成 white）。
-                GUI.backgroundColor = on ? Gui.Accent : new Color(1f, 1f, 1f, 0.72f);
-                if (GUILayout.Button(Loc.T(TabKeys[i]), Gui.ButtonStyle,
+                // 更容易分辨"我在哪一页"。
+                //
+                // **不能再用 GUI.backgroundColor 染色。** 它是**乘算**的：
+                // 圆角按钮的底色已经烘进贴图里，再乘一次会把颜色压暗成另一回事
+                // （原先那两处染色就是这么写的，配上自绘贴图会双重变暗）。
+                // 改成两个专门样式，颜色在贴图里定死。
+                if (GUILayout.Button(Loc.T(TabKeys[i]),
+                        on ? Gui.AccentButtonStyle : Gui.QuietButtonStyle,
                         GUILayout.Width(TabW), GUILayout.Height(28f)))
                 {
                     _tab = i;
@@ -260,7 +279,6 @@ namespace SpectreReplay.Ui
                     // 看起来像"点开了一个不属于这里的列表"。
                     _openRow = -1;
                 }
-                GUI.backgroundColor = oldBg;
             }
             GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
@@ -303,7 +321,12 @@ namespace SpectreReplay.Ui
         {
             GUILayout.BeginHorizontal();
             GUILayout.Label(Loc.T(labelKey), Gui.LabelStyle, GUILayout.Width(LabelW));
-            float now = GUILayout.HorizontalSlider(value, min, max, GUILayout.Width(Gui.CtrlW));
+            // 自绘滑条：原生 HorizontalSlider 的贴图来自 GUI.skin.horizontalSlider，
+            // 而 UMM 只改它的 fixedHeight/border/padding/margin、**从不换贴图**，
+            // 所以它永远是 Unity 默认的圆头灰条（见 Gui.Slider 的说明）。
+            Rect track = GUILayoutUtility.GetRect(Gui.CtrlW, 20f,
+                GUILayout.Width(Gui.CtrlW), GUILayout.Height(20f));
+            float now = Gui.Slider(track, value, min, max);
             GUILayout.Label(fmt(now), Gui.LabelStyle, GUILayout.Width(90f));
             GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
@@ -374,19 +397,15 @@ namespace SpectreReplay.Ui
             string text = waiting
                 ? Loc.T("ui.presskey")
                 : (cur > 0 ? KeyName((KeyCode)cur) : Loc.T("ui.nokey"));
-            // 等待按键时把按钮染成强调色：这是"现在轮到你按键"的唯一提示
-            Color oldBg = GUI.backgroundColor;
-            if (waiting)
-            {
-                GUI.backgroundColor = Gui.Accent;
-            }
-            if (GUILayout.Button(text, Gui.ButtonStyle,
+            // 等待按键时换成强调色按钮：这是"现在轮到你按键"的唯一提示。
+            // 同页签那处：用专门样式而不是 GUI.backgroundColor（乘算会双重变暗）。
+            if (GUILayout.Button(text,
+                    waiting ? Gui.AccentButtonStyle : Gui.ButtonStyle,
                     GUILayout.Width(Gui.CtrlW), GUILayout.Height(24f)))
             {
                 int id = GetCaptureId(labelKey);
                 _capturing = _capturing == id ? 0 : id;
             }
-            GUI.backgroundColor = oldBg;
             GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
 
@@ -459,15 +478,11 @@ namespace SpectreReplay.Ui
         internal static void Button(string labelKey, Action onClick, bool wide)
         {
             GUILayout.BeginHorizontal();
-            Color oldBg = GUI.backgroundColor;
-            if (wide)
-            {
-                GUI.backgroundColor = Gui.Accent;
-            }
+            // 同上：wide 用专门的强调样式，不再靠 GUI.backgroundColor 染色
+            // （乘算会把贴图里烘好的底色再压一遍）。
             bool hit = GUILayout.Button(Loc.T(labelKey),
                 wide ? Gui.PrimaryButtonStyle : Gui.ButtonStyle,
                 GUILayout.Height(28f), GUILayout.Width(wide ? 220f : 140f));
-            GUI.backgroundColor = oldBg;
             GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
             if (hit)
@@ -477,56 +492,112 @@ namespace SpectreReplay.Ui
         }
 
         /// <summary>
-        /// 文本框的控件名。回车提交靠它认焦点。
-        ///
-        /// **刻意不含点号。** LocCheck.CollectUsedKeys() 用正则
-        /// `"([a-z][a-z0-9]*\.[a-z0-9_.]+)"` 扫页面源码收集文案键，点号接小写单词
-        /// 长得和真正的文案键一模一样：写成"模块名.名字"就会被闸门当成漏翻的键，
-        /// 报"两种语言都没有"。控件名不需要点号，不点就两不误伤。
-        /// </summary>
-        private const string RowInputControlName = "OutDirBox";
-
-        /// <summary>
-        /// 文本输入行。**改动先落到草稿，回车才提交。**
+        /// 文本输入行。**改动先落到草稿，回车（或点别处）才提交。**
         ///
         /// 原先每次按键都直接提交：一个字符一次落盘。后果不只是"多个循环"
         /// ——玩家想整个删掉路径（Ctrl+A 再退格）时，中途每个中间态都会被
         /// 存下来并被立刻用掉（输出目录会瞬间变成不存在的目录）。
+        ///
+        /// **控件是自绘的**（<see cref="TextField"/>），不再用
+        /// <c>GUILayout.TextField</c>：后者是本页唯一没被 UMM 重设皮肤的控件，
+        /// 会沿用 ADOFAI 自己的深色皮肤，在深色卡片上显示成一条黑框
+        /// （2026-10-12 用户截图报的正是这一行）。自绘之后焦点也由
+        /// <see cref="TextField"/> 自己管，不再需要
+        /// SetNextControlName / GetNameOfFocusedControl 那套 IMGUI 焦点机制
+        /// ——它依赖前后控件决定 control id，在 Repaint 趟容易失焦。
         /// </summary>
         internal static void RowInput(string labelKey)
         {
             GUILayout.BeginHorizontal();
             GUILayout.Label(Loc.T(labelKey), Gui.LabelStyle, GUILayout.Width(LabelW));
-            // SetNextControlName + GetNameOfFocusedControl 是 Unity 自己留下的成对
-            // 接口：前者给**即将画的下一个控件**起名，后者问焦点在谁身上。不用它
-            // 就得自己维护 control id，而 id 取决于前后控件，容易在 Repaint 那趟
-            // 失焦——症状是"偶尔按回车没反应"。
-            GUI.SetNextControlName(RowInputControlName);
             // **宽度必须走 Gui.CtrlW，不能写死 360。** 页面上每一行控件列
             // 都是 LabelW + CtrlW，写死 360 会让这一行的控件比上面几行宽一截——
             // 视觉上"这一行歪了"，而且整页包在 ScrollView 里，窗口窄一点时
             // LabelW+360 先溢出（下拉宽 70px 才会露不出来）。
-            _textDraft = GUILayout.TextField(_textDraft ?? "", GUILayout.Width(Gui.CtrlW));
-            bool enter = Event.current != null
-                && Event.current.type == EventType.KeyDown
-                && Event.current.keyCode == KeyCode.Return
-                && GUI.GetNameOfFocusedControl() == RowInputControlName;
+            Rect box = GUILayoutUtility.GetRect(Gui.CtrlW, 24f,
+                GUILayout.Width(Gui.CtrlW), GUILayout.Height(24f));
+            // 选目录按钮。**放在方框右边而不是另起一行**：截图里方框右侧本来
+            // 就空着约 120px（后面跟的是 FlexibleSpace），按钮塞进那块空地，
+            // 既不用加宽控件列、也不会让这一行比上下行宽一截。
+            // 手打绝对路径对玩家是很糟的体验：路径要精确到盘符与每层目录名，
+            // 打错一个字符就是「渲染失败」而界面不说是路径的问题。
+            if (GUILayout.Button(Loc.T("record.changedir"), Gui.ButtonStyle,
+                    GUILayout.Width(90f), GUILayout.Height(24f)))
+            {
+                _pickOutDirPending = true;
+            }
             GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
 
-            if (enter)
+            // 画在 EndHorizontal 之后：本控件不参与 GUILayout 布局（矩形已经取好），
+            // 放在水平组里画反而会和 UMM 自己的滚动区互相干扰。
+            bool canceled;
+            bool commit = _outDir.Draw(box, Gui.LabelStyle, Loc.T("render.outdir.empty"), out canceled);
+            if (canceled)
+            {
+                // Esc = 放弃本次编辑，还原成设置里的值（不回写设置）
+                _outDir.Text = Settings.RenderOutputDir ?? "";
+            }
+            if (commit)
             {
                 CommitText();
-                GUI.FocusControl(null);
+            }
+
+            if (!_pickOutDirPending)
+            {
+                return;
+            }
+            _pickOutDirPending = false;
+            try
+            {
+                // 与保存目录同理：FileBrowser.PickFolder 是**阻塞式原生模态框**，
+                // 在 IMGUI 的 Layout/Repaint 趟里直接弹会让事件队列配对错位。
+                MainThread.Defer(PickOutDirDeferred);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[SpectreReplay] 无法启动输出目录选择框：" + ex.Message);
             }
         }
 
-        /// <summary>提交文本框内容。关窗口、点 Save 时都会调。</summary>
+        /// <summary>
+        /// 在 OnGUI 之外跑原生选择框，选完写进 RenderOutputDir。
+        ///
+        /// **不留「取消就清空」的语义**：返回空串既可能表示玩家取消，也可能是
+        /// 真的选不出目录；而 RenderOutputDir 留空本身是**有意义的默认值**
+        /// （= SavePath\RenderVideos，见 VideoRenderJob.BuildOutputPath）。
+        /// 分不清就会把「取消」当成「恢复默认」，把玩家已填的路径悄悄清掉。
+        /// 所以：拿不到非空结果就什么都不做。
+        /// </summary>
+        private static void PickOutDirDeferred()
+        {
+            try
+            {
+                string start = string.IsNullOrEmpty(Settings.RenderOutputDir)
+                    ? Settings.SavePath : Settings.RenderOutputDir;
+                string dir = FileBrowser.PickFolder(start, null, null, Loc.T("render.outdir.pick"));
+                if (string.IsNullOrEmpty(dir))
+                {
+                    return;   // 玩家取消：保持原样
+                }
+                Settings.RenderOutputDir = dir;
+                Settings.CommitSafe();
+                _outDir.Text = dir;
+                _outDir.Editing = false;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[SpectreReplay] 选择输出目录失败：" + ex.Message);
+            }
+        }
+
+        /// <summary>提交输入框内容。关窗口、点 Save、点别处、回车时都会调。</summary>
         internal static void CommitText()
         {
-            if (_textDraft != null && _textDraft != Settings.RenderOutputDir)
+            string draft = _outDir.Text ?? "";
+            if (draft != Settings.RenderOutputDir)
             {
-                Settings.RenderOutputDir = _textDraft;
+                Settings.RenderOutputDir = draft;
                 Settings.CommitSafe();
             }
         }

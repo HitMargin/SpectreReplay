@@ -5,6 +5,7 @@ using System.Linq;
 using SpectreReplay.Features.Replay;
 using SpectreReplay.Features.VideoRender;
 using SpectreReplay.Ui;
+using UnityFileDialog;
 using UnityEngine;
 using static SpectreReplay.Settings;
 using static SpectreReplay.SpectreState;
@@ -77,7 +78,13 @@ namespace SpectreReplay.Pages
                 // "保存在 Mods/SpectreReplay/Replays/"，而 SavePath 实际是模组根
                 // （modEntry.Path），回放散在根目录里、和 dll 混在一起——玩家照
                 // 那句话去 Replays/ 找只会看到空目录，以为保存没成功。
-                Gui.KeyValue("record.savedir", SaveDirText(), Gui.DimCol);
+                //
+                // **它同时是唯一能改保存目录的入口**，对应 Settings.SavePath。
+                // 此前这一行只是一句只读的 Gui.KeyValue：数据在（Settings 里有
+                // 字段）、链路通（ConfigManager 落盘、SpectreState 真的按它写
+                // 文件），却没有任何一行界面能改它——想换个盘放回放只能去手改
+                // Configs.json，而从界面上看不出有这一项。与 ⑨/⑩ 是同一类病。
+                DrawSaveDirRow();
             });
 
             Gui.Section("record.hotkeys", Gui.Accent, () =>
@@ -243,6 +250,69 @@ namespace SpectreReplay.Pages
             GUILayout.Label(Loc.T("playback.idle"), Gui.NoteStyle, GUILayout.ExpandWidth(true));
             DrawArmedHint();
             DrawTimingSummary();
+            DrawOpenLevelRow();
+        }
+
+        /// <summary>
+        /// 「打开这一关」按钮。从已载入回放里读 <c>level_path</c>，一键跳到它录自的那一关。
+        ///
+        /// **为什么需要它。** 回放只在"重开/换关/进关"时才启动（见
+        /// <see cref="OpenReplayLevel"/> 的说明），而练习谱/自制谱要自己找回去
+        /// 很麻烦——玩家录完一局、退出、回放页点载入，然后只能靠记忆翻关卡列表。
+        /// 上游 Spectre 有这颗按钮（SpectreUiPages.More.cs:98-121），我们移植时丢了。
+        ///
+        /// **只对"已装弹的回放"显示**（<c>PlayMode &amp;&amp; data != null</c>）：
+        /// 录制模式下 data 也在记录，不加这个门槛的话自己打一局也会冒出这颗按钮。
+        /// </summary>
+        private static void DrawOpenLevelRow()
+        {
+            if (!PlayMode || data == null)
+            {
+                return;
+            }
+            if (!data.strings.TryGetValue(LevelPath, out string levelPath)
+                || string.IsNullOrEmpty(levelPath))
+            {
+                return;
+            }
+
+            GUILayout.Space(4f);
+            // 官方关卡没有可打开的谱面文件：说清楚，别给一颗点了没反应的按钮。
+            bool official = levelPath.StartsWith("OfficialLevel", StringComparison.Ordinal)
+                || (data.bools.TryGetValue(IsOfficialLevel, out bool iso) && iso);
+            if (official)
+            {
+                string internalName = data.strings.TryGetValue(InternalLevelName, out string nm) ? nm : "";
+                GUILayout.Label(Loc.T("playback.openlevel.official")
+                    + (string.IsNullOrEmpty(internalName) ? levelPath : internalName),
+                    Gui.NoteStyle, GUILayout.ExpandWidth(true));
+                return;
+            }
+            if (!File.Exists(levelPath))
+            {
+                GUILayout.Label(Loc.T("playback.openlevel.missing") + ClipMiddle(levelPath, 46),
+                    Gui.NoteStyle, GUILayout.ExpandWidth(true));
+                return;
+            }
+
+            // 录自编辑器就回编辑器、录自关卡就回关卡——两边起跳逻辑不同
+            string recScene = data.strings.TryGetValue(SceneName, out string sc) ? sc : "";
+            bool editorReplay = recScene == "scnEditor";
+            string captured = levelPath;
+            if (GUILayout.Button(Loc.T(editorReplay ? "playback.openlevel.editor" : "playback.openlevel"),
+                    Gui.ButtonStyle, GUILayout.Width(160f), GUILayout.Height(24f)))
+            {
+                try
+                {
+                    OpenReplayLevel.Go(captured, editorReplay);
+                }
+                catch (Exception ex)
+                {
+                    // 跳转失败（谱面损坏/场景状态异常）不该把整个设置页带走
+                    Debug.LogWarning("[SpectreReplay] 打开关卡失败：" + ex.Message);
+                    Status.Warn("playback.openlevel.busy");
+                }
+            }
         }
 
         /// <summary>
@@ -311,6 +381,51 @@ namespace SpectreReplay.Pages
             {
                 GUILayout.Label(Loc.F("playback.timing_skipped", skipped),
                     Gui.NoteStyle, GUILayout.ExpandWidth(true));
+            }
+
+            // ── 命中分布图 ──────────────────────────────────────────
+            // 上游 Spectre 是"点分析按钮才画"（SpectreUiPages.More.cs:123-156）。
+            // 我们这里**不需要按钮**：摘要已经是自动算的（Analyze 在
+            // DrawTimingSummary 开头就调过），图只是把同一份 Report 画出来，
+            // 再加一颗按钮等于让玩家多点一下才看到已有的数据。
+            // （原计划的"手动分析按钮"因此取消——见 Loc 里未使用的
+            //  playback.analyze* 三个键，它们是为那个方案准备的，现已不需要。）
+            GUILayout.Space(4f);
+            GUILayout.Label(Loc.T("playback.analyze.hint"),
+                Gui.NoteStyle, GUILayout.ExpandWidth(true));
+            DrawScatter(rep);
+        }
+
+        /// <summary>
+        /// 画命中分布柱状图。贴图由 <see cref="HitScatter"/> 缓存并按需重建；
+        /// 这里只负责"取一张矩形、把贴图贴上去"。
+        ///
+        /// 用 <c>GUI.DrawTexture</c> 而不是 GUILayout.Box/Image：IMGUI 里画贴图
+        /// 只有这一条路（上游那套 uGUI 的 RawImage 在 IMGUI 页面里不存在）。
+        /// </summary>
+        private static void DrawScatter(ReplayAnalyzer.Report rep)
+        {
+            try
+            {
+                Texture2D tex = HitScatter.Get(rep, data);
+                if (tex == null)
+                {
+                    GUILayout.Label(Loc.T("playback.analyze.none"),
+                        Gui.NoteStyle, GUILayout.ExpandWidth(true));
+                    return;
+                }
+                // 高度固定 120（与贴图 H 一致，1:1 不缩放，柱子不会被拉糊）
+                Rect r = GUILayoutUtility.GetRect(1f, 120f, GUILayout.ExpandWidth(true));
+                Color old = GUI.color;
+                GUI.color = Color.white;
+                GUI.DrawTexture(r, tex, ScaleMode.StretchToFill);
+                GUI.color = old;
+                Gui.Frame(r, Gui.LineCol);
+            }
+            catch (Exception ex)
+            {
+                // 画图纯属附加信息，任何异常都不该把整个设置页带走
+                Debug.LogWarning("[SpectreReplay] 命中分布图绘制失败：" + ex.Message);
             }
         }
 
@@ -501,12 +616,20 @@ namespace SpectreReplay.Pages
             {
                 OnGui.Note("convert.hint");
                 Gui.Divider();
-                // 目标格式直接复用 render.format 的选择：不引入第二处格式来源。
-                // 两处各选一个的话，"选 webm 却转出 mp4" 这类事必然发生。
-                Gui.KeyValue("render.format",
-                    VideoEncoder.ExtensionOf(
-                        (VideoEncoder.OutContainer)Mathf.Clamp(RenderOutputFormat, 0, 3)),
-                    Gui.DimCol);
+                // 目标格式：**独立于 render.format**（用户 2026-10-12 拍板方案 B）。
+                //
+                // 这里原先是一行**只读**的 Gui.KeyValue，只把 RenderOutputFormat
+                // 显示出来——玩家看到"输出格式 .mp4"却点不动，是「有界面但改不了」
+                // 那一族缺陷的第 4 例（前三例：键盘音三项、回放驱动开关、保存目录）。
+                // 真能改的下拉在渲染页，所以本页这一行看起来像坏了。
+                //
+                // 现在改成真下拉，绑 Settings.ConvertTarget。**为什么解耦**：
+                // 渲染格式是"这局录成什么"，转换格式是"把已有的一堆转成什么"，
+                // 复用同一个值会让"渲染 mp4、顺手把旧视频转 mkv"做不到，只能来回改。
+                // （权衡记录：原先复用是怕"选了 webm 却转出 mp4"——那个风险现在由
+                //  这一行自己显示当前值来消除，玩家看得到自己要转成什么。）
+                OnGui.RowDropdown("convert.target", new[] { "mp4", "mkv", "webm", "mov" },
+                    ConvertTarget, i => { ConvertTarget = i; Commit(); });
 
                 var st = _convertState;
                 if (st != null && st.Running)
@@ -561,7 +684,7 @@ namespace SpectreReplay.Pages
                     return;
                 }
                 _convertState = VideoConverter.Start(dir,
-                    (VideoEncoder.OutContainer)Mathf.Clamp(RenderOutputFormat, 0, 3), ff);
+                    (VideoEncoder.OutContainer)Mathf.Clamp(ConvertTarget, 0, 3), ff);
             }
             catch (Exception ex)
             {
@@ -610,6 +733,108 @@ namespace SpectreReplay.Pages
             catch
             {
                 return "?";
+            }
+        }
+
+        /// <summary>把过长的路径折成「头…尾」，保证单行显示得完。</summary>
+        private static string ClipMiddle(string s, int max)
+        {
+            if (string.IsNullOrEmpty(s) || s.Length <= max)
+            {
+                return s;
+            }
+            int keep = Math.Max(1, max - 1);
+            int head = keep / 2;
+            int tail = keep - head;
+            return s.Substring(0, head) + "\u2026" + s.Substring(s.Length - tail);
+        }
+
+        // ── 保存目录 ────────────────────────────────────────────
+
+        /// <summary>点击后置位，等下一拍再弹选择框（见 DrawSaveDirRow）。</summary>
+        private static bool _pickSaveDirPending;
+
+        /// <summary>
+        /// 一行「回放目录」：显示当前目录 + 一个「更改…」按钮。对应
+        /// <c>Settings.SavePath</c>。
+        ///
+        /// 这一行此前只是只读的 <c>Gui.KeyValue</c>——数据在（Settings 有字段）、
+        /// 链路通（ConfigManager 落盘、SpectreState 真的按它写文件），却没有任何
+        /// 一行界面能改它。想换个盘放回放只能去手改 Configs.json，而从界面上
+        /// 看不出有这一项。与 ⑨（键盘音三项）/ ⑩（回放驱动开关）是同一类病。
+        ///
+        /// **为什么按钮点了不直接弹选择框。** <c>FileBrowser.PickFolder</c> 是
+        /// **阻塞式原生对话框**（UnityFileDialog.dll → file_dialog_pick_folder，
+        /// 见 UnityFileDialog.decompiled.cs:266）。而这里是在 IMGUI 的控件回调里
+        /// ——Layout/Repaint 那一趟还没走完就钻进一个模态原生窗口，事件队列的
+        /// 配对会错位。所以点击只置一个待办，真正的调用交给 MainThread.Defer，
+        /// 在下一拍 Update（OnGUI 之外）执行。
+        /// </summary>
+        private static void DrawSaveDirRow()
+        {
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(Loc.T("record.savedir"), Gui.LabelStyle, GUILayout.Width(Gui.LabelW));
+            // 路径可能很长（换到别的盘之后尤其），中段省略：盘符/开头与目录名/
+            // 结尾是玩家用来确认"是不是我选的那个"的两端，尾巴省略反而认不出。
+            GUILayout.Label(ClipMiddle(SaveDirText(), 46), Gui.LabelStyle,
+                GUILayout.ExpandWidth(true));
+            if (GUILayout.Button(Loc.T("record.changedir"), Gui.ButtonStyle,
+                    GUILayout.Width(90f), GUILayout.Height(22f)))
+            {
+                // **录制中不许改。** 本局键盘音写在**旧**目录的 tmp.wav 里，而保存时
+                // SpectreState.SaveFile 是按当前 SavePath 去找它的
+                // （SpectreState.cs:266 与 :277）。中途改掉 ⇒ tmp.wav 找不着，
+                // 回放照存、键盘音静默丢失，而且把一局的产物拆到两个目录里。
+                if (is_recording)
+                {
+                    Status.Warn("record.savedir.busy");
+                }
+                else
+                {
+                    _pickSaveDirPending = true;
+                }
+            }
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
+
+            if (!_pickSaveDirPending)
+            {
+                return;
+            }
+            _pickSaveDirPending = false;
+            try
+            {
+                MainThread.Defer(PickSaveDirDeferred);
+            }
+            catch (Exception ex)
+            {
+                // 连"排进下一拍"都失败（极端情况下程序集没解析到）也不该让
+                // OnGUI 抛出去——UMM 对 OnGUI 异常的处理是收掉整个设置面板。
+                Debug.LogWarning("[SpectreReplay] 无法启动目录选择框：" + ex.Message);
+            }
+        }
+
+        /// <summary>在 OnGUI 之外跑原生选择框，拿到结果再写设置。</summary>
+        private static void PickSaveDirDeferred()
+        {
+            try
+            {
+                string dir = FileBrowser.PickFolder(
+                    SaveDirText(), null, null, Loc.T("record.savedir.pick"));
+                if (string.IsNullOrEmpty(dir))
+                {
+                    return;   // 玩家取消
+                }
+                SavePath = dir;
+                // 走统一落盘入口：它除了写盘还会 Settings.check 并刷新补丁开关。
+                SaveNow();
+                // 列表缓存作废，下一帧从新目录重扫（否则「回放」页还列着旧目录的文件）
+                _replayCache = null;
+                _replayCacheTick = int.MinValue;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[SpectreReplay] 选择保存目录失败：" + ex.Message);
             }
         }
 
