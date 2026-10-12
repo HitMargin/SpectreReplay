@@ -87,8 +87,44 @@ internal static class Patch_RenderClockConductor
             throw new InvalidOperationException(
                 "[SpectreReplay] RenderClock transpiler: replacement method not found (AccessTools.Method returned null)");
 
+        // **必须先物化成 List 再判断"已被别的 mod 接管"。**
+        // 下面那个 foreach 带 yield return，是**惰性**的——在它跑完之前
+        // instructions 一个元素都还没被枚举过。若把探测写在 foreach 之后，
+        // 拿到的 replaced 仍是 0，判定永远不成立（且会真的把流耗尽）。
+        // 这是本项目"foreach + yield 里做后置判断"的典型陷阱。
+        var body = new List<CodeInstruction>();
+        if (instructions != null)
+        {
+            body.AddRange(instructions);
+        }
+
+        // 已被别的 mod 的同类 transpiler 替换过？（Harmony 的 Calls 是
+        // `object.Equals(operand, method)`——精确比 MethodInfo。所以目标被换成
+        // 别的程序集里同名的 RenderClockSource.DspTime 时，我们的 Calls(dspGetter)
+        // 一个都不命中，而指令里会留着**那个**程序集的调用。）
+        // 判据取"类型同名"而不是比对我们自己的 MethodInfo：对方那份的类型
+        // 来自另一个程序集，拿到这里也只会是 null。
+        foreach (CodeInstruction ci in body)
+        {
+            if (ci.operand is MethodInfo mi
+                && (mi.DeclaringType?.Name == "RenderClockSource"))
+            {
+                // 静默让位：不置 TranspilerReady（渲染走 audio-cursor 兜底），
+                // 也不抛异常。**只能逐条 yield**——本方法是迭代器，
+                // `return body;` 会报 CS1622（无法从迭代器返回值）。
+                Debug.Log("[SpectreReplay] RenderClock transpiler: " + methodName
+                    + " 的时间源已被另一个模组接管（" + mi.DeclaringType?.Assembly.GetName().Name
+                    + "），本次让位；离线渲染走音频游标兜底时钟。");
+                foreach (CodeInstruction passthrough in body)
+                {
+                    yield return passthrough;
+                }
+                yield break;
+            }
+        }
+
         int replaced = 0;
-        foreach (CodeInstruction instruction in instructions)
+        foreach (CodeInstruction instruction in body)
         {
             if (instruction.Calls(dspGetter))
             {
@@ -115,7 +151,8 @@ internal static class Patch_RenderClockConductor
 
         if (replaced == 0)
             throw new InvalidOperationException(
-                $"[SpectreReplay] RenderClock transpiler: no time-source calls found in {methodName} — game Update likely changed");
+                $"[SpectreReplay] RenderClock transpiler: no time-source calls found in {methodName} — "
+                + "目标方法里既没有游戏的时间源调用、也没有别的模组留下的替换，游戏侧形状应该变了");
         RenderClockSource.TranspilerReady = true;
     }
 }
