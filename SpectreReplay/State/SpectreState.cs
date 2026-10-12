@@ -54,6 +54,125 @@ public static class SpectreState
         }
     }
 
+    /// <summary>
+    /// 从已载入的回放跳到它录自的那一关（含编辑器）。
+    ///
+    /// **为什么必须有它。** 回放的启动时机是 <c>scrController.Start_Rewind</c>
+    /// ——也就是"重开/换关/进关"时。玩家在设置页点「回放」只是**装弹**，
+    /// 必须自己再进那一关才会播。而练习谱/自制谱要找到那一关很麻烦
+    /// （退出当前关 → 关卡列表里翻 → 记不清是哪个文件）。
+    /// 上游 Spectre 给了「打开关卡」按钮直达（SpectreUiPages.More.cs:177
+    /// OpenReplayLevel），我们移植时丢了这一块。
+    ///
+    /// **流程体照上游保持一致**（转场状态设置必须原样，见下）——
+    /// 这不是可以随手简化的代码：漏设 <c>previousScene</c> 会让"返回"按钮
+    /// 跳错地方，漏设 <c>checkpointNum</c> 会从第 0 块而不是回放起点开始。
+    /// </summary>
+    internal static class OpenReplayLevel
+    {
+        /// <summary>
+        /// 跳到回放录自的关卡。<paramref name="editorReplay"/> 为真时走编辑器。
+        ///
+        /// 调用方负责先确认 <c>levelPath</c> 非空且文件存在——这里只做跳转，
+        /// 不替调用方判断该不该跳（那属于界面层的决策）。
+        /// </summary>
+        internal static void Go(string levelPath, bool editorReplay)
+        {
+            if (string.IsNullOrEmpty(levelPath))
+            {
+                return;
+            }
+            // 跳转前必须停掉正在跑的录制/回放：否则旧场景的协程会带着
+            // 旧状态跨场景活下来，在新关卡里继续注入按键。
+            PlayActions.StopPlaying();
+            PlayActions.StopRecording();
+
+            int startTile = data != null && data.ints.TryGetValue(StartTile, out int stv)
+                ? Math.Max(0, stv) : 0;
+
+            if (editorReplay)
+            {
+                // 编辑器：让编辑器加载完自己打开这个谱面，并把选中砖定位到起点。
+                // SelectFloor 是异步的（谱面加载要几帧），所以用协程等就绪。
+                scnEditor.levelToOpenOnLoad = levelPath;
+                GCS.sceneToLoad = "scnEditor";
+                GCS.checkpointNum = startTile;
+                // 只从非关卡场景进来时才清掉试玩/练习标记——上游原样保留这个判断：
+                // 从关卡内跳编辑器时清了会丢当前试玩设置。
+                if (!ADOBase.isScnGame)
+                {
+                    GCS.speedTrialMode = false;
+                    GCS.practiceMode = false;
+                }
+                ADOBase.loader.LoadSceneWithTransition(WipeDirection.StartsFromRight);
+                MainThread.StartCoroutine(SelectEditorFloorWhenReady(startTile));
+            }
+            else
+            {
+                GCS.checkpointNum = startTile;
+                GCS.previousScene = "scnGame";
+                // 飙速模式的倍速要一并还原：回放是按当时倍速录的，
+                // 不还原会让整份回放的按键位置全错。
+                if (data != null && data.bools.TryGetValue(SpeedTrailMode, out bool stm))
+                {
+                    GCS.speedTrialMode = stm;
+                    if (stm && data.doubles.TryGetValue(SpeedTrail, out double st))
+                    {
+                        GCS.currentSpeedTrial = (float)st;
+                    }
+                }
+                scrController controller = scrController.instance;
+                if (controller != null)
+                {
+                    // 已经在关卡里：直接换谱面，不重载场景（更快，也不闪白）
+                    controller.LoadCustomLevel(levelPath);
+                }
+                else
+                {
+                    GCS.sceneToLoad = "scnGame";
+                    GCS.customLevelPaths = new[] { levelPath };
+                    GCS.loadCustomFromBundle = false;
+                    scrController.deaths = 0;
+                    ADOBase.loader.LoadSceneWithTransition(WipeDirection.StartsFromRight);
+                }
+            }
+            Debug.Log("[SpectreReplay] open replay level (" + (editorReplay ? "editor" : "game")
+                + "): " + levelPath);
+        }
+
+        /// <summary>
+        /// 编辑器打开谱面后，等加载完成（<c>isLoading</c> 熄灭、地板表就绪），
+        /// 把选中地板定位到回放起始砖——编辑器试玩是从**当前选中砖**起跳的，
+        /// 不定位就会从第 0 块开始，回放位置全错。
+        ///
+        /// 参考上游 <c>SettingsUI.SelectEditorFloorWhenReady</c>（那份是他们的，
+        /// 我们按同样的判据自己写）。**1800 帧上限**是防"打开失败后无限空转"
+        /// ——没有它，谱面永远加载不出来时这个协程会一直挂着。
+        /// </summary>
+        /// **必须写全限定名 `System.Collections.IEnumerator`。** 本文件
+        /// 顶部有 `using System.Collections.Generic`，直接写 `IEnumerator`
+        /// 会被解析成泛型 `IEnumerator<T>`，报 CS0305（需要 1 个类型参数）。
+        /// 别为此加 `using System.Collections`——那会和 Generic 的同名类型打架。
+        private static System.Collections.IEnumerator SelectEditorFloorWhenReady(int floor)
+        {
+            for (int i = 0; i < 1800; i++)
+            {
+                scnEditor editor = ADOBase.editor;
+                if (editor != null && !editor.isLoading
+                    && editor.floors != null && editor.floors.Count > floor)
+                {
+                    // cameraJump 必须 true：这是交互式定位，镜头要跟到起始砖。
+                    // （视频渲染里用的是 false——那是离线渲染，镜头由回放接管，
+                    //  两种场景的取舍不同，不能照搬。）
+                    editor.SelectFloor(editor.floors[floor], cameraJump: true);
+                    yield break;
+                }
+                yield return null;
+            }
+            Debug.Log("[SpectreReplay] 编辑器定位起始砖超时（第 " + floor + " 块）");
+        }
+    }
+
     internal class PlayActions
     {
         internal static void SwitchToPlayMode()

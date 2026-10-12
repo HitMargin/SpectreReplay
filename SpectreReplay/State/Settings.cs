@@ -182,6 +182,13 @@ public static class Settings
         "lateperfect", "verylate", "toolate", "multipress",
         "failmiss", "auto"
     };
+    // 必须在 JudgeMarginColorsOn 之前声明。C# 静态字段初始化器按**文本顺序**执行，
+    // 放到文件末尾会让下面那行读到一个 null 数组，抛 NullReferenceException 并被包成
+    // TypeInitializationException —— 整个 Settings 类都不可用（2026-10-11 首次实跑
+    // Load() 就崩在这里，闸门结构上抓不到：Settings.cs 依赖 UnityEngine，没链进离屏套件）。
+    // 原先这里引用的是另一个类 JudgeTextDefaults.DefaultColors（跨类无顺序约束），
+    // 9feee37 删掉那个文件、改成同类字段后踩中。
+    internal static readonly Color[] VanillaMarginColors = NewColorArray();
     public static Color[] JudgeMarginColors = NewColorArray();
     public static bool[] JudgeMarginColorsOn = new bool[VanillaMarginColors.Length];
     public static bool JudgeGlowOn = false;
@@ -291,7 +298,13 @@ public static class Settings
     // ── PlanetColors settings ───────────────────────────
     public static bool PlanetColorOn = false;
     public static bool[] PlanetColorPlayerOn = InitPlanetOn();
-    public static Color[] PlanetColorBase = null;
+    // **不能是 null。** ConfigManager.SaveConfigs 构造 ConfigData 时会把它交给
+    // ToHexArray，而那段构造不在 try 内 —— 抛出的 NRE 会让整份设置都写不下去
+    // （2026-10-11 实测：改任何设置都不落盘，日志只有一行"保存设置失败"）。
+    // 上游此处是 (Color[])PlanetColorApplier.DefaultColors.Clone()；我们没移植
+    // PlanetColors 特性（该目录不存在），故给一个定长 8（= 上游 PlanetCount）的
+    // 中性数组即可 —— PlanetColorOn 默认 false 且无消费方，这组字段只是持久化载体。
+    public static Color[] PlanetColorBase = new Color[8];
     public static Color[][] PlanetColorParts = InitPlanetParts();
     public static bool[][] PlanetColorPartsOn = InitPlanetPartsOn();
 
@@ -312,6 +325,16 @@ public static class Settings
     public static int RenderEncoderMode = 0;   // 0 自动 1 最快 2 质量 3 纯 CPU
     public static int RenderQualityMode = 1;   // 0 低 1 标准 2 高 3 极致
     public static int RenderOutputFormat = 0;  // 输出容器：0 mp4 1 mkv 2 webm 3 mov（见 VideoEncoder.OutContainer）
+    // 转换目标容器。**与 RenderOutputFormat 刻意解耦**（用户 2026-10-12 拍板方案 B）：
+    // 两件事的目的不同——渲染格式是"我这局要录成什么"，转换格式是"把已有的一堆
+    // 视频批量转成什么"。复用同一个值会导致"想渲染 mp4、顺手把旧视频转 mkv"
+    // 做不到，只能来回改。
+    //
+    // 上游 Spectre 用的是**不持久化**的 `private static int _videoConvertTarget`
+    // （SpectreUiPages.Features.cs:643）。我们改为持久化：本项目的既有约定是
+    // "凡界面上能选的都落盘"（缺陷①「设置存不下来」就是这条约定被破坏），
+    // 且玩家很可能分几次转同一批文件。
+    public static int ConvertTarget = 0;       // 转换目标容器：0 mp4 1 mkv 2 webm 3 mov
     public static float RenderTailSeconds = 3f;
     public static string RenderOutputDir = ""; // 留空 = SavePath/RenderVideos
 
@@ -428,7 +451,6 @@ public static class Settings
         };
     }
 
-    internal static readonly Color[] VanillaMarginColors = NewColorArray();
     /// <summary>把当前设置立即落盘并刷新补丁开关（移植后的通用提交入口）。</summary>
     internal static void CommitSafe()
     {

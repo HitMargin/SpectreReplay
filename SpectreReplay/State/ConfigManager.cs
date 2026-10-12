@@ -154,6 +154,8 @@ public static class ConfigManager
         public int render_encoder { get; set; }
         public int render_quality { get; set; }
         public int render_output_format { get; set; }
+        /// <summary>转换目标容器（与渲染格式解耦，见 Settings.ConvertTarget）。</summary>
+        public int convert_target { get; set; }
         public int render_capture_mode { get; set; }
         public float render_tail { get; set; }
         public bool render_on { get; set; }
@@ -331,6 +333,7 @@ public static class ConfigManager
                 render_encoder = Settings.RenderEncoderMode,
                 render_quality = Settings.RenderQualityMode,
                 render_output_format = Settings.RenderOutputFormat,
+                convert_target = Settings.ConvertTarget,
                 render_capture_mode = Settings.RenderCaptureMode,
                 render_tail = Settings.RenderTailSeconds,
                 render_on = Settings.RenderOn,
@@ -715,6 +718,9 @@ public static class ConfigManager
                 Settings.RenderEncoderMode = Mathf.Clamp(ints.Value<int?>("render_encoder") ?? Settings.RenderEncoderMode, 0, 3);
                 Settings.RenderQualityMode = Mathf.Clamp(ints.Value<int?>("render_quality") ?? Settings.RenderQualityMode, 0, 3);
                 Settings.RenderOutputFormat = Mathf.Clamp(ints.Value<int?>("render_output_format") ?? Settings.RenderOutputFormat, 0, 3);
+                // 旧配置没有这个键：缺省时**跟随渲染格式**，保持升级前的行为
+                // （升级前转换用的就是 RenderOutputFormat）。
+                Settings.ConvertTarget = Mathf.Clamp(ints.Value<int?>("convert_target") ?? Settings.RenderOutputFormat, 0, 3);
                 Settings.RenderCaptureMode = Mathf.Clamp(ints.Value<int?>("render_capture_mode") ?? Settings.RenderCaptureMode, 0, 1);
                 Settings.RenderTailSeconds = Mathf.Clamp(ints.Value<float?>("render_tail") ?? Settings.RenderTailSeconds, 0f, 15f);
                 Settings.RenderOn = ints.Value<bool?>("render_on") ?? Settings.RenderOn;
@@ -897,6 +903,11 @@ public static class ConfigManager
 
     private static string ToHex(Color c) => "#" + ColorUtility.ToHtmlStringRGBA(c);    private static string[] ToHexArray(Color[] colors)
     {
+        // null 兜底：调用方传 null 时返回 null，而不是在这里抛 NRE。
+        // 传 null 曾让整份设置写不下去（PlanetColorBase 那次）；这类"助手函数被
+        // null 打穿"的崩溃一律就地堵死。返回 null 对 JSON 是合法值，读回来仍是
+        // null，而各调用点本来就有 (x != null) 判断。
+        if (colors == null) return null;
         var arr = new string[colors.Length];
         for (int i = 0; i < colors.Length; i++)
             arr[i] = "#" + ColorUtility.ToHtmlStringRGBA(colors[i]);
