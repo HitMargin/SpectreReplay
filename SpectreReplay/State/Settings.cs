@@ -284,7 +284,9 @@ public static class Settings
     /// 玩家以为关的是渲染，实际关掉的是整条回放链。
     /// </summary>
     public static bool RenderOn = true;
-    public static int RenderCaptureMode = 0;  // 0 纯净相机 1 游戏画面(含UI)
+    // 默认「游戏画面(含UI)」：纯净相机不含界面，玩家往往出片后才发现进度条、
+    // 判定反馈全没了（不可逆，只能重渲）。游戏画面所见即所得，是更安全的默认。
+    public static int RenderCaptureMode = 1;  // 0 纯净相机 1 游戏画面(含UI)
     public static int RenderWidth = 1920;
     public static int RenderHeight = 1080;
     public static int RenderFps = 60;

@@ -540,10 +540,17 @@ namespace SpectreReplay.Pages
         /// </summary>
         private static void DrawRenderOptions()
         {
-            OnGui.RowSlider("render.width", RenderWidth, 320f, 7680f,
-                v => ((int)v) + " px", v => { RenderWidth = (int)v; Commit(); });
-            OnGui.RowSlider("render.height", RenderHeight, 240f, 4320f,
-                v => ((int)v) + " px", v => { RenderHeight = (int)v; Commit(); });
+            // 宽/高只对「纯净相机」有意义：游戏画面模式的分辨率跟随窗口，
+            // 置灰不如**不显示**——留两个调了没反应的滑条，正是本项目反复
+            // 栽过的「有界面但改不了」。上游同样在该模式下用说明替换掉这组控件
+            // （SpectreUiPages.Features.cs:716-722）。
+            if (RenderCaptureMode != 1)
+            {
+                OnGui.RowSlider("render.width", RenderWidth, 320f, 7680f,
+                    v => ((int)v) + " px", v => { RenderWidth = (int)v; Commit(); });
+                OnGui.RowSlider("render.height", RenderHeight, 240f, 4320f,
+                    v => ((int)v) + " px", v => { RenderHeight = (int)v; Commit(); });
+            }
             OnGui.RowSlider("render.fps", RenderFps, 15f, 480f,
                 v => ((int)v) + " fps", v => { RenderFps = (int)v; Commit(); });
             OnGui.RowSlider("render.tail", RenderTailSeconds, 0f, 15f,
@@ -552,6 +559,11 @@ namespace SpectreReplay.Pages
             {
                 Loc.T("render.surface.clean"), Loc.T("render.surface.screen"),
             }, RenderCaptureMode, i => { RenderCaptureMode = i; Commit(); });
+            // 两种画面源的取舍差异很大（要不要 UI、分辨率能不能超采样），
+            // 只给两个下拉项说不出这些——照上游在选中项下面补一句说明。
+            // 两个键都写在源码里（三元表达式），LocCheck 才能都核到。
+            OnGui.Note(RenderCaptureMode == 1
+                ? "render.surface.screen_note" : "render.surface.clean_note");
             OnGui.RowDropdown("render.codec", new[]
             {
                 Loc.T("render.codec.auto"), Loc.T("render.codec.fastest"),
@@ -584,7 +596,9 @@ namespace SpectreReplay.Pages
         /// 一个调用点都没有：选「最快」时若 NVENC 探测失败，编码器会静默落到
         /// libx264(CPU)，渲染速度差一个数量级，而界面上看不到任何差别——
         /// 玩家只会觉得"这台机器跑不动"，去改画质/帧率那些无关的设置。
-        /// 这一行只读状态、不起探测进程（DescribeEncoder 复用 NVENC 的已缓存结论）。
+        /// 编码器那行只读状态、不起探测进程（DescribeEncoder 复用 NVENC 的已缓存结论）；
+        /// ffmpeg 那行会**在首次且仅当模组目录没有 exe 时**探一次系统 PATH，
+        /// 但结果带 30s 冷却缓存（VideoEncoder.Cooling），不会每帧拉进程。
         /// </summary>
         private static void DrawEncoderNote()
         {
@@ -594,6 +608,17 @@ namespace SpectreReplay.Pages
                 string name = VideoEncoder.DescribeEncoder(
                     (VideoEncoder.Quality)Mathf.Clamp(RenderEncoderMode, 0, 3), container);
                 Gui.KeyValue("render.codec.current", name, Gui.DimCol);
+
+                // ffmpeg 状态。**为什么要有这一行**：渲染与转换全都依赖 ffmpeg，
+                // 而没有它的时候此前只有"点了开始渲染"才弹一句游戏内提示——
+                // 玩家在设置页看不出任何异常，只会以为是自己参数没配对。
+                // 判定口径与上游一致（SpectreUiPages.Features.cs:693）：
+                // 模组/游戏根目录里找到 exe 就算就绪，否则再探一次系统 PATH。
+                string exe = VideoEncoder.LocateEncoder();
+                bool ready = exe != "ffmpeg" || VideoEncoder.PathProbeSucceeded();
+                Gui.KeyValue("render.ffmpeg",
+                    Loc.T(ready ? "render.ffmpeg.ready" : "render.ffmpeg.missing"),
+                    ready ? Gui.OkCol : Gui.BadCol);
             }
             catch (Exception ex)
             {
