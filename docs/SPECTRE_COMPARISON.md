@@ -784,8 +784,9 @@ ms = 角差(rad) × 60 / (π × pitch × bpm×speed) × 1000
 
 三处与 Spectre 的差异，都是有意为之：
 
-- **不算 Perfect/Pure 窗口宽度**。Spectre 那份要靠它的
-  `CustomJudge.BoundaryRaw`，我们没有自定义判定，那两个窗口无从谈起。
+- **不算 Perfect/Pure 窗口宽度**。（**2026-10-17 更新**：现由
+  `Features/Compat/MarginBoundary.Raw` 提供——它就是从已删除的
+  `CustomJudge.BoundaryRaw` 摘出来的窗口数学，见下「CustomJudge 移除」一节。）
 - **`TimingReport()` 返回 null 表示"算不了"，不返回空报告**。
   画一个空分组会让人以为"分析结果是 0"，而真实原因只是"还没载入"。
 - **每次重算，不加缓存**。它只在 OnGUI 里调，而逐砖 speed 会随关卡推进变化，
@@ -1217,7 +1218,31 @@ MUT-AK 也一起挂掉**。定位靠 `git diff` 里 `-﻿<#` / `+﻿﻿<#` 那�
 |---|---|---|
 | **Other** | 8 | turnaround/暂停时长计算、decode-pause 转译器、异步输入缓存性能、pro events、内存优化器、特殊按键、max-used-keys 统计、judge 文字显示。**没有一个碰录制·回放·渲染的正确性** |
 | **Editor** | 11 | `SpeedMath.cs:105-146` 只读；`Patch_SpeedPauseConverter.cs` 改 `editor.events` 后调游戏自己的 `ApplyEventsToFloors()`；`Patch_BpmBeatCalculator.cs` 注册 `"encode", false`（**从不序列化**，`:348-353` 除零时故意什么都不写）；`Patch_EditorBugfixes.cs:65` 只在拖编辑器时间轴时才够得着。**唯一真影响是 `Patch_BGAMode.cs`**（8 处补丁，默认关 `FeatureKeys.BGAMode`）——见下 |
-| **CustomJudge** | 4 | 只有 `Patch_RealJudge.cs` 改判定，受 `CustomRealJudgeOn`/`CustomOnlyOn` 约束（**默认关**）⇒ **使用约束**，不是缺口。`Patch_TierJudge.cs` 只读 `ref HitMargin`；`TierJudgeState` 已由 `Start_Rewind` Postfix 自动重置（与 `PlaybackEngine.Begin()` 同一个挂点） |
+| **CustomJudge** | 4 | 只有 `Patch_RealJudge.cs` 改判定，受 `CustomRealJudgeOn`/`CustomOnlyOn` 约束（**默认关**）⇒ **使用约束**，不是缺口。`Patch_TierJudge.cs` 只读 `ref HitMargin`；`TierJudgeState` 已由 `Start_Rewind` Postfix 自动重置（与 `PlaybackEngine.Begin()` 同一个挂点）。**2026-10-17 用户裁决：整套移除**，见下节 |
+
+#### CustomJudge 移除（2026-10-17）
+
+用户原话：「**CustomJudge 并不属于replay和视频渲染的部分啊**」。
+
+复核后确认这个判断成立：
+
+- 上游那两份**真正改游戏判定**的补丁（`Patch_RealJudge.cs` /
+  `Patch_TierJudge.cs`）**我们根本没移植**——搬进来的所谓「自定义判定」
+  是一个**没有判定改写能力的判定系统**，只剩档位 UI、档案读写与状态账本。
+- 真正被 replay 用到的只有**一处**：判定窗口**数学**
+  `BoundaryRaw`（散点图按原版 Perfect/Pure 窗口归一化着色；
+  `GameCompat.Boundary` 找不到游戏函数时兜底）。
+- **没有任何第三方 mod 依赖 `SpectreAPI`**：扫 `Mods\` 下全部 dll，只有
+  `Spectre.dll` 与 `SpectreReplay.dll` 自己含 `SpectreAPI/GetTierDefinitions/
+  GetLastHitTier` 字符串 ⇒ 删对外接口是安全的。
+
+处置：窗口数学摘为 `Features/Compat/MarginBoundary.Raw`（只留数学，
+不留任何判定改写能力），其余**整体删除**——`Features/CustomJudge/`
+目录、`Settings` 的 CustomJudge/CustomTier* 字段、`ConfigManager` 的
+`CustomJudgeData` 与读写分支、`SpectreAPI` 的档位 API 面、
+`SpectreState` 的自定义 xacc 分支、`FeatureKeys` 三个常量、
+14 语言 ×2 条 `customjudge.*` 文案。旧配置里的 `CustomJudge` 节点
+**被忽略而非报错**（`JObject` 取不到就是 null）。
 | **JudgeBar** | 10 | `Patch_JudgeBar.cs:13` 解锁 `DifficultyUIMode.ShowAll`、`:27 UpdateLayout`、`:50 ADOFAI.ErrorMeterTick.Show`；`Patch_FailureJudgement.cs` 14 处挂点（含 `scrPlayer.Die` 的 Prefix/Postfix，`:72 if (multipress \| hitbox) return;`）。默认关（`Spectre\Main.cs:90` + `Settings.cs:199 JudgeBarOn = false`）。`FailureJudgement.cs:75-76/:99` 只读；`JudgeBarMeter.cs:197-198` 改的 `meter.sensitivity`/`tickLife` 是**自身组件**（`:333-334` 还原）；`OverloadBarUI.cs` 是 Overlay 画布，纯外观 |
 | **ResultsPlus** | 3 | `Patch_HitError.cs:9/:15` 只收集命中误差（**我们用 `HitTimingAnalyzer` 覆盖了同一份数据**）；`Patch_ResultsText.cs:22/:32/:55/:87` 是暂停弹窗/状态变更/keyFrequency 去重/结算文字 |
 | **Perf** | 1 | `FeaturePatchCost.cs`（82 行）反射 **Spectre 自己的程序集**数 `[SpectrePatch]` 声明数——**它不挂任何补丁**，只是个自测面板 |

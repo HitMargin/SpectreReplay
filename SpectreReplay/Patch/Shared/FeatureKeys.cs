@@ -12,7 +12,6 @@ internal static class FeatureKeys
     public const string JudgeFilter = "JudgeFilter";
     public const string JudgeColor = "JudgeColor";
     public const string JudgeBar = "JudgeBar";
-    public const string CustomJudge = "CustomJudge";
     public const string EffectRemover = "EffectRemover";
     public const string PlanetColor = "PlanetColor";
     public const string LegacyPauseCalc = "LegacyPauseCalc";
@@ -37,6 +36,4 @@ internal static class FeatureKeys
     public const string ReplayManualSave = "ReplayManualSave";
     public const string ReplayCancelSave = "ReplayCancelSave";
     public const string ReplayAsyncInput = "ReplayAsyncInput";
-    public const string CustomRealJudge = "CustomRealJudge";
-    public const string CustomOnly = "CustomOnly";
 }

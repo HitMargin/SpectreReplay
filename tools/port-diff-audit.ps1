@@ -139,6 +139,17 @@ $knownDeviations = @(
     @{ Pat = 'native.CopyTo';                       Why = '同上：数据落在精确容器里，拷贝跟着实际渲染目标走' }
     @{ Pat = 'native.IsCreated';                    Why = '同上：原生容器按需精确重建' }
     @{ Pat = 'native.Length';                       Why = '同上：容器长度必须等于本帧样本数' }
+    # ── 2026-10-17 移除 CustomJudge 特性（用户裁决）────────────────────
+    # 用户原话：「CustomJudge 并不属于replay和视频渲染的部分啊」。判定改写整套
+    # （档位/状态/档案/改判定的补丁）都不是本项目的事，已整体删除。
+    # 但判定窗口**数学**是 replay 真需要的（散点图按原版窗口归一化着色、找不到
+    # 游戏函数时兜底），故摘出为 Features\Compat\MarginBoundary.Raw。
+    # 上游那边这个函数叫 CustomJudge.BoundaryRaw。
+    @{ Pat = 'MarginBoundary.Raw';                  Why = '2026-10-17 CustomJudge 移除：窗口数学摘到 Compat（replay 仍需要）' }
+    @{ Pat = 'Features.Compat.MarginBoundary.Raw';  Why = '同上：调用点改指新家' }
+    @{ Pat = 'Features.Compat';                    Why = '2026-10-17 CustomJudge 移除：窗口数学落到 Compat 命名空间（上游在 Features.CustomJudge）' }
+    @{ Pat = 'perfectWins.Add';                     Why = '同上：散点图完美窗口（原调 CustomJudge.BoundaryRaw）' }
+    @{ Pat = 'pureWins.Add';                        Why = '同上：散点图纯判窗口' }
 )
 
 Write-Output ""

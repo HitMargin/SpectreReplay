@@ -19,34 +19,8 @@ public static class ConfigManager
         public StringsData Strings { get; set; } = new StringsData();
         public StringListsData StringLists { get; set; } = new StringListsData();
         public ColorsData Colors { get; set; } = new ColorsData();
-        public CustomJudgeData CustomJudge { get; set; } = new CustomJudgeData();
     }
 
-    // 自定义判定档案（独立嵌套节点，字段与 Settings.CustomTier* 一一对应）
-    private class CustomJudgeData
-    {
-        public bool on { get; set; }
-        public bool textOn { get; set; } = false; // 默认关：飘字改写需主动开启
-        public bool[] tier_on { get; set; }
-        public float[] tier_inner { get; set; }
-        public float[] tier_outer { get; set; }
-        public float[] tier_deg { get; set; }  // 旧版累计边界，兼容读取
-        public float[] tier_ms { get; set; }
-        public string[] tier_name { get; set; }
-        public string[] tier_prefix { get; set; }
-        public string[] tier_color { get; set; }
-        public float[] tier_weight { get; set; }
-        public bool[] tier_split { get; set; }
-        public bool[] tier_hide { get; set; }
-        public string[] tier_outline_color { get; set; }
-        public string[] tier_tick_outline_color { get; set; }
-        public bool realjudge { get; set; }
-        public int real_pure { get; set; } = -1;
-        public int real_perfect { get; set; } = -1;
-        public int real_counted { get; set; } = -1;
-        public bool xacc { get; set; }
-        public bool only { get; set; }
-    }
 
     private class SetsData
     {
@@ -108,7 +82,6 @@ public static class ConfigManager
         public bool JudgeTextParticleOn { get; set; }
         public bool JudgeBarOn { get; set; }
         public bool JudgeBarDynamicOn { get; set; }
-        public bool JudgeBarShowTiersOn { get; set; }
         public bool JudgeBarUnlockStrict { get; set; }
         public bool JudgeBarEdgeColorOn { get; set; }
         public bool JudgeBarZonePureOn { get; set; }
@@ -288,7 +261,6 @@ public static class ConfigManager
                 JudgeTextParticleOn = Settings.JudgeTextParticleOn,
                 JudgeBarOn = Settings.JudgeBarOn,
                 JudgeBarDynamicOn = Settings.JudgeBarDynamicOn,
-                JudgeBarShowTiersOn = Settings.JudgeBarShowTiersOn,
                 JudgeBarUnlockStrict = Settings.JudgeBarUnlockStrict,
                 JudgeBarEdgeColorOn = Settings.JudgeBarEdgeColorOn,
                 JudgeBarZonePureOn = Settings.JudgeBarZonePureOn,
@@ -382,21 +354,6 @@ public static class ConfigManager
                 judgebar_tick_outline_color = ToHex(Settings.JudgeBarTickOutlineColor)
             }
         };
-        // SaveCustomJudge() 原本在上面的构造里求值（在 try 之外）——它遍历档位表的
-        // 十个平行 List 取色，任何一处长度不同步都会抛 IndexOutOfRangeException 并穿透
-        // 到调用方。挪到这里与序列化/写盘同处一个 try。
-        CustomJudgeData customJudge;
-        try
-        {
-            customJudge = SaveCustomJudge();
-        }
-        catch (Exception ex)
-        {
-            Debug.Log("[SpectreReplay] 档位表取值失败，本次配置将不带 CustomJudge 段: "
-                + ex.GetType().Name + " " + ex.Message);
-            customJudge = null;
-        }
-        if (customJudge != null) data.CustomJudge = customJudge;
         // 从这里往下的全部工作（序列化、建目录、写盘）都在
         // try 保护内。SaveConfigs 的 4 个调用方都**没有**自己的 try —— UM4 的
         // OnHideGUI 回调、退出钩子、设置页保存按钮，而 UM4 不包异常。异常穿透的后果
@@ -653,7 +610,6 @@ public static class ConfigManager
                 Settings.JudgeTextParticleOn = sets.Value<bool?>("JudgeTextParticleOn") ?? Settings.JudgeTextParticleOn;
                 Settings.JudgeBarOn = sets.Value<bool?>("JudgeBarOn") ?? Settings.JudgeBarOn;
                 Settings.JudgeBarDynamicOn = sets.Value<bool?>("JudgeBarDynamicOn") ?? Settings.JudgeBarDynamicOn;
-                Settings.JudgeBarShowTiersOn = sets.Value<bool?>("JudgeBarShowTiersOn") ?? Settings.JudgeBarShowTiersOn;
                 Settings.JudgeBarUnlockStrict = sets.Value<bool?>("JudgeBarUnlockStrict") ?? Settings.JudgeBarUnlockStrict;
                 Settings.JudgeBarEdgeColorOn = sets.Value<bool?>("JudgeBarEdgeColorOn") ?? Settings.JudgeBarEdgeColorOn;
                 Settings.JudgeBarZonePureOn = sets.Value<bool?>("JudgeBarZonePureOn") ?? Settings.JudgeBarZonePureOn;
@@ -859,21 +815,6 @@ public static class ConfigManager
             {
                 Debug.Log("[SpectreReplay] 配置分区 \"Colors\" 载入失败（其余分区不受影响）: " + ex.Message);
             }
-            // CustomJudge 分区自身已带 try（内部结构不同），无需再包一层
-            var cj = json["CustomJudge"];
-            if (cj != null)
-            {
-                try
-                {
-                    var data = cj.ToObject<CustomJudgeData>();
-                    if (data != null)
-                        LoadCustomJudge(data);
-                }
-                catch (System.Exception ex)
-                {
-                    Debug.Log("[SpectreReplay] 自定义判定配置解析失败（档位表回退默认值）: " + ex.Message);
-                }
-            }
             Debug.Log("[SpectreReplay] 配置载入成功");
         }
         catch (JsonException ex)
@@ -928,113 +869,4 @@ public static class ConfigManager
         if (string.IsNullOrEmpty(s)) return false;
         return ColorUtility.TryParseHtmlString(s.StartsWith("#") ? s : "#" + s, out color);
     }
-
-    // 自定义判定档案持久化：九个平行 List 按索引对齐整体重建（档数 = 列表长度）
-    private static CustomJudgeData SaveCustomJudge()
-    {
-        int n = Settings.CustomTierOn.Count;
-        var color = new string[n];
-        var outlineColor = new string[n];
-        var tickOutlineColor = new string[n];
-        for (int i = 0; i < n; i++)
-        {
-            color[i] = "#" + ColorUtility.ToHtmlStringRGBA(Settings.CustomTierColor[i]);
-            outlineColor[i] = "#" + ColorUtility.ToHtmlStringRGBA(
-                i < Settings.CustomTierOutlineColor.Count ? Settings.CustomTierOutlineColor[i] : default);
-            tickOutlineColor[i] = "#" + ColorUtility.ToHtmlStringRGBA(
-                i < Settings.CustomTierTickOutlineColor.Count ? Settings.CustomTierTickOutlineColor[i] : default);
-        }
-        return new CustomJudgeData
-        {
-            on = Settings.CustomJudgeOn,
-            textOn = Settings.CustomJudgeTextOn,
-            tier_on = Settings.CustomTierOn.ToArray(),
-            tier_inner = Settings.CustomTierInner.ToArray(),
-            tier_outer = Settings.CustomTierOuter.ToArray(),
-            tier_ms = Settings.CustomTierMs.ToArray(),
-            tier_name = Settings.CustomTierName.ToArray(),
-            tier_prefix = Settings.CustomTierPrefix.ToArray(),
-            tier_color = color,
-            tier_weight = Settings.CustomTierWeight.ToArray(),
-            tier_split = Settings.CustomTierSplit.ToArray(),
-            tier_hide = Settings.CustomTierHide.ToArray(),
-            tier_outline_color = outlineColor,
-            tier_tick_outline_color = tickOutlineColor,
-            realjudge = Settings.CustomRealJudgeOn,
-            real_pure = Settings.CustomRealPure,
-            real_perfect = Settings.CustomRealPerfect,
-            real_counted = Settings.CustomRealCounted,
-            xacc = Settings.CustomXaccOn,
-            only = Settings.CustomOnlyOn
-        };
-    }
-
-    private static void LoadCustomJudge(CustomJudgeData d)
-    {
-        Settings.CustomJudgeOn = d.on;
-        Settings.CustomJudgeTextOn = d.textOn; // 默认 false（旧配置无此键 = 不改飘字）
-        // 档数以 tier_on 为准；outer 兼容旧键 tier_deg，inner 缺失时按旧累计模型推导
-        //（inner[0]=0、inner[i]=outer[i-1]，语义等价迁移）
-        int n = d.tier_on?.Length ?? 0;
-        Settings.CustomTierOn = new List<bool>(n);
-        Settings.CustomTierInner = new List<float>(n);
-        Settings.CustomTierOuter = new List<float>(n);
-        Settings.CustomTierMs = new List<float>(n);
-        Settings.CustomTierName = new List<string>(n);
-        Settings.CustomTierPrefix = new List<string>(n);
-        Settings.CustomTierColor = new List<Color>(n);
-        Settings.CustomTierWeight = new List<float>(n);
-        Settings.CustomTierSplit = new List<bool>(n);
-        Settings.CustomTierHide = new List<bool>(n);
-        Settings.CustomTierOutlineColor = new List<Color>(n);
-        float[] outerSrc = d.tier_outer ?? d.tier_deg;
-        for (int i = 0; i < n; i++)
-        {
-            Settings.CustomTierOn.Add(d.tier_on[i]);
-            Settings.CustomTierOuter.Add(At(outerSrc, i));
-            if (d.tier_inner != null && i < d.tier_inner.Length)
-                Settings.CustomTierInner.Add(d.tier_inner[i]);
-            else
-                Settings.CustomTierInner.Add(i > 0 ? At(outerSrc, i - 1) : 0f);
-            Settings.CustomTierMs.Add(At(d.tier_ms, i));
-            Settings.CustomTierName.Add(At(d.tier_name, i) ?? "");
-            Settings.CustomTierPrefix.Add(At(d.tier_prefix, i) ?? "");
-            Settings.CustomTierColor.Add(Color.white);
-            Settings.CustomTierWeight.Add(At(d.tier_weight, i, 1f));
-            Settings.CustomTierSplit.Add(At(d.tier_split, i));
-            Settings.CustomTierHide.Add(At(d.tier_hide, i));
-            Settings.CustomTierOutlineColor.Add(default); // 透明 = 不描边（旧配置兼容）
-            Settings.CustomTierTickOutlineColor.Add(default);
-        }
-        if (d.tier_color != null)
-            for (int i = 0; i < n && i < d.tier_color.Length; i++)
-                if (TryParseHex(d.tier_color[i], out Color c))
-                    Settings.CustomTierColor[i] = c;
-        if (d.tier_outline_color != null)
-            for (int i = 0; i < n && i < d.tier_outline_color.Length; i++)
-                if (TryParseHex(d.tier_outline_color[i], out Color oc))
-                    Settings.CustomTierOutlineColor[i] = oc;
-        if (d.tier_tick_outline_color != null)
-            for (int i = 0; i < n && i < d.tier_tick_outline_color.Length; i++)
-                if (TryParseHex(d.tier_tick_outline_color[i], out Color toc))
-                    Settings.CustomTierTickOutlineColor[i] = toc;
-        Settings.CustomRealJudgeOn = d.realjudge;
-        int last = Mathf.Max(n - 1, 0);
-        if (d.real_pure >= 0) Settings.CustomRealPure = Mathf.Clamp(d.real_pure, 0, last);
-        if (d.real_perfect >= 0) Settings.CustomRealPerfect = Mathf.Clamp(d.real_perfect, 0, last);
-        if (d.real_counted >= 0) Settings.CustomRealCounted = Mathf.Clamp(d.real_counted, 0, last);
-        Settings.CustomXaccOn = d.xacc;
-        Settings.CustomOnlyOn = d.only;
-        // 档位表已按存档重建：账本立刻对齐尺寸（否则首次 Commit 前结算页读计数会越界）
-        Features.CustomJudge.TierJudgeState.Reset();
-    }
-
-    private static float At(float[] src, int i, float fill = 0f)
-        => src != null && i < src.Length ? src[i] : fill;
-
-    private static bool At(bool[] src, int i)
-        => src != null && i < src.Length && src[i];
-
-    private static string At(string[] src, int i)
-        => src != null && i < src.Length ? src[i] : null;
 }

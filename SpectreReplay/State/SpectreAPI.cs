@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using SpectreReplay.Features.Compat;
-using SpectreReplay.Features.CustomJudge;
 using SpectreReplay.Features.Replay;
 using UnityEngine;
 
@@ -151,149 +150,12 @@ public static class SpectreAPI
             return new List<KeyValuePair<string, string>>(_blockSources);
     }
 
-    // ── 自定义判定读取 ───────────────────────────────────────────
-
-    /// <summary>命中符号：早 / 自动 / 晚 / 中旋。</summary>
-    public enum HitSign { Early = -1, Auto = 0, Late = 1, Midspin = 2 }
-
-    /// <summary>单个判定档的计数快照。</summary>
-    public readonly struct TierCount
-    {
-        public readonly int Early;
-        public readonly int Late;
-        public readonly int Auto;
-        public readonly int Midspin;
-
-        public TierCount(int early, int late, int auto, int midspin)
-        {
-            Early = early; Late = late; Auto = auto; Midspin = midspin;
-        }
-
-        /// <summary>四类合计（加权 xacc 的分子口径与此一致）。</summary>
-        public int Total => Early + Late + Auto + Midspin;
-    }
-
-    /// <summary>自定义判定功能是否开启（关闭时下列计数接口返回空数据）。</summary>
-    public static bool IsCustomJudgeActive => Settings.CustomJudgeOn;
-
-    /// <summary>当前档位数（随档案动态变化）。</summary>
-    public static int GetTierCount() => Settings.CustomTierOn.Count;
-
-    /// <summary>
-    /// 单档计数快照。tier 越界或功能关闭返回全零。<br/>
-    /// 注意：检查点回滚、重开都会使数值回退，属正常口径。
-    /// </summary>
-    public static TierCount GetTierCounts(int tier)
-    {
-        if (!Settings.CustomJudgeOn || tier < 0 || tier >= Settings.CustomTierOn.Count)
-            return default;
-        return new TierCount(TierJudgeState.EarlyCount(tier), TierJudgeState.LateCount(tier),
-            TierJudgeState.AutoCount(tier), TierJudgeState.MidspinCount(tier));
-    }
-
-    /// <summary>全部档位的计数快照（下标即档位）。</summary>
-    public static TierCount[] GetAllTierCounts()
-    {
-        int n = GetTierCount();
-        var arr = new TierCount[n];
-        for (int i = 0; i < n; i++) arr[i] = GetTierCounts(i);
-        return arr;
-    }
-
-    /// <summary>最近一次落账命中的档位索引；-1 = 尚无命中或越档命中。</summary>
-    public static int GetLastHitTier() => TierJudgeState.CommittedTier;
-
-    /// <summary>最近一次落账命中的符号；配合 GetLastHitTier 使用。</summary>
-    public static HitSign GetLastHitSign()
-        => TierJudgeState.CommittedKind switch
-        {
-            -1 => HitSign.Early,
-            1 => HitSign.Late,
-            2 => HitSign.Midspin,
-            _ => HitSign.Auto,
-        };
-
-    /// <summary>结算口径准度：自定义权重开启时走自定义公式，否则原版四段权重。</summary>
+    /// <summary>结算口径准度（原版四段权重，与文件名所用口径一致）。</summary>
     public static double GetXacc() => SpectreState.ComputePercentXacc();
 
     /// <summary>强制原版口径的准度（文件名所用口径，跨判定方案可比）。</summary>
     public static double GetVanillaXacc() => SpectreState.ComputePercentXaccVanilla();
 
-    /// <summary>
-    /// 判定档位定义快照——Configs.json 里 CustomJudge 节的内存镜像（加载后以 Settings 为准），
-    /// 与设置页所见一致。数组下标即档位索引。
-    /// </summary>
-    public static TierDefinition[] GetTierDefinitions()
-    {
-        int n = Settings.CustomTierOn.Count;
-        var arr = new TierDefinition[n];
-        for (int i = 0; i < n; i++)
-        {
-            arr[i] = new TierDefinition(
-                i,
-                Settings.CustomTierOn[i],
-                At(Settings.CustomTierInner, i, 0f),
-                At(Settings.CustomTierOuter, i, 0f),
-                At(Settings.CustomTierMs, i, 0f),
-                AtStr(Settings.CustomTierName, i),
-                AtStr(Settings.CustomTierPrefix, i),
-                AtCol(Settings.CustomTierColor, i),
-                At(Settings.CustomTierWeight, i, 1f),
-                AtBool(Settings.CustomTierSplit, i),
-                AtBool(Settings.CustomTierHide, i));
-        }
-        return arr;
-    }
-
-    private static T At<T>(List<T> list, int i, T def)
-        => list != null && (uint)i < list.Count ? list[i] : def;
-
-    private static string AtStr(List<string> list, int i)
-        => At(list, i, "") ?? "";
-
-    private static Color AtCol(List<Color> list, int i)
-        => At(list, i, Color.black);
-
-    private static bool AtBool(List<bool> list, int i) => At(list, i, false);
-
-    /// <summary>
-    /// 档位在判定条上的当前实时区间（条坐标 0..60°，已含级联铺排与毫秒换算）。<br/>
-    /// 随 BPM×速度、音调、难度窗口动态变化；零宽退化档 Outer==Inner。<br/>
-    /// 不在关卡内 / 自定义判定关闭 / 游戏对象缺失时返回 null。
-    /// </summary>
-    public static TierZone[] GetLiveTierLayout()
-    {
-        if (!Settings.CustomJudgeOn) return null;
-        scrController controller = scrController.instance;
-        scrConductor conductor = scrConductor.instance;
-        if (controller == null || conductor == null) return null;
-        try
-        {
-            // 与准度条 tick 配色同源的上下文推导：速度取前一地板，mm 取目标块
-            var floor = controller.playerOne?.currFloor;
-            double bpmTimesSpeed = (double)conductor.bpm * (floor?.prevfloor?.speed ?? 1f);
-            double pitch = conductor.song != null ? conductor.song.pitch : 1.0;
-            float marginScale = (float)(floor?.nextfloor != null ? floor.nextfloor.marginScale
-                              : floor?.marginScale ?? 1.0);
-            // 逐版本取窗口：旧版直调 scrMisc（HitMarginGeneral 参数），r150 起签名
-            // 变成 Difficulty→结构体返回，由 GameCompat 按反射自动择路
-            double countedRaw = GameCompat.Boundary(
-                HitMarginGeneral.Counted, bpmTimesSpeed, pitch, marginScale);
-            int n = CustomJudge.Count;
-            var arr = new TierZone[n];
-            for (int i = 0; i < n; i++)
-            {
-                var (inner, outer) = CustomJudge.TierRangeBar(i, bpmTimesSpeed, pitch, marginScale, countedRaw);
-                arr[i] = new TierZone(inner, outer);
-            }
-            return arr;
-        }
-        catch (Exception ex)
-        {
-            Debug.LogWarning("[SpectreAPI] 解析档位实时布局失败: " + ex);
-            return null;
-        }
-    }
 
     // ── 回放视频渲染 ─────────────────────────────────────────────
     // 渲染使用「回放视频」页签的当前设置（分辨率/帧率/编码器等）；
@@ -405,7 +267,7 @@ public static class SpectreAPI
 
     /// <summary>
     /// 功能补丁是否全部解析就绪（目标方法存在、版本门控通过）。<br/>
-    /// feature 取 FeatureKeys 常量字符串，如 "CustomJudge"、"Replay"、"PlanetColor"。
+    /// feature 取 FeatureKeys 常量字符串，如 "Replay"、"PlanetColor"。
     /// </summary>
     public static bool IsFeatureAvailable(string feature) => SpectrePatchHub.IsAvailable(feature);
 
@@ -462,59 +324,5 @@ public sealed class ReplayInfo
         StartTile = startTile; EndTile = endTile;
         Bpm = bpm; PlaybackSpeed = playbackSpeed;
         HitCount = hitCount; KeyEventCount = keyEventCount;
-    }
-}
-
-/// <summary>判定档位定义（Configs.json CustomJudge 节的只读镜像，SpectreAPI.GetTierDefinitions 返回值）。</summary>
-public sealed class TierDefinition
-{
-    /// <summary>档位索引。</summary>
-    public int Index { get; }
-    /// <summary>档位是否启用。</summary>
-    public bool Enabled { get; }
-    /// <summary>
-    /// 写定内沿角（判定条坐标 0..60°）。-1 = 接上一档结束角。
-    /// </summary>
-    public float InnerDeg { get; }
-    /// <summary>
-    /// 写定外沿角。-1/-2/-3 = 跟随游戏 Pure/Perfect/Counted 窗口实时边界；
-    /// ≥60 = 触边钉死；配合 <see cref="MsFloor"/> 取二者较大值。
-    /// </summary>
-    public float OuterDeg { get; }
-    /// <summary>毫秒下限（真实时间换算为窗口角，随 BPM×速度移动）；0 = 不设。</summary>
-    public float MsFloor { get; }
-    /// <summary>显示名（空串 = 回退原版飘字文本）。</summary>
-    public string Name { get; }
-    /// <summary>飘字前缀（如 "+"、"X"）。</summary>
-    public string Prefix { get; }
-    /// <summary>档位颜色（飘字/tick/结算）。</summary>
-    public Color Color { get; }
-    /// <summary>加权 xacc 的权重。</summary>
-    public float Weight { get; }
-    /// <summary>结算屏是否按早/迟拆分显示。</summary>
-    public bool SplitDisplay { get; }
-    /// <summary>是否隐藏该档飘字。</summary>
-    public bool Hidden { get; }
-
-    internal TierDefinition(int index, bool enabled, float innerDeg, float outerDeg, float msFloor,
-        string name, string prefix, Color color, float weight, bool splitDisplay, bool hidden)
-    {
-        Index = index; Enabled = enabled;
-        InnerDeg = innerDeg; OuterDeg = outerDeg; MsFloor = msFloor;
-        Name = name ?? ""; Prefix = prefix ?? ""; Color = color;
-        Weight = weight; SplitDisplay = splitDisplay; Hidden = hidden;
-    }
-}
-
-/// <summary>档位在判定条坐标上的实时区间（SpectreAPI.GetLiveTierLayout 返回值）。单位：度（0..60）。</summary>
-public readonly struct TierZone
-{
-    public readonly float InnerDeg;
-    public readonly float OuterDeg;
-
-    internal TierZone(float innerDeg, float outerDeg)
-    {
-        InnerDeg = innerDeg;
-        OuterDeg = outerDeg;
     }
 }

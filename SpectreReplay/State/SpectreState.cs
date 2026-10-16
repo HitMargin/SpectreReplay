@@ -530,17 +530,11 @@ public static class SpectreState
         var tracker = scrController.instance?.playerOne?.marginTracker;
         if (tracker == null || tracker.hitMargins == null || tracker.hitMargins.Count == 0)
             return 0.0;
-        // 自定义权重模式：分子 = Σ(档命中 × 档权重)，越档命中不计；分母仍为全部命中数
-        if (Settings.CustomJudgeOn && Settings.CustomXaccOn)
-            return Features.CustomJudge.TierJudgeState.WeightedSum() / (double)tracker.hitMargins.Count;
         return ComputePercentXaccVanilla();
     }
 
     // 原版口径 xacc：官方四段权重（1 / 0.75 / 0.4 / 0.2）对 margin 桶计数加权。
-    // 文件名固定用这个口径——文件名要跨玩家、跨判定方案通用可比，
-    // 自定义档准度只上结算屏，不进文件名。
-    // 注：RealJudge 改写判定边界时，桶本身已按自定义规则落账，
-    // 此时该值是“原版公式对本次实际判定的取值”，而非无 mod 重打的假想值
+    // 文件名固定用这个口径——文件名要跨玩家通用可比。
     public static double ComputePercentXaccVanilla()
     {
         var tracker = scrController.instance?.playerOne?.marginTracker;

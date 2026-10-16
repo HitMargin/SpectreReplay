@@ -69,13 +69,15 @@ $pluginCallbackNames = @(
 
 # C 类清单：Spectre 侧确有调用方、但那些调用方所属特性本项目按裁决"不补"。
 # 每个都核过 Spectre 那边的调用点存在（见 2026-10-06 的 we/them 计数对比）。
-#   档位 UI（CustomJudge/TierJudgeState）  → CustomJudge 特性不补
 #   结算附加文本（HitErrorData 统计/MaxCombo、GameCompat.DeadTiles） → ResultsText 不补
 #   ReplayManager.UnLoadReplay           → Spectre 在设置页"卸载当前回放"里调，我们无该页
 #   LocalizationManager.CodeToLang 等    → 语言管理工具函数，Spectre 的设置 UI 用
+# （2026-10-17：CustomJudge 整套按用户裁决删除，档位/TierJudgeState/BoundaryRaw 等
+#   名字已从本项目消失，故不再列在"不补"名单里；窗口数学 MarginBoundary.Raw 留在
+#   Compat 且被 ReplayAnalyzer 调用，不是死代码。GameCompat.Boundary 这套**走游戏
+#   函数**的反射机制原本只服务已删的档位布局，也一并删了——ReplayAnalyzer 走的是
+#   MarginBoundary.Raw 本地复刻，要的恰恰是"不被别的 mod 改写过的原版窗口"。）
 $cSpectreCallerNotPorted = @(
-    'InnermostTier','DisplayName','Classify','AddTier','RemoveTier','LoadProfile','SaveProfile',
-    'EffectiveBoundary','BoundaryRaw','Boundary',
     'MarkCheckpoint','RevertToCheckpoint',
     'MaxCombo','ComputeStats','CapturePending',
     'DeadTiles','IsCounted','IsJudgeTracked','IsPlayerHitMargin','IsTimeless','XAccWeight',

@@ -206,8 +206,6 @@ public static class Settings
     public static bool JudgeBarOn = false;
     // 动态窗口缩放：开 = 分区实时按难度/BPM/音调缩放（精确判定条行为）；关 = 固定原版 30/45/60 布局
     public static bool JudgeBarDynamicOn = true;
-    // 在判定条上叠加自定义档位分区（独立于动态缩放；需 CustomJudge 功能开启才有内容可画）
-    public static bool JudgeBarShowTiersOn = true;
     public static bool JudgeBarUnlockStrict = false;
     public static float JudgeBarAnimationDuration = 0.4f;
     public static float JudgeBarSensitivity = 0.2f;
@@ -254,38 +252,6 @@ public static class Settings
     // AJB 的 0.6 偏深，想要 AJB 观感手动调高即可）
     public static float JudgeBarBackgroundOpacity = 0.4f;
 
-    // ── CustomJudge settings（默认值由 CustomJudge.ApplyDefaults 统一写入，见静态构造；
-    //    九个平行 List 同步增删，档位数量完全动态）──
-    public static bool CustomJudgeOn = false;
-    // 飘字改写子开关：默认关（档位区间/颜色/描边照常，飘字保持原生）。
-    // 要改飘字必须手动开这个开关——用户的心智模型是"文字修改应该主动开启"
-    public static bool CustomJudgeTextOn = false;
-    public static List<bool> CustomTierOn = new();
-    public static List<float> CustomTierInner = new();
-    public static List<float> CustomTierOuter = new();
-    public static List<float> CustomTierMs = new();
-    public static List<string> CustomTierName = new();
-    public static List<string> CustomTierPrefix = new();
-    public static List<Color> CustomTierColor = new();
-    public static List<float> CustomTierWeight = new();
-    public static List<bool> CustomTierSplit = new();
-    public static List<bool> CustomTierHide = new();
-    // 档位描边色（弧形判定条分区四周画一圈此色；alpha 0 = 不描边）
-    public static List<Color> CustomTierOutlineColor = new();
-    // 描边发光宽度（本地像素）。径向被羽化带夹住、角向被相邻分区夹住，
-    // 窄档位/细判定条需要更大的诉求量才有存在感
-    public static float CustomTierOutlineWidth = 3f;
-    // 档位 tick 描边色（该档区间内命中的 tick 自带此色描边；alpha 0 = 不描边）
-    public static List<Color> CustomTierTickOutlineColor = new();
-    // 真实判定改写：三条游戏边界换用指定档的边界
-    public static bool CustomRealJudgeOn = false;
-    public static int CustomRealPure;
-    public static int CustomRealPerfect;
-    public static int CustomRealCounted;
-    public static bool CustomXaccOn = false;
-    public static bool CustomOnlyOn = false;
-
-    static Settings() => Features.CustomJudge.CustomJudge.ApplyDefaults();
 
     // ── ResultsPlus settings ────────────────────────────
     public static bool ResultsPlusOn = true;

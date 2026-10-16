@@ -105,14 +105,14 @@ internal static class ReplayAnalyzer
                 if (double.IsNaN(ms) || double.IsInfinity(ms))
                     continue;
                 samples.Add((float)ms);
-                // 窗口角度走 BoundaryRaw 的原版语义（不经过真实判定改写 Postfix）。
-                // 注意 BoundaryRaw 返回的是【度】，须先转回弧度再用与误差相同的逆变换，
+                // 窗口角度走 MarginBoundary.Raw 的原版语义（不经过任何判定改写 Postfix）。
+                // 注意它返回的是【度】，须先转回弧度再用与误差相同的逆变换，
                 // 否则窗口会被放大 180/π ≈ 57 倍，散点图全部误绿
                 double degToMs = (Math.PI / 180.0) * 60.0
                     / (Math.PI * pitch * bpmTimesSpeed) * 1000.0;
-                perfectWins.Add((float)(Features.CustomJudge.CustomJudge.BoundaryRaw(
+                perfectWins.Add((float)(Features.Compat.MarginBoundary.Raw(
                     HitMarginGeneral.Perfect, bpmTimesSpeed, pitch, 1.0) * degToMs));
-                pureWins.Add((float)(Features.CustomJudge.CustomJudge.BoundaryRaw(
+                pureWins.Add((float)(Features.Compat.MarginBoundary.Raw(
                     HitMarginGeneral.Pure, bpmTimesSpeed, pitch, 1.0) * degToMs));
             }
         }
