@@ -339,6 +339,45 @@ switch ($Which) {
             '            if (Cache.TryGetValue(key, out Texture2D hit) && hit != null)' `
             '            if (key.W == -1)'
     }
+    'MUT-U12' {
+        # ⑩：滑条右侧退回**只读显示**——正是用户 2026-10-17 要求改掉的那个形态。
+        #     做法：把自绘输入的 Draw 换成 GUILayout.Label（只读），同时保留
+        #     后面的提交逻辑不管（判据只看 RowSlider 体内还有没有 .Draw）。
+        #     **为什么这条是本条的"正确变异形状"**：缺陷是"数值不可编辑"，
+        #     而"不可编辑"最朴素的复现就是把控件换回 Label——不是删掉整段。
+        Backup 'Ui\OnGui.cs'
+        ReplaceExact 'Ui\OnGui.cs' `
+            '            bool commit = st.Draw(field, Gui.LabelStyle, "", out canceled);' `
+            '            GUILayout.Label(st.Text, Gui.LabelStyle, GUILayout.Width(FieldW)); bool commit = false; canceled = false;'
+    }
+    'MUT-U13' {
+        # ⑪：滑条丢掉 hover 判定（把 hot 写死 false）。
+        #     形态对准判据：判据要求 RowSlider/Slider 体内**同时**有 Hover( 与
+        #     hover 色。这条只干掉"判鼠标位置"那一半——留下的 hover 色恒不生效。
+        #     **不能只删颜色**：那样判据也红，但红的原因不是"没做 hover"，
+        #     而是"没做完 hover"，两种形态要各有一条变异才分得清。
+        Backup 'Ui\Gui.cs'
+        ReplaceExact 'Ui\Gui.cs' `
+            '                bool hot = Hover(track) || GUIUtility.hotControl == id;' `
+            '                bool hot = false;'
+    }
+    'MUT-U14' {
+        # ⑪b：开关丢掉 hover（只留非悬停色）。同 U13，钉的是"判了没换色"
+        #      的另一半。
+        Backup 'Ui\Gui.cs'
+        ReplaceExact 'Ui\Gui.cs' `
+            '            bool hot = Hover(track);' `
+            '            bool hot = false;'
+    }
+    'MUT-U15' {
+        # ⑪c：输入框丢掉 hover。
+        #     把它替换成一个语义等价但不含 Hover( 的写法——注意**不能留未使用变量**
+        #     （会让变异体"编译不过"而不是"被断言抓到"，证明力归零）。
+        Backup 'Ui\TextField.cs'
+        ReplaceExact 'Ui\TextField.cs' `
+            '            bool hot = Gui.Hover(box);' `
+            '            bool hot = false;'
+    }
     # ── 界面控制流 / 接线（UiLogicShapeCheck）─────────────────────
     'MUT-U1' {
         # ① 退回旧样子：停止录制按钮改回借用「取消保存」文案。
@@ -769,7 +808,7 @@ switch ($Which) {
         ReplaceExact 'Features\Replay\KeyboardSimulation.cs' 'internal static class KeyboardSimulation' 'internal static class KeyboardSimulation { /* accidental drift */ internal static int __driftProbe = 1;'
     }
     default {
-        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-PORT1）"
+        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-PORT1）"
     }
 }
 

@@ -183,8 +183,11 @@ namespace SpectreReplay.Ui
 
         private void Paint(Rect box, Rect inner, GUIStyle style, string placeholder)
         {
-            Gui.Fill(box, Gui.FieldBg);
-            Gui.Frame(box, Editing ? Gui.FieldFocus : Gui.FieldBorder);
+            // hover：鼠标落在框上时凹槽与描边各提一档。与按钮/滑条/开关用
+            // 同一套语汇（悬停即提亮），否则整页只有按钮"活"着。
+            bool hot = Gui.Hover(box);
+            Gui.Fill(box, hot && !Editing ? Gui.FieldBgHover : Gui.FieldBg);
+            Gui.Frame(box, Editing ? Gui.FieldFocus : (hot ? Gui.FieldBorderHover : Gui.FieldBorder));
 
             // 占位文案与正文**都要在裁剪里**。调用方传进来的是 Gui.LabelStyle，
             // 它克隆自 GUI.skin.label，而 UMM 把 skin.label.clipping 改成了

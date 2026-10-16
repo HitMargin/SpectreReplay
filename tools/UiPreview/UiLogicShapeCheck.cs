@@ -216,8 +216,53 @@ namespace UiPreview
                      // 只钉 _pad 那一处：Fill() 里合法地用 whiteTexture 画纯色块
                      // （它随后自己还原 GUI.color），整文件禁 whiteTexture 会假红。
                      && !s.Contains("_pad.normal.background = Texture2D.whiteTexture", StringComparison.Ordinal));
+            // ⑩ 滑条右侧的数值必须是**可编辑输入框**，不能退回只读显示。
+            //
+            //    2026-10-17 用户要求：「把滑动条右边的数字显示改为输入框」。
+            //    理由与「只读展示行」那一族同源但方向相反：数值**显示出来了**、
+            //    滑条**也能拖**，看起来什么都不缺——所以它不是"界面缺失"那类
+            //    缺陷，而是"精度不够用"。
+            //
+            //    **为什么必须用自绘输入框而不是 GUILayout.TextField**：
+            //    同页那个内建输入框会沿用 ADOFAI 深色皮肤（UMM 从不重设
+            //    GUI.skin.textField），在深色卡片上就是一条黑框——判据 ② 已经
+            //    为 OnGui.cs 钉死了这一点，这里的滑条数值框必须走同一条路。
+            //
+            //    判据三件齐：
+            //      ① RowSlider 方法体里出现了自绘控件的 Draw（而不是 GUILayout.Label）；
+            //      ② 一行滑条的数值框调了 GetField/字段缓存（否则每帧新建控件、
+            //         编辑状态每帧丢失，打一个字就掉一个）；
+            //      ③ 解析失败时必须**复位**（st.Text = NumberOf(full)），
+            //         否则输入框会留着一段永远提交不上去的乱码。
+            fail += Check(projectRoot,
+                "⑩ 滑条右侧数值必须是可编辑输入框（不许退回只读显示）",
+                "Ui\\OnGui.cs",
+                s => SliderValueIsEditable(s));
+            // ⑪ 滑条 / 输入框 / 开关都必须有 hover 反馈。
+            //
+            //    2026-10-17 用户要求：「滑条 输入框 开关 等控件都像按钮那样
+            //    做成鼠标移到上面时变化」。**按钮的 hover 来自样式里烘好的
+            //    normal/hover 两张贴图**（Gui.MakeButton），而这三个是纯自绘的，
+            //    没有任何机制替它们判鼠标位置——不主动做，鼠标移上去毫无反应，
+            //    整页只有按钮"活"着，读起来像坏了一半。
+            //
+            //    判据钉的是**形态**（用没用 Gui.Hover + hover 色），不是具体色值：
+            //    数字可以调，机制不能丢。分别判三个文件/方法，避免"改一处算全篇"。
+            fail += Check(projectRoot,
+                "⑪ 滑条必须有 hover 反馈（自绘控件不会自动获得 hover）",
+                "Ui\\Gui.cs",
+                s => MethodUsesHover(s, "Slider", "SliderTrackHover"));
+            fail += Check(projectRoot,
+                "⑪b 开关必须有 hover 反馈",
+                "Ui\\Gui.cs",
+                s => MethodUsesHover(s, "Switch", "PillOffHover"));
+            fail += Check(projectRoot,
+                "⑪c 输入框必须有 hover 反馈",
+                "Ui\\TextField.cs",
+                s => s.Contains("Gui.Hover(box)", StringComparison.Ordinal)
+                     && s.Contains("FieldBgHover", StringComparison.Ordinal));
             if (fail == 0)
-                Console.WriteLine("    ✓ 十三条界面形状判据都成立");
+                Console.WriteLine("    ✓ 十六条界面形状判据都成立");
             return fail;
         }
 
@@ -468,6 +513,86 @@ namespace UiPreview
                     n++;
             }
             return n;
+        }
+
+        /// <summary>
+        /// 滑条右侧的数值是否真的是**可编辑自绘输入框**。
+        ///
+        /// 判据落在 <c>RowSlider</c> 方法体内，不整文件搜：OnGui.cs 别处
+        /// 合法地出现 <c>GUILayout.Label</c>（标签列就是），整文件判会假绿。
+        ///
+        /// 三件必须同时成立：
+        ///   ① 调了自绘输入的 <c>.Draw(</c>——数值框是自绘的；
+        ///   ② 用了按 key 缓存的字段（<c>GetField(</c> / <c>_fields</c>）——
+        ///      不缓存的话每帧新建 TextField，编辑状态每帧归零，
+        ///      **打一个字掉一个**，比只读还难用；
+        ///   ③ 解析失败有复位路径（<c>NumberOf(</c>）——否则框里会留一段
+        ///      永远提交不上去的乱码。
+        ///
+        /// 找不到 RowSlider 一律判**不通过**：判据默认姿态是不信，
+        /// "一处都没有"更可能是判据自己失效（有人改了方法名）。
+        /// </summary>
+        private static bool SliderValueIsEditable(string code)
+        {
+            string body = MethodBody(code, "RowSlider");
+            if (body == null) return false;
+            return body.Contains(".Draw(", StringComparison.Ordinal)
+                && body.Contains("GetField(", StringComparison.Ordinal)
+                && body.Contains("NumberOf(", StringComparison.Ordinal)
+                // 不许退回内建输入框（它会沿用 ADOFAI 深色皮肤，同判据 ②）
+                && !body.Contains("GUILayout.TextField", StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// 某个方法体内是否**同时**出现了 hover 判定与 hover 色。
+        ///
+        /// 两个都要：只写了 hover 色不判鼠标位置 = 恒不生效（等于没做）；
+        /// 只判鼠标位置不换色 = 判了也没用。这正是"变异形状要对准判据"那条——
+        /// 只查其一的话，把另一半删掉判据照样绿。
+        /// </summary>
+        private static bool MethodUsesHover(string code, string method, string hoverColor)
+        {
+            string body = MethodBody(code, method);
+            return body != null
+                && body.Contains("Hover(", StringComparison.Ordinal)
+                && body.Contains(hoverColor, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// 取某方法的体（从签名行到下一个成员声明为止）。
+        /// 本项目的成员都直接挂在 static class 下（没有局部函数），
+        /// 所以"最近的成员声明"就是真正的宿主方法，不需要括号配对。
+        /// 返回 null = 没找到该方法。
+        /// </summary>
+        private static string MethodBody(string code, string method)
+        {
+            string[] lines = code.Replace("\r\n", "\n").Split('\n');
+            int start = -1;
+            for (int i = 0; i < lines.Length; i++)
+            {
+                // 匹配 `... method(` 且该行是成员声明（不是调用）
+                if (!System.Text.RegularExpressions.Regex.IsMatch(lines[i],
+                        @"^\s*(?:private|internal|public|protected)\s+[\w<>\[\],\.\s]+\s+" +
+                        System.Text.RegularExpressions.Regex.Escape(method) + @"\s*\("))
+                {
+                    continue;
+                }
+                start = i;
+                break;
+            }
+            if (start < 0) return null;
+
+            var sb = new System.Text.StringBuilder();
+            for (int i = start; i < lines.Length; i++)
+            {
+                if (i > start && System.Text.RegularExpressions.Regex.IsMatch(lines[i],
+                        @"^\s*(?:private|internal|public|protected)\s+[\w<>\[\],\.\s]+\s+\w+\s*\("))
+                {
+                    break;
+                }
+                sb.AppendLine(lines[i]);
+            }
+            return sb.ToString();
         }
 
         private static int Check(string projectRoot, string name, string rel,

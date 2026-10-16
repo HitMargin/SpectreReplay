@@ -79,6 +79,26 @@ namespace SpectreReplay.Ui
         internal static readonly Color SliderTrack = new Color(0.14f, 0.16f, 0.21f, 1f);
         internal static readonly Color SliderThumb = new Color(0.88f, 0.91f, 0.95f, 1f);
 
+        // ── hover 色板（滑条 / 开关 / 输入框）─────────────────────────
+        // **为什么这三类控件也要 hover。** 按钮的 hover 是烘在贴图里的
+        // （normal 与 hover 两张图），而滑条/开关/输入框是**纯自绘**的，
+        // 没有任何样式帮它们做这件事——不主动判鼠标位置，鼠标移上去就毫无
+        // 反应，整页只有按钮"活"着，读起来像坏了一半。
+        //
+        // 提亮幅度刻意与 BtnFace→BtnHover（约 +0.06~0.08 亮度）对齐：
+        // 幅度不一致的话，同一页里会出现"按钮亮得很明显、开关几乎看不出来"，
+        // 反而更像 bug。判据 ⑪ 钉的是"取用了 hover 判据与 hover 色"，
+        // 不是某几个具体数字——数字可以调，形态不能丢。
+        internal static readonly Color SliderTrackHover = new Color(0.20f, 0.23f, 0.29f, 1f);
+        internal static readonly Color SliderFillHover  = new Color(0.36f, 0.72f, 1f, 1f);
+        internal static readonly Color SliderThumbHover = new Color(1f, 1f, 1f, 1f);
+        internal static readonly Color PillOffHover     = new Color(1f, 1f, 1f, 0.26f);
+        // 输入框 hover 必须**另起名字**、不能改 FieldBg：判据 ⑤ 拿 FieldBg 与
+        // CardBg 比 Rec.709 亮度（凹槽要比承载面亮），FieldBg 是非悬停的基准色，
+        // 改它就等于把基准改掉了。
+        internal static readonly Color FieldBgHover     = new Color(0.26f, 0.30f, 0.37f, 1f);
+        internal static readonly Color FieldBorderHover = new Color(1f, 1f, 1f, 0.45f);
+
         /// <summary>标签列的固定宽度。不同语言下标签长短差很多，
         /// 自动排布会让控件列左右跳动，拖滑条时尤其明显。</summary>
         internal const float LabelW = 190f;
@@ -187,6 +207,21 @@ namespace SpectreReplay.Ui
         internal static GUIStyle AccentButtonStyle { get { Ensure(); return _btnAccent; } }
 
         // ── 原子绘制 ──────────────────────────────────────────
+
+        /// <summary>
+        /// 鼠标是否悬停在 <paramref name="r"/> 上。
+        ///
+        /// **这是滑条 / 开关 / 输入框能做到 hover 变化的唯一来源。** 按钮的
+        /// hover 来自样式里烘好的两张贴图（normal / hover），那三个控件是纯自绘的，
+        /// 没有任何机制替它们判定鼠标位置。判据 ⑪ 认的就是"用没用这个函数"。
+        ///
+        /// **不要在这里碰 <c>GUIUtility.GetControlID</c>**：它按调用顺序分配
+        /// 控件 id，而这个函数会被多个控件在 Layout/Repaint 两趟各调一次，
+        /// 插进来会把别人的 id 全带偏（下拉错位那类毛病的温床）。
+        /// 需要"拖动中也算悬停"的控件（滑条）自己比较 hotControl。
+        /// </summary>
+        internal static bool Hover(Rect r)
+            => Event.current != null && r.Contains(Event.current.mousePosition);
 
         /// <summary>纯色填充。只在 Repaint 趟真的画。</summary>
         internal static void Fill(Rect r, Color c)
@@ -384,6 +419,12 @@ namespace SpectreReplay.Ui
 
             if (e.type == EventType.Repaint)
             {
+                // hover：鼠标在轨道上、或正拖着本控件，就整体提一档。
+                // **拖动中也要保持**（hotControl == id）：拖的时候鼠标很容易
+                // 偏离 6px 高的细轨道，只认 Contains 会让高亮途中熄灭，
+                // 看起来像"拖丢了"。
+                bool hot = Hover(track) || GUIUtility.hotControl == id;
+
                 // 先还原一次：调用方（如 RowSlider）可能刚设过 GUI.color，
                 // 留着它会把这里所有贴图整体染色。
                 Color old = GUI.color;
@@ -394,15 +435,15 @@ namespace SpectreReplay.Ui
                 // GUI.DrawTexture 会把左边那两个圆角横向拉成椭圆（"两头尖"）。
                 // 而这条槽只有 6px 高，圆角本来就看不出来——不值得为它做 9-slice。
                 // 真正需要圆角的是滑块：它是 1:1 绘制（32→14 等比缩小），不会被拉歪。
-                Fill(bar, SliderTrack);
+                Fill(bar, hot ? SliderTrackHover : SliderTrack);
                 float fillW = span * k;
                 if (fillW > 1f)
                 {
-                    Fill(new Rect(bar.x, bar.y, fillW, bar.height), Accent);
+                    Fill(new Rect(bar.x, bar.y, fillW, bar.height), hot ? SliderFillHover : Accent);
                 }
                 float tx = bar.x + span * k;
                 GUI.DrawTexture(new Rect(tx, track.y + (track.height - Thumb) * 0.5f, Thumb, Thumb),
-                    RoundedTex.Get(32, 32, (int)(Thumb * 0.5f), SliderThumb));
+                    RoundedTex.Get(32, 32, (int)(Thumb * 0.5f), hot ? SliderThumbHover : SliderThumb));
                 GUI.color = old;
             }
 
@@ -453,8 +494,13 @@ namespace SpectreReplay.Ui
             GUILayout.Label(Loc.T(labelKey), _label, GUILayout.Width(LabelW));
             Rect track = GUILayoutUtility.GetRect(44f, 20f, GUILayout.Width(44f), GUILayout.Height(20f));
             bool clicked = GUI.Button(track, GUIContent.none, GUIStyle.none);
-            Fill(track, value ? Accent : PillOff);
-            Frame(track, value ? new Color(0.55f, 0.82f, 1f, 0.9f) : new Color(1f, 1f, 1f, 0.22f));
+            // hover：与按钮同一套语汇（悬停即提亮）。关闭态的 pill 底色是
+            // 半透明白，在深色卡片上本来就淡，不给反馈会让人以为点不动。
+            bool hot = Hover(track);
+            Fill(track, value ? (hot ? Lighten(Accent, 0.10f) : Accent)
+                              : (hot ? PillOffHover : PillOff));
+            Frame(track, value ? new Color(0.55f, 0.82f, 1f, 0.9f)
+                               : new Color(1f, 1f, 1f, hot ? 0.34f : 0.22f));
             float k = track.height - 6f;
             Rect knob = new Rect(
                 value ? track.x + track.width - k - 3f : track.x + 3f,

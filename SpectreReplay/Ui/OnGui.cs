@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using UnityFileDialog;
 using UnityEngine;
@@ -315,7 +316,7 @@ namespace SpectreReplay.Ui
             Gui.Switch(labelKey, value, onChange);
         }
 
-        /// <summary>一行滑条 + 右侧当前值。</summary>
+        /// <summary>一行滑条 + 右侧**可编辑**当前值。</summary>
         internal static void RowSlider(string labelKey, float value, float min, float max,
             Func<float, string> fmt, Action<float> onChange)
         {
@@ -327,12 +328,126 @@ namespace SpectreReplay.Ui
             Rect track = GUILayoutUtility.GetRect(Gui.CtrlW, 20f,
                 GUILayout.Width(Gui.CtrlW), GUILayout.Height(20f));
             float now = Gui.Slider(track, value, min, max);
-            GUILayout.Label(fmt(now), Gui.LabelStyle, GUILayout.Width(90f));
+            float shown = Mathf.Approximately(now, value) ? value : now;
+            // 右侧数值框。**从只读 Label 改成可编辑输入框**（用户 2026-10-17 要求）：
+            // 滑条拖到 1920 与 1921 在像素上分不出来，而帧率/偏移这类值往往
+            // 玩家心里已有确数——只能拖是"看得见却打不进去"。
+            //
+            // **框里只放数字，单位画在框外**：fmt 产出的是 "1920 px" 这种带单位
+            // 的串，直接当可编辑内容的话，玩家一进去就得先删单位才打得动，
+            // 而且解析必然失败。拆开之后显示与编辑各归各的。
+            Rect field = GUILayoutUtility.GetRect(FieldW, 20f,
+                GUILayout.Width(FieldW), GUILayout.Height(20f));
+            string full = fmt(shown);
+            string suffix = UnitOf(full);
+            if (suffix.Length > 0)
+            {
+                // 单位不占 GUILayout 宽度，直接画在框和 FlexibleSpace 之间的空地上
+                Gui.Text(new Rect(field.xMax + 4f, field.y, 46f, field.height),
+                    suffix, Gui.DimCol, Gui.SmallStyle);
+            }
             GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
+
+            // 与 RowInput 同理：自绘控件不参与 GUILayout 布局，画在组外。
+            var st = GetField(labelKey);
+            SyncField(st, NumberOf(full));
+            bool canceled;
+            bool commit = st.Draw(field, Gui.LabelStyle, "", out canceled);
+            if (canceled)
+            {
+                // Esc = 放弃本次编辑，还原成滑条当前值
+                st.Text = NumberOf(full);
+            }
+            else if (commit)
+            {
+                if (TryParse(st.Text, out float typed))
+                {
+                    // 夹进滑条自身的区间：输入框能写 99999，而滑条给不出那个值——
+                    // 不夹的话下一帧滑条按越界值算 k，滑块会黏在端点上而数值显示
+                    // 一个永远拖不回来的数。
+                    float clamped = Mathf.Clamp(typed, min, max);
+                    if (!Mathf.Approximately(clamped, value))
+                    {
+                        onChange(clamped);
+                        return;   // 本帧以输入框为准，别再让滑条覆盖一次
+                    }
+                }
+                st.Text = NumberOf(full);   // 解析失败：复位成当前值（自愈）
+            }
             if (!Mathf.Approximately(now, value))
             {
                 onChange(now);
+            }
+        }
+
+        /// <summary>数值框宽度。与原先只读 Label 的 90f 一致，列宽不变。</summary>
+        private const float FieldW = 90f;
+
+        /// <summary>
+        /// 从 "1920 px" 里取出数字部分 "1920"。**按第一个空格切**而不是正则：
+        /// 本项目所有数值格式都是 `数字 + 空格 + 单位` 一种形状（见各调用点），
+        /// 没有负数带前导空格的情况；用正则反而多一层要维护的语法。
+        /// </summary>
+        private static string NumberOf(string formatted)
+        {
+            int i = formatted.IndexOf(' ');
+            return i < 0 ? formatted : formatted.Substring(0, i);
+        }
+
+        /// <summary>从 "1920 px" 里取出单位部分 "px"；没有单位则返回空串。</summary>
+        private static string UnitOf(string formatted)
+        {
+            int i = formatted.IndexOf(' ');
+            return i < 0 ? "" : formatted.Substring(i + 1);
+        }
+
+        /// <summary>
+        /// 数值输入框的解析。**必须宽进严出**：玩家会打 "60"、"60.5"、"-12"，
+        /// 也可能打成乱码或留空；解析失败就**保持原值不动**（不回退到 0，
+        /// 也不提交）——把一次手滑变成"帧率变成 0"是最糟的处理。
+        /// 顺带收全角负号/小数点：中文输入法下这两个键很容易打成全角。
+        /// </summary>
+        private static bool TryParse(string s, out float v)
+        {
+            v = 0f;
+            if (string.IsNullOrEmpty(s))
+            {
+                return false;
+            }
+            s = s.Trim().Replace("－", "-").Replace("．", ".");
+            return float.TryParse(s, System.Globalization.NumberStyles.Float,
+                       System.Globalization.CultureInfo.InvariantCulture, out v)
+                   && !float.IsNaN(v) && !float.IsInfinity(v);
+        }
+
+        /// <summary>
+        /// 每行滑条一个持久输入框（按 labelKey 缓存）。
+        ///
+        /// **为什么不能用一个共享草稿**（RowInput 的 _outDir 是单实例）：
+        /// 一页上有上十条滑条，共享草稿会在画到第二行时把第一行的内容冲掉。
+        /// 键用 labelKey 而不是序号：序号会随页面增删控件整体漂移，
+        /// 漂移之后"帧率"框里会显示"画质"上次留下的数。
+        /// </summary>
+        private static readonly Dictionary<string, TextField> _fields =
+            new Dictionary<string, TextField>();
+
+        private static TextField GetField(string key)
+        {
+            if (!_fields.TryGetValue(key, out TextField f))
+            {
+                f = new TextField();
+                _fields[key] = f;
+            }
+            return f;
+        }
+
+        /// <summary>不在编辑时，把框里的文字跟当前值对齐（拖动滑条/载入设置后要跟上）。</summary>
+        private static void SyncField(TextField f, string text)
+        {
+            if (!f.Editing && f.Text != text)
+            {
+                f.Text = text;
             }
         }
 
