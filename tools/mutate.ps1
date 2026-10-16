@@ -583,7 +583,36 @@ switch ($Which) {
         Backup 'Features\VideoRender\VideoRenderClockPatches.cs'
         ReplaceExact 'Features\VideoRender\VideoRenderClockPatches.cs' '                && (mi.DeclaringType?.Name == "RenderClockSource"))' '                && (mi.DeclaringType?.Name == "RenderClockSource") && mi.Name == "NeverMatches"))'
     }
-    'MUT-X1' {
+    'MUT-V11' {
+        # ⑧：把 RenderBuffer 的原生容器退回 4096 对齐的分桶（上游 c36e7b3 的形态）。
+        #    Unity 按传入数组的长度推进采集环形缓冲的读指针：长度大于实际样本会把
+        #    读指针推过写指针，此后 GetSampleCountForCaptureFrame() 恒为 0、
+        #    dspTime 冻结，于是走"静默→重启"、每次 Start() 只换来一个缓冲又立刻
+        #    归零，三次预算用尽即判死。而"退回精确尺寸"的兜底分支从不触发，
+        #    因为 Render 返回的是 true。
+        #    2026-10-16 上游实测确认（第 1 帧 perChannel=256 正常、第 2 帧起恒 0）。
+        #    锚点单行且全仓唯一；变异体用内联算式保持语法完整（不引用不存在的变量，
+        #    否则会变成"编译不过"而不是"被断言抓到"，证明力归零）。
+        Backup 'Features\VideoRender\VideoAudioTrack.cs'
+        ReplaceExact 'Features\VideoRender\VideoAudioTrack.cs' '        _render = new NativeArray<float>(floats, Allocator.Persistent, NativeArrayOptions.ClearMemory);' '        _render = new NativeArray<float>(((floats + 4095) / 4096) * 4096, Allocator.Persistent, NativeArrayOptions.ClearMemory); // bucketed'
+    }
+    'MUT-V12' {
+        # ⑨：把卡片底色退回"白底 + GUI.backgroundColor 乘算"（2026-10-16 修复前的形态）。
+        #    这是**乘算**：卡片里圆角按钮烘好的底色会被再乘一遍卡片色，
+        #    hover 与 normal 的色差从 20/23/26 被压成 3/3/5（≈1%，肉眼不可辨）。
+        #    现象是"按钮没有 hover"，真因是"hover 被乘没了"。
+        #    同项目里页签当初正因这条改成独立样式，而 Section 内按钮漏了——所以
+        #    判据钉的是形态（Gui.cs 不许再出现 backgroundColor 赋值），不是那一颗按钮。
+        Backup 'Ui\Gui.cs'
+        ReplaceExact 'Ui\Gui.cs' '            _pad.normal.background = RoundedTex.Get(2, 2, 0, CardBg);' '            _pad.normal.background = Texture2D.whiteTexture;'
+    }
+    'MUT-V13' {
+        # ⑨ 的第二半：底图对了，但又在 Section 里设回 backgroundColor（乘算还有效）。
+        #    只钉"底图是卡色贴图"会漏掉这种形态：底色看着对，按钮 hover 照样被抹平。
+        #    锚点单行且全仓唯一（整个 Gui.cs 里只有这一处把 CardBg 赋给 backgroundColor）。
+        Backup 'Ui\Gui.cs'
+        ReplaceExact 'Ui\Gui.cs' '            float top = GUILayoutUtility.GetRect(1f, 1f, GUILayout.ExpandWidth(true)).y;' '            GUI.backgroundColor = CardBg; float top = GUILayoutUtility.GetRect(1f, 1f, GUILayout.ExpandWidth(true)).y;'
+    }    'MUT-X1' {
         # 跨线程可见性：把泵线程写、主线程读的 pumpFailure 退回普通字段。
         # 这类缺陷编译通过、跑起来也基本正常（x86 弱内存模型下常常碰巧看到新值），
         # 只在真机 JIT 重排时表现为"偶发卡住/状态不更新"——典型的"看着在工作"。
@@ -740,7 +769,7 @@ switch ($Which) {
         ReplaceExact 'Features\Replay\KeyboardSimulation.cs' 'internal static class KeyboardSimulation' 'internal static class KeyboardSimulation { /* accidental drift */ internal static int __driftProbe = 1;'
     }
     default {
-        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-PORT1）"
+        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-PORT1）"
     }
 }
 

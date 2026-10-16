@@ -115,7 +115,12 @@ namespace SpectreReplay.Ui
             // 而不是折行——玩家看到半句话被硬生生截断。
             _note     = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.UpperLeft, wordWrap = true, clipping = TextClipping.Clip };
             _pad      = new GUIStyle { padding = new RectOffset(12, 12, 8, 8), margin = new RectOffset(0, 0, 0, 0) };
-            _pad.normal.background = Texture2D.whiteTexture;
+            // 卡片底色**必须由贴图自带**，绝不能用 GUI.backgroundColor 去染一张白底：
+            // 它是**乘算**的，会乘到之后画的每个控件背景上——卡片里那些圆角按钮的
+            // 底色是烘在贴图里的，再乘一遍就把 hover 与 normal 的色差从 20/23/26
+            // 压成 3/3/5（≈1%，肉眼不可辨）。2026-10-16 用户报「打开编辑器按钮
+            // hover 没颜色变化」正是它。判据 ⑨ / MUT-V12 守这里。
+            _pad.normal.background = RoundedTex.Get(2, 2, 0, CardBg);
             _btn      = MakeButton(GUI.skin.button, BtnFace, BtnHover, TextCol, false);
             _btnPrimary = MakeButton(GUI.skin.button, Accent, Lighten(Accent, 0.15f), Color.white, true);
             _btnQuiet = MakeButton(GUI.skin.button, BtnQuiet, Lighten(BtnQuiet, 0.10f), DimCol, false);
@@ -228,11 +233,14 @@ namespace SpectreReplay.Ui
         /// <summary>
         /// 一个分组：标题条 + 卡片体。**必用这个形式，不要手写 Begin/End。**
         ///
-        /// 卡片底色靠 GUI.backgroundColor + 只带 padding 的样式实现：
-        /// backgroundColor 在 EndVertical **之后**才还原，这样无论 Unity
-        /// 是在 Begin 那一趟还是 End 那一趟取色，读到的都是卡片色——
-        /// 只设一处的话会退成白色卡片，而现象是"只有内容没有底色"，
-        /// 看起来像是没画，很难联想到是这个顺序的问题。
+        /// 卡片底色由 <c>_pad</c> 的**卡色贴图**自带（见 Ensure 里那条注释），
+        /// **不再用 <c>GUI.backgroundColor = CardBg</c>**：那是乘算，会把卡片里
+        /// 圆角按钮烘好的底色再乘一遍，直接抹平 hover 与 normal 的色差
+        /// （2026-10-16「打开编辑器按钮 hover 没颜色变化」的根因）。
+        ///
+        /// 历史上这里确实靠 backgroundColor 染色，且注释记过"要在 EndVertical
+        /// 之后才还原"以避免白卡片——换成贴图后这个时序问题**整类消失**：
+        /// 底色是样式自带的，与取色发生在哪一趟无关。
         /// </summary>
         internal static void Section(string titleKey, Color accent, Action body)
         {
@@ -243,9 +251,6 @@ namespace SpectreReplay.Ui
             Fill(new Rect(head.x, head.y + head.height - 1f, head.width, 1f), LineCol);
             Fill(new Rect(head.x, head.y, 3f, head.height), accent);
             Text(new Rect(head.x + 11f, head.y, head.width - 18f, head.height), Loc.T(titleKey), TextCol, _bold);
-
-            Color oldBg = GUI.backgroundColor;
-            GUI.backgroundColor = CardBg;
 
             // 卡片体的边框/左侧色条。**量法上的两个坑**（这条最难查：不报错，
             // 只是描边画错位置，而"偏一点"很难联想到是 IMGUI 语义）：
@@ -284,7 +289,6 @@ namespace SpectreReplay.Ui
             finally
             {
                 GUILayout.EndVertical();
-                GUI.backgroundColor = oldBg;
             }
         }
 

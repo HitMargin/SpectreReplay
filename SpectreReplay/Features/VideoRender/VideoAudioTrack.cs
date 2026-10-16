@@ -18,9 +18,11 @@ internal sealed class VideoAudioTrack : IDisposable
     private readonly int giveUpFrames;
 
     private FileStream file;
-    private NativeArray<float> native;
-    private NativeArray<float> _exact;
-    private bool _bucketedOk = true;
+    // 渲染目标。长度必须**恰为**本帧每通道样本数 × 声道数：Unity 按传入数组的
+    // 长度从采集环形缓冲里消费数据，长度大于可用样本会把读指针推过写指针。
+    private NativeArray<float> _render;
+    // 托管侧暂存：分桶复用（避免每帧 new float[]/byte[] 进 LOH）。这两个数组只承接
+    // 拷贝与落盘，**与 Render 的长度语义无关**，所以可以安全分桶。
     private float[] managed;
     private byte[] bytes;
     private long written;
@@ -76,21 +78,15 @@ internal sealed class VideoAudioTrack : IDisposable
             return;
         }
         SizeBuffers(floats);
-        // 分桶缓冲的长度 ≥ 本帧样本数。Unity 侧按"容量足够"判定，正常直接可用；
-        // 万一某个 Unity 版本要求长度严格相等，Render 会返回 false——此时永久
-        // 退回精确尺寸（宁可回到旧的每帧重分配，也不能为性能优化搞崩整条渲染）。
-        // 注意：降级路径的数据落在精确缓冲里，拷贝必须跟着"实际渲染目标"走。
-        NativeArray<float> target = _bucketedOk ? native : ExactBuffer(floats);
-        bool rendered = AudioRenderer.Render(target);
-        if (!rendered && _bucketedOk)
-        {
-            _bucketedOk = false;
-            Debug.LogWarning("[SpectreReplay] mixdown: bucketed render buffer rejected, "
-                + "falling back to exact-size buffer per frame");
-            target = ExactBuffer(floats);
-            rendered = AudioRenderer.Render(target);
-        }
-        if (!rendered)
+        // Render 的目标长度必须**恰为**本次可用样本数（floats）。Unity 按数组长度推进
+        // 采集环形缓冲的读指针：长度大于实际样本会把读指针推过写指针，此后
+        // GetSampleCountForCaptureFrame() 恒为 0、AudioSettings.dspTime 冻结（音频线程
+        // 再也等不到可读数据）。2026-10-16 实测：9-26 起把长度从 floats(512) 放大到
+        // 4096 后，第 1 帧正常（perChannel=256）、第 2 帧起恒 0、5 秒内 dspTime 纹丝
+        // 不动；每次 Stop/Start 只换回一个缓冲又立刻归零，而 pause/focused/mics/音频
+        // 配置全程正常——这就是「音频捕获归零」的根因。
+        NativeArray<float> target = RenderBuffer(floats);
+        if (!AudioRenderer.Render(target))
         {
             Dead = true;
             DeathReason = "AudioRenderer.Render returned false at frame " + frameNo;
@@ -103,14 +99,16 @@ internal sealed class VideoAudioTrack : IDisposable
         written += floats * 4;
     }
 
-    // 精确尺寸容器（仅在分桶方案被拒后使用）
-    private NativeArray<float> ExactBuffer(int floats)
+    // 渲染缓冲：长度严格等于本帧样本数。尺寸随 dsp 缓冲的量化抖动在 128/256/512 间
+    // 波动，变化时重分配（NativeArray 走非托管内存、不进 GC 堆，代价远小于它换来的
+    // 正确性）。绝不为了"复用"而放大长度——见 CaptureFrame 的根因说明。
+    private NativeArray<float> RenderBuffer(int floats)
     {
-        if (_exact.IsCreated && _exact.Length == floats)
-            return _exact;
-        if (_exact.IsCreated) _exact.Dispose();
-        _exact = new NativeArray<float>(floats, Allocator.Persistent, NativeArrayOptions.ClearMemory);
-        return _exact;
+        if (_render.IsCreated && _render.Length == floats)
+            return _render;
+        if (_render.IsCreated) _render.Dispose();
+        _render = new NativeArray<float>(floats, Allocator.Persistent, NativeArrayOptions.ClearMemory);
+        return _render;
     }
 
     // 回写文件头，WAV 才能被读取
@@ -129,10 +127,8 @@ internal sealed class VideoAudioTrack : IDisposable
             try { AudioRenderer.Stop(); } catch { }
             capturing = false;
         }
-        if (native.IsCreated) native.Dispose();
-        native = default;
-        if (_exact.IsCreated) _exact.Dispose();
-        _exact = default;
+        if (_render.IsCreated) _render.Dispose();
+        _render = default;
         file?.Dispose();
         file = null;
     }
@@ -167,24 +163,14 @@ internal sealed class VideoAudioTrack : IDisposable
         }
     }
 
+    // 托管侧暂存的分桶增长：只增不减，避免每帧 new float[]/byte[] 进 LOH。
+    // 这里的分桶是安全的——managed/bytes 只承接拷贝与落盘，长度不参与 Render 语义。
     private void SizeBuffers(int floats)
     {
-        // GetSampleCountForCaptureFrame() 返回"自上次调用以来可用的每通道样本数"，
-        // 会随 dsp 缓冲的整/半帧波动。原来的"尺寸不同就 dispose+重分配"会因此
-        // 每帧重新分配几百 KB（还进 LOH），造成明显 GC 压力。改为向上取整到
-        // 桶大小复用：只有需求超过当前容量才增长，缩小只改用前缀。
-        const int bucketSamples = 4096;             // 4096 float = 16KB/声道
-        int need = ((floats + bucketSamples - 1) / bucketSamples) * bucketSamples;
-        if (managed != null && managed.Length >= floats && bytes != null
-            && bytes.Length >= floats * 4 && native.IsCreated && native.Length >= floats)
-        {
+        if (managed != null && managed.Length >= floats && bytes != null && bytes.Length >= floats * 4)
             return;
-        }
-        if (need < floats) need = floats;
-        if (native.IsCreated) native.Dispose();
-        // 分桶后分配已属罕见，ClearMemory 的 memset 成本可忽略；换来"即使 Unity
-        // 只写了一部分也只读到静音"的安全底（ClearMemory 语义与原实现一致）
-        native = new NativeArray<float>(need, Allocator.Persistent, NativeArrayOptions.ClearMemory);
+        const int bucketSamples = 4096;             // 4096 float = 16KB/声道
+        int need = Math.Max(floats, ((floats + bucketSamples - 1) / bucketSamples) * bucketSamples);
         if (managed == null || managed.Length < need) managed = new float[need];
         if (bytes == null || bytes.Length < need * 4) bytes = new byte[need * 4];
     }

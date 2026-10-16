@@ -125,6 +125,20 @@ $knownDeviations = @(
     @{ Pat = 'ci.operand';                           Why = '同上：探测已被别的 mod 替换过的指令' }
     @{ Pat = 'mi.DeclaringType';                    Why = '同上：按声明类型名认出别的程序集那份 RenderClockSource' }
     @{ Pat = 'Assembly.GetName';                    Why = '同上：日志里报出是哪个 mod 接管的' }
+    # ── 2026-10-16 离线渲染音频捕获从不成功（成片无音轨）──────────────────
+    # 真因：上游 c36e7b3 把 AudioRenderer.Render 的原生容器也改成 4096 对齐
+    # 的分桶（长度 ≥ 本帧样本数），假设 Unity 按容量足够判定。实测（Unity
+    # 6000.3.21f1）容器偏大时 Render 仍返回 true，但捕获就此停住——下一帧
+    # GetSampleCountForCaptureFrame 恒为 0，于是静默→重启，每次 Start() 只
+    # 换来一帧，三次预算用尽即判死。
+    # 证据：上游成片在 c36e7b3 之前全部带音轨（09-19 及更早共 16 个），之后
+    # 再无一次成功；10-16 日志里上游自己渲染同样失败。
+    # 修法：native 精确等于 floats，分桶只留给托管数组（那才是 GC/LOH 来源）。
+    # （注释里别用 ASCII 双引号：PowerShell 在注释中仍把它当字符串定界符。）
+    @{ Pat = 'AudioRenderer.Render';                Why = '2026-10-16 混音轨原生容器必须精确尺寸（分桶会让捕获静默停住）' }
+    @{ Pat = 'native.CopyTo';                       Why = '同上：数据落在精确容器里，拷贝跟着实际渲染目标走' }
+    @{ Pat = 'native.IsCreated';                    Why = '同上：原生容器按需精确重建' }
+    @{ Pat = 'native.Length';                       Why = '同上：容器长度必须等于本帧样本数' }
 )
 
 Write-Output ""

@@ -13,8 +13,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify.ps1
 **只读审计**（7 个离线审计脚本）、线上 dll 与构建产物的 sha256 一致、
 `D:\Projects\Spectre` 工作区干净。
 
-> **当前 57 条断言 0 失败**（2026-10-12 实测）。这个数字会随轮次变，
-> 引用前先跑一遍 `verify.ps1` 看真实条数。
+> **当前打印 57 条断言 0 失败**（2026-10-16 实测）。这个数字会随轮次变，
+> 引用前先跑一遍 `verify.ps1` 看真实条数。**注意它是「✓ 行数」而不是判据数**
+> ——`UiLogicShapeCheck` 现有 13 条判据只印 1 行，所以加判据这个数字不变。
 
 ## 套件构成
 
@@ -31,7 +32,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify.ps1
 | WavRoundTripCheck | 键盘音 WAV 的写读往返：写侧头部契约**取自真源码**、读侧接受范围覆盖写侧产出、拒 6 种坏头（非 PCM/位深 12,64/声道 0,负/FormatTag 0）、四种合法位深全接受、位深下限常量与判定一致 |
 | LocRuntimeCheck | 34 个运行时键（`GetLocalizedText` 那套）在全部 14 种语言下都齐 |
 | PortedCompletenessCheck | 移植搬来的模块都真有调用点：HitErrorData 采集、CalibAdvice 消费、ReplayAnalyzer 显示、DescribeEncoder 降级提示、playback.ready 装弹提示、VideoConverter 入口、**转换目标来自 `Settings.ConvertTarget` 且必须可编辑 + 双向持久化（⑦/⑦b/⑦c）**、回放列表覆盖全部可读格式、键盘音三项有界面入口（⑨a/⑨b）、回放驱动开关有界面入口（⑩/⑩b）、保存目录有界面入口（⑪/⑪b）、**「打开这一关」按钮（⑫/⑫b）+ 编辑器跳转等就绪后定位起始砖（⑬）+ 命中分布图复用缓存（⑭）**、没有孤儿检查 |
-| UiLogicShapeCheck | 界面控制流形状：停止录制不许借用「取消保存」文案、文本框必须**自绘**（不许用内建输入框）且宽度走 Gui.CtrlW、分组边框不许用 GetLastRect、**阻塞式原生目录选择框必须 Defer 到 OnGUI 之外（两个调用点各一条）**、**输入框底色必须比卡片更亮**、**按钮必须传自定义样式 + 滑条必须自绘 + 圆角贴图必须有缓存**（2026-10-12 用户报「UI 还是原生控件」后加的） |
+| UiLogicShapeCheck | 界面控制流形状：停止录制不许借用「取消保存」文案、文本框必须**自绘**（不许用内建输入框）且宽度走 Gui.CtrlW、分组边框不许用 GetLastRect、**阻塞式原生目录选择框必须 Defer 到 OnGUI 之外（两个调用点各一条）**、**输入框底色必须比卡片更亮**、**按钮必须传自定义样式 + 滑条必须自绘 + 圆角贴图必须有缓存**（2026-10-12 用户报「UI 还是原生控件」后加的）、**混音轨 Render 容器必须精确**（⑧）、**卡片不许用 GUI.backgroundColor 染色**（⑨，乘算会抹平按钮 hover） |
 | MissingRuntimeKeyCheck | 运行时键必须有定义（`GetLocalizedText` 查不到时 `return key`，玩家会看到原始键名） |
 | KeybdSoundTickCheck | 键盘音起始时间戳：起录块不许导体判空后 return、必须能补真值、回放侧拒非正基准 |
 | ConfigMigrationCheck | 旧配置迁移：迁移真的被调用、不误判新版文件、每个旧键都有归属 |
@@ -51,8 +52,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify.ps1
 
 > **口径修正（2026-10-12）：`✓ 行数 ≠ 断言单元数`，早先"两者相等"的说法是错的。**
 > 实测有两处**折叠**：`PortedCompletenessCheck` 有 15 个判据却只印 2 行
-> （「随移植搬来的模块都已被接上」+ 孤儿检查），`UiLogicShapeCheck` 有 4 个判据
-> 只印 1 行（「四条界面形状判据都成立」）。其余 *Check 基本一行一判据。
+> （「随移植搬来的模块都已被接上」+ 孤儿检查），`UiLogicShapeCheck` 有 **13 个判据**
+> 只印 1 行（「十三条界面形状判据都成立」）。其余 *Check 基本一行一判据。
 > 于是加判据**不会**让 `mutate.ps1` 印的「断言 N 条」变大——2026-10-12 加了
 > ⑪/⑪b/④ 三条后该数字仍是 57，而三条都由 MUT-P12/P13/U6 证明会红。
 > **引用条数时说明是"✓ 行数"还是"判据数"，别把前者当日志里的真值。**
@@ -60,7 +61,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify.ps1
 每加一条断言，**必须用 `tools\mutate.ps1 -Which MUT-X` 证明它会红**（自动还原）。
 已累计 10 条以上假断言、2 条假变异——形态见 `docs\SPECTRE_COMPARISON.md`
 与记忆库的「六条铁律」。`-ExpectGreen` 是反向对照（证明"全绿"本身可达）。
-`tools\mutate-regression.ps1` 全量回归 **57 条**变异（证明本身会腐化）。
+`tools\mutate-regression.ps1` 全量回归 **62 条**变异（证明本身会腐化，
+2026-10-16 实测）。新增 `MUT-V11` 守「Render 容器必须精确尺寸」；
+`MUT-V12`/`MUT-V13` 分别守判据⑨的两半（卡片底图必须是卡色贴图、
+不许再出现 `GUI.backgroundColor` 赋值——乘算会抹平按钮 hover）。
 
 > **变异锚点会跟着代码改而失效，且失效的样子是 exit 2 而不是红。** 删掉
 > `GUILayout.TextField` 那次，MUT-U2 的锚点（`TextField` + `CtrlW` 那一行）

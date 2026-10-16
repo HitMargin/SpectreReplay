@@ -159,9 +159,128 @@ namespace UiPreview
                 "⑦ RenderClock transpiler 必须识别「已被别的 mod 接管」（不许误报 game changed）",
                 "Features\\VideoRender\\VideoRenderClockPatches.cs",
                 s => TranspilerDistinguishesTakeover(s));
+            // ⑧ 喂给 AudioRenderer.Render 的原生容器必须**精确等于本帧样本数**。
+            //
+            //    2026-10-16 真事：上游 c36e7b3（v0.4.1 第 150 轮审计）为消掉每帧
+            //    重分配，把原生容器也改成 4096 对齐的分桶（长度 ≥ floats），
+            //    注释写着"Unity 侧按容量足够判定"。**那个假设是错的**：
+            //    Unity 按传入数组的长度推进采集环形缓冲的读指针，长度大于实际样本
+            //    会把读指针推过写指针——此后 GetSampleCountForCaptureFrame() 恒为 0、
+            //    AudioSettings.dspTime 冻结。于是走"静默→重启"，每次 Start() 只换来
+            //    一个缓冲又立刻归零，三次预算用尽即判死。日志形态：
+            //      mixdown started → silent frame=2 → restarted 1 → silent frame=123 …
+            //    而"退回精确尺寸"的兜底分支**从不触发**，因为 Render 返回的是 true
+            //    （证据：DeathReason 是 mixdown silent，不是 Render returned false）。
+            //
+            //    **判据的输入是外部事实**：上游成片在 c36e7b3 之前全部带音轨
+            //    （09-19 及更早共 16 个，ffmpeg 逐个验过），之后再无一次成功过。
+            //    不是环境漂移、也不是游戏更新。
+            //
+            //    正确形状：Render 的目标来自 RenderBuffer(floats)——长度严格等于
+            //    本帧样本数、变化时重分配；分桶只允许给**托管数组**（managed/bytes
+            //    只承接拷贝与落盘，长度不参与 Render 语义）。
+            //    判据因此必须**限定在 RenderBuffer 方法体内**：SizeBuffers 里合法地
+            //    写着 Math.Max(floats, 桶大小)，整文件搜 Math.Max 是假判据。
+            fail += Check(projectRoot,
+                "⑧ 混音轨 Render 容器必须精确（分桶会让捕获静默停住）",
+                "Features\\VideoRender\\VideoAudioTrack.cs",
+                s => MixdownRenderBufferIsExact(s));
+            // ⑨ 分组卡片**不许用 GUI.backgroundColor 染色**（它乘算，会抹平按钮 hover）。
+            //
+            //    2026-10-16 真事：用户报「打开编辑器按钮鼠标放上去没有颜色变化」。
+            //    按钮样式本身没错——hover.background 一直在设（Gui.cs MakeButton）。
+            //    问题是它落在 Gui.Section 的卡片体里，而 Section 给整段设了
+            //    GUI.backgroundColor = CardBg。**backgroundColor 是乘算的**：
+            //    按钮底色烘在圆角贴图里，再乘一遍卡片色 ——
+            //      BtnFace  (51,59,74) × CardBg(33,38,48) = 7,9,14
+            //      BtnHover (71,82,99) × CardBg          = 9,12,19
+            //    hover 与 normal 的色差从 20/23/26 被压到 3/3/5（≈1%），肉眼不可辨。
+            //    ⇒ 现象是"没有 hover"，实际是"hover 被乘没了"。
+            //
+            //    同项目里这个坑**已经踩过一次**：页签当初正因"双重变暗"改成了
+            //    独立样式，但 Section 内那些按钮没跟着改。所以判据必须钉在
+            //    **Gui.cs 里不许出现 backgroundColor 赋值**，而不只是修那一颗按钮
+            //    ——治形态，不治位置。
+            //
+            //    修法：卡片底色由 _pad 自带的**卡色贴图**提供（见 Ensure），
+            //    颜色不再经过乘算。判据三件齐：
+            //      ① 赋值语句为零（只查 `GUI.backgroundColor =`，注释已被剥掉）；
+            //      ② _pad 的底图必须是卡色贴图而不是 texture2D.whiteTexture；
+            //      ③ 还原语句也应当没有了（oldBg 这套随之消失）。
+            fail += Check(projectRoot,
+                "⑨ 卡片不许用 GUI.backgroundColor 染色（乘算会抹平按钮 hover）",
+                "Ui\\Gui.cs",
+                s => !s.Contains("GUI.backgroundColor =", StringComparison.Ordinal)
+                     && !s.Contains("GUI.backgroundColor=", StringComparison.Ordinal)
+                     && s.Contains("_pad.normal.background = RoundedTex.Get(2, 2, 0, CardBg)", StringComparison.Ordinal)
+                     // 只钉 _pad 那一处：Fill() 里合法地用 whiteTexture 画纯色块
+                     // （它随后自己还原 GUI.color），整文件禁 whiteTexture 会假红。
+                     && !s.Contains("_pad.normal.background = Texture2D.whiteTexture", StringComparison.Ordinal));
             if (fail == 0)
-                Console.WriteLine("    ✓ 十一条界面形状判据都成立");
+                Console.WriteLine("    ✓ 十三条界面形状判据都成立");
             return fail;
+        }
+
+        /// <summary>
+        /// 混音轨是否用**精确尺寸**的原生容器调 <c>AudioRenderer.Render</c>。
+        ///
+        /// 判据四件齐（缺一件就能让 4096 分桶悄悄回来）：
+        ///   ① Render 的目标来自 <c>RenderBuffer(floats)</c>——按本帧样本数取容器；
+        ///   ② <c>RenderBuffer</c> 内部只按 <c>floats</c> 分配——精确值；
+        ///   ③ 该分配行不得出现分桶值（<c>need</c> / <c>Math.Max</c>）——
+        ///      这正是 c36e7b3 的形态；只查①会漏掉"RenderBuffer 里又分桶"。
+        ///   ④ 不得再有 <c>AudioRenderer.Render(native)</c> 这种直传字段的旧形态。
+        ///
+        /// **判据限定在 RenderBuffer 方法体内**，不做整文件 Contains：
+        /// SizeBuffers 里合法地写着 <c>Math.Max(floats, 桶大小)</c>，整文件搜会假红。
+        ///
+        /// 找不到 RenderBuffer 一律判**不通过**：判据的默认姿态是不信——
+        /// "一处都没有"更可能是判据自己失效（有人改了方法名/形状），
+        /// 而不是"全都合规"。
+        /// </summary>
+        private static bool MixdownRenderBufferIsExact(string code)
+        {
+            if (!code.Contains("RenderBuffer(floats)", StringComparison.Ordinal))
+                return false;
+            if (code.Contains("AudioRenderer.Render(native)", StringComparison.Ordinal))
+                return false;
+
+            // 定位 RenderBuffer 方法体（从方法签名到下一个成员声明为止）
+            string[] lines = code.Replace("\r\n", "\n").Split('\n');
+            int start = -1;
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].Contains("NativeArray<float> RenderBuffer(int floats)", StringComparison.Ordinal))
+                {
+                    start = i;
+                    break;
+                }
+            }
+            if (start < 0) return false;
+
+            var body = new System.Text.StringBuilder();
+            for (int i = start + 1; i < lines.Length; i++)
+            {
+                string line = lines[i].TrimStart();
+                // 方法体在本类里结束于下一个成员声明（注释已被 SrcUtil.Clean 剥掉）
+                if (line.StartsWith("private ", StringComparison.Ordinal)
+                    || line.StartsWith("internal ", StringComparison.Ordinal)
+                    || line.StartsWith("public ", StringComparison.Ordinal))
+                {
+                    break;
+                }
+                body.AppendLine(lines[i]);
+            }
+            string b = body.ToString();
+            // 必须按 floats 精确分配
+            if (!b.Contains("new NativeArray<float>(floats,", StringComparison.Ordinal))
+                return false;
+            // 不许出现分桶值或取大运算
+            if (b.Contains("need", StringComparison.Ordinal)
+                || b.Contains("Math.Max", StringComparison.Ordinal)
+                || b.Contains("bucket", StringComparison.Ordinal))
+                return false;
+            return true;
         }
 
         /// <summary>
