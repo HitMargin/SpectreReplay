@@ -342,8 +342,39 @@ namespace UiPreview
                 "⑱e 键盘音两项必须挂录音开关",
                 "Pages\\\\Pages.cs",
                 s => KeybdRowsDimWithRecord(s));
+            // ⑲ 更新检查：三种态必须分开说，且版本比较方向不能反。
+            //
+            //    2026-10-17 用户要求「关于列表里加一个检测更新的功能 并且用上UMM
+            //    自带的 Repository HomePage」。这条功能真正的风险不是「没做」，
+            //    而是**做了但在撒谎**：
+            //      ① NewestVersion 为 null 有两种含义——「已是最新」与「UMM 根本没查」
+            //         （玩家关了 CheckUpdates / 没网）。把后者说成前者，玩家会以为
+            //         自己已经是最新，永远等不到更新，而且没有任何迹象。
+            //      ② 版本比较写成 `newest < current` 或 `newest == current` 时，
+            //         「有新版」永远不显示——功能看着在、永远不响。
+            //      ③ 把 Info.Version（string）拿去比 Version：编译就会挡，但只测
+            //         到「能编译」不够，要钉住它读的是 ModEntry.Version。
+            //
+            //    判据必须**判分支结构**而不是「出现过 NewestVersion」——后者在把
+            //    整个 else 分支删掉时照样绿。
+            fail += Check(projectRoot,
+                "⑲a 更新状态：有新版/已最新/未检查三态必须分开(不许把未检查说成已最新)",
+                "Pages\\\\Pages.cs",
+                s => UpdateStatesAreDistinct(s));
+            fail += Check(projectRoot,
+                "⑲b 版本比较方向必须是 newest > current",
+                "Pages\\\\Pages.cs",
+                s => UpdateVersionCompareDirection(s));
+            fail += Check(projectRoot,
+                "⑲c 当前版本必须读 ModEntry.Version(Version 类型),不是 Info.Version(string)",
+                "Pages\\\\Pages.cs",
+                s => UpdateUsesModEntryVersion(s));
+            fail += Check(projectRoot,
+                "⑲d info.json 必须填 Repository 与 HomePage(UMM 靠这两个字段检查更新)",
+                "info.json",
+                s => InfoJsonHasUpdateFields(s));
             if (fail == 0)
-                Console.WriteLine("    ✓ 二十七条界面形状判据都成立");
+                Console.WriteLine("    ✓ 三十一条界面形状判据都成立");
             return fail;
         }
 
@@ -894,6 +925,109 @@ namespace UiPreview
                 if (body == null || !body.Contains("RowGap();", StringComparison.Ordinal)) return false;
             }
             return true;
+        }
+
+        // ── ⑲ 系列：更新检查不许「看着在、其实在撒谎」 ─────────────
+        //
+        // 这一族的核心风险不是没做，而是**说错话**：
+        //   · NewestVersion 为 null 同时代表「已最新」与「UMM 没查」；
+        //     把后者说成前者，玩家永远等不到更新且毫无迹象；
+        //   · 版本比较方向写反，则「有新版」永不显示；
+        //   · 拿 Info.Version（string）当 Version 比，编译就会挡，
+        //     但只测「能编译」不够，要钉住它读的是 ModEntry.Version。
+
+        /// <summary>
+        /// 三种态必须各自独立成支：有新版走 Warn、已最新走 Ok、未检查走 Dim。
+        ///
+        /// **为什么必须判分支结构而不是「出现过 NewestVersion」**：把整个
+        /// <c>else if (newest != null)</c> 分支删掉，只留「有新版 / 否则已最新」，
+        /// 「出现过 NewestVersion」照样命中——而那正是「未检查被说成已最新」
+        /// 这个缺陷本身。所以要求三个不同的文案键都出现，且分别挂在三个分支里。
+        /// </summary>
+        private static bool UpdateStatesAreDistinct(string code)
+        {
+            string body = MethodBody(code, "DrawUpdateRow");
+            if (body == null) return false;
+            // 三态各用各的文案键，缺一即说明有一态被合并了。
+            bool hasAvailable = body.Contains("about.update.available", StringComparison.Ordinal);
+            bool hasLatest = body.Contains("about.update.latest", StringComparison.Ordinal);
+            bool hasUnknown = body.Contains("about.update.unknown", StringComparison.Ordinal);
+            if (!hasAvailable || !hasLatest || !hasUnknown) return false;
+            // 「未检查」必须在**默认/否则**那一支里，不能被塞进 newest != null 里。
+            int unknownIdx = body.IndexOf("about.update.unknown", StringComparison.Ordinal);
+            int latestIdx = body.IndexOf("about.update.latest", StringComparison.Ordinal);
+            if (unknownIdx < latestIdx) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// 比较方向必须是 <c>newest &gt; current</c>。
+        ///
+        /// 写成 <c>newest &lt; current</c>、<c>newest == current</c> 或干脆省掉比较
+        /// （只判 newest != null）时，「有新版」这条永远不亮——功能看着接好了，
+        /// 却从不响，而玩家只会以为自己一直是最新。
+        /// </summary>
+        private static bool UpdateVersionCompareDirection(string code)
+        {
+            string body = MethodBody(code, "DrawUpdateRow");
+            if (body == null) return false;
+            // 允许 newest > current 与 current < newest 两种等价写法，但**不许**反向。
+            bool forward = body.Contains("newest > current", StringComparison.Ordinal)
+                           || body.Contains("current < newest", StringComparison.Ordinal);
+            if (!forward) return false;
+            // 排除「反差方向也写了一遍」这种破坏对称性的写法。
+            if (body.Contains("newest < current", StringComparison.Ordinal)) return false;
+            if (body.Contains("current > newest", StringComparison.Ordinal)) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// 当前版本必须取 <c>Main.mod.Version</c>（System.Version），
+        /// 不许取 <c>Main.mod.Info.Version</c>（string）。
+        ///
+        /// 这两者名字像、类型不同：拿 Info.Version 去跟 Version 比必然编译不过，
+        /// 但若有人为了让它编译通过而改成 `new Version(Info.Version)`，
+        /// 那就在「版本字符串不合规」时抛异常——而 OnGUI 抛异常的后果是
+        /// 整个设置面板被 UMM 收掉。
+        /// </summary>
+        private static bool UpdateUsesModEntryVersion(string code)
+        {
+            string body = MethodBody(code, "CurrentVersionOrNull");
+            if (body == null) return false;
+            if (!body.Contains("Main.mod.Version", StringComparison.Ordinal)) return false;
+            if (body.Contains("Info.Version", StringComparison.Ordinal)) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// <c>info.json</c> 必须同时有 <c>Repository</c> 与 <c>HomePage</c>，
+        /// 且都是非空字符串。
+        ///
+        /// 这两个字段是 UMM 检查更新的**唯一入口**：
+        ///   · 没有 Repository → UMM 根本不去下载版本清单，NewestVersion 永远 null；
+        ///   · 没有 HomePage → UMM 列表里不显示那颗主页按钮，关于页的「打开主页」
+        ///     也会因为拿不到 URL 而不画。
+        /// 判「字段存在且非空」：只判存在会让 `"Repository": ""` 蒙混过关，
+        /// 而那与没填等价（UMM 那边 IsNullOrEmpty 直接跳过）。
+        /// </summary>
+        private static bool InfoJsonHasUpdateFields(string code)
+        {
+            return HasNonEmptyJsonField(code, "Repository")
+                   && HasNonEmptyJsonField(code, "HomePage");
+        }
+
+        /// <summary>JSON 里是否有 <c>"name": "非空"</c>。宽容空格与顺序。</summary>
+        private static bool HasNonEmptyJsonField(string code, string name)
+        {
+            int at = code.IndexOf("\"" + name + "\"", StringComparison.Ordinal);
+            if (at < 0) return false;
+            int colon = code.IndexOf(':', at);
+            if (colon < 0) return false;
+            int q1 = code.IndexOf('"', colon + 1);
+            if (q1 < 0) return false;
+            int q2 = code.IndexOf('"', q1 + 1);
+            if (q2 < 0) return false;
+            return q2 > q1 + 1;
         }
 
         /// <summary>

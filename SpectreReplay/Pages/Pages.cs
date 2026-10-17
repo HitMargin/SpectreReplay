@@ -935,7 +935,119 @@ namespace SpectreReplay.Pages
                 Gui.KeyValue("about.version", VersionText(), Gui.TextCol);
                 Gui.KeyValue("about.engine", Loc.T("about.engine.value"), Gui.DimCol);
                 Gui.KeyValue("about.path", SaveDirText(), Gui.DimCol);
+                Gui.Divider();
+                DrawUpdateRow();
             });
+        }
+
+        /// <summary>
+        /// 「检查更新」这一行。
+        ///
+        /// **这里不自己发网络请求。** 更新检查由 UMM 自己做：它读 info.json 的
+        /// Repository 下载那个 JSON，把结果写进 ModEntry.NewestVersion，再在
+        /// UMM 自己的模组列表里显示「(Outdated)」。我们只是把那个结果**读出来**
+        /// 摆在关于页上，让玩家不必去翻 UMM 列表。
+        ///
+        /// 查证依据（反编译 UnityModManager.dll 的 IL，不是看文档）：
+        ///   · CheckModUpdates 读 Info.Repository 去下载、读 Info.HomePage 供 Nexus 路径；
+        ///   · ParseRepository 用 Release.Id 调 FindMod，而 FindMod 比的是 **ModInfo.Id**
+        ///     ——所以 repo.json 里必须写 Id = com.spectre.replay，不是显示名；
+        ///   · NewestVersion 只在「版本确实更新」时才被赋值，否则保持 null。
+        ///
+        /// 三种态各自说清楚，因为它们的修法完全不同：
+        ///   · 有新版 → 告诉版本号，并让玩家能点开仓库下载；
+        ///   · 已是最新 → 只有确认查过才敢说（NewestVersion 非空即证明 UMM 查到了）;
+        ///   · 还没查过 → **绝不要说"已是最新"**。NewestVersion 为 null 有两种可能：
+        ///     真的没新版，或者 UMM 根本没查（玩家关了 CheckUpdates / 没网）。
+        ///     把后者说成前者，是让玩家永远等不到更新。
+        /// </summary>
+        private static void DrawUpdateRow()
+        {
+            string homepage = HomePageUrl();
+            Version newest = NewestVersionOrNull();
+            Version current = CurrentVersionOrNull();
+
+            if (newest != null && current != null && newest > current)
+            {
+                Gui.KeyValue("about.update.available",
+                    Loc.T("about.update.available.value") + newest, Gui.WarnCol);
+            }
+            else if (newest != null)
+            {
+                Gui.KeyValue("about.update.status", Loc.T("about.update.latest"), Gui.OkCol);
+            }
+            else
+            {
+                Gui.KeyValue("about.update.status", Loc.T("about.update.unknown"), Gui.DimCol);
+            }
+
+            // 仓库按钮：只在真的填了 HomePage 时才画。没填还画一颗点不动的按钮，
+            // 玩家会以为模组坏了。
+            if (!string.IsNullOrEmpty(homepage))
+            {
+                OnGui.Button("about.update.open", () => OpenUrl(homepage), false);
+            }
+        }
+
+        /// <summary>info.json 里填的 HomePage。取不到就返回空串（调用方据此决定不画按钮）。</summary>
+        private static string HomePageUrl()
+        {
+            try
+            {
+                return Main.mod != null && Main.mod.Info != null
+                    ? Main.mod.Info.HomePage ?? "" : "";
+            }
+            catch
+            {
+                return "";
+            }
+        }
+
+        /// <summary>
+        /// UMM 查到的"最新版本"。**可能为 null**——那表示"UMM 没查到"或"就是最新"，
+        /// 两种情况在这里分不开，所以调用方不许把它当成"已是最新"。
+        /// </summary>
+        private static Version NewestVersionOrNull()
+        {
+            try
+            {
+                return Main.mod != null ? Main.mod.NewestVersion : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static Version CurrentVersionOrNull()
+        {
+            try
+            {
+                // **ModEntry.Version 是 System.Version，ModInfo.Version 是 string。**
+                // 拿错会编译不过——而这条路径只在"比较版本"时才走到，
+                // 用 Info.Version 就得自己 Parse，多一层失败可能。
+                return Main.mod != null ? Main.mod.Version : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 打开外部链接。包 try：Application.OpenURL 在无浏览器/被系统拦截时会抛，
+        /// 而 OnGUI 抛异常的后果是整个设置面板被 UMM 收掉（玩家感受是"点一下就没了"）。
+        /// </summary>
+        private static void OpenUrl(string url)
+        {
+            try
+            {
+                Application.OpenURL(url);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[SpectreReplay] 打开链接失败：" + ex.Message);
+            }
         }
 
         private static string VersionText()

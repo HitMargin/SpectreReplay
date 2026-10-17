@@ -1011,6 +1011,35 @@ switch ($Which) {
         }
         SetLines 'Pages\Pages.cs' ($out2.ToArray())
     }
+    'MUT-K4' {
+        # ⑲a：把「未检查」这一态改口说成「已是最新」。
+        # 这是本功能最危险的形态：NewestVersion 为 null 既可能是"已最新"
+        # 也可能是"UMM 根本没查"（玩家关了 CheckUpdates / 没网），把后者
+        # 说成前者，玩家永远等不到更新且毫无迹象。判据 ⑲a 必须因此变红。
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' 'Loc.T("about.update.unknown"), Gui.DimCol' 'Loc.T("about.update.latest"), Gui.OkCol'
+    }
+    'MUT-K5' {
+        # ⑲b：版本比较方向写反。`newest > current` 才是"有新版"，
+        # 改成 `<` 之后这一支永远不亮——功能看着接好了、从不响，
+        # 而玩家只会以为自己一直是最新。
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' 'newest > current' 'newest < current'
+    }
+    'MUT-K6' {
+        # ⑲c：当前版本改读 Info.Version（string）再 new Version(...)。
+        # 编译得过（Version 构造器接受 string），但版本串不合规时会抛，
+        # 而 OnGUI 抛异常的后果是整个设置面板被 UMM 收掉。
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' 'return Main.mod != null ? Main.mod.Version : null;' 'return Main.mod != null && Main.mod.Info != null ? new Version(Main.mod.Info.Version) : null;'
+    }
+    'MUT-K7' {
+        # ⑲d：把 info.json 的 Repository 清空。UMM 那边 IsNullOrEmpty 直接
+        # 跳过 ⇒ 它根本不去下载版本清单 ⇒ NewestVersion 永远 null，
+        # 而"字段还在"会让只判存在的弱判据照样绿——所以判据必须判非空。
+        Backup 'info.json'
+        ReplaceExact 'info.json' '"Repository": "https://raw.githubusercontent.com/HitMargin/SpectreReplay/master/repo.json"' '"Repository": ""'
+    }
     'MUT-K3' {
         # LocRuntimeCheck 反向判据（表里不许有没人取的键）的自证。
         # 做法是给中文表加一条运行时永远取不到的键，而不是删一条：反向判据要抓的
