@@ -193,8 +193,18 @@ internal sealed class VideoRenderJob : MonoBehaviour
         //           Transpiler 把 scrConductor/scrCountdown 的 dspTime 也换成确定性值，
         //           倒计时/事件调度/直读 dspTime 的路径全部确定性化。
         // 旧轨兜底：Transpiler 挂载失败（游戏改了 Update 方法体）时保持原行为。
+        //
+        // **必须连 Settings.RenderClockOn 一起判，不能只看 TranspilerReady。**
+        // TranspilerReady 是"transpiler 跑过"的一次性事实，全仓只有置 true、没有置回
+        // false 的地方（补丁卸载不会清它）。而 2026-10-17 起这条补丁挂了 Feature 开关，
+        // 于是存在一个真实的坏序：**开→渲染→关→再渲染**。此时补丁已卸载、
+        // scrConductor.Update 恢复读真实 dspTime，而 TranspilerReady 仍是旧 true
+        // ⇒ 作业会走确定性轨：一边用帧号算 PinnedSongPosition，一边游戏内部用真实
+        // dspTime，两条时间轴混着用，比纯净兜底更糟。
+        // 加了开关之后，"补丁当前是否真的挂着"由开关谓词决定，所以这里的就绪条件
+        // 必须与那个谓词对齐（开关关 = 视为未就绪 = 走兜底）。
         RenderClock clock = null;
-        bool useRenderClock = RenderClockSource.TranspilerReady;
+        bool useRenderClock = RenderClockSource.TranspilerReady && Settings.RenderClockOn;
         if (useRenderClock)
         {
             clock = new RenderClock(fps);

@@ -224,6 +224,22 @@ namespace UiPreview
             fail += Check(projectRoot, "⑮e 渲染页要有该开关的控件",
                 new[] { "Pages\\Pages.cs" },
                 new[] { "render.clock.experimental" });
+            // ⑮f 渲染作业的就绪判断必须**同时**看开关，不能只看 TranspilerReady。
+            //
+            //    这是 2026-10-17 加开关时自己引进来的真 bug：`TranspilerReady`
+            //    全仓只有置 true、没有置回 false 的地方（补丁卸载不会清它）。
+            //    开关拨关后补丁已卸载、scrConductor.Update 恢复读真实 dspTime，
+            //    而 TranspilerReady 仍是旧 true ⇒ 作业继续走确定性轨：
+            //    一边用帧号算 PinnedSongPosition，一边游戏内部用真实 dspTime，
+            //    **两条时间轴混用**，比纯净兜底更糟。
+            //    坏序是「开→渲染→关→再渲染」，只看单次渲染永远发现不了。
+            //
+            //    判据：那一行必须写成 `RenderClockSource.TranspilerReady && Settings.RenderClockOn`。
+            //    只查 "TranspilerReady" 出现过是没用的（它本来就该出现）；
+            //    必须钉住"它后面还 AND 了开关"这个形状。
+            fail += Check(projectRoot, "⑮f 渲染作业的就绪判断必须与开关一起判（否则关掉后仍走确定性轨）",
+                new[] { "Features\\VideoRender\\VideoRenderJob.cs" },
+                new[] { "RenderClockSource.TranspilerReady && Settings.RenderClockOn" });
             if (fail == 0)
                 Console.WriteLine("    ✓ 随移植搬来的模块都已被接上");
             return fail;

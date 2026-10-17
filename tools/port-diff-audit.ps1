@@ -158,6 +158,11 @@ $knownDeviations = @(
     @{ Pat = 'SpectrePatchHub.SetFeatureToggl';      Why = '同上：Main 里注册该 Feature 的谓词' }
     @{ Pat = 'PatchType.Transpiler';                 Why = '2026-10-17 Attribute 表达式的连带 token（开关接线本身）' }
     @{ Pat = 'Settings.ReplayOn';                    Why = '2026-10-17 渲染时钟谓词与回放总开关相乘（ReplayOn && RenderClockOn）' }
+    # -- 2026-10-17 渲染作业的就绪判断与开关一起判 --------------------------
+    # 上游只判 TranspilerReady。我们加了 Feature 开关，而该字段只置 true
+    # 不置回 false（补丁卸载不清它），所以必须 AND 上开关，否则
+    # '开→渲染→关→再渲染' 会继续走确定性轨、两条时间轴混用。
+    @{ Pat = 'RenderClockSource.TranspilerReady';  Why = '2026-10-17 就绪判断必须 AND 开关（TranspilerReady 卸载后不清）' }
     @{ Pat = 'pureWins.Add';                        Why = '同上：散点图纯判窗口' }
 )
 

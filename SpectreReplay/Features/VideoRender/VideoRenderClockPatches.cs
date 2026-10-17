@@ -32,7 +32,12 @@ internal static class RenderClockSource
 
     internal static bool ControlsTime => ActiveClock != null;
 
-    // 启动时 Transpiler 匹配成功 → true；失败（游戏改了 Update）→ false → 渲染走旧 Pin
+    // 启动时 Transpiler 匹配成功 → true；失败（游戏改了 Update）→ false → 渲染走旧 Pin。
+    //
+    // ⚠️ **它是"曾经跑过"的一次性事实，不是"当前是否挂着"的状态。** 全仓只有置 true、
+    // 没有置回 false 的地方——补丁被卸载（含 2026-10-17 起这个开关被拨到关）时它不会清。
+    // 所以任何"现在该不该用确定性时钟"的判断都必须**与开关谓词一起判**，
+    // 不能只看这个字段（否则会出现"开→渲染→关→再渲染"的坏序，见 VideoRenderJob 处注释）。
     internal static bool TranspilerReady;
 
     internal static double DspTime()

@@ -369,6 +369,14 @@ switch ($Which) {
             '            bool hot = Hover(track);' `
             '            bool hot = false;'
     }
+    'MUT-U19' {
+        # ⑮f：就绪判断退回只看 TranspilerReady（= 上游形状）。
+        #      这是本轮真修过的 bug：TranspilerReady 只置 true 不置回 false，
+        #      补丁卸载不清它 ⇒ '开→渲染→关→再渲染' 仍走确定性轨，
+        #      一边帧号算 PinnedSongPosition、一边游戏读真实 dspTime，两条时间轴混用。
+        Backup 'Features\VideoRender\VideoRenderJob.cs'
+        ReplaceExact 'Features\VideoRender\VideoRenderJob.cs' 'bool useRenderClock = RenderClockSource.TranspilerReady && Settings.RenderClockOn;' 'bool useRenderClock = RenderClockSource.TranspilerReady;'
+    }
     'MUT-U16' {
         # ⑮a：把渲染时钟补丁的 Feature 摘掉——退回上游那种'无条件常开'。
         #      判据 ⑮a 必须因此变红：开关会变成假的（界面上能拨、补丁却永远挂着）。
@@ -828,7 +836,7 @@ switch ($Which) {
         ReplaceExact 'Features\Replay\KeyboardSimulation.cs' 'internal static class KeyboardSimulation' 'internal static class KeyboardSimulation { /* accidental drift */ internal static int __driftProbe = 1;'
     }
     default {
-        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-PORT1）"
+        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-PORT1）"
     }
 }
 
