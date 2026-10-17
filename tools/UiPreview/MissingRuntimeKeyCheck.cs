@@ -23,8 +23,7 @@ namespace UiPreview
             var files = Directory.GetFiles(projectRoot, "*.cs", SearchOption.AllDirectories)
                 .Where(f => !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar)
                          && !f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar)
-                         && !f.Contains(Path.DirectorySeparatorChar + "tools" + Path.DirectorySeparatorChar)
-                         && !f.Contains(Path.DirectorySeparatorChar + "_legacy" + Path.DirectorySeparatorChar))
+                         && !f.Contains(Path.DirectorySeparatorChar + "tools" + Path.DirectorySeparatorChar))
                 .ToList();
 
             // ① 被引用的运行时键（剥注释，注释里举例提到的键不算引用）

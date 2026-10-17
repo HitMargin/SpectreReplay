@@ -6,7 +6,8 @@
 > replay + video render 换成了 Spectre 的源码。** 自研引擎（`PlaybackEngine` /
 > `PlaybackClamps` / `KeyRecorder` / `LevelWatcher` / `LiveSession` /
 > `OfflineSession` / `PatchLoader` / `HitStateReplayer` / `PlaybackValidator` /
-> `RenderService`）**已全部移入 `_legacy_srp\` 停用，主项目里一个都不在了**。
+> `RenderService`）**已全部停用，主项目里一个都不在了**（当时的存档目录已删除，
+> 需要翻旧实现时用 `git show f96aa86^:<路径>`）。
 >
 > 因此下面这些偏差描述的代码**已经不存在于运行路径**，它们的"已修"结论
 > 只对旧架构成立，读的时候不要当成现状：

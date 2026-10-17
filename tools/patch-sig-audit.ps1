@@ -17,7 +17,7 @@ if (-not (Test-Path $src)) {
     exit 3
 }
 $files = @(Get-ChildItem $src -Recurse -File -Filter *.cs -ErrorAction Stop |
-    Where-Object { $_.FullName -notmatch '\\(obj|bin)\\' -and $_.FullName -notmatch '_legacy' -and $_.FullName -notmatch '\\tools\\' })
+    Where-Object { $_.FullName -notmatch '\\(obj|bin)\\' -and $_.FullName -notmatch '\\tools\\' })
 if ($files.Count -eq 0) {
     Write-Output "✗ 在 $src 下没扫到任何 .cs——计数为 0 之前先证明自己扫到了（假干净比误报危险）"
     exit 3

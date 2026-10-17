@@ -24,7 +24,7 @@ if (-not (Test-Path $root)) {
 # 保证**——哪天某个检查类为了自证写一个带 __instance 的样例，计数就会从 16 变 17，
 # 而没人知道多出来的那一条是工具自己的代码。与其余四个审计的过滤条件保持一致。
 $files = @(Get-ChildItem $root -Recurse -File -Filter *.cs -ErrorAction Stop |
-    Where-Object { $_.FullName -notmatch '\\(obj|bin)\\' -and $_.FullName -notmatch '_legacy' -and $_.FullName -notmatch '\\tools\\' })
+    Where-Object { $_.FullName -notmatch '\\(obj|bin)\\' -and $_.FullName -notmatch '\\tools\\' })
 if ($files.Count -eq 0) {
     Write-Output "✗ 在 $root 下没扫到任何 .cs——计数为 0 之前先证明自己扫到了（假干净比误报危险）"
     exit 3

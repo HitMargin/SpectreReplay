@@ -47,7 +47,6 @@ namespace UiPreview
             {
                 if (f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar)) continue;
                 if (f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar)) continue;
-                if (f.Contains(Path.DirectorySeparatorChar + "_legacy" + Path.DirectorySeparatorChar)) continue;
                 string text = File.ReadAllText(f);
                 if (!text.Contains("SpectrePatch(", StringComparison.Ordinal)) continue;
 

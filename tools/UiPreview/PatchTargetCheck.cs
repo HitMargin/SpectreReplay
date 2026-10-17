@@ -64,7 +64,6 @@ namespace UiPreview
                 if (f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar)) continue;
                 if (f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar)) continue;
                 if (f.Contains(Path.DirectorySeparatorChar + "tools" + Path.DirectorySeparatorChar)) continue;
-                if (f.Contains(Path.DirectorySeparatorChar + "_legacy" + Path.DirectorySeparatorChar)) continue;
                 foreach (var line in SrcUtil.Clean(File.ReadAllText(f)).Split('\n'))
                     if (line.Contains("[SpectrePatch(", StringComparison.Ordinal)) rawDecls++;
             }
@@ -156,7 +155,6 @@ namespace UiPreview
                 if (f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar)) continue;
                 if (f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar)) continue;
                 if (f.Contains(Path.DirectorySeparatorChar + "tools" + Path.DirectorySeparatorChar)) continue;
-                if (f.Contains(Path.DirectorySeparatorChar + "_legacy" + Path.DirectorySeparatorChar)) continue;
 
                 // **必须先剥注释。** SpectrePatch.cs 的属性文档注释里有一整段
                 // [SpectrePatch(...)] 的**示例代码**（typeof(scrFollower) /

@@ -9,7 +9,7 @@ if (-not (Test-Path $ours))   { Write-Output "✗ 源目录不存在：$ours";  
 if (-not (Test-Path $theirs)) { Write-Output "✗ 源目录不存在：$theirs"; exit 3 }
 
 $ourFiles = @(Get-ChildItem $ours -Recurse -File -Filter *.cs -ErrorAction Stop |
-    Where-Object { $_.FullName -notmatch '\\(obj|bin)\\' -and $_.FullName -notmatch '_legacy_srp' })
+    Where-Object { $_.FullName -notmatch '\\(obj|bin)\\' })
 if ($ourFiles.Count -eq 0) { Write-Output "✗ 没扫到任何 .cs"; exit 3 }
 Write-Output "我们的文件数 = $($ourFiles.Count)"
 

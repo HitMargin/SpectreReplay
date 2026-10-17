@@ -32,7 +32,6 @@ namespace UiPreview
             {
                 if (f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar)) continue;
                 if (f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar)) continue;
-                if (f.Contains(Path.DirectorySeparatorChar + "_legacy" + Path.DirectorySeparatorChar)) continue;
                 string text = File.ReadAllText(f);
                 // 只认日志字符串形状：引号 + [Spectre] + 空格。
                 // 剥不剥注释都要查——注释里写 `[Spectre]` 会误导读者，
