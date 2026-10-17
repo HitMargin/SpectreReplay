@@ -47,12 +47,22 @@ internal static class ReplayDecoder
         return replay;
     }
 
+    /// <summary>
+    /// 粗判一段字节像不像本模组的回放。
+    ///
+    /// **判据必须看最外层**，不能再看魔数：2026-10-18 加了压缩包装层之后，
+    /// 文件开头是压缩标记（0/1/2）或旧布局的 gzip 头（0x1F），
+    /// 而 <see cref="ReplayConstants.Magic"/> 已经躺在那层里面了。
+    /// 旧版判据在这里会恒定返回 false —— 而它零调用点，所以没人发现。
+    /// </summary>
     public static bool IsNewFormat(byte[] data)
     {
-        if (data.Length < 8) return false;
-        var magic = BitConverter.ToUInt64(data, 0);
-        // 只认本格式魔数。旧容器的 `LegacyMagic` 已随旧格式适配一起删除。
-        return magic == ReplayConstants.Magic;
+        if (data == null || data.Length < ReplayConstants.CompressionHeaderLen) return false;
+        byte head = data[0];
+        return head == ReplayConstants.CompressionRaw
+            || head == ReplayConstants.CompressionGzip
+            || head == ReplayConstants.CompressionBrotli
+            || head == 0x1F;   // 旧布局：整条 gzip 流
     }
 
     // 每条记录的最小字节数：用于把文件里的 count 收敛到"流里真能装下这么多条"，
@@ -80,25 +90,7 @@ internal static class ReplayDecoder
         return raw;
     }
 
-    private static byte[] Decompress(byte[] data)
-    {
-        using var input = new MemoryStream(data);
-        using var gzip = new GZipStream(input, CompressionMode.Decompress);
-        using var output = new MemoryStream();
-        // 解压炸弹防护：gzip 头里的原始长度不可信（可伪造），改为边解压边限量。
-        // 上限取 512MB——远超任何真实回放（百万级事件 ≈ 十几 MB），但能挡住
-        // 畸形文件把内存吃光导致游戏直接崩溃。
-        const long maxDecompressed = 512L * 1024 * 1024;
-        var buffer = new byte[64 * 1024];
-        int read;
-        while ((read = gzip.Read(buffer, 0, buffer.Length)) > 0)
-        {
-            if (output.Length + read > maxDecompressed)
-                throw new InvalidDataException("Decompressed replay exceeds 512MB limit");
-            output.Write(buffer, 0, read);
-        }
-        return output.ToArray();
-    }
+    private static byte[] Decompress(byte[] data) => ReplayCompression.Decompress(data);
 
     private static Replay.ReplayMetadata ReadMetadata(BinaryReader r)
     {

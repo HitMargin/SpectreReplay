@@ -39,6 +39,7 @@
     
     <Compile Include="..\..\SpectreReplay\Features\Replay\keyEvent.cs" Link="Real\keyEvent.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\HitContext.cs" Link="Real\HitContext.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayCompression.cs" Link="Real\ReplayCompression.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayEncoder.cs" Link="Real\ReplayEncoder.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayDecoder.cs" Link="Real\ReplayDecoder.cs" />
     

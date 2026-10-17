@@ -75,6 +75,14 @@
       <HintPath>..\..\adofai-libs\System.Drawing.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- BrotliStream 在 netstandard.dll 的 facade 里只到 GZipStream 为止，编译期需要
+         真正的实现程序集。这个 dll 游戏自带（Managed\System.IO.Compression.dll，
+         114688 B），已核实里面 BrotliStream 是 TypeDef 而非 TypeRef —— 也就是说
+         运行时确实有实现，不是空转发。Private=false 保证不拷贝进输出目录。 -->
+    <Reference Include="System.IO.Compression">
+      <HintPath>..\..\adofai-libs\System.IO.Compression.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="netstandard">
       <HintPath>..\..\adofai-libs\netstandard.dll</HintPath>
       <Private>false</Private>

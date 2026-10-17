@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
 using UnityEngine;
 
 namespace SpectreReplay.Features.Replay;
@@ -22,16 +21,8 @@ internal static class ReplayEncoder
             WriteHitContexts(writer, replay.HitContexts);
         }
 
-        var compressed = Compress(ms.ToArray());
+        var compressed = ReplayCompression.Compress(ms.ToArray());
         return compressed;
-    }
-
-    private static byte[] Compress(byte[] data)
-    {
-        using var output = new MemoryStream();
-        using (var gzip = new GZipStream(output, System.IO.Compression.CompressionLevel.Optimal))
-            gzip.Write(data, 0, data.Length);
-        return output.ToArray();
     }
 
     private static void WriteMetadata(BinaryWriter w, Replay.ReplayMetadata m)

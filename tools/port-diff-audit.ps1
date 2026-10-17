@@ -217,6 +217,12 @@ $knownDeviations = @(
     @{ Pat = 'kdf.GetBytes';                         Why = '2026-10-18 加密重写：PBKDF2 派生输出(一次取加密+MAC 两把)' }
     @{ Pat = 'Magic.Length';                         Why = '2026-10-18 加密重写：容器头拼接与 MAC 覆盖范围都要用它' }
     @{ Pat = 'ms.ToArray';                           Why = '2026-10-18 加密重写：CryptoStream 收尾取字节' }
+    # -- 2026-10-18 压缩层换 Brotli + 包装层(用户要求最高级压缩)-------------
+    # 压缩从 Encoder 内嵌的 gzip 抽成独立包装层 ReplayCompression.cs：
+    # [1B 算法号][4B 原文长度][压缩体]，算法 0=raw/1=gzip/2=Brotli(q6)，
+    # 旧 gzip 流(解密后首字节 0x1F)仅解压侧回落。Encoder/Decoder 各改一行接线。
+    @{ Pat = 'ReplayCompression.';                   Why = '2026-10-18 压缩层换 Brotli(q6)：包装层独立成 ReplayCompression.cs，编解码两端接线到它' }
+    @{ Pat = 'ReplayConstants.Compression';          Why = '2026-10-18 同上：算法号/头长常量(Raw=0/Gzip=1/Brotli=2/HeaderLen=5)' }
 )
 
 Write-Output ""
