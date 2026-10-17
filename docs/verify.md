@@ -61,13 +61,20 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify.ps1
 每加一条断言，**必须用 `tools\mutate.ps1 -Which MUT-X` 证明它会红**（自动还原）。
 已累计 10 条以上假断言、2 条假变异——形态见 `docs\SPECTRE_COMPARISON.md`
 与记忆库的「六条铁律」。`-ExpectGreen` 是反向对照（证明"全绿"本身可达）。
-`tools\mutate-regression.ps1` 全量回归 **94 条**变异（计数口径：`mutate.ps1` 里 `'MUT-XXX' {` 块的去重数；2026-10-17 实测 94）。新增 `MUT-V11` 守「Render 容器必须精确尺寸」；
+`tools\mutate-regression.ps1` 全量回归 **95 条**变异（计数口径：`mutate.ps1` 里 `'MUT-XXX' {` 块的去重数；2026-10-17 实测 95）。新增 `MUT-V11` 守「Render 容器必须精确尺寸」；
 `MUT-V12`/`MUT-V13` 分别守判据⑨的两半（卡片底图必须是卡色贴图、
 不许再出现 `GUI.backgroundColor` 赋值——乘算会抹平按钮 hover）。
 2026-10-17 另加两条：`MUT-U34` 守「去特效总开关必须默认关」（⑯）、
 `MUT-U35` 守「中文文案不得把关卡称作存档」（⑰）。
 `MUT-K3` 守 LocRuntimeCheck 的反向那一半（往表里塞一条没人取的键 ⇒ 必须红）。
-`MUT-K4`~`MUT-K7` 守更新检查的四条判据（⑲a 未检查态不许被说成已最新、⑲b 比较方向、⑲c 读 ModEntry.Version、⑲d info.json 两个字段非空）。
+`MUT-K4`~`MUT-K7` 守更新检查的几条判据（⑲a 已最新必须依据「查过没有」而非 `newest != null`、⑲a2 必须真读 `Params.LastUpdateCheck`、⑲b 比较方向、⑲c 读 ModEntry.Version、⑲d info.json 两个字段非空）。
+
+> **⑲a 的判据本身改过一次，值得记下来。** 第一版要求「已最新」挂在 `newest != null` 上，
+> 它能通过，但守的语义是错的——反编译 IL 证明 `ParseRepository` 只在
+> `current < release` 时才 `stfld NewestVersion`，**版本相等时保持 null**。
+> 于是「已最新」永远亮不起来，界面一直停在「未检查」，玩家刚查完也看不到结果。
+> 判据若只验「三态文案都出现过」，就会替这个错误设计背书。
+> 现在钉的是**分界条件本身**（必须是 `checkedOnce`）。这是「判据不能只验存在、要验语义形状」的又一例。
 
 > **变异锚点会跟着代码改而失效，且失效的样子是 exit 2 而不是红。** 删掉
 > `GUILayout.TextField` 那次，MUT-U2 的锚点（`TextField` + `CtrlW` 那一行）

@@ -358,9 +358,13 @@ namespace UiPreview
             //    判据必须**判分支结构**而不是「出现过 NewestVersion」——后者在把
             //    整个 else 分支删掉时照样绿。
             fail += Check(projectRoot,
-                "⑲a 更新状态：有新版/已最新/未检查三态必须分开(不许把未检查说成已最新)",
+                "⑲a 更新状态：有新版/已最新/未检查三态必须分开（已最新必须依据「查过没有」，不是 newest!=null）",
                 "Pages\\\\Pages.cs",
                 s => UpdateStatesAreDistinct(s));
+            fail += Check(projectRoot,
+                "⑲a2 必须真去读 UMM 的 Params.LastUpdateCheck(区分查过与没查过的唯一旁证)",
+                "Pages\\\\Pages.cs",
+                s => UpdateReadsLastUpdateCheck(s));
             fail += Check(projectRoot,
                 "⑲b 版本比较方向必须是 newest > current",
                 "Pages\\\\Pages.cs",
@@ -937,27 +941,59 @@ namespace UiPreview
         //     但只测「能编译」不够，要钉住它读的是 ModEntry.Version。
 
         /// <summary>
-        /// 三种态必须各自独立成支：有新版走 Warn、已最新走 Ok、未检查走 Dim。
+        /// 三种态必须各自独立成支，且「已最新」「未检查」的分界是
+        /// <c>checkedOnce</c>（UMM 是否真的查过），**不是** <c>newest != null</c>。
         ///
-        /// **为什么必须判分支结构而不是「出现过 NewestVersion」**：把整个
-        /// <c>else if (newest != null)</c> 分支删掉，只留「有新版 / 否则已最新」，
-        /// 「出现过 NewestVersion」照样命中——而那正是「未检查被说成已最新」
-        /// 这个缺陷本身。所以要求三个不同的文案键都出现，且分别挂在三个分支里。
+        /// 这条判据在实现过程中改过一次，原因值得记下来：反编译 IL 证明
+        /// <c>ParseRepository</c> 只在 `current &lt; release` 时才 `stfld NewestVersion`
+        /// ——**版本相等时它保持 null**。所以第一版判据（「已最新」挂在
+        /// `newest != null` 上）虽然能通过，但它守的语义是错的：「已最新」
+        /// 永远亮不起来，界面会一直停在「未检查」。
+        /// 判据如果只验「三态都出现过」，就会替这个错误设计背书。
+        ///
+        /// 因此这里钉的是**分界条件本身**：
+        ///   ① 三个文案键都在；
+        ///   ② `else if` 的条件是 `checkedOnce`，不能是 `newest != null`；
+        ///   ③ 未检查是最后那支（else）。
         /// </summary>
         private static bool UpdateStatesAreDistinct(string code)
         {
             string body = MethodBody(code, "DrawUpdateRow");
             if (body == null) return false;
-            // 三态各用各的文案键，缺一即说明有一态被合并了。
             bool hasAvailable = body.Contains("about.update.available", StringComparison.Ordinal);
             bool hasLatest = body.Contains("about.update.latest", StringComparison.Ordinal);
             bool hasUnknown = body.Contains("about.update.unknown", StringComparison.Ordinal);
             if (!hasAvailable || !hasLatest || !hasUnknown) return false;
-            // 「未检查」必须在**默认/否则**那一支里，不能被塞进 newest != null 里。
+
+            // ② 「已最新」必须挂在 checkedOnce 上。挂回 newest != null 就是退回
+            //    那个「永远不亮」的错误设计。
+            if (!body.Contains("else if (checkedOnce)", StringComparison.Ordinal)) return false;
+            if (body.Contains("else if (newest != null)", StringComparison.Ordinal)) return false;
+
+            // ③ 未检查在最后。
             int unknownIdx = body.IndexOf("about.update.unknown", StringComparison.Ordinal);
             int latestIdx = body.IndexOf("about.update.latest", StringComparison.Ordinal);
             if (unknownIdx < latestIdx) return false;
             return true;
+        }
+
+        /// <summary>
+        /// 必须真的去读 UMM 的 <c>Params.LastUpdateCheck</c>——那是区分「查过」与
+        /// 「没查过」的唯一旁证。没有它，「已最新」这一态就无从判断，只能退回
+        /// 「未检查」。
+        ///
+        /// 两点必须同时成立：① 按名字取 <c>Params</c>；② 读 <c>LastUpdateCheck</c>。
+        /// 只判前者会放过「取了 Params 但没用它」的空实现。
+        /// </summary>
+        private static bool UpdateReadsLastUpdateCheck(string code)
+        {
+            string body = MethodBody(code, "LastUpdateCheckSeen");
+            if (body == null) return false;
+            if (!body.Contains("LastUpdateCheck", StringComparison.Ordinal)) return false;
+            if (!body.Contains("\"Params\"", StringComparison.Ordinal)) return false;
+            // 必须包在 try 里：反射失败时不能把整个设置页带走。
+            string outer = MethodBody(code, "LastUpdateCheckSeen");
+            return outer != null && outer.Contains("catch", StringComparison.Ordinal);
         }
 
         /// <summary>

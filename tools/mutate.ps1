@@ -1012,12 +1012,43 @@ switch ($Which) {
         SetLines 'Pages\Pages.cs' ($out2.ToArray())
     }
     'MUT-K4' {
-        # ⑲a：把「未检查」这一态改口说成「已是最新」。
-        # 这是本功能最危险的形态：NewestVersion 为 null 既可能是"已最新"
-        # 也可能是"UMM 根本没查"（玩家关了 CheckUpdates / 没网），把后者
-        # 说成前者，玩家永远等不到更新且毫无迹象。判据 ⑲a 必须因此变红。
+        # ⑲a：把「已最新」的判据从 checkedOnce 改回 newest != null。
+        #
+        # 这正是**第一版实现的真实缺陷**，不是为凑变异硬造的：反编译 IL 证明
+        # ParseRepository 只在 current < release 时才 stfld NewestVersion，
+        # 版本相等时它保持 null。所以挂 newest != null 会让「已最新」永远不亮，
+        # 玩家刚查完界面仍停在「未检查」——功能做了却看不见。
+        # 判据 ⑲a 要求 else if 的条件必须是 checkedOnce。
         Backup 'Pages\Pages.cs'
-        ReplaceExact 'Pages\Pages.cs' 'Loc.T("about.update.unknown"), Gui.DimCol' 'Loc.T("about.update.latest"), Gui.OkCol'
+        ReplaceExact 'Pages\Pages.cs' 'else if (checkedOnce)' 'else if (newest != null)'
+    }
+    'MUT-K4b' {
+        # ⑲a2：把读 Params.LastUpdateCheck 的实现掏空，只留方法名与 try/catch
+        # 的外壳（让人误以为接线还在）。掏空后「查过没有」无从判断，
+        # 「已最新」这一态永远不可能亮——判据 ⑲a2 必须因此变红。
+        Backup 'Pages\Pages.cs'
+        $ls = Lines 'Pages\Pages.cs'
+        $start = -1
+        for ($i = 0; $i -lt $ls.Count; $i++) {
+            if ($ls[$i].Contains('private static bool LastUpdateCheckSeen()')) { $start = $i; break }
+        }
+        if ($start -lt 0) { throw 'MUT-K4b: cannot find LastUpdateCheckSeen' }
+        # 方法体收尾：从签名后第一个顶格（4 空格缩进）的 } 往下找
+        $end = -1
+        for ($j = $start + 1; $j -lt $ls.Count -and $j -lt $start + 80; $j++) {
+            if ($ls[$j] -eq '        }') { $end = $j; break }
+        }
+        if ($end -lt 0) { throw 'MUT-K4b: cannot find end of method body' }
+        $out4 = New-Object System.Collections.Generic.List[string]
+        for ($i = 0; $i -lt $ls.Count; $i++) {
+            if ($i -eq $start + 1) {
+                $out4.Add('            return false;')
+                $i = $end - 1
+                continue
+            }
+            $out4.Add($ls[$i])
+        }
+        SetLines 'Pages\Pages.cs' ($out4.ToArray())
     }
     'MUT-K5' {
         # ⑲b：版本比较方向写反。`newest > current` 才是"有新版"，

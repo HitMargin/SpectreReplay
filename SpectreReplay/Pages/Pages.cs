@@ -956,23 +956,31 @@ namespace SpectreReplay.Pages
         ///
         /// 三种态各自说清楚，因为它们的修法完全不同：
         ///   · 有新版 → 告诉版本号，并让玩家能点开仓库下载；
-        ///   · 已是最新 → 只有确认查过才敢说（NewestVersion 非空即证明 UMM 查到了）;
-        ///   · 还没查过 → **绝不要说"已是最新"**。NewestVersion 为 null 有两种可能：
-        ///     真的没新版，或者 UMM 根本没查（玩家关了 CheckUpdates / 没网）。
-        ///     把后者说成前者，是让玩家永远等不到更新。
+        ///   · 查过且没新版 → 敢说「已是最新」；
+        ///   · 还没查过 → **绝不要说「已是最新」**。把「UMM 根本没查」说成「已最新」，
+        ///     玩家会永远等不到更新，而且没有任何迹象。
+        ///
+        /// **⚠️ NewestVersion == null 不能当作「已是最新」用。** 这是反编译 IL 才发现的：
+        /// ParseRepository 里 `op_LessThan(current, release)` 之后紧跟 `brfalse`，
+        /// 也就是**只有「确实更新」时才执行 stfld NewestVersion**；版本相等或更低时
+        /// 直接跳过，字段保持 null。所以 null 同时代表「没新版」与「没查过」。
+        /// 要分开这两种，唯一的旁证是 `Params.LastUpdateCheck`——UMM 每次检查都会
+        /// 先把它写成 DateTime.Now。它非默认值 ⇒ 查过；此时 NewestVersion 仍为 null
+        /// ⇒ 真的是最新。
         /// </summary>
         private static void DrawUpdateRow()
         {
             string homepage = HomePageUrl();
             Version newest = NewestVersionOrNull();
             Version current = CurrentVersionOrNull();
+            bool checkedOnce = LastUpdateCheckSeen();
 
             if (newest != null && current != null && newest > current)
             {
                 Gui.KeyValue("about.update.available",
                     Loc.T("about.update.available.value") + newest, Gui.WarnCol);
             }
-            else if (newest != null)
+            else if (checkedOnce)
             {
                 Gui.KeyValue("about.update.status", Loc.T("about.update.latest"), Gui.OkCol);
             }
@@ -986,6 +994,48 @@ namespace SpectreReplay.Pages
             if (!string.IsNullOrEmpty(homepage))
             {
                 OnGui.Button("about.update.open", () => OpenUrl(homepage), false);
+            }
+        }
+
+        /// <summary>
+        /// UMM 是否**检查过**更新。判据是 <c>Params.LastUpdateCheck</c> 有没有被写过：
+        /// <c>CheckModUpdates</c> 一进来就 `stfld Param::LastUpdateCheck = DateTime.Now`，
+        /// 失败也照样写，所以「非默认值」= 确实跑过一次（不管成没成）。
+        ///
+        /// **必须用反射**：<c>Param</c> 类型本身是 public、<c>LastUpdateCheck</c> 字段也是
+        /// public，但拿它的入口 <c>UnityModManager.get_Params</c> 是 **internal**。
+        /// 拿不到就返回 false（退回「未检查」这一态）——宁可说「不知道」，
+        /// 也不能在没证据时说「已是最新」。
+        /// </summary>
+        private static bool LastUpdateCheckSeen()
+        {
+            try
+            {
+                var umm = typeof(UnityModManagerNet.UnityModManager);
+                var prop = umm.GetProperty("Params",
+                    System.Reflection.BindingFlags.Static
+                    | System.Reflection.BindingFlags.Public
+                    | System.Reflection.BindingFlags.NonPublic);
+                object ps = prop != null ? prop.GetValue(null, null) : null;
+                if (ps == null) return false;
+                var fld = ps.GetType().GetField("LastUpdateCheck",
+                    System.Reflection.BindingFlags.Instance
+                    | System.Reflection.BindingFlags.Public
+                    | System.Reflection.BindingFlags.NonPublic);
+                if (fld == null) return false;
+                object v = fld.GetValue(ps);
+                if (v is DateTime dt)
+                {
+                    // 默认值 DateTime.MinValue（从没查过）；任何真实时间都远大于它。
+                    return dt.Year > 2000;
+                }
+                return false;
+            }
+            catch (Exception ex)
+            {
+                // 反射失败不能把整个设置页带走（OnGUI 抛异常 = 面板被 UMM 收掉）。
+                Debug.LogWarning("[SpectreReplay] 读取上次更新检查时间失败：" + ex.Message);
+                return false;
             }
         }
 
