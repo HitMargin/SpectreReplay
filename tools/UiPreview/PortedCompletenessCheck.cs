@@ -200,6 +200,25 @@ namespace UiPreview
             //    与 ⑫b 同族：只查 "playback.openlevel" 子串会被提示文案骗过。
             fail += CheckPredicate(projectRoot, "⑫d 官方关卡要有可点的按钮（不能只剩提示文字）",
                 "Pages\\Pages.cs", HasOfficialOpenButton);
+            // ⑫e 必须能**卸载**当前回放（2026-10-17 用户报「不能去取消当前的回放文件」）。
+            //
+            //    `ReplayManager.UnLoadReplay` 一直在库里，但**零调用点**——界面只有
+            //    「回放」没有「卸载」，载入后回不到未装弹状态，想换成"直接打一局录制"
+            //    必须重启游戏。又是「数据在、链路通、界面缺」那一族。
+            //
+            //    判据三件齐：
+            //      ① 卸载动作存在且**顺序正确**（先停播放/录制，再换出 data，
+            //         最后翻回录制态）——顺序反了会读到已清空的 data；
+            //      ② 真的调了 UnLoadReplay（只清 PlayMode 不换 data，等于没卸）；
+            //      ③ 界面**两个状态分支**都有入口（回放中 / 已装弹未开播）。
+            //         只补一处的话，另一个状态仍然卸不掉。
+            fail += CheckPredicate(projectRoot, "⑫e 卸载回放必须按序收口（停→换出data→回录制态）",
+                "State\\SpectreState.cs", ReplayUnloadIsOrdered);
+            fail += Check(projectRoot, "⑫f 卸载必须真的调用 UnLoadReplay（不能只翻标志）",
+                new[] { "State\\SpectreState.cs" },
+                new[] { "ReplayManager.UnLoadReplay(out data)" });
+            fail += CheckPredicate(projectRoot, "⑫g 界面必须给出卸载入口（回放中与已装弹两处都要）",
+                "Pages\\Pages.cs", HasUnloadEntryPoints);
             // ⑬ 编辑器跳转必须等场景就绪再定位起始砖。
             //    **这条最容易漏**：编辑器试玩从"当前选中砖"起跳，不定位就会从
             //    第 0 块开始，整份回放的按键位置全错——而界面看不出任何异常，
@@ -432,6 +451,73 @@ namespace UiPreview
                 sb.AppendLine(lines[i]);
             }
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// 卸载回放的**顺序**是否正确。
+        ///
+        /// 顺序不是风格问题：回放/录制协程还在跑时清 data，它们下一帧会去读
+        /// 已清空的对象（轻则报错重则卡死）；而先翻回录制态再 Stop，Stop 里
+        /// 判断"现在是不是在播"的依据已经被改掉，停不下来。
+        ///
+        /// 判据要求三件事**按位置递增**出现：
+        ///   ① StopPlaying / StopRecording  → ② UnLoadReplay → ③ SwitchToRecordMode
+        /// </summary>
+        private static bool ReplayUnloadIsOrdered(string code)
+        {
+            string body = MethodBody(code, "UnloadReplay");
+            if (body == null) return false;
+            int stop = body.IndexOf("StopPlaying", StringComparison.Ordinal);
+            int unload = body.IndexOf("UnLoadReplay", StringComparison.Ordinal);
+            int back = body.IndexOf("SwitchToRecordMode", StringComparison.Ordinal);
+            return stop >= 0 && unload > stop && back > unload;
+        }
+
+        /// <summary>
+        /// 界面是否在**两个状态分支**都给了卸载入口。
+        ///
+        /// `DrawPlaybackState` 有两个互斥分支：is_playing（回放中）与空闲态
+        /// （含"已装弹未开播"）。只在一处画按钮的话，另一个状态仍然卸不掉——
+        /// 而"刚载入就又卸不掉"恰恰是最容易被感觉到的那个。
+        ///
+        /// **判法不能是"数 DrawUnloadButton 出现几次"**：第一版就是这么写的，
+        /// 造变异时把空闲态那处的 `if (PlayMode && data != null)` 改成 `false`
+        /// （调用行还在、只是永不执行），次数仍是 2，判据照样绿——**假绿**
+        /// （2026-10-17 MUT-U23 实测）。"调用写在死代码里"和"没写"对玩家等价。
+        ///
+        /// 正确判法：要求两处**都**处在活路径上——
+        ///   ① 回放中分支：`is_playing` 块里出现 DrawUnloadButton；
+        ///   ② 空闲分支：必须存在 `if (PlayMode && data != null)` 这个**真条件**
+        ///      （不是 `false` / `!true` 这类恒假写法），且其后出现 DrawUnloadButton。
+        /// </summary>
+        private static bool HasUnloadEntryPoints(string code)
+        {
+            string body = MethodBody(code, "DrawPlaybackState");
+            if (body == null) return false;
+
+            int n = 0, at = 0;
+            while ((at = body.IndexOf("DrawUnloadButton", at, StringComparison.Ordinal)) >= 0)
+            {
+                n++;
+                at += "DrawUnloadButton".Length;
+            }
+            if (n < 2) return false;
+
+            // 空闲分支的门必须是"真条件"：不能是恒假写法。
+            // 找 `if (PlayMode && data != null)` 这一行，且它**不是**
+            // `if (false)` / `if (!true)` 这类被改死的样子。
+            foreach (string raw in body.Replace("\r\n", "\n").Split('\n'))
+            {
+                string line = raw.Trim();
+                if (!line.StartsWith("if (", StringComparison.Ordinal)) continue;
+                if (!line.Contains("PlayMode", StringComparison.Ordinal)) continue;
+                if (!line.Contains("data != null", StringComparison.Ordinal)) continue;
+                // 排掉恒假伪装
+                if (line.Contains("false", StringComparison.Ordinal)) continue;
+                if (line.Contains("!true", StringComparison.Ordinal)) continue;
+                return true;
+            }
+            return false;
         }
 
         private static bool HasOpenLevelButton(string code)

@@ -369,6 +369,41 @@ switch ($Which) {
             '            bool hot = Hover(track);' `
             '            bool hot = false;'
     }
+    'MUT-U22' {
+        # ⑫e：卸载顺序颠倒——把 UnLoadReplay 与 SwitchToRecordMode 对调。
+        #      形态：State 已清空却还把 PlayMode 翻回去之后才换 data，
+        #      中间态里 PlayMode/RecordMode 与 data 不一致（回放中却读到空 data）。
+        #      **必须按行索引改**：这两行各自唯一，但要'对调'而不是'替换成别的文本'，
+        #      ReplaceExact 表达不了（它是逐行 Contains，多行锚点命中 0 次——本轮实测）。
+        Backup 'State\SpectreState.cs'
+        $ls = Lines 'State\SpectreState.cs'
+        $n = 0
+        for ($i = 0; $i -lt $ls.Count - 1; $i++) {
+            if ($ls[$i] -match 'UnLoadReplay\(out data\)' -and $ls[$i+1] -match 'SwitchToRecordMode') {
+                $tmp = $ls[$i]
+                $ls[$i] = $ls[$i+1]
+                $ls[$i+1] = $tmp
+                $n++
+            }
+        }
+        if ($n -ne 1) { throw ('MUT-U22 unexpected count=' + $n) }
+        SetLines 'State\SpectreState.cs' $ls
+    }
+    'MUT-U23' {
+        # ⑫g：砍掉空闲态那处的卸载入口（'刚载入就又卸不掉'）。
+        #      **必须按行号改**：DrawUnloadButton 出现 2 次。
+        Backup 'Pages\Pages.cs'
+        $ls = Lines 'Pages\Pages.cs'
+        $n = 0
+        for ($i = 0; $i -lt $ls.Count; $i++) {
+            if ($ls[$i] -match 'PlayMode && data != null') {
+                $ls[$i] = $ls[$i] -replace 'PlayMode && data != null', 'false'
+                $n++
+            }
+        }
+        if ($n -ne 1) { throw ('MUT-U23 unexpected count=' + $n) }
+        SetLines 'Pages\Pages.cs' $ls
+    }
     'MUT-U20' {
         # ⑫c：官方关卡跳转**不清 customLevelPaths**。
         #      形态：internalLevelName 写了、场景也重载了，但上一关的自制谱路径还留着。
@@ -849,7 +884,7 @@ switch ($Which) {
         ReplaceExact 'Features\Replay\KeyboardSimulation.cs' 'internal static class KeyboardSimulation' 'internal static class KeyboardSimulation { /* accidental drift */ internal static int __driftProbe = 1;'
     }
     default {
-        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-PORT1）"
+        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-PORT1）"
     }
 }
 

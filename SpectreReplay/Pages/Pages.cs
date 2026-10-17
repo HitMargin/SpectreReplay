@@ -225,11 +225,18 @@ namespace SpectreReplay.Pages
                     song = sn;
                 }
                 GUILayout.Label(Loc.F("playback.armed", song), Gui.LabelStyle);
+                GUILayout.BeginHorizontal();
                 if (GUILayout.Button(Loc.T("playback.stop"), Gui.ButtonStyle,
                         GUILayout.Width(140f), GUILayout.Height(26f)))
                 {
                     PlayActions.StopPlaying();
                 }
+                // 「停止」与「卸载」是两件事：停止只是不再注入按键，回放仍装着
+                // （可以随时重开这关再放）；卸载才是回到"什么都没装弹"。
+                // 以前只有停止、没有卸载，玩家想换回"直接打一局录制"只能重启游戏。
+                DrawUnloadButton();
+                GUILayout.FlexibleSpace();
+                GUILayout.EndHorizontal();
                 return;
             }
             if (is_recording)
@@ -248,9 +255,45 @@ namespace SpectreReplay.Pages
                 return;
             }
             GUILayout.Label(Loc.T("playback.idle"), Gui.NoteStyle, GUILayout.ExpandWidth(true));
+            // 空闲态也要给出卸载入口：`PlayMode` 为真但还没开播（装了弹没发射）
+            // 时 data 仍在，玩家同样需要能反悔——此时上面那个 is_playing 分支
+            // 走不到，不补这一处就会出现"刚载入就又卸不掉了"。
+            if (PlayMode && data != null)
+            {
+                GUILayout.BeginHorizontal();
+                DrawUnloadButton();
+                GUILayout.FlexibleSpace();
+                GUILayout.EndHorizontal();
+            }
             DrawArmedHint();
             DrawTimingSummary();
             DrawOpenLevelRow();
+        }
+
+        /// <summary>
+        /// 「卸载回放」按钮。**两个状态分支都要给**（回放中 / 已装弹未开播），
+        /// 因为它们的宿主分支不同，只补一处就会剩下另一个状态卸不掉。
+        ///
+        /// 用 <see cref="Gui.QuietButtonStyle"/> 而不是普通按钮：它是"撤销装弹"
+        /// 这类破坏性小操作，不该和「回放」那颗主行动按钮抢视觉权重。
+        /// 二次确认也没必要——卸载不删文件，重新载入即可。
+        /// </summary>
+        private static void DrawUnloadButton()
+        {
+            if (GUILayout.Button(Loc.T("playback.unload"), Gui.QuietButtonStyle,
+                    GUILayout.Width(110f), GUILayout.Height(26f)))
+            {
+                try
+                {
+                    PlayActions.UnloadReplay();
+                    _loadedPath = "";
+                }
+                catch (Exception ex)
+                {
+                    // 卸载失败不该把整个设置页带走（与载入侧同一处理）
+                    Debug.LogWarning("[SpectreReplay] 卸载回放失败：" + ex.Message);
+                }
+            }
         }
 
         /// <summary>

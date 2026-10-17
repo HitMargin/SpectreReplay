@@ -284,6 +284,31 @@ public static class SpectreState
             IsFullRun = false;
         }
 
+        /// <summary>
+        /// 卸载当前回放，回到"什么都没装弹"的录制态。
+        ///
+        /// **为什么需要它。** <c>ReplayManager.UnLoadReplay</c> 一直在库里，
+        /// 但**零调用点**——界面上只有「回放」没有「卸载」，于是载入一份回放后
+        /// 就再也回不到未装弹状态：那颗「回放」按钮会一直高亮，
+        /// 玩家想换成"直接打一局录制"必须先重启游戏。
+        /// 这与"键盘音三项 / 回放驱动开关 / 保存目录"是同一族缺陷
+        /// （数据在、链路通、界面缺），只是这次连界面行都没有。
+        ///
+        /// **顺序不能改**（照上游 <c>SpectreUiPages.More.cs:40-44</c>）：
+        /// ① 先 StopPlaying/StopRecording——回放/录制协程还在跑时清 data，
+        ///    它们下一帧会去读已清空的 data，轻则报错重则卡死；
+        /// ② 再 UnLoadReplay 换出 data 并清掉键盘音（<c>WavLoader.loaded_clip</c>
+        ///    与 <c>HasKeybdSound</c> 不清的话，下一局会带着上一局的键盘音）；
+        /// ③ 最后 SwitchToRecordMode 把 PlayMode 翻回 false 并复位所有游标。
+        /// </summary>
+        internal static void UnloadReplay()
+        {
+            PlayActions.StopPlaying();
+            PlayActions.StopRecording();
+            Features.Replay.ReplayManager.UnLoadReplay(out data);
+            PlayActions.SwitchToRecordMode();
+        }
+
         // 启停事件只在状态真正翻转时触发（Start/Stop 内部各有守卫，重复调用无害）；
         // 全部启停路径都经 PlayActions 收口，这里是对外事件的唯一挂点。
         // Start* 会把互斥的另一侧标志直接翻转（不经过对应 Stop），此处一并补发 Stopped
