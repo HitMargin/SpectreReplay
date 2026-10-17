@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using SpectreReplay.Features.EffectRemover;
 using SpectreReplay.Features.Replay;
 using SpectreReplay.Features.VideoRender;
 using SpectreReplay.Ui;
@@ -133,10 +134,9 @@ namespace SpectreReplay.Pages
             // 它管的不是"旧引擎"，而是**整个按键模拟回放链路**：
             //   ReplayPlayer.cs:38  关掉后停止回放时**不会释放已按住的键**（键会卡住）
             //   ReplayPlayer.cs:133 关掉后回放时**一个键都不注入**（画面毫无反应）
-            // 上游 Spectre 把它当一等公民摆在"回放设置"首页，标签就叫
-            // 「模拟按键 / Simulate Key Press」（SpectreUiPages.More.cs:160）。
-            // 我们移植时丢了 UI，于是这个开关只剩 Configs.json 一条路——
-            // 而它恰好是"回放没反应"时最该被检查的一项。
+            // 它必须有一等公民的位置摆在"回放设置"首页，标签就叫
+            // 「模拟按键 / Simulate Key Press」——而它恰好是"回放没反应"时
+            // 最该被检查的一项，只剩 Configs.json 一条路等于没人找得到。
             Gui.Section("playback.drive", Gui.Accent, () =>
             {
                 OnGui.Row("playback.simulate", LegacyEngine, v => { LegacyEngine = v; Commit(); });
@@ -311,7 +311,7 @@ namespace SpectreReplay.Pages
         /// **为什么需要它。** 回放只在"重开/换关/进关"时才启动（见
         /// <see cref="OpenReplayLevel"/> 的说明），而练习谱/自制谱要自己找回去
         /// 很麻烦——玩家录完一局、退出、回放页点载入，然后只能靠记忆翻关卡列表。
-        /// 上游 Spectre 有这颗按钮（SpectreUiPages.More.cs:98-121），我们移植时丢了。
+        /// 这颗按钮就是那条回去的路。
         ///
         /// **只对"已装弹的回放"显示**（<c>PlayMode &amp;&amp; data != null</c>）：
         /// 录制模式下 data 也在记录，不加这个门槛的话自己打一局也会冒出这颗按钮。
@@ -420,9 +420,9 @@ namespace SpectreReplay.Pages
         /// <summary>
         /// 已载入回放的命中误差摘要。
         ///
-        /// **为什么要在这里动手。** ReplayAnalyzer.Analyze 随移植搬了过来（纯计算、
-        /// 不碰引擎），但 SpectreReplay 侧**一个调用点都没有** —— 那一整块"整体偏早/
-        /// 偏晚、中位数、标准差"是玩家打完一局最想知道的事，而它对玩家等于不存在。
+        /// **为什么要显示它。** ReplayAnalyzer.Analyze 是纯计算、不碰引擎，
+        /// 但**必须有调用点**才算存在 —— 那一整块"整体偏早/偏晚、中位数、
+        /// 标准差"是玩家打完一局最想知道的事，没人调用就等于不存在。
         ///
         /// 只在**已载入回放且关卡已加载**时显示：Analyze 的返回 null 带有
         /// need_level（没进关）/ no_data（没有可分析的命中）两种本地化键后缀，
@@ -681,8 +681,8 @@ namespace SpectreReplay.Pages
         /// <summary>
         /// 本局渲染实际会用的编码器。
         ///
-        /// **为什么必须画出来。** <c>VideoEncoder.DescribeEncoder</c> 在移植里
-        /// 一个调用点都没有：选「最快」时若 NVENC 探测失败，编码器会静默落到
+        /// **为什么必须画出来。** <c>VideoEncoder.DescribeEncoder</c> 的结论
+        /// 必须落到界面上：选「最快」时若 NVENC 探测失败，编码器会静默落到
         /// libx264(CPU)，渲染速度差一个数量级，而界面上看不到任何差别——
         /// 玩家只会觉得"这台机器跑不动"，去改画质/帧率那些无关的设置。
         /// 编码器那行只读状态、不起探测进程（DescribeEncoder 复用 NVENC 的已缓存结论）；
@@ -717,9 +717,8 @@ namespace SpectreReplay.Pages
         }
 
         /// <summary>
-        /// 转换已有视频：VideoConverter 随移植搬了过来，但**一直零调用点**。
-        /// Spectre 是在它的 uGUI 设置页里调的（SpectreUiPages.Features.cs:778），
-        /// 我们没有那套页面，于是"批量转格式"这个功能对玩家等于不存在。
+        /// 转换已有视频：VideoConverter 是纯逻辑转换器，**必须有界面入口**——
+        /// 没有入口时"批量转格式"这个功能对玩家等于不存在。
         ///
         /// 这里给一个轻量入口：只认上面那个输出目录，目标容器就是 render.format
         /// 当前选的那个。不另开目录选择器——那是另一个功能，不是这个缺口的一部分。
@@ -805,6 +804,104 @@ namespace SpectreReplay.Pages
                 // OnGUI 里抛异常 = UMM 收掉整个设置面板
                 Debug.LogError("[SpectreReplay] 启动转换失败：" + ex);
             }
+        }
+
+        // ── 去特效 ──────────────────────────────────────────────
+
+        /// <summary>
+        /// 去特效页。
+        ///
+        /// **为什么单独一页而不是塞进录像页。** 这里有 27 个开关，全塞进任何一页都会
+        /// 把原有的设置挤到几屏之外——而这一页本身**是给高级用途的**：想让谱面看起来
+        /// 干净、或者机器跑不动渲染时减负。单独一页还有个附带好处：总开关关掉时它
+        /// 就是个普通页签，玩家不会误以为"录制功能坏了"。
+        ///
+        /// **控件顺序按"风险从低到高"排。** 最前面是总开关与「允许存盘」（这两项
+        /// 决定这次操作会不会改到磁盘），后面才是各个具体项——把破坏性选项（移除装饰物、
+        /// 重置轨道颜色）摆在最上面，玩家顺手打开就会把谱面的美术全抹了。
+        /// </summary>
+        internal static void DrawEffects()
+        {
+            Gui.Section("effects.master", Gui.Accent, () =>
+            {
+                OnGui.Row("effects.on", EffectRemoverOn, v =>
+                {
+                    EffectRemoverOn = v;
+                    Commit();
+                    // 关掉时把编辑器的保存按钮放回可用态。**不接这一下会留下
+                    // 一颗永远点不动的保存按钮**——补丁被卸载了，但按钮的
+                    // interactable 还停在禁用态，玩家只能重启游戏。
+                    if (!v)
+                    {
+                        EffectRemover.RestoreEditorSaveButtons();
+                    }
+                });
+                OnGui.Note("effects.on.note");
+                // 这两项要跟着去特效开关一起走：功能没开时它们没有意义，
+                // 但**不禁用**——本项目没有禁用态样式，禁用态看起来就是坏掉的控件。
+                OnGui.Row("effects.enablesave", EffectRemoverEnableSave,
+                    v => { EffectRemoverEnableSave = v; Commit(); });
+                OnGui.Note("effects.enablesave.note");
+            });
+
+            Gui.Section("effects.visual", Gui.Accent, () =>
+            {
+                OnGui.Row("effects.filters", EffectRemoverFilters, v => { EffectRemoverFilters = v; Commit(); });
+                OnGui.Row("effects.advfilters", EffectRemoverAdvancedFilters, v => { EffectRemoverAdvancedFilters = v; Commit(); });
+                OnGui.Row("effects.particles", EffectRemoverParticles, v => { EffectRemoverParticles = v; Commit(); });
+                OnGui.Row("effects.backgrounds", EffectRemoverBackgrounds, v => { EffectRemoverBackgrounds = v; Commit(); });
+                OnGui.Row("effects.cameras", EffectRemoverCameras, v => { EffectRemoverCameras = v; Commit(); });
+                if (EffectRemoverCameras)
+                {
+                    OnGui.RowSlider("effects.camerazoom", EffectRemoverCameraZoomScale, 100f, 1000f,
+                        v => ((int)v) + " %", v => { EffectRemoverCameraZoomScale = v; Commit(); });
+                }
+            });
+
+            Gui.Section("effects.decor", Gui.Accent, () =>
+            {
+                OnGui.Row("effects.decorations", EffectRemoverDecorations, v => { EffectRemoverDecorations = v; Commit(); });
+                OnGui.Row("effects.removealldecor", EffectRemoverRemoveAllDecorations,
+                    v => { EffectRemoverRemoveAllDecorations = v; Commit(); });
+                OnGui.Note("effects.decor.note");
+            });
+
+            Gui.Section("effects.track", Gui.Accent, () =>
+            {
+                OnGui.Row("effects.trackanim", EffectRemoverTrackAnimations, v => { EffectRemoverTrackAnimations = v; Commit(); });
+                OnGui.Row("effects.trackpos", EffectRemoverTrackPositions, v => { EffectRemoverTrackPositions = v; Commit(); });
+                OnGui.Row("effects.trackmove", EffectRemoverTrackMoves, v => { EffectRemoverTrackMoves = v; Commit(); });
+                OnGui.Row("effects.trackcolor", EffectRemoverTrackColors, v => { EffectRemoverTrackColors = v; Commit(); });
+                OnGui.Row("effects.resettrackopacity", EffectRemoverResetTrackOpacity,
+                    v => { EffectRemoverResetTrackOpacity = v; Commit(); });
+                OnGui.Row("effects.resettrackanim", EffectRemoverResetTrackAnimation,
+                    v => { EffectRemoverResetTrackAnimation = v; Commit(); });
+                OnGui.Row("effects.resettrackcolor", EffectRemoverResetTrackColor,
+                    v => { EffectRemoverResetTrackColor = v; Commit(); });
+            });
+
+            Gui.Section("effects.planet", Gui.Accent, () =>
+            {
+                OnGui.Row("effects.planetorbit", EffectRemoverPlanetOrbit, v => { EffectRemoverPlanetOrbit = v; Commit(); });
+                OnGui.Row("effects.planetscale", EffectRemoverPlanetScale, v => { EffectRemoverPlanetScale = v; Commit(); });
+                OnGui.Row("effects.planetradius", EffectRemoverPlanetRadius, v => { EffectRemoverPlanetRadius = v; Commit(); });
+                OnGui.Row("effects.hideicons", EffectRemoverHideIcons, v => { EffectRemoverHideIcons = v; Commit(); });
+            });
+
+            Gui.Section("effects.audio", Gui.Accent, () =>
+            {
+                OnGui.Row("effects.hitsounds", EffectRemoverHitSounds, v => { EffectRemoverHitSounds = v; Commit(); });
+                OnGui.Row("effects.holdsounds", EffectRemoverHoldSounds, v => { EffectRemoverHoldSounds = v; Commit(); });
+            });
+
+            Gui.Section("effects.gameplay", Gui.Accent, () =>
+            {
+                OnGui.Row("effects.checkpoints", EffectRemoverCheckpoints, v => { EffectRemoverCheckpoints = v; Commit(); });
+                OnGui.Row("effects.inputevents", EffectRemoverInputEvents, v => { EffectRemoverInputEvents = v; Commit(); });
+                OnGui.Row("effects.framerate", EffectRemoverFrameRate, v => { EffectRemoverFrameRate = v; Commit(); });
+                OnGui.Row("effects.repeatevents", EffectRemoverRepeatEvents, v => { EffectRemoverRepeatEvents = v; Commit(); });
+                OnGui.Note("effects.gameplay.note");
+            });
         }
 
         // ── 关于 ────────────────────────────────────────────────

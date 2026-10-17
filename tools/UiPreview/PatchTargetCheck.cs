@@ -83,6 +83,15 @@ namespace UiPreview
                 Type t = game.GetType(s.ClassName);
                 if (t == null)
                 {
+                    // **补一次按简单名查找。** 源码里写的是 typeof(LevelData)，
+                    // 解析出来只有简单名；而 GetType 要的是全限定名。目标类型若不在
+                    // 全局命名空间（ADOFAI.LevelData / ADOFAI.Editor.Actions.SaveLevelEditorAction），
+                    // 只查全名就会误判成"目标类型不存在"——那是检查器自己的盲区，
+                    // 不是补丁挂不上。按简单名扫一遍兜底，重名时优先取唯一的那个。
+                    t = FindTypeBySimpleName(game, s.ClassName);
+                }
+                if (t == null)
+                {
                     Console.WriteLine("    ✗ 目标类型不存在：" + s.ClassName + "  ← 补丁挂不上，功能静默失效");
                     fail++;
                     continue;
@@ -120,6 +129,29 @@ namespace UiPreview
             if (fail == 0)
                 Console.WriteLine("    ✓ 所有生效的补丁目标在真程序集里都存在且形参对得上");
             return fail;
+        }
+
+        /// <summary>
+        /// 按简单名在程序集里找类型。**重名时只返回唯一的那个**：出现两个同名类型
+        /// 说明源码里的名字本身有歧义，这时报错比猜一个更该发生。
+        /// </summary>
+        private static Type FindTypeBySimpleName(Assembly asm, string simpleName)
+        {
+            Type found = null;
+            try
+            {
+                foreach (Type t in asm.GetTypes())
+                {
+                    if (!string.Equals(t.Name, simpleName, StringComparison.Ordinal)) continue;
+                    if (found != null) return null;   // 有歧义，交给调用方报错
+                    found = t;
+                }
+            }
+            catch (ReflectionTypeLoadException)
+            {
+                return null;
+            }
+            return found;
         }
 
         /// <summary>按括号深度扫一行，更新 depth / started / closed。</summary>

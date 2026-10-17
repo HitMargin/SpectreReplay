@@ -533,7 +533,7 @@ public static class ConfigManager
         try
         {
             var json = JObject.Parse(File.ReadAllText(filePath));
-            // ── 旧版配置迁移（自研引擎时代 → Spectre 整体移植后）─────────────
+            // ── 旧版配置迁移（早期扁平格式 → 现在的分区格式）───────────────
             //
             // 旧 Configs.json 是**扁平**结构（顶层 PascalCase：RecordingOn /
             // Surface / Width / Fps / Encoder / DuplicateWhenLate…），新结构是

@@ -5,15 +5,15 @@ using SpectreReplay.Features.ResultsPlus;
 
 namespace SpectreReplay.Features.Replay;
 
-// 命中误差采集：本文件是 Spectre 侧两个补丁的移植。
+// 命中误差采集：两个补丁把判定结果变成可用的校准样本。
 //
-// **为什么必须有它。** SpectreReplay 里 HitErrorData（误差样本）、CalibrationAdvisor
-// （校准建议）、Settings.CalibSamples/CalibGames（持久化载体）全都随移植搬了过来，
+// **为什么必须有它。** HitErrorData（误差样本）、CalibrationAdvisor
+// （校准建议）、Settings.CalibSamples/CalibGames（持久化载体）都在，
 // 而 Patch_Lifecycle 的 Start_Rewind Postfix 每局都在调 HitErrorData.ResetForNewRun() 与
-// CalibrationAdvisor.OnNewRun()。但**喂数据的两个补丁没搬**：
+// CalibrationAdvisor.OnNewRun()。但**喂数据的两个补丁**必须成对存在：
 //   · CapturePending（SwitchChosen Prefix 缓存判定参数）
 //   · Record（AddHit Postfix 落一条样本）
-// 全仓对这两个方法零调用 —— 也就是说"每局清零一份永远是空的数据"。
+// 少了它们就是"每局清零一份永远是空的数据"。
 // 表现形式不是报错，而是：校准建议永远攒不够 MinSamples=40 条样本、
 // 结算里看不到偏移统计，而玩家以为"再练练就会出建议"。
 //
@@ -35,9 +35,8 @@ internal static class Patch_HitErrorAddHit
         => HitErrorData.Record(__instance, hit);
 }
 
-// 结算时把本局的有效样本并进滚动窗口。Spectre 这一环在 DetailedResults.Show 的
-// Postfix 上（同时负责结算文本追加），SpectreReplay 不移植结算文本，
-// 只需保留 CommitRun 这一半——否则上面采到的样本永远没有消费方。
+// 结算时把本局的有效样本并进滚动窗口。只需保留 CommitRun 这一半
+// （结算文本追加是另一件事，本模组不做）——否则上面采到的样本永远没有消费方。
 internal static class Patch_ResultsCommitCalib
 {
     [SpectrePatch(typeof(DetailedResults), "Show", PatchType.Postfix, Feature = FeatureKeys.CalibAdvice)]

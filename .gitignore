@@ -4,3 +4,7 @@ obj/
 *.user
 *.suo
 .dsh-meow/
+
+# 闸门脚本每次运行都会重写的输出，不属于源码
+verify-last.log
+mutate-regression-last.log

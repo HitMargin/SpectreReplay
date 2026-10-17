@@ -9,7 +9,7 @@ using UnityEngine;
 
 namespace SpectreReplay.Features.VideoRender;
 
-// ── 时间源替换（OrbitRender ConductorPatch 同款思路）─────────────────────
+// ── 时间源替换 ─────────────────────────────────────────────────────────
 //
 // 不再拦截 songposition_minusi 的读写（输出端），而是把 scrConductor.Update /
 // scrCountdown.Update 方法体里的时间源调用整体替换：

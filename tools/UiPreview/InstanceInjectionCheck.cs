@@ -83,6 +83,13 @@ namespace UiPreview
                     if (sig == null || !sig.Contains("__instance")) continue;
 
                     Type t = game.GetType(typeName);
+                    if (t == null)
+                    {
+                        // **补一次按简单名查找。** 源码写 typeof(LevelData) 时解析出来
+                        // 只有简单名，而 GetType 要全限定名——目标在 ADOFAI 命名空间下
+                        // 就会查不到，把"检查器的盲区"误报成"补丁挂不上"。
+                        t = FindTypeBySimpleName(game, typeName);
+                    }
                     bool found = false, isStatic = false;
                     if (t != null)
                     {
@@ -119,6 +126,28 @@ namespace UiPreview
             if (fail == 0)
                 Console.WriteLine($"    ✓ {rows.Count} 处 __instance 全部作用于实例方法");
             return fail;
+        }
+        /// <summary>
+        /// 按简单名找类型，**重名返回 null**：两个同名类型说明源码里的名字本身有歧义，
+        /// 这时报错比猜一个更该发生。
+        /// </summary>
+        private static Type FindTypeBySimpleName(Assembly asm, string simpleName)
+        {
+            Type found = null;
+            try
+            {
+                foreach (Type t in asm.GetTypes())
+                {
+                    if (!string.Equals(t.Name, simpleName, StringComparison.Ordinal)) continue;
+                    if (found != null) return null;
+                    found = t;
+                }
+            }
+            catch (ReflectionTypeLoadException)
+            {
+                return null;
+            }
+            return found;
         }
     }
 }

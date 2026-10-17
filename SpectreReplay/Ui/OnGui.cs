@@ -80,10 +80,10 @@ namespace SpectreReplay.Ui
 
         private static readonly string[] TabKeys =
         {
-            "page.record", "page.playback", "page.render", "page.about",
+            "page.record", "page.playback", "page.render", "page.effects", "page.about",
         };
 
-        /// <summary>标签页固定宽度：四个页名长短不一，按内容伸缩会让整排跳动。</summary>
+        /// <summary>标签页固定宽度：页名长短不一，按内容伸缩会让整排跳动。</summary>
         private const float TabW = 132f;
 
         // ── UMM 回调 ────────────────────────────────────────────
@@ -301,6 +301,7 @@ namespace SpectreReplay.Ui
                     case 0: Pages.Pages.DrawRecord(); break;
                     case 1: Pages.Pages.DrawPlayback(); break;
                     case 2: Pages.Pages.DrawRender(); break;
+                    case 3: Pages.Pages.DrawEffects(); break;
                     default: Pages.Pages.DrawAbout(); break;
                 }
             }

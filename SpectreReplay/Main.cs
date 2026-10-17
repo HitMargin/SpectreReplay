@@ -10,7 +10,7 @@ using ModEntry = UnityModManagerNet.UnityModManager.ModEntry;
 namespace SpectreReplay
 {
     /// <summary>
-    /// 入口：把 Spectre 的 replay + video render 整体移植进本模组后的装配。
+    /// 入口：装配录制/回放/视频渲染三大功能族的补丁与界面回调。
     /// Load 只做最轻的事（配置/文案/界面回调），重活全在 OnToggle。
     /// </summary>
     public static class Main
@@ -91,7 +91,7 @@ namespace SpectreReplay
                     PatchShared.GameVersion.Release, 141, 150);
                 SpectrePatchHub.Initialize(typeof(Main).Assembly);
 
-                // 回放功能开关（本移植只带 Replay 一个功能族）
+                // 回放功能开关（录制/回放/保存/录像共用这一个功能族）
                 SpectrePatchHub.SetFeatureToggle(FeatureKeys.Replay, () => Settings.ReplayOn);
                 SpectrePatchHub.SetFeatureToggle(FeatureKeys.ReplayManualSave, () => Settings.ReplayOn && Settings.ManualSave);
                 SpectrePatchHub.SetFeatureToggle(FeatureKeys.ReplayCancelSave, () => Settings.ReplayOn && Settings.CancelSave);
@@ -108,6 +108,11 @@ namespace SpectreReplay
                 // 与 Replay 相乘：回放系统整个关掉时，渲染时钟也没有存在意义。
                 SpectrePatchHub.SetFeatureToggle(FeatureKeys.RenderClock,
                     () => Settings.ReplayOn && Settings.RenderClockOn);
+                // 去特效。**必须注册**：未注册的功能其补丁按"关闭"处理且日志告警，
+                // 而它的三个补丁分别负责「摘事件 / 禁止存盘 / 刷新按钮」——漏注册时
+                // 表现为"开关拨到开、谱面一点没变"，日志里只有一行未注册告警。
+                SpectrePatchHub.SetFeatureToggle(FeatureKeys.EffectRemover,
+                    () => Settings.EffectRemoverOn);
                 SpectrePatchHub.SetMasterToggle(() => Settings.UiPowerOn);
                 SpectrePatchHub.Refresh();
 

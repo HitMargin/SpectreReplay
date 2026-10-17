@@ -4,7 +4,6 @@ namespace SpectreReplay.Features.VideoRender;
 
 /// <summary>
 /// 确定性渲染时钟：帧号驱动一切，与音频设备/真实耗时完全脱钩。
-/// （OrbitRender RenderClock 同款思路）
 ///
 /// 核心公式：
 ///   Time = FrameIndex / Fps          ← 每帧固定步进

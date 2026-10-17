@@ -267,8 +267,8 @@ public static class Settings
     // **不能是 null。** ConfigManager.SaveConfigs 构造 ConfigData 时会把它交给
     // ToHexArray，而那段构造不在 try 内 —— 抛出的 NRE 会让整份设置都写不下去
     // （2026-10-11 实测：改任何设置都不落盘，日志只有一行"保存设置失败"）。
-    // 上游此处是 (Color[])PlanetColorApplier.DefaultColors.Clone()；我们没移植
-    // PlanetColors 特性（该目录不存在），故给一个定长 8（= 上游 PlanetCount）的
+    // 上游此处是 (Color[])PlanetColorApplier.DefaultColors.Clone()；本模组没有
+    // PlanetColors 特性（该目录不存在），故给一个定长 8（= 游戏 PlanetCount）的
     // 中性数组即可 —— PlanetColorOn 默认 false 且无消费方，这组字段只是持久化载体。
     public static Color[] PlanetColorBase = new Color[8];
     public static Color[][] PlanetColorParts = InitPlanetParts();
@@ -430,7 +430,7 @@ public static class Settings
         };
     }
 
-    /// <summary>把当前设置立即落盘并刷新补丁开关（移植后的通用提交入口）。</summary>
+    /// <summary>把当前设置立即落盘并刷新补丁开关（通用提交入口）。</summary>
     internal static void CommitSafe()
     {
         try

@@ -1,0 +1,109 @@
+SpectreReplay
+Copyright (C) 2026 the SpectreReplay authors
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+this program. If not, see <https://www.gnu.org/licenses/>.
+
+
+================================================================================
+1. Upstream origin of the replay and video-render core
+================================================================================
+
+SpectreReplay is GPL-3.0 because it is a derivative work. The replay engine and
+the video-render pipeline were ported from the Spectre project, which is
+distributed under the GNU General Public License version 3.
+
+    Upstream project:  Spectre (a mod for A Dance of Fire and Ice)
+    Upstream license:  GNU General Public License, version 3
+
+What is derived from that upstream:
+
+  * the replay engine        - per-frame input capture, the .sprp/.crpl binary
+                               replay format (magic, versioning, metadata,
+                               hit-context records), AES + gzip encoding,
+                               decoding, playback scheduling and key injection;
+  * the video-render pipeline - offscreen frame capture, timeline pinning,
+                               ffmpeg process piping and argument assembly,
+                               container muxing and format conversion,
+                               audio capture from the game's mixdown bus;
+  * the keyboard-sound capture path that records microphone input to WAV and
+    re-attaches it to a replay.
+
+These parts stay under GPL-3.0. They must not be relicensed, and any
+redistribution must keep both this notice and the license text in `LICENSE`.
+
+Not derived from that upstream: the declarative patch layer, the settings
+model, the self-drawn settings UI, and the localisation tables in this
+repository were written for SpectreReplay.
+
+
+================================================================================
+2. Third-party components
+================================================================================
+
+The following components are used by SpectreReplay. A component listed as
+"not distributed" is only referenced at compile or run time and is not shipped
+with this project.
+
+  ffmpeg              https://ffmpeg.org/
+                      Separate command-line executable, invoked as a child
+                      process and never linked into SpectreReplay. Distributed
+                      under its own license: LGPL-2.1-or-later for a default
+                      build, GPL-2.0-or-later for a build configured with
+                      --enable-gpl. If an ffmpeg binary is shipped next to the
+                      mod, that copy is redistributed unmodified and is
+                      governed by the license of the build it came from.
+
+  libx264 (x264)      https://www.videolan.org/developers/x264.html
+                      H.264 software encoder, compiled into the ffmpeg build
+                      that is used for CPU encoding. Licensed GPL-2.0-or-later;
+                      this is what makes a typical bundled ffmpeg build a GPL
+                      build.
+
+  Harmony             https://github.com/pardeike/Harmony
+                      Runtime method patching library (prefix/postfix/
+                      transpiler). MIT License. Not distributed: it is supplied
+                      at run time by the game's mod loader.
+
+  UnityModManager     https://www.nexusmods.com/site/mods/21
+                      Mod loader used to load, configure and toggle this mod.
+                      Not distributed with SpectreReplay.
+
+  Unity Engine        https://unity.com/
+                      Runtime the mod runs inside. Not distributed.
+
+  Newtonsoft.Json     https://www.newtonsoft.com/json
+                      JSON serialisation for the settings file. MIT License.
+
+
+================================================================================
+3. Game assets
+================================================================================
+
+A Dance of Fire and Ice and its assemblies, art, audio and chart data belong to
+their respective rights holders. SpectreReplay references the game's assemblies
+at compile time only; none of them are redistributed here, and none of the
+GPL-3.0 rights granted by this project extend to them.
+
+SpectreReplay is an unofficial fan-made mod. It is not affiliated with or
+endorsed by the developers or publishers of A Dance of Fire and Ice.
+
+
+================================================================================
+4. Obtaining the source
+================================================================================
+
+SpectreReplay is distributed as a compiled mod together with the sources of
+the same version. The complete corresponding source, including the build files
+needed to reproduce the binary, is available from the same place the mod was
+obtained. GPL-3.0 gives you the right to obtain, study, modify and redistribute
+that source under the same terms.
