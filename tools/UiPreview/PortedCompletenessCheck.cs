@@ -290,6 +290,28 @@ namespace UiPreview
             fail += Check(projectRoot, "⑮f 渲染作业的就绪判断必须与开关一起判（否则关掉后仍走确定性轨）",
                 new[] { "Features\\VideoRender\\VideoRenderJob.cs" },
                 new[] { "RenderClockSource.TranspilerReady && Settings.RenderClockOn" });
+            // ⑯ 去特效总开关必须**默认关**（2026-10-17 用户裁决）。
+            //
+            //    上游 `Settings.EffectRemoverOn = true`，我们有意偏离。理由不是
+            //    "保守"，而是**爆炸半径不同**：本项目其它开关都只影响自己的输出
+            //    （录什么、渲染成什么），唯独它改的是**关卡内容本身**——打开后
+            //    进关看到的谱面已经不是原谱。玩家装这个模组是来录制/回放的，
+            //    不是来改谱的；默认开会让"我只想录一局"的人先撞上一次莫名其妙
+            //    的谱面变形，而他不会想到是新装的模组干的。
+            //
+            //    判据必须判**赋值结果**：`= true` 与 `= false` 是同一行代码的
+            //    两种状态，子串 `EffectRemoverOn` 永远命中，判"出现过"是假判据。
+            fail += CheckPredicate(projectRoot, "⑯ 去特效总开关必须默认关（它改的是关卡内容本身）",
+                "State\\Settings.cs", EffectRemoverDefaultsOff);
+            // ⑰ 中文文案里不许把「关卡」称作「存档」（2026-10-17 用户指出：
+            //    「存档翻译存在问题 应为 关卡」）。
+            //
+            //    这不是用词口味问题：本模组语境里的「存档」在玩家那边指**游戏进度**，
+            //    而这一项覆盖的是**关卡文件**（.adofai 谱面）。写成「允许覆盖存档」
+            //    会让玩家以为它会动自己的过关记录，于是不敢开；或者反过来理解成
+            //    "开了更安全"。同一处误导在 README 里也出现过。
+            fail += CheckPredicate(projectRoot, "⑰ 中文文案不得把关卡称作存档（会让玩家以为动的是进度存档）",
+                "Ui\\Loc.cs", ChineseLocSaysLevelNotSave);
             if (fail == 0)
                 Console.WriteLine("    ✓ 随移植搬来的模块都已被接上");
             return fail;
@@ -570,6 +592,66 @@ namespace UiPreview
                 {
                     return false;
                 }
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 去特效总开关是否**默认关**。
+        ///
+        /// 判法必须是「找到声明并读它等号右边」，不能判子串：
+        /// `public static bool EffectRemoverOn` 这一截在 `= true` 与 `= false`
+        /// 两种状态下完全一样，判"出现过"的判据在默认值被改回 true 时照样绿
+        /// （这正是本项目反复栽的「判出现过 ≠ 判生效着」）。
+        /// 同时排除注释行——解释"为什么默认关"的注释里必然写着 true。
+        /// </summary>
+        private static bool EffectRemoverDefaultsOff(string code)
+        {
+            foreach (string raw in code.Replace("\r\n", "\n").Split('\n'))
+            {
+                string line = raw.TrimStart();
+                if (line.StartsWith("//", StringComparison.Ordinal)
+                    || line.StartsWith("*", StringComparison.Ordinal)) continue;
+                // 声明行：public static bool EffectRemoverOn = ...
+                if (!line.Contains("bool EffectRemoverOn", StringComparison.Ordinal))
+                    continue;
+                // 只认**赋值过**的那一行（字段声明本身带初值）；不带 = 的是分号结尾
+                int eq = line.IndexOf('=');
+                if (eq < 0) continue;
+                string rhs = line.Substring(eq + 1).Trim();
+                // 去掉行尾注释残留与分号
+                if (rhs.StartsWith("true", StringComparison.Ordinal)) return false;
+                if (rhs.StartsWith("false", StringComparison.Ordinal)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 中文文案里是否把关卡错叫成「存档」。
+        ///
+        /// 判法：中文字符串字面量里不得出现「存档」。**只查中文表**——英文表
+        /// 说的是 saves / overwriting，没有这个歧义。
+        ///
+        /// 为什么值得一条判据：这不是文风问题。「存档」在玩家语境里指游戏
+        /// 进度（打到第几关），而这一项覆盖的是关卡文件本身。写成
+        /// 「允许覆盖存档」会让人以为它会动自己的进度记录。
+        /// </summary>
+        private static bool ChineseLocSaysLevelNotSave(string code)
+        {
+            // 剥注释已在 CheckPredicate 里做过；这里按行找中文字面量。
+            foreach (string raw in code.Replace("\r\n", "\n").Split('\n'))
+            {
+                string line = raw.TrimStart();
+                if (line.StartsWith("//", StringComparison.Ordinal)
+                    || line.StartsWith("*", StringComparison.Ordinal)) continue;
+                // 只判含中文字符的行（英文表整行 ASCII）
+                bool hasCjk = false;
+                foreach (char c in line)
+                {
+                    if (c >= 0x4E00 && c <= 0x9FFF) { hasCjk = true; break; }
+                }
+                if (!hasCjk) continue;
+                if (line.Contains("存档", StringComparison.Ordinal)) return false;
             }
             return true;
         }

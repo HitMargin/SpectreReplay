@@ -416,6 +416,24 @@ switch ($Which) {
         if ($n -ne 1) { throw ('MUT-U33 unexpected count=' + $n) }
         SetLines 'Ui\OnGui.cs' $out2.ToArray()
     }
+    'MUT-U34' {
+        # ⑯：去特效总开关退回上游的默认开。
+        #      判据必须因此变红——它改的是**关卡内容本身**，默认开意味着
+        #      "只想录一局"的人一进关就看到被摘干净的谱面。
+        #      **注意这条变异的形态**：只把 false 改回 true，行首那截
+        #      `public static bool EffectRemoverOn` 一个字节都没动。
+        #      所以判"EffectRemoverOn 出现过"的假判据在它面前照样绿，
+        #      必须判等号右边的值。
+        Backup 'State\Settings.cs'
+        ReplaceExact 'State\Settings.cs' 'public static bool EffectRemoverOn = false;' 'public static bool EffectRemoverOn = true;'
+    }
+    'MUT-U35' {
+        # ⑰：把关卡文案改回「允许覆盖存档」（就是用户报的那句原文）。
+        #      判据必须因此变红。同样，键名 effects.enablesave 没动，
+        #      只有中文值变——判键名存在与否的假判据抓不到。
+        Backup 'Ui\Loc.cs'
+        ReplaceExact 'Ui\Loc.cs' '{ "effects.enablesave", "允许覆盖关卡" },' '{ "effects.enablesave", "允许覆盖存档" },'
+    }
     'MUT-U26' {
         # (1)(2)只留 1 个都算没做。删掉某条 .tip 中文表项。
         Backup 'Ui\Loc.cs'

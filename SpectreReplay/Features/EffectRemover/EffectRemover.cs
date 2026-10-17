@@ -15,7 +15,7 @@ namespace SpectreReplay.Features.EffectRemover;
 /// 跑之前。一次改完，之后无论谁读这份 levelEvents 都看不到被去掉的事件。
 ///
 /// **这是破坏性操作。** 它改的是玩家磁盘上那关的数据在内存里的副本，所以
-/// 默认只在「播放预览」这条路上生效；要让它影响存档必须显式打开 EnableSave，
+/// 默认只在「播放预览」这条路上生效；要让它把改动写回关卡文件必须显式打开 EnableSave，
 /// 否则玩家只是想干净地看一遍谱面，结果保存时把原谱弄没了。
 /// </summary>
 internal static class EffectRemover

@@ -54,7 +54,7 @@ namespace SpectreReplay.Pages
                 // 保存策略七项：**每一项都真的在控制回放什么时候落盘**
                 // （Patch_Recording.cs:136/137/139/142/163、SpectreState.cs:254、
                 // ReplayRecorder.cs:66、Patch_Lifecycle.cs:92/261），而原版界面上
-                // 一个都改不了——存档里那七项只可能是默认值。玩家最常见的两个诉求
+                // 一个都改不了——配置文件里那七项只可能是默认值。玩家最常见的两个诉求
                 // 正好都被默认值挡着：想存"打了一半的练习"（CompleteSave 默认
                 // true ⇒ 非完整通关直接不存）、想存"失手了的一局"
                 // （DontSaveWhenMiss 默认 true ⇒ 有 miss 直接不存）。
@@ -109,7 +109,7 @@ namespace SpectreReplay.Pages
 
             // **键盘音三项：原版 Settings 有字段、ConfigManager 也落盘、
             // Patch_Playback 也真的在消费，却没有任何一行界面能改。**
-            // 存档里那三项只可能是默认值——尤其 MicrophoneOffset 是**校准值**
+            // 配置文件里那三项只可能是默认值——尤其 MicrophoneOffset 是**校准值**
             // （毫秒）：键盘声整体偏早/偏晚时它是唯一的修正手段，玩家没得调，
             // 只能去手改 Configs.json，而他从界面上看不出有这一项。
             // 与 DrawRenderOptions 那次是同一个病：数据在、链路通、界面缺。
@@ -617,7 +617,7 @@ namespace SpectreReplay.Pages
         /// 渲染参数。**每个控件都真的接到一个 Settings 字段上。**
         ///
         /// 编码器 / 画质 / 结尾秒数在原版里 Settings 有字段、ConfigManager 也
-        /// 落盘，却**没有任何一行界面能改它们**——存档里那几项只可能是默认值，
+        /// 落盘，却**没有任何一行界面能改它们**——配置文件里那几项只可能是默认值，
         /// 玩家改了没得反应，还以为是自己没找到。
         /// </summary>
         private static void DrawRenderOptions()

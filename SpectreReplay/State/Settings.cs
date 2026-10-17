@@ -69,7 +69,11 @@ public static class Settings
     public static HashSet<string> AllowedAsyncSpecialKeys = new();
 
     // ── EffectRemover settings ──────────────────────────
-    public static bool EffectRemoverOn = true;
+    // **默认关**（上游是 true，这里有意偏离）。它是唯一会改到**关卡内容本身**
+    // 的功能：打开后进关看到的谱面已经不是原谱，而玩家是来录制/回放的，
+    // 不是来改谱的。默认开会让「我只是想录一局」的人先撞上一次莫名其妙的
+    // 谱面变形，且他不会想到是新装的模组干的。要用的人自己在「去特效」页开。
+    public static bool EffectRemoverOn = false;
     public static bool EffectRemoverEnableSave = false;
 
     // ── Enable Pro Events ────────────────────────────────
