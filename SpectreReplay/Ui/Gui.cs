@@ -105,6 +105,63 @@ namespace SpectreReplay.Ui
         internal static readonly Color TipBg     = new Color(0.05f, 0.06f, 0.08f, 0.98f);
         internal static readonly Color TipBorder = new Color(0.35f, 0.68f, 0.95f, 0.95f);
 
+        // ── 禁用态（总开关关掉时，它下面的子设置压暗）──────────────
+        // **为什么不用 GUI.enabled = false。** 本页四个主要控件（开关/滑条/
+        // 输入框/下拉）全是自绘的：它们自己 Fill 矩形、自己画文字，**根本不
+        // 经过 IMGUI 的禁用态渲染**。GUI.enabled = false 的结果是"颜色照旧、
+        // 但点不动"——比不置灰更迷惑，玩家会以为界面卡了。所以禁用态必须自己
+        // 做一遍：压暗走颜色，拦截走各控件自己的守卫（它们是唯一知道"这一行
+        // 该不该响应鼠标"的地方）。
+        //
+        // 这也是 Pages.cs 里那句「不禁用——本项目没有禁用态样式」的答案：
+        // 以前确实没有，所以当时的取舍是干脆不禁用。现在有了。
+        private static int _dimDepth;
+        private static readonly Color DimTint = new Color(0.62f, 0.62f, 0.62f, 1f);
+
+        /// <summary>当前是否处在禁用态里（控件据此决定要不要响应鼠标）。</summary>
+        internal static bool IsDim { get { return _dimDepth > 0; } }
+
+        /// <summary>
+        /// 压暗系数。自绘控件的颜色都要先乘过它——它们各自 `GUI.color = c`
+        /// 是**覆盖**而不是相乘，不主动乘的话整个禁用态对它们完全无效。
+        /// </summary>
+        internal static Color Tint { get { return _dimDepth > 0 ? DimTint : Color.white; } }
+
+        /// <summary>
+        /// 在禁用态里画一段内容：视觉压暗 + 内部控件不再响应。
+        ///
+        /// 压暗用 <c>GUI.color</c> 而不是逐控件改色：它会被之后画的**每一个**
+        /// 控件继承（含 GUILayout.Button 那类内建控件，它们的底色烘在贴图里，
+        /// 没有别的地方可以调），而自绘控件因为会覆盖 GUI.color，另由
+        /// <see cref="Tint"/> 显式补偿一次——两边各管一半，才不会一半灰一半亮。
+        ///
+        /// **嵌套不再叠加**（depth 从 0 变 1 时才设色）：两处嵌套各乘一次
+        /// 0.62，第二层会黑到看不清。
+        /// </summary>
+        internal static void Dim(bool when, Action body)
+        {
+            if (!when)
+            {
+                body?.Invoke();
+                return;
+            }
+            Color old = GUI.color;
+            if (_dimDepth == 0)
+            {
+                GUI.color = DimTint;
+            }
+            _dimDepth++;
+            try
+            {
+                body?.Invoke();
+            }
+            finally
+            {
+                _dimDepth--;
+                GUI.color = old;
+            }
+        }
+
         /// <summary>标签列的固定宽度。不同语言下标签长短差很多，
         /// 自动排布会让控件列左右跳动，拖滑条时尤其明显。</summary>
         internal const float LabelW = 190f;
@@ -252,7 +309,10 @@ namespace SpectreReplay.Ui
                 return;
             }
             Color old = GUI.color;
-            GUI.color = c;
+            // **必须显式乘 Tint**：下面这行是"覆盖"GUI.color，Dim() 设进去的
+            // 压暗色会被整个盖掉，于是禁用态里自绘控件颜色照旧、只有内建控件
+            // 变灰——一半灰一半亮比不置灰更像坏了。
+            GUI.color = c * Tint;
             GUI.DrawTexture(r, Texture2D.whiteTexture);
             GUI.color = old;
         }
@@ -272,7 +332,7 @@ namespace SpectreReplay.Ui
         internal static void Text(Rect r, string s, Color c, GUIStyle st)
         {
             Color old = GUI.color;
-            GUI.color = c;
+            GUI.color = c * Tint;
             GUI.Label(r, s, st);
             GUI.color = old;
         }
@@ -298,7 +358,7 @@ namespace SpectreReplay.Ui
         /// 之后才还原"以避免白卡片——换成贴图后这个时序问题**整类消失**：
         /// 底色是样式自带的，与取色发生在哪一趟无关。
         /// </summary>
-        internal static void Section(string titleKey, Color accent, Action body)
+        internal static void Section(string titleKey, Color accent, Action body, bool enabled = true)
         {
             Ensure();
             GUILayout.Space(8f);
@@ -328,7 +388,10 @@ namespace SpectreReplay.Ui
             GUILayout.BeginVertical(_pad);
             try
             {
-                body?.Invoke();
+                // **标题条不压暗、内容压暗。** 标题是分组的名字，玩家要能读清
+                // "这一组叫什么"才能理解自己为什么调不了；把标题也灰掉就变成
+                // 一整块死掉的区域，看不出层级。
+                Dim(!enabled, body);
 
                 // 这一行必须在 EndVertical 之前：此时整个组的高度已经定下来了。
                 // 放在 End 之后读到的会是最后一个子控件（坑 1）。
@@ -412,8 +475,14 @@ namespace SpectreReplay.Ui
             float span = Mathf.Max(1f, bar.width - Thumb);
             float k = Mathf.Clamp01((value - min) / (max - min));
 
-            switch (e.GetTypeForControl(id))
+            // **禁用态：一个鼠标事件都不吃。**
+            // 不能只靠"压暗"——画面上灰了但照着能拖动，玩家会以为"灰只是个
+            // 错误提示"。这里连 e.Use() 都不做，让事件落空，滑块纹丝不动。
+            // GetControlID 仍在上面取了：本来就没进 switch，不会抢占 hotControl。
+            if (!IsDim)
             {
+                switch (e.GetTypeForControl(id))
+                {
                 case EventType.MouseDown:
                     if (e.button == 0 && track.Contains(e.mousePosition))
                     {
@@ -436,6 +505,7 @@ namespace SpectreReplay.Ui
                         e.Use();
                     }
                     break;
+                }
             }
 
             if (e.type == EventType.Repaint)
@@ -444,12 +514,14 @@ namespace SpectreReplay.Ui
                 // **拖动中也要保持**（hotControl == id）：拖的时候鼠标很容易
                 // 偏离 6px 高的细轨道，只认 Contains 会让高亮途中熄灭，
                 // 看起来像"拖丢了"。
-                bool hot = Hover(track) || GUIUtility.hotControl == id;
+                // **禁用态不许提亮**：灰着却还跟着鼠标发亮，等于告诉玩家"它能
+                // 用"，而实际拖不动。
+                bool hot = !IsDim && (Hover(track) || GUIUtility.hotControl == id);
 
                 // 先还原一次：调用方（如 RowSlider）可能刚设过 GUI.color，
                 // 留着它会把这里所有贴图整体染色。
                 Color old = GUI.color;
-                GUI.color = Color.white;
+                GUI.color = Tint;
 
                 // 轨道与填充用**纯色 Fill**，不用圆角贴图。
                 // 原因是拉伸：贴图只有 16px 宽，而填充条要撑到上百像素，
@@ -514,13 +586,21 @@ namespace SpectreReplay.Ui
             GUILayout.BeginHorizontal();
             GUILayout.Label(Loc.T(labelKey), _label, GUILayout.Width(LabelW));
             Rect track = GUILayoutUtility.GetRect(44f, 20f, GUILayout.Width(44f), GUILayout.Height(20f));
-            bool clicked = GUI.Button(track, GUIContent.none, GUIStyle.none);
+            // **禁用态：按钮点不动。** GUI.Button 自己会检查 GUI.enabled，但这里
+            // 是自绘 + GUIStyle.none，**必须自己拦**——否则灰色的 pill 照样能点开。
+            bool clicked = !IsDim && GUI.Button(track, GUIContent.none, GUIStyle.none);
             // 悬停区 = 标签列 + 开关本体。标签列宽固定（LabelW），所以不用
             // GetLastRect 就能反推出整行的矩形——而 GetLastRect 在本文件里是
             // 被判据 ③ 明令禁止的（它返回的是最后一个子控件，不是组的矩形）。
-            Tip(RowHit(track, LabelW), labelKey);            // hover：与按钮同一套语汇（悬停即提亮）。关闭态的 pill 底色是
+            // 禁用态不登记说明：说明在说"这个开关干什么"，而此刻它开着也点不动。
+            if (!IsDim)
+            {
+                Tip(RowHit(track, LabelW), labelKey);
+            }
+            // hover：与按钮同一套语汇（悬停即提亮）。关闭态的 pill 底色是
             // 半透明白，在深色卡片上本来就淡，不给反馈会让人以为点不动。
-            bool hot = Hover(track);
+            // 禁用态同样不提亮（理由见 Slider）。
+            bool hot = !IsDim && Hover(track);
             Fill(track, value ? (hot ? Lighten(Accent, 0.10f) : Accent)
                               : (hot ? PillOffHover : PillOff));
             Frame(track, value ? new Color(0.55f, 0.82f, 1f, 0.9f)

@@ -81,6 +81,19 @@ namespace SpectreReplay.Ui
             Event e = Event.current;
             bool committed = false;
 
+            // **禁用态：不进编辑、不处理任何按键/鼠标。**
+            // 只压暗不拦是没有意义的——灰框仍然能点进去打字、提交后值就变了，
+            // 玩家会认为"灰色只是表示默认值"。这里连 Editing 都强制清掉：
+            // 若玩家正在编辑时总开关被关，框必须失焦并放弃这次编辑，
+            // 否则会出现"框已灰、却还在接收输入"的怪状态。
+            if (Gui.IsDim)
+            {
+                Editing = false;
+                _dragging = false;
+                Paint(box, inner, style, placeholder);
+                return false;
+            }
+
             if (e != null)
             {
                 switch (e.type)
@@ -185,7 +198,8 @@ namespace SpectreReplay.Ui
         {
             // hover：鼠标落在框上时凹槽与描边各提一档。与按钮/滑条/开关用
             // 同一套语汇（悬停即提亮），否则整页只有按钮"活"着。
-            bool hot = Gui.Hover(box);
+            // 禁用态不提亮：灰着还跟鼠标发亮会让人以为能点。
+            bool hot = !Gui.IsDim && Gui.Hover(box);
             Gui.Fill(box, hot && !Editing ? Gui.FieldBgHover : Gui.FieldBg);
             Gui.Frame(box, Editing ? Gui.FieldFocus : (hot ? Gui.FieldBorderHover : Gui.FieldBorder));
 

@@ -312,6 +312,13 @@ namespace UiPreview
             //    "开了更安全"。同一处误导在 README 里也出现过。
             fail += CheckPredicate(projectRoot, "⑰ 中文文案不得把关卡称作存档（会让玩家以为动的是进度存档）",
                 "Ui\\Loc.cs", ChineseLocSaysLevelNotSave);
+            // ⑱ 系列（**总开关关掉时子设置必须压暗**）不在这里判：那四条要读
+            // `Pages\\Pages.cs`，而它**没有链进本离屏套件**（见 UiPreview.csproj
+            // 的链接清单——只链了 Loc.cs 与 Features\\Replay 那批）。放在这里的话
+            // CheckPredicate 会因为"找不到文件"直接判红，而那个红是**假红**，
+            // 与被测代码无关。
+            // ⇒ 它们落在 UiLogicShapeCheck：那个套件本来就在读 Pages.cs（⑫ 用的
+            //   就是它），且已在 Driver 里登记。
             if (fail == 0)
                 Console.WriteLine("    ✓ 随移植搬来的模块都已被接上");
             return fail;
@@ -655,6 +662,7 @@ namespace UiPreview
             }
             return true;
         }
+
 
         private static bool HasOpenLevelButton(string code)
         {

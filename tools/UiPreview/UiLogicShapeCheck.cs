@@ -312,9 +312,150 @@ namespace UiPreview
                 "⑬f 五种行控件与整行按钮都必须留出行距(否则圆角咬合成一根)",
                 "Ui\\\\OnGui.cs",
                 s => AllRowsHaveGap(s));
+            // ⑱ 总开关关掉时，它下面的子设置必须压暗（2026-10-17 用户要求：
+            //    「如果 且不能调整一个子功能的总开关被关闭了 那么 子设置应为灰色」）。
+            //
+            //    **这条守的不是"有没有灰色常量"**，而是"子设置到底接没接上总开关"。
+            //    三种形态各自都会出问题，而且都"看着像做了"：
+            //      ① 整块分组没传总开关 ⇒ 总开关关了，子项照样能点（等于没做）；
+            //      ② 传了但传的是 `true` 常量 ⇒ 看着写了、永远不生效；
+            //      ③ 传了别的字段 ⇒ 灰的时机全错，比不灰更糟。
+            //    所以判据要**逐个分组/逐行**钉住那个实参，不是数"出现过 Dim("。
+            //
+            //    **为什么放在这个文件而不是 PortedCompletenessCheck**：那一个要读
+            //    Pages.cs，而 Pages.cs 没链进它的源码集，CheckPredicate 会因为
+            //    "找不到文件"判红——那个红与代码无关，是假红。本套件已在读
+            //    Pages.cs（⑫ 就是），放在这里才真的测到。
+            fail += Check(projectRoot,
+                "⑱b 去特效六个子分组必须挂总开关(关掉时整块压暗)",
+                "Pages\\\\Pages.cs",
+                s => EffectsSectionsDimWithMaster(s));
+            fail += Check(projectRoot,
+                "⑱c 录制页保存策略必须挂录制总开关",
+                "Pages\\\\Pages.cs",
+                s => RecordRowsDimWithReplay(s));
+            fail += Check(projectRoot,
+                "⑱d 渲染参数整块必须挂渲染总开关",
+                "Pages\\\\Pages.cs",
+                s => s.Contains("Gui.Dim(!RenderOn, DrawRenderOptions)", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "⑱e 键盘音两项必须挂录音开关",
+                "Pages\\\\Pages.cs",
+                s => KeybdRowsDimWithRecord(s));
             if (fail == 0)
-                Console.WriteLine("    ✓ 二十三条界面形状判据都成立");
+                Console.WriteLine("    ✓ 二十七条界面形状判据都成立");
             return fail;
+        }
+
+        // ── ⑱ 系列：总开关关掉时子设置必须压暗 ─────────────────────
+        //
+        // 这几条判的**都是同一个形状**：某个分组/某几行的末参必须是那个总开关
+        // 字段本身。共同的三条注意：
+        //   ① 必须剥注释再判——解释"为什么挂这个开关"的注释里当然写着字段名，
+        //      不剥的话把实参删掉、注释留着，判据照样绿（本项目栽过的老形态）；
+        //   ② 必须判**实参位置**，不能只判"这一行包含 X"：字段名会出现在
+        //      onValue lambda 里（`v => X = v`），那不是门控。d
+        //   ③ 不能数"出现了几次"：漏掉一个分组的同一句话在其��分组里还有五份。
+
+        /// <summary>去特效六个子分组是否都挂 <c>EffectRemoverOn</c>。</summary>
+        private static bool EffectsSectionsDimWithMaster(string code)
+        {
+            foreach (string title in new[]
+                     {
+                         "effects.visual", "effects.decor", "effects.track",
+                         "effects.planet", "effects.audio", "effects.gameplay",
+                     })
+            {
+                if (!SectionEndsWith(code, title, "EffectRemoverOn")) return false;
+            }
+            return true;
+        }
+
+        /// <summary>录制页的保存策略行是否都挂了 <c>ReplayOn</c>。</summary>
+        private static bool RecordRowsDimWithReplay(string code)
+        {
+            string[] keys =
+            {
+                "record.autosave", "record.completesave", "record.dontsavewhenauto",
+                "record.dontsavewhenmiss", "record.latesave", "record.failsave",
+                "record.backup", "record.limitkey", "record.manualsave",
+            };
+            foreach (string k in keys)
+            {
+                if (!RowCallEndsWith(code, k, "ReplayOn")) return false;
+            }
+            return true;
+        }
+
+        /// <summary>键盘音的音量/偏移是否挂了 <c>KeybdSoundRecordActive</c>。</summary>
+        private static bool KeybdRowsDimWithRecord(string code)
+        {
+            foreach (string k in new[] { "record.keybd.volume", "record.keybd.offset" })
+            {
+                if (!RowCallEndsWith(code, k, "KeybdSoundRecordActive")) return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 找到 <c>Gui.Section(&quot;title&quot;</c> 那一行，往后找**本组**的收尾
+        /// <c>}, X);</c>，判断 X 是否等于 <paramref name="arg"/>。
+        ///
+        /// **只在这一组的范围内找**：六个分组的收尾长得一模一样，从全文件找
+        /// `}, EffectRemoverOn);` 的话，六个里挂了一个就全绿。
+        /// </summary>
+        private static bool SectionEndsWith(string code, string title, string arg)
+        {
+            string[] lines = code.Replace("\r\n", "\n").Split('\n');
+            string open = "Gui.Section(\"" + title + "\"";
+            int start = -1;
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].Contains(open, StringComparison.Ordinal)) { start = i; break; }
+            }
+            if (start < 0) return false;
+            for (int i = start + 1; i < lines.Length; i++)
+            {
+                string t = lines[i].Trim();
+                if (!t.StartsWith("});", StringComparison.Ordinal)
+                    && !t.StartsWith("}, ", StringComparison.Ordinal)) continue;
+                return t.Contains(", " + arg + ");", StringComparison.Ordinal);
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 找到 <c>OnGui.Row(&quot;key&quot;</c> 起的一段，看它的最后一个实参是不是
+        /// <paramref name="arg"/>。这一段可能跨多行（RowSlider 的 fmt / onChange
+        /// 各占一行），所以判到**语句结束**为止：以 `);` 结尾的那行就是收尾。
+        /// </summary>
+        private static bool RowCallEndsWith(string code, string key, string arg)
+        {
+            string[] lines = code.Replace("\r\n", "\n").Split('\n');
+            // **锚点只认键名，不认助手名。** 原先写成 `OnGui.Row("key"`，
+            // 而键盘音那两行实际是 `OnGui.RowSlider("key"` —— `Row(` 不是
+            // `RowSlider(` 的前缀，于是永远找不到起点、判据恒红，而红的样子
+            // 像是"代码没挂开关"（实测就是这么误判的）。
+            // 改成只认 `("key"`：键名本身在项目里唯一，助手是哪个不影响。
+            string open = "(\"" + key + "\"";
+            int start = -1;
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].Contains(open, StringComparison.Ordinal)) { start = i; break; }
+            }
+            if (start < 0) return false;
+            var sb = new System.Text.StringBuilder();
+            for (int i = start; i < lines.Length; i++)
+            {
+                string t = lines[i].Trim();
+                sb.Append(t).Append(' ');
+                if (t.EndsWith(");", StringComparison.Ordinal)) break;
+            }
+            string call = sb.ToString();
+            int close = call.LastIndexOf(");", StringComparison.Ordinal);
+            if (close < 0) return false;
+            string head = call.Substring(0, close).TrimEnd();
+            return head.EndsWith(", " + arg, StringComparison.Ordinal);
         }
 
         /// <summary>

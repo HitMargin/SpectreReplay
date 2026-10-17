@@ -50,7 +50,12 @@ namespace SpectreReplay.Pages
                 OnGui.Note("record.howto");
                 Gui.Divider();
                 OnGui.Row("record.recording", ReplayOn, v => { ReplayOn = v; Commit(); });
-                OnGui.Row("record.autosave", AutoSave, v => { AutoSave = v; Commit(); });
+                // **录制总开关关掉时，下面这些保存策略一律压暗且不可调。**
+                // ReplayOn 为假时整套回放补丁根本不挂载（Main.cs:95-98 注册的谓词
+                // 全是 `ReplayOn && …`），这些项改了不会产生任何效果——白放着比
+                // 灰掉更糟：玩家会以为调了有用，然后发现「设了不生效」。
+                // 判据 ⑱ 守这里：这几行的末参必须是 `ReplayOn`，而不是恒 true。
+                OnGui.Row("record.autosave", AutoSave, v => { AutoSave = v; Commit(); }, ReplayOn);
                 // 保存策略七项：**每一项都真的在控制回放什么时候落盘**
                 // （Patch_Recording.cs:136/137/139/142/163、SpectreState.cs:254、
                 // ReplayRecorder.cs:66、Patch_Lifecycle.cs:92/261），而原版界面上
@@ -58,13 +63,13 @@ namespace SpectreReplay.Pages
                 // 正好都被默认值挡着：想存"打了一半的练习"（CompleteSave 默认
                 // true ⇒ 非完整通关直接不存）、想存"失手了的一局"
                 // （DontSaveWhenMiss 默认 true ⇒ 有 miss 直接不存）。
-                OnGui.Row("record.completesave", CompleteSave, v => { CompleteSave = v; Commit(); });
-                OnGui.Row("record.dontsavewhenauto", DontSaveWhenAuto, v => { DontSaveWhenAuto = v; Commit(); });
-                OnGui.Row("record.dontsavewhenmiss", DontSaveWhenMiss, v => { DontSaveWhenMiss = v; Commit(); });
-                OnGui.Row("record.latesave", LateSave, v => { LateSave = v; Commit(); });
-                OnGui.Row("record.failsave", FailSave, v => { FailSave = v; Commit(); });
-                OnGui.Row("record.backup", Backup, v => { Backup = v; Commit(); });
-                OnGui.Row("record.limitkey", LimitKey, v => { LimitKey = v; Commit(); });
+                OnGui.Row("record.completesave", CompleteSave, v => { CompleteSave = v; Commit(); }, ReplayOn);
+                OnGui.Row("record.dontsavewhenauto", DontSaveWhenAuto, v => { DontSaveWhenAuto = v; Commit(); }, ReplayOn);
+                OnGui.Row("record.dontsavewhenmiss", DontSaveWhenMiss, v => { DontSaveWhenMiss = v; Commit(); }, ReplayOn);
+                OnGui.Row("record.latesave", LateSave, v => { LateSave = v; Commit(); }, ReplayOn);
+                OnGui.Row("record.failsave", FailSave, v => { FailSave = v; Commit(); }, ReplayOn);
+                OnGui.Row("record.backup", Backup, v => { Backup = v; Commit(); }, ReplayOn);
+                OnGui.Row("record.limitkey", LimitKey, v => { LimitKey = v; Commit(); }, ReplayOn);
                 // 这两项都是**真的行为开关**（不是摆设）：ManualSave 管 F9 手动保存
                 // 那条补丁挂不挂（Main.cs + Patch_Misc.cs）、GetDataFromAsyncInput
                 // 管按键从异步输入还是轮询取（Main.cs + AsyncKeyRecorder.cs）。
@@ -73,7 +78,7 @@ namespace SpectreReplay.Pages
                 // （原先这里还有第三个「界面语言跟随游戏」，2026-10-17 已删除：
                 //   面板语言由 Ui.Loc.RefreshLanguage 始终跟随游戏，那个开关只影响
                 //   14 语言大表里的通知文案，留着只会让人以为界面语言能单独设。）
-                OnGui.Row("record.manualsave", ManualSave, v => { ManualSave = v; Commit(); });
+                OnGui.Row("record.manualsave", ManualSave, v => { ManualSave = v; Commit(); }, ReplayOn);
                 // 异步输入：**开关前先看游戏侧有没有开。** 这条设置只在游戏的
                 // "使用异步输入"打开时才有意义——`AsyncKeyRecorder.FlushFrame`
                 // 里那个 `AsyncInputManager.isActive` 守卫就是它：游戏侧没开时
@@ -117,12 +122,18 @@ namespace SpectreReplay.Pages
             {
                 OnGui.Row("record.keybd.record", KeybdSoundRecordActive,
                     v => { KeybdSoundRecordActive = v; Commit(); });
+                // 音量与偏移**只在录音开着时才有意义**：消费点全在
+                // `if (Settings.KeybdSoundRecordActive …)` 里面
+                // （Patch_Playback.cs:65/93、Patch_Lifecycle.cs:52）。
+                // 录音关掉时调它们不会产生任何效果。
                 // 音量：内部 0..100，Patch_Playback 用它 /10f 当 AudioSource.volume
                 OnGui.RowSlider("record.keybd.volume", KeybdSoundVolume, 0f, 100f,
-                    v => ((int)v) + " %", v => { KeybdSoundVolume = (int)v; Commit(); });
+                    v => ((int)v) + " %", v => { KeybdSoundVolume = (int)v; Commit(); },
+                    KeybdSoundRecordActive);
                 // 偏移：毫秒，可正可负（PSlider 支持负区间）
                 OnGui.RowSlider("record.keybd.offset", MicrophoneOffset, -500f, 500f,
-                    v => ((int)v) + " ms", v => { MicrophoneOffset = (int)v; Commit(); });
+                    v => ((int)v) + " ms", v => { MicrophoneOffset = (int)v; Commit(); },
+                    KeybdSoundRecordActive);
                 OnGui.Note("record.keybd.note");
             });
         }
@@ -545,7 +556,12 @@ namespace SpectreReplay.Pages
                 });
             }
 
-            Gui.Section("render.options", Gui.Accent, () => DrawRenderOptions());
+            // **渲染总开关关掉时，这一整块参数都压暗且不可调。**
+            // RenderOn 为假时 VideoRender.StartRender 直接拒绝（VideoRender.cs:67），
+            // 这些参数一个都不会被读到——留着可调等于让玩家白设一遍。
+            // 用 Dim 包一整块而不是逐行加参数：这里二十多个控件，逐行写既啰嗦
+            // 又容易漏一个，而漏的那一个正好会变成"整块都灰、只有它亮着"。
+            Gui.Section("render.options", Gui.Accent, () => Gui.Dim(!RenderOn, DrawRenderOptions));
 
             // 转换已有视频放在最后：它是"渲染完再做的事"，与渲染参数不是一类。
             DrawConvertSection();
@@ -837,10 +853,11 @@ namespace SpectreReplay.Pages
                     }
                 });
                 OnGui.Note("effects.on.note");
-                // 这两项要跟着去特效开关一起走：功能没开时它们没有意义，
-                // 但**不禁用**——本项目没有禁用态样式，禁用态看起来就是坏掉的控件。
+                // 「允许覆盖关卡」跟着去特效开关走：功能没开时它毫无意义。
+                // **现在有禁用态了**（Gui.Dim），所以这两项真的会压暗；
+                // 原先那句「不禁用——本项目没有禁用态样式」已经过期。
                 OnGui.Row("effects.enablesave", EffectRemoverEnableSave,
-                    v => { EffectRemoverEnableSave = v; Commit(); });
+                    v => { EffectRemoverEnableSave = v; Commit(); }, EffectRemoverOn);
                 OnGui.Note("effects.enablesave.note");
             });
 
@@ -853,10 +870,14 @@ namespace SpectreReplay.Pages
                 OnGui.Row("effects.cameras", EffectRemoverCameras, v => { EffectRemoverCameras = v; Commit(); });
                 if (EffectRemoverCameras)
                 {
+                    // 二级父子：镜头缩放只在「移除镜头移动」开着时有意义
+                    // ——它是那个动作的配套参数（见 Loc 的 camerazoom.tip）。
+                    // 同时仍受总开关管，所以两个条件相乘。
                     OnGui.RowSlider("effects.camerazoom", EffectRemoverCameraZoomScale, 100f, 1000f,
-                        v => ((int)v) + " %", v => { EffectRemoverCameraZoomScale = v; Commit(); });
+                        v => ((int)v) + " %", v => { EffectRemoverCameraZoomScale = v; Commit(); },
+                        EffectRemoverOn);
                 }
-            });
+            }, EffectRemoverOn);
 
             Gui.Section("effects.decor", Gui.Accent, () =>
             {
@@ -864,7 +885,7 @@ namespace SpectreReplay.Pages
                 OnGui.Row("effects.removealldecor", EffectRemoverRemoveAllDecorations,
                     v => { EffectRemoverRemoveAllDecorations = v; Commit(); });
                 OnGui.Note("effects.decor.note");
-            });
+            }, EffectRemoverOn);
 
             Gui.Section("effects.track", Gui.Accent, () =>
             {
@@ -878,7 +899,7 @@ namespace SpectreReplay.Pages
                     v => { EffectRemoverResetTrackAnimation = v; Commit(); });
                 OnGui.Row("effects.resettrackcolor", EffectRemoverResetTrackColor,
                     v => { EffectRemoverResetTrackColor = v; Commit(); });
-            });
+            }, EffectRemoverOn);
 
             Gui.Section("effects.planet", Gui.Accent, () =>
             {
@@ -886,13 +907,13 @@ namespace SpectreReplay.Pages
                 OnGui.Row("effects.planetscale", EffectRemoverPlanetScale, v => { EffectRemoverPlanetScale = v; Commit(); });
                 OnGui.Row("effects.planetradius", EffectRemoverPlanetRadius, v => { EffectRemoverPlanetRadius = v; Commit(); });
                 OnGui.Row("effects.hideicons", EffectRemoverHideIcons, v => { EffectRemoverHideIcons = v; Commit(); });
-            });
+            }, EffectRemoverOn);
 
             Gui.Section("effects.audio", Gui.Accent, () =>
             {
                 OnGui.Row("effects.hitsounds", EffectRemoverHitSounds, v => { EffectRemoverHitSounds = v; Commit(); });
                 OnGui.Row("effects.holdsounds", EffectRemoverHoldSounds, v => { EffectRemoverHoldSounds = v; Commit(); });
-            });
+            }, EffectRemoverOn);
 
             Gui.Section("effects.gameplay", Gui.Accent, () =>
             {
@@ -901,7 +922,7 @@ namespace SpectreReplay.Pages
                 OnGui.Row("effects.framerate", EffectRemoverFrameRate, v => { EffectRemoverFrameRate = v; Commit(); });
                 OnGui.Row("effects.repeatevents", EffectRemoverRepeatEvents, v => { EffectRemoverRepeatEvents = v; Commit(); });
                 OnGui.Note("effects.gameplay.note");
-            });
+            }, EffectRemoverOn);
         }
 
         // ── 关于 ────────────────────────────────────────────────

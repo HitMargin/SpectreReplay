@@ -434,6 +434,66 @@ switch ($Which) {
         Backup 'Ui\Loc.cs'
         ReplaceExact 'Ui\Loc.cs' '{ "effects.enablesave", "允许覆盖关卡" },' '{ "effects.enablesave", "允许覆盖存档" },'
     }
+    'MUT-U36' {
+        # ⑱b：只把去特效**其中一个**子分组的收尾实参删掉（退回"不挂总开关"）。
+        #      判据必须因此变红。
+        #      **这条变异特意只改六组里的一组**：若判据写成"全文件出现过
+        #      }, EffectRemoverOn);"，另外五份会让它照样绿——那正是本变异
+        #      要暴露的假判据形态。
+        Backup 'Pages\Pages.cs'
+        # **锚不接受多行**（ReplaceExact 是逐行 Contains），而这一行在文件里
+        # 出现 6 次。所以用 Lines 定位：找 effects.decor.note 的下一行。
+        $ls = Lines 'Pages\Pages.cs'
+        $hit = -1
+        for ($i = 0; $i -lt $ls.Count; $i++) {
+            if ($ls[$i].Trim() -eq 'OnGui.Note("effects.decor.note");') { $hit = $i + 1; break }
+        }
+        if ($hit -lt 0) { throw 'MUT-U36 unexpected count=-1（找不到 effects.decor.note）' }
+        if ($ls[$hit].Trim() -ne '}, EffectRemoverOn);') { throw ('MUT-U36 anchor mismatch: ' + $ls[$hit].Trim()) }
+        $ls[$hit] = '            });'
+        SetLines 'Pages\Pages.cs' $ls
+    }
+    'MUT-U37' {
+        # ⑱c：录制页某一行保存策略的末参删掉（只删一行，其余八行仍在）。
+        #      同样只动一行，专门暴露"数出现过"的假判据。
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' 'OnGui.Row("record.failsave", FailSave, v => { FailSave = v; Commit(); }, ReplayOn);' 'OnGui.Row("record.failsave", FailSave, v => { FailSave = v; Commit(); });'
+    }
+    'MUT-U38' {
+        # ⑱d：渲染参数整块的 Dim 去掉（退回"总开关关了照样能调"）。
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' 'Gui.Section("render.options", Gui.Accent, () => Gui.Dim(!RenderOn, DrawRenderOptions));' 'Gui.Section("render.options", Gui.Accent, () => DrawRenderOptions());'
+    }
+    'MUT-U39' {
+        # ⑱e：键盘音音量那一行的末参删掉（偏移那行仍在）。
+        #      这两行是**多行调用**，末参在第三行——正因如此，判据必须
+        #      "判到语句结束"，只判第一行会漏掉它。
+        Backup 'Pages\Pages.cs'
+        # 同上：末参在**第三行**，ReplaceExact 是逐行匹配，用不了多行锚。
+        # 用 Lines 定位：找 record.keybd.volume 起的那一段，把它的收尾行末参删掉。
+        $ls = Lines 'Pages\Pages.cs'
+        $start = -1
+        for ($i = 0; $i -lt $ls.Count; $i++) {
+            if ($ls[$i].Contains('OnGui.RowSlider("record.keybd.volume"')) { $start = $i; break }
+        }
+        if ($start -lt 0) { throw 'MUT-U39 找不到 record.keybd.volume' }
+        $end = -1
+        for ($i = $start; $i -lt $ls.Count; $i++) {
+            if ($ls[$i].Trim().EndsWith(');')) { $end = $i; break }
+        }
+        if ($end -lt 0) { throw 'MUT-U39 找不到该调用的收尾行' }
+        if ($ls[$end].Trim() -ne 'KeybdSoundRecordActive);') { throw ('MUT-U39 anchor mismatch: ' + $ls[$end].Trim()) }
+        # 正确删法：把**上一行**末尾的 `,` 改成 `);`，然后删掉末参那一行整行。
+        # 只删末参那行会留下 `..., Commit(); },` 这样半句——编译不过，变异就
+        # 退化成"预览器起不来"，证明力归零。
+        $prev = $end - 1
+        if (-not $ls[$prev].TrimEnd().EndsWith(',')) { throw ('MUT-U39 上一行不以逗号结尾：' + $ls[$prev].Trim()) }
+        $ls[$prev] = $ls[$prev].TrimEnd().Substring(0, $ls[$prev].TrimEnd().Length - 1) + ');'
+        $ls[$end] = $null
+        $out2 = New-Object 'Collections.Generic.List[string]'
+        foreach ($ln in $ls) { if ($null -ne $ln) { $out2.Add($ln) } }
+        SetLines 'Pages\Pages.cs' $out2.ToArray()
+    }
     'MUT-U26' {
         # (1)(2)只留 1 个都算没做。删掉某条 .tip 中文表项。
         Backup 'Ui\Loc.cs'

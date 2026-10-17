@@ -339,17 +339,31 @@ namespace SpectreReplay.Ui
             GUILayout.Space(4f);
         }
 
-        /// <summary>一行开关。视觉走 Gui.Switch（自绘 pill）。</summary>
-        internal static void Row(string labelKey, bool value, Action<bool> onChange)
+        /// <summary>
+        /// 一行开关。视觉走 Gui.Switch（自绘 pill）。
+        ///
+        /// <paramref name="enabled"/> 为 false 时整行压暗且不响应——用于
+        /// 「总开关关掉后它下面的子设置」那种情形。**默认 true**，所以既有
+        /// 调用点一行都不用改。
+        /// </summary>
+        internal static void Row(string labelKey, bool value, Action<bool> onChange,
+            bool enabled = true)
         {
-            Gui.Switch(labelKey, value, onChange);
+            Gui.Dim(!enabled, () => Gui.Switch(labelKey, value, onChange));
             RowGap();
         }
 
         /// <summary>一行滑条 + 右侧**可编辑**当前值。</summary>
         internal static void RowSlider(string labelKey, float value, float min, float max,
-            Func<float, string> fmt, Action<float> onChange)
+            Func<float, string> fmt, Action<float> onChange, bool enabled = true)
         {
+            // **不拆成"薄壳 + Core"两个方法。** ⑬d/⑬f 两条判据都是按
+            // 「行助手自己体内有没有 Tip( / RowGap(」判的——拆出 Core 之后
+            // 那两样都跑进 Core 里，薄壳看着就是"没登记说明、没留行距"，
+            // 判据当场变红。判据没写错，它守的正是"每行自己收尾"这个形状。
+            // 所以门控走 Gui.Dim 包住**整段**，让 Tip/RowGap 仍在体内。
+            Gui.Dim(!enabled, () =>
+            {
             GUILayout.BeginHorizontal();
             GUILayout.Label(Loc.T(labelKey), Gui.LabelStyle, GUILayout.Width(LabelW));
             // 自绘滑条：原生 HorizontalSlider 的贴图来自 GUI.skin.horizontalSlider，
@@ -414,6 +428,7 @@ namespace SpectreReplay.Ui
             {
                 onChange(now);
             }
+            });
             RowGap();
         }
 
