@@ -277,15 +277,45 @@ namespace SpectreReplay.Pages
             }
 
             GUILayout.Space(4f);
-            // 官方关卡没有可打开的谱面文件：说清楚，别给一颗点了没反应的按钮。
+            // 官方关卡：以前只显示一句提示就收尾，但那是个**错误结论**——
+            // 官方关卡不是"没有关卡"，而是关卡数据烤在游戏里、靠
+            // GCS.internalLevelName 选（形如 "0-0"/"AR-X"），不靠文件路径。
+            // 回放录制时已把那个名字存进 data.strings[InternalLevelName]，
+            // 所以这里能直达（见 OpenReplayLevel.GoOfficial）。
             bool official = levelPath.StartsWith("OfficialLevel", StringComparison.Ordinal)
                 || (data.bools.TryGetValue(IsOfficialLevel, out bool iso) && iso);
             if (official)
             {
                 string internalName = data.strings.TryGetValue(InternalLevelName, out string nm) ? nm : "";
-                GUILayout.Label(Loc.T("playback.openlevel.official")
-                    + (string.IsNullOrEmpty(internalName) ? levelPath : internalName),
+                // 老回放没有内部关卡名：给提示而不是一颗点了没反应的按钮。
+                if (string.IsNullOrEmpty(internalName))
+                {
+                    GUILayout.Label(Loc.T("playback.openlevel.official")
+                        + (string.IsNullOrEmpty(levelPath) ? "" : levelPath),
+                        Gui.NoteStyle, GUILayout.ExpandWidth(true));
+                    return;
+                }
+                // 标题行 + 直达按钮：歌名与关卡 id 都写出来，玩家才知道要跳去哪。
+                GUILayout.Label(Loc.F("playback.openlevel.official_go", internalName),
                     Gui.NoteStyle, GUILayout.ExpandWidth(true));
+                // **按钮用独立文案键 `playback.openlevel.official.go`，不复用
+                // `playback.openlevel`。** 理由不是措辞而是可验证性：判据 ⑫b 要求
+                // "同一行同时出现 Button 与 playback.openlevel"，两条分支若共用那个键，
+                // 改坏自制谱那一颗时官方这颗仍会让判据命中 —— 变异 MUT-V5 当场
+                // 退化成假断言（2026-10-17 实测）。两个入口各有自己的键，才能各自被钉住。
+                if (GUILayout.Button(Loc.T("playback.openlevel.official.go"),
+                        Gui.ButtonStyle, GUILayout.Width(160f), GUILayout.Height(24f)))
+                {
+                    try
+                    {
+                        OpenReplayLevel.GoOfficial();
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogWarning("[SpectreReplay] 打开官方关卡失败：" + ex.Message);
+                        Status.Warn("playback.openlevel.busy");
+                    }
+                }
                 return;
             }
             if (!File.Exists(levelPath))

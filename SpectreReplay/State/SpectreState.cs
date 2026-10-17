@@ -141,6 +141,84 @@ public static class SpectreState
         }
 
         /// <summary>
+        /// 跳到回放录自的**官方关卡**。
+        ///
+        /// **为什么官方关卡能跳、而以前不能。** 以前这里只显示一句"官方关卡没有
+        /// 可打开的谱面文件"就收尾——理由是对的（官方关卡确实没有 .adofai 文件），
+        /// 但结论下错了：官方关卡不是"没有关卡"，而是**关卡数据烤在游戏里**，
+        /// 靠 <c>GCS.internalLevelName</c> 这个字符串（形如 "0-0"、"AR-X"）选，
+        /// 而不是靠文件路径。
+        ///
+        /// **游戏自己的加载链**（反编译 Assembly-CSharp 核实）：
+        ///  ① <c>GCS.internalLevelName</c> 非 null ⇒ <c>ADOBase.isInternalLevel</c> 为真；
+        ///  ② <c>scnGame</c> 场景重载后，<c>scnGame.Update</c> 在第 3 帧做
+        ///     「<c>text = GCS.internalLevelName ?? GCS.customLevelPaths[index]</c>」→
+        ///     <c>LoadAndPlayLevel(text)</c>；
+        ///  ③ <c>scnGame.Awake</c> 只在 <c>internalLevelName</c> 为 null **且**
+        ///     customLevelPaths 为空时才去填默认值——所以只要我们**先**把名字写好，
+        ///     它就不会被覆盖。
+        ///  ⇒ 我们只需要：清掉 customLevelPaths、写好 internalLevelName、重载 scnGame。
+        ///
+        /// **必须清 <c>customLevelPaths</c>**：它是 `scnGame.Update` 那个 null 合并的
+        /// 另一边，留着上一关的自制谱路径会让关卡选错。
+        ///
+        /// **关卡名从哪来**：回放录制时 <c>Patch_Lifecycle</c> 就把
+        /// <c>GCS.internalLevelName</c> 存进了 <c>data.strings[InternalLevelName]</c>
+        /// （官方关卡才有值，自制谱是空串）。所以这里**不需要**从 LevelPath 里
+        /// 反解——那个字段对官方关卡是 <c>"OfficialLevel &lt;歌名&gt;"</c>，不是关卡 id。
+        /// </summary>
+        internal static void GoOfficial()
+        {
+            if (data == null)
+            {
+                return;
+            }
+            if (!data.strings.TryGetValue(InternalLevelName, out string internalName)
+                || string.IsNullOrEmpty(internalName))
+            {
+                // 老回放（该字段还没加时录的）没有内部关卡名，跳不了。
+                // 这**不是**缺陷，是数据缺失，说清楚就行。
+                // **必须走 Ui.Loc，不是 LocalizationManager**：这条文案只存在于
+                // 界面层那两张表里（zh/en），14 语言大表里没有它——用错会在
+                // LocCheck 那里报"缺 14 种语言"，而运行时则是露出原始键名。
+                TriggerMessage(Ui.Loc.T("playback.openlevel.official"), 4f);
+                Debug.LogWarning("[SpectreReplay] 该回放没有记录内部关卡名（旧版本录制），无法直达官方关卡");
+                return;
+            }
+
+            // 与 Go() 同理：跳转前必须停掉录制/回放，否则旧场景的协程会带着
+            // 旧状态跨场景活下来，在新关卡里继续注入按键。
+            PlayActions.StopPlaying();
+            PlayActions.StopRecording();
+
+            int startTile = data.ints.TryGetValue(StartTile, out int stv)
+                ? Math.Max(0, stv) : 0;
+
+            GCS.checkpointNum = startTile;
+            GCS.previousScene = "scnGame";
+            // 官方关卡：**清掉**自制谱路径，只留 internalLevelName 这一条路。
+            // 这两个字段是 scnGame.Update 里二选一的两边，同时有值会打架。
+            GCS.customLevelPaths = null;
+            GCS.loadCustomFromBundle = false;
+            GCS.internalLevelName = internalName;
+            // 飙速/练习标记必须还原成录制时的样子：回放按键位置是按当时的
+            // 速度与起跳点录的，不还原会整体错位。
+            if (data.bools.TryGetValue(SpeedTrailMode, out bool stm))
+            {
+                GCS.speedTrialMode = stm;
+                if (stm && data.doubles.TryGetValue(SpeedTrail, out double st))
+                {
+                    GCS.currentSpeedTrial = (float)st;
+                }
+            }
+            GCS.sceneToLoad = "scnGame";
+            scrController.deaths = 0;
+            ADOBase.loader.LoadSceneWithTransition(WipeDirection.StartsFromRight);
+            Debug.Log("[SpectreReplay] open replay official level: " + internalName
+                + " (startTile=" + startTile + ")");
+        }
+
+        /// <summary>
         /// 编辑器打开谱面后，等加载完成（<c>isLoading</c> 熄灭、地板表就绪），
         /// 把选中地板定位到回放起始砖——编辑器试玩是从**当前选中砖**起跳的，
         /// 不定位就会从第 0 块开始，回放位置全错。

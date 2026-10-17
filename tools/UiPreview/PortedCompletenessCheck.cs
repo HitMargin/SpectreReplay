@@ -179,6 +179,27 @@ namespace UiPreview
             //     判据：必须存在一个 **Button 调用**，其文案含 playback.openlevel。
             fail += CheckPredicate(projectRoot, "⑫b 回放页要有「打开这一关」的按钮（不能只剩提示文字）",
                 "Pages\\Pages.cs", HasOpenLevelButton);
+            // ⑫c 官方关卡也必须能直达（2026-10-17 用户报「官方关卡不能直接打开」）。
+            //
+            //    原先这里只显示一句"官方关卡没有可打开的谱面文件"，看着有道理，
+            //    其实是**把"没有文件"错当成了"没有关卡"**——官方关卡的数据烤在
+            //    游戏里，靠 `GCS.internalLevelName`（形如 "0-0"/"AR-X"）选。
+            //    回放录制时已把这个名字写进 `data.strings[InternalLevelName]`，
+            //    所以完全能直达：清 customLevelPaths → 写 internalLevelName →
+            //    重载 scnGame，`scnGame.Update` 第三帧就会 LoadAndPlayLevel。
+            //
+            //    判据三件齐（缺任一件都会静默跳到别的关卡）：
+            //      ① 真的写了 `GCS.internalLevelName = `；
+            //      ② **真的清掉了 `GCS.customLevelPaths`**——它是 scnGame.Update
+            //         里 `internalLevelName ?? customLevelPaths[index]` 的另一边，
+            //         留着上一关的自制谱路径会让关卡选错；
+            //      ③ 真的重载了 scnGame（只改字段不重载场景，什么都不会发生）。
+            fail += CheckPredicate(projectRoot, "⑫c 官方关卡必须能直达（写 internalLevelName + 清 customLevelPaths + 重载 scnGame）",
+                "State\\SpectreState.cs", OfficialLevelJumpIsWired);
+            // ⑫d 官方关卡那颗按钮必须真的存在（不能退回只显示提示文字）。
+            //    与 ⑫b 同族：只查 "playback.openlevel" 子串会被提示文案骗过。
+            fail += CheckPredicate(projectRoot, "⑫d 官方关卡要有可点的按钮（不能只剩提示文字）",
+                "Pages\\Pages.cs", HasOfficialOpenButton);
             // ⑬ 编辑器跳转必须等场景就绪再定位起始砖。
             //    **这条最容易漏**：编辑器试玩从"当前选中砖"起跳，不定位就会从
             //    第 0 块开始，整份回放的按键位置全错——而界面看不出任何异常，
@@ -323,6 +344,96 @@ namespace UiPreview
         /// 在**同一行**：那一族的另外两条（.official / .missing）走的是
         /// <c>GUILayout.Label</c>，是纯提示，不能算"给了入口"。
         /// </summary>
+        /// <summary>
+        /// 官方关卡直达是否**真的接好了**：三件必须同时成立。
+        ///
+        /// 单看任一件都会假绿——
+        ///   · 只写 `internalLevelName` 不重载场景 ⇒ 什么都没发生；
+        ///   · 只重载场景不写名字 ⇒ scnGame.Awake 会落回默认值（`AR-X`），跳到别的关；
+        ///   · 不清 `customLevelPaths` ⇒ `scnGame.Update` 的
+        ///     `internalLevelName ?? customLevelPaths[index]` 里那半边仍有值，
+        ///     上一关的自制谱路径会把关卡抢走。
+        ///
+        /// 判据落在**代码行**上（剥注释后），且限定在 `GoOfficial` 方法体内：
+        /// 同文件里 `Go()` 合法地写着 `GCS.customLevelPaths = new[] { levelPath }`
+        /// （那是自制谱分支），整文件搜 `customLevelPaths` 会假绿。
+        /// </summary>
+        private static bool OfficialLevelJumpIsWired(string code)
+        {
+            string body = MethodBody(code, "GoOfficial");
+            if (body == null) return false;
+            return body.Contains("GCS.internalLevelName = internalName", StringComparison.Ordinal)
+                && body.Contains("GCS.customLevelPaths = null", StringComparison.Ordinal)
+                && body.Contains("\"scnGame\"", StringComparison.Ordinal)
+                && body.Contains("LoadSceneWithTransition", StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// 官方关卡那颗按钮是否真的存在。
+        ///
+        /// **与 `HasOpenLevelButton` 分开的原因**：那条只认"含 playback.openlevel
+        /// 的 Button 行"，而官方分支曾经连按钮都没有、只有提示文案。现在两条分支
+        /// 各有自己的按钮，各自判——否则修好其中一条，另一条退回纯提示也不会被发现。
+        /// 这里认的是 `GoOfficial()` 这个**独有的调用**出现在文件里，
+        /// 比匹配文案更稳（文案可以复用在别处）。
+        /// </summary>
+        private static bool HasOfficialOpenButton(string code)
+        {
+            foreach (string raw in code.Replace("\r\n", "\n").Split('\n'))
+            {
+                string line = raw.TrimStart();
+                if (line.StartsWith("//", StringComparison.Ordinal)
+                    || line.StartsWith("*", StringComparison.Ordinal)) continue;
+                if (line.Contains("OpenReplayLevel.GoOfficial()", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 取某方法的体（从签名行到下一个成员声明为止），剥掉注释行。
+        /// 本项目的成员都直接挂在 static class 下（没有局部函数），
+        /// 所以"最近的成员声明"就是真正的宿主方法。返回 null = 没找到。
+        /// </summary>
+        private static string MethodBody(string code, string method)
+        {
+            string[] lines = code.Replace("\r\n", "\n").Split('\n');
+            int start = -1;
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (!System.Text.RegularExpressions.Regex.IsMatch(lines[i],
+                        @"^\s*(?:private|internal|public|protected)\s+[\w<>\[\],\.\s]+\s+" +
+                        System.Text.RegularExpressions.Regex.Escape(method) + @"\s*\("))
+                {
+                    continue;
+                }
+                start = i;
+                break;
+            }
+            if (start < 0) return null;
+
+            var sb = new System.Text.StringBuilder();
+            for (int i = start; i < lines.Length; i++)
+            {
+                if (i > start && System.Text.RegularExpressions.Regex.IsMatch(lines[i],
+                        @"^\s*(?:private|internal|public|protected)\s+[\w<>\[\],\.\s]+\s+\w+\s*\("))
+                {
+                    break;
+                }
+                string t = lines[i].TrimStart();
+                if (t.StartsWith("//", StringComparison.Ordinal)
+                    || t.StartsWith("*", StringComparison.Ordinal)
+                    || t.StartsWith("/*", StringComparison.Ordinal))
+                {
+                    continue;   // 注释里提到这些名字不算接线
+                }
+                sb.AppendLine(lines[i]);
+            }
+            return sb.ToString();
+        }
+
         private static bool HasOpenLevelButton(string code)
         {
             foreach (string raw in code.Replace("\r\n", "\n").Split('\n'))
@@ -330,10 +441,28 @@ namespace UiPreview
                 string line = raw.TrimStart();
                 if (line.StartsWith("//", StringComparison.Ordinal)
                     || line.StartsWith("*", StringComparison.Ordinal)) continue;
-                if (line.Contains("GUILayout.Button", StringComparison.Ordinal)
-                    && line.Contains("playback.openlevel", StringComparison.Ordinal))
+                if (!line.Contains("GUILayout.Button", StringComparison.Ordinal)) continue;
+
+                // **必须按"键名边界"判，不能只 Contains("playback.openlevel")。**
+                // 2026-10-17 实测踩到：官方关卡那颗按钮用了 `playback.openlevel.official.go`，
+                // 它包含 `playback.openlevel` 这个子串 ⇒ 把自制谱那颗改坏（MUT-V5）后
+                // 判据仍被官方这颗命中，断言当场退化成假的。
+                // 判法：出现 `playback.openlevel` 之后紧接的字符必须是引号或行尾，
+                // 即它是一个**完整键名**而不是更长的键的前缀。
+                int at = line.IndexOf("playback.openlevel", StringComparison.Ordinal);
+                while (at >= 0)
                 {
-                    return true;
+                    int after = at + "playback.openlevel".Length;
+                    // 前面也必须是引号，避免匹配到 `xxx.playback.openlevel` 这种
+                    char before = at > 0 ? line[at - 1] : '"';
+                    if (after >= line.Length || line[after] == '"')
+                    {
+                        if (before == '"' || before == '.' || before == ' ')
+                        {
+                            return true;
+                        }
+                    }
+                    at = line.IndexOf("playback.openlevel", at + 1, StringComparison.Ordinal);
                 }
             }
             return false;

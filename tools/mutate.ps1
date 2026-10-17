@@ -369,6 +369,19 @@ switch ($Which) {
             '            bool hot = Hover(track);' `
             '            bool hot = false;'
     }
+    'MUT-U20' {
+        # ⑫c：官方关卡跳转**不清 customLevelPaths**。
+        #      形态：internalLevelName 写了、场景也重载了，但上一关的自制谱路径还留着。
+        #      scnGame.Update 里是 internalLevelName ?? customLevelPaths[index] 二选一，
+        #      残留值会把关卡抢走 —— 现象是'点开这一关，跳进了别的关'。
+        Backup 'State\SpectreState.cs'
+        ReplaceExact 'State\SpectreState.cs' 'GCS.customLevelPaths = null;' 'GCS.customLevelPaths = GCS.customLevelPaths;'
+    }
+    'MUT-U21' {
+        # ⑫d：官方关卡那颗按钮退回纯提示文字（就是用户报'不能直接打开'的原样）。
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' 'OpenReplayLevel.GoOfficial();' 'Noop();'
+    }
     'MUT-U19' {
         # ⑮f：就绪判断退回只看 TranspilerReady（= 上游形状）。
         #      这是本轮真修过的 bug：TranspilerReady 只置 true 不置回 false，
@@ -836,7 +849,7 @@ switch ($Which) {
         ReplaceExact 'Features\Replay\KeyboardSimulation.cs' 'internal static class KeyboardSimulation' 'internal static class KeyboardSimulation { /* accidental drift */ internal static int __driftProbe = 1;'
     }
     default {
-        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-PORT1）"
+        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-PORT1）"
     }
 }
 
