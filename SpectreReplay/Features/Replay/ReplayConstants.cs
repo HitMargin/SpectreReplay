@@ -3,8 +3,11 @@ namespace SpectreReplay.Features.Replay;
 internal static class ReplayConstants
 {
     public const ulong Magic = 0x6C70_7263_5250_53;      // "SPRrcplp"
-    public const ulong LegacyMagic = 0x6C70_7263_5052_43; // "CRPrcplp" (pre-Spectre)
     public const int FormatVersion = 2;
+
+    // 原先这里还有 `LegacyMagic = "CRPrcplp"`（pre-Spectre 旧容器）。
+    // 2026-10-18 用户裁定删掉旧回放文件适配时一并移除：解码端不再认第二个魔数，
+    // 旧文件由 `ReplayManager.LoadReplay` 报「文件头不匹配」而不是半解析。
 
     public const ulong MagicMetadata = 0x61_7461_6461_7465_4D;
     public const int MetadataVersion = 2;

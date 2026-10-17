@@ -1221,6 +1221,19 @@ switch ($Which) {
         Backup 'Features\Replay\Patch_SpecialKeys.cs'
         ReplaceExact 'Features\Replay\Patch_SpecialKeys.cs' 'if (code == KeyCode.Escape || code == KeyCode.None)' 'if (code == KeyCode.None)'
     }
+    'MUT-U45' {
+        # ⑧c：把旧格式扩展名塞回可读清单 = 列表又开始列已删除的格式。
+        #      判据要抓的是「清单里不许有旧扩展名」;塞在注释里不算(HasCodeUse 剥注释)。
+        #      故意**保留原句**(只在其后追加一项)，这样才暴露子串判据。
+        Backup 'Features\Replay\ReplayManager.cs'
+        ReplaceExact 'Features\Replay\ReplayManager.cs' '        ReplayConstants.Extension,           // .sprp  加密（默认）' '        ReplayConstants.Extension,           // .sprp  加密（默认） ".crpl2", ".crpl",'
+    }
+    'MUT-U46' {
+        # ⑧b：把 `.psprp`(不解密变体)从可读清单删掉 = 少列一种格式。
+        #      那种文件磁盘上有、列表里没有，玩家点不了也找不到。
+        Backup 'Features\Replay\ReplayManager.cs'
+        ReplaceExact 'Features\Replay\ReplayManager.cs' '        ReplayConstants.ExtensionNoEncrypt,  // .psprp 不解密' ''
+    }
     'MUT-PORT1' {
         # 移植保真度：在 KeyboardSimulation.cs 里引入一处**上游没有、也登记不上**的
         # 改动 = 模拟"抄错"。port-diff-audit 应当报"未登记差异"并 exit 1。

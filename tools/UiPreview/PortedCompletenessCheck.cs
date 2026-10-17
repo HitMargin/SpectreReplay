@@ -79,20 +79,25 @@ namespace UiPreview
             //    判据：DTO 里要有一个字段声明，且赋值与读取两处都在。
             fail += CheckPredicate(projectRoot, "⑦c 转换目标必须双向持久化（写了也要读回来）",
                 "State\\ConfigManager.cs", ConvertTargetIsPersisted);
-            // ⑧ 回放列表必须列出**全部可读格式**，不能只列默认那一种。
-            //    LoadReplayAuto 三种格式全能读（.sprp/.crpl2/.crpl），而列表原先
-            //    只 glob .sprp——另外两种文件"磁盘上有、界面上没有"，玩家从
-            //    Spectre 拷来的回放或改用 Crp2 录的全点不了。这种缺失不报错、
-            //    日志无异常，只是功能对那部分文件不存在。
-            //    判据：列表处必须走 ReadableExtensions（集中在一处的那份清单），
-            //    且清单本身要覆盖 6 个扩展名。
+            // ⑧ 回放列表必须走**集中在一处**的扩展名清单，不许在界面里写死一份。
+            //    历史：列表原先只 glob `.sprp`，而当时解码端三种格式全能读，
+            //    于是 `.crpl2/.crpl` 的文件"磁盘上有、界面上没有"。
+            //    2026-10-18 用户裁定删掉旧回放格式适配后，可读格式只剩新格式两种，
+            //    但"扩展名清单只有一份"这条仍然要守——写死的第二份会在格式再变时
+            //    静默失效（文件还在、列表里没有）。
             fail += Check(projectRoot, "⑧ 回放列表要列全部可读格式（不许只 glob 默认扩展名）",
                 new[] { "Pages\\Pages.cs", "Features\\Replay\\ReplayManager.cs" },
                 new[] { "ReadableExtensions" });
-            fail += Check(projectRoot, "⑧b 可读格式清单要覆盖三种格式（含不解密变体共 6 个）",
+            // ⑧b 清单内容：两种新格式都要在，且**旧格式的四个扩展名一个都不许回来**。
+            //    前半段防"少列一种"（`.psprp` 漏掉 → 不解密录的文件点不开）；
+            //    后半段防回退——旧格式读写都删了，列表要是还列 `.crpl2`，
+            //    玩家点它只会得到"文件头不匹配"，比不显示更像坏了。
+            fail += Check(projectRoot, "⑧b 可读格式清单只含新格式两种",
                 new[] { "Features\\Replay\\ReplayManager.cs" },
-                new[] { "\".crpl2\"", "\".pcrpl2\"", "\".crpl\"", "\".pcrpl\"",
-                        "ReplayConstants.Extension,", "ReplayConstants.ExtensionNoEncrypt," });
+                new[] { "ReplayConstants.Extension,", "ReplayConstants.ExtensionNoEncrypt," });
+            fail += CheckAbsent(projectRoot, "⑧c 可读格式清单不得再列旧格式",
+                "Features\\Replay\\ReplayManager.cs",
+                new[] { "\".crpl2\"", "\".pcrpl2\"", "\".crpl\"", "\".pcrpl\"" });
             // ⑨ 键盘音三项必须有界面入口。与 ⑥ 同族（搬了没接线）且**犯了第二次**：
             //   Settings 有字段、ConfigManager 落盘、Patch_Playback 有四处消费
             //   （:65/:93 判 KeybdSoundRecordActive、:232 用 MicrophoneOffset 校准、
@@ -875,6 +880,33 @@ namespace UiPreview
             {
                 Console.WriteLine("    ✗ " + name + "（" + rel + "）");
                 return 1;
+            }
+            return 0;
+        }
+
+        /// <summary>
+        /// 反向判：这些符号**一个都不许**出现在该文件的代码行里。
+        ///
+        /// 与 <see cref="Check"/> 成对使用——只判"必须在"防不住"旧的又加回来"：
+        /// 本项目删掉的每一处都补了一条反向判据，否则下一个人看到"格式少了两个"
+        /// 又会顺手补回去（语言开关那次就是这么复发的）。
+        /// </summary>
+        private static int CheckAbsent(string projectRoot, string name, string rel, string[] symbols)
+        {
+            string ok = Path.Combine(projectRoot, rel);
+            if (!File.Exists(ok))
+            {
+                Console.WriteLine("    ✗ " + name + "：找不到 " + rel);
+                return 1;
+            }
+            string text = File.ReadAllText(ok);
+            foreach (string s in symbols)
+            {
+                if (HasCodeUse(text, s))
+                {
+                    Console.WriteLine("    ✗ " + name + "：" + rel + " 里仍有 " + s);
+                    return 1;
+                }
             }
             return 0;
         }

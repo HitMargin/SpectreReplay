@@ -407,9 +407,13 @@ public static class SpectreState
 
     internal static bool debug_skip_Verification = false;
 
+    // 写「不解密」的 `.psprp` 而不是加密的 `.sprp`。**这与旧格式无关**，是新格式的调试开关：
+    // 解开加密要拿密钥，排查「文件是不是坏了」时先看明文更省事。保留。
     internal static bool debug_no_encryption = false;
 
-    internal static ReplayManager.ReplaySaveFormat debug_save_format = ReplayManager.ReplaySaveFormat.New;
+    // 原先这里还有 `debug_save_format`（New/Crp2/Json 三选一）。
+    // 它**全仓只有声明一处**、没有任何界面/配置/写入点，即 Crp2 与 Json 两条写路径
+    // 从来不可达；2026-10-18 用户裁定删掉旧回放文件适配时一并移除，写侧只留新格式。
 
     internal static bool debug_hide_text = false;
 
@@ -462,7 +466,7 @@ public static class SpectreState
         }
         string fileName = !data.strings.ContainsKey(FileName) ? CreateFileName() : data.strings[FileName];
         string savePath = Path.Combine(Settings.SavePath, fileName);
-        if (ReplayManager.SaveReplay(data, savePath, debug_save_format, debug_no_encryption))
+        if (ReplayManager.SaveReplay(data, savePath, debug_no_encryption))
         {
             message += LocalizationManager.GetLocalizedText("note.save_success") + "\n";
             savedPath = savePath;
@@ -477,7 +481,7 @@ public static class SpectreState
             // 备份结果原本被完全忽略：主回放已保存成功时，备份可能因权限受限/磁盘满/
             // 目录不可写而失败，而用户毫无察觉 —— 直到真出事那天才发现"备份早就没了"。
             // 备份失败不影响主回放的成功状态（success），但必须告知用户。
-            if (!ReplayManager.SaveReplay(data, Path.Combine(Main.mod.Path, "backup"), debug_save_format, debug_no_encryption))
+            if (!ReplayManager.SaveReplay(data, Path.Combine(Main.mod.Path, "backup"), debug_no_encryption))
             {
                 message += LocalizationManager.GetLocalizedText("note.save_fail") + "backup\n";
             }

@@ -25,7 +25,9 @@ internal static class ReplayDecoder
         using var r = new BinaryReader(ms);
 
         var magic = r.ReadUInt64();
-        if (magic != ReplayConstants.Magic && magic != ReplayConstants.LegacyMagic)
+        // 只认一个魔数。旧容器（pre-Spectre 的 "CRPrcplp"）已不再支持——
+        // 认它等于把「用旧文件头解出新结构」这种半解析留着，坏了比不支持更难查。
+        if (magic != ReplayConstants.Magic)
             throw new InvalidDataException($"Unknown magic: 0x{magic:X}");
 
         var version = r.ReadInt32();
@@ -49,7 +51,8 @@ internal static class ReplayDecoder
     {
         if (data.Length < 8) return false;
         var magic = BitConverter.ToUInt64(data, 0);
-        return magic == ReplayConstants.Magic || magic == ReplayConstants.LegacyMagic;
+        // 只认本格式魔数。旧容器的 `LegacyMagic` 已随旧格式适配一起删除。
+        return magic == ReplayConstants.Magic;
     }
 
     // 每条记录的最小字节数：用于把文件里的 count 收敛到"流里真能装下这么多条"，

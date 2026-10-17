@@ -829,8 +829,8 @@ private const string IVStorageKey  = "potato";
 
 我们不复制它的格式、也不加自己的加密：回放是**本地单人练习数据**，
 加密对它没有意义；而一个"看起来有加密、其实钥匙就在旁边"的设计
-反而会让人误以为它安全。同理 `LegacyReplayData` / `ReplayCrp2Codec`
-也不移植——我们有自己的 `Version = 4` 格式。
+反而会让人误以为它安全。同理 旧容器格式(`.crpl` JSON / `.crpl2` CRP2)
+也不移植——我们只有 `.sprp` 一种容器(2026-10-18 旧格式适配已整体删除，见 `ReplayManager` 顶部注释)。
 
 ### `Compat/HitMarginCompat.cs`（341 行）——不补，但**核过一遍确认不用补**
 

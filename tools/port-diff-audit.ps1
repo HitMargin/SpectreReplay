@@ -171,6 +171,13 @@ $knownDeviations = @(
     @{ Pat = 'FeatureKeys.SpecialKeys';             Why = '2026-10-18 特殊按键过滤做成 Feature 门控（上游常开）' }
     @{ Pat = 'Settings.AllowedKeyboardSpecialKeys'; Why = '同上：谓词读勾选集合（勾了才挂补丁）' }
     @{ Pat = 'Settings.AllowedAsyncSpecialKeys';    Why = '同上：异步那一组的勾选集合' }
+    # -- 2026-10-18 删掉旧回放文件适配(用户裁定)--------------------------
+    # 用户原话：「重构整个回放文件 删掉旧的回放文件适配」。删的是：旧容器
+    # (.crpl 旧版 JSON / .crpl2 CRP2 二进制)的读写两条路径 + 魔数 LegacyMagic
+    # + 全部 33 处 JSON 字段名映射。保住的是 ReplayCrypto 加解密与 .psprp。
+    # 下面两条是这轮删除的连带 token(上游当然还留着那些分支)。
+    @{ Pat = 'ReplayConstants.Magic';              Why = '2026-10-18 删旧格式：解码端只认一个魔数(上游还认 LegacyMagic)' }
+    @{ Pat = 'raw.Length';                          Why = '2026-10-18 删旧格式：LoadReplay 合一后新增的过短文件判定' }
 )
 
 Write-Output ""

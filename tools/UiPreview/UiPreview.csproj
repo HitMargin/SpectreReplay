@@ -5,8 +5,9 @@
     离线预览器 / 离线闸门：不启动游戏也能验的那部分。
     移植 Spectre 的 replay + video render 之后，可链接的纯逻辑真源码是
     Features\Replay 下的编解码/数据类（不碰引擎 / 只依赖 System）：
-      ReplayEncoder / ReplayDecoder / ReplayBinaryIO / ReplayCrypto /
-      ReplayKeys / ReplayConstants / ReplayDataModels / Replay.cs
+      ReplayEncoder / ReplayDecoder / ReplayCrypto /
+      ReplayKeys / ReplayConstants / Replay.cs
+      （ReplayBinaryIO / ReplayDataModels 随旧回放格式于 2026-10-18 删除）
       以及 Features\VideoRender\VideoEncoder.cs（ffmpeg 参数拼装，纯 .NET）。
   -->
 
@@ -31,12 +32,12 @@
     <Compile Include="..\..\SpectreReplay\Features\Replay\Replay.cs" Link="Real\Replay.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayKeys.cs" Link="Real\ReplayKeys.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayConstants.cs" Link="Real\ReplayConstants.cs" />
-    <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayDataModels.cs" Link="Real\ReplayDataModels.cs" />
+    
     <Compile Include="..\..\SpectreReplay\Features\Replay\keyEvent.cs" Link="Real\keyEvent.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\HitContext.cs" Link="Real\HitContext.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayEncoder.cs" Link="Real\ReplayEncoder.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayDecoder.cs" Link="Real\ReplayDecoder.cs" />
-    <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayBinaryIO.cs" Link="Real\ReplayBinaryIO.cs" />
+    
     <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayCrypto.cs" Link="Real\ReplayCrypto.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\LegacyReplayData.cs" Link="Real\LegacyReplayData.cs" />
   </ItemGroup>

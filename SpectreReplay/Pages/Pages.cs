@@ -1474,14 +1474,12 @@ namespace SpectreReplay.Pages
                     _replayCacheTick = Environment.TickCount;
                     return list;
                 }
-                // **三种格式都要列，不能只列默认那一种。**
-                // 原实现只 glob `ReplayConstants.Extension`（.sprp，New 格式）。
-                // 可 `LoadReplayAuto` 是**三种格式全能读**的（.sprp / .crpl2 /
-                // .crpl 三套 magic 都有分支），而 .crpl2/.crpl 文件在列表里
-                // **一个都不出现**——玩家从 Spectre 拷过来的回放、或自己把
-                // `debug_save_format` 改成 Crp2 录的回放，全都"看得见文件、
-                // 列表里没有"。点不了就不是不能用，而是根本找不到。
-                // 扩展名仍从常量取，不写死字面量（格式一改这里会静默失效）。
+                // 扩展名从 `ReplayManager.ReadableExtensions` 取，**不在这里写死**。
+                // 历史上这里是写死的单个 `.sprp`，而当时解码端三种格式全能读
+                // （.sprp / .crpl2 / .crpl 各有一条分支），于是另外两种文件
+                // "磁盘上有、列表里没有"——点不了不是不能用，是根本找不到。
+                // 2026-10-18 旧格式适配整体删除后只剩新格式两种，但"清单只有一份"
+                // 这条仍然要守：写死的第二份会在格式再变时静默失效。
                 var files = Features.Replay.ReplayManager.ReadableExtensions
                     .SelectMany(ext => Directory.GetFiles(dir, "*" + ext))
                     .Distinct(StringComparer.OrdinalIgnoreCase)

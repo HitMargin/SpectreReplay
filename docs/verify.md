@@ -1,4 +1,4 @@
-﻿# 离线验证清单
+# 离线验证清单
 
 跑一遍：
 
@@ -31,7 +31,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify.ps1
 | ReplayCheck | 链接真实 ReplayEncoder/Decoder 的回放格式往返（五种数据形状含巨大 count 被干净拒绝） |
 | WavRoundTripCheck | 键盘音 WAV 的写读往返：写侧头部契约**取自真源码**、读侧接受范围覆盖写侧产出、拒 6 种坏头（非 PCM/位深 12,64/声道 0,负/FormatTag 0）、四种合法位深全接受、位深下限常量与判定一致 |
 | LocRuntimeCheck | 两个方向：**正向**——被取词的运行时键（`GetLocalizedText` 字面量 + `SetPhase` 第二实参）在全部 14 种语言下都齐；**反向**——表里定义的键必须真有人取，死键即为红（2026-10-17 加，此前表里有 315 个键、真正在用的只有 33 个） |
-| PortedCompletenessCheck | 移植搬来的模块都真有调用点：ReplayAnalyzer 显示、DescribeEncoder 降级提示、playback.ready 装弹提示、VideoConverter 入口、**转换目标来自 `Settings.ConvertTarget` 且必须可编辑 + 双向持久化（⑦/⑦b/⑦c）**、回放列表覆盖全部可读格式、键盘音三项有界面入口（⑨a/⑨b）、回放驱动开关有界面入口（⑩/⑩b）、保存目录有界面入口（⑪/⑪b）、**「打开这一关」按钮（⑫/⑫b）+ 编辑器跳转等就绪后定位起始砖（⑬）+ 命中分布图复用缓存（⑭）+ 渲染时钟开关四件齐（⑮a~⑮f）**、**去特效总开关默认关（⑯）+ 中文文案不得把关卡称作存档（⑰）**、没有孤儿检查 |
+| PortedCompletenessCheck | 移植搬来的模块都真有调用点：ReplayAnalyzer 显示、DescribeEncoder 降级提示、playback.ready 装弹提示、VideoConverter 入口、**转换目标来自 `Settings.ConvertTarget` 且必须可编辑 + 双向持久化（⑦/⑦b/⑦c）**、回放列表走集中清单且只含新格式两种(⑧/⑧b/⑧c)、键盘音三项有界面入口（⑨a/⑨b）、回放驱动开关有界面入口（⑩/⑩b）、保存目录有界面入口（⑪/⑪b）、**「打开这一关」按钮（⑫/⑫b）+ 编辑器跳转等就绪后定位起始砖（⑬）+ 命中分布图复用缓存（⑭）+ 渲染时钟开关四件齐（⑮a~⑮f）**、**去特效总开关默认关（⑯）+ 中文文案不得把关卡称作存档（⑰）**、没有孤儿检查 |
 | UiLogicShapeCheck | 界面控制流形状：停止录制不许借用「取消保存」文案、文本框必须**自绘**（不许用内建输入框）且宽度走 Gui.CtrlW、分组边框不许用 GetLastRect、**阻塞式原生目录选择框必须 Defer 到 OnGUI 之外（两个调用点各一条）**、**输入框底色必须比卡片更亮**、**按钮必须传自定义样式 + 滑条必须自绘 + 圆角贴图必须有缓存**（2026-10-12 用户报「UI 还是原生控件」后加的）、**混音轨 Render 容器必须精确**（⑧）、**卡片不许用 GUI.backgroundColor 染色**（⑨，乘算会抹平按钮 hover）、**更新检查三态不许合并 + 版本比较方向 + 读 ModEntry.Version + info.json 两个字段非空**（⑲a~⑲d，2026-10-17 加）、**拨开关必须当场刷新编辑器保存按钮**（⑳a/⑳b，2026-10-18 用户报「允许覆盖关卡开关后不会实时生效」）、**特殊按键两条输入路径都挂 Feature + Main 已注册 + Escape 不得放开**（㉑a~㉑c，2026-10-18 加） |
 | MissingRuntimeKeyCheck | 运行时键必须有定义（`GetLocalizedText` 查不到时 `return key`，玩家会看到原始键名） |
 | KeybdSoundTickCheck | 键盘音起始时间戳：起录块不许导体判空后 return、必须能补真值、回放侧拒非正基准 |
