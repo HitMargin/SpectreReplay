@@ -196,9 +196,6 @@ internal static class HitMarginCompat
 
     internal static bool IsFail(HitMargin margin) => In(margin, FailFamily);
 
-    /// <summary>是否具备时机语义、应参与自定义分档（Auto / 中旋 / 多压 / 漏块除外）。</summary>
-    internal static bool IsTierCounted(HitMargin margin) => In(margin, TierCountedFamily);
-
     /// <summary>无时机语义的命中（中旋、自动、多压、漏块）。</summary>
     internal static bool IsTimeless(HitMargin margin) => In(margin, TimelessFamily);
 

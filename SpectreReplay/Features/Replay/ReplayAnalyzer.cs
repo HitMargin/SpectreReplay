@@ -7,7 +7,7 @@ using static SpectreReplay.Features.Replay.ReplayKeys;
 namespace SpectreReplay.Features.Replay;
 
 // 回放离线误差分析：不进游戏、不回放，直接从已加载回放的 HitContext 还原每次命中的
-// 毫秒误差。换算复刻 HitErrorData.Record 的逆运算式：
+// 毫秒误差，换算公式：
 //   ms = 角差(rad) × 60 / (π × pitch × bpm×speed) × 1000（已乘方向，正 = 晚按）
 // 方向与逐砖速度不在回放文件里（HitContext 只存角度），取自当前加载的谱面，
 // 因此分析要求关卡已加载——与回放启动的前置条件一致。

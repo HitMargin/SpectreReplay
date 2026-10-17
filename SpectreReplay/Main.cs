@@ -96,12 +96,6 @@ namespace SpectreReplay
                 SpectrePatchHub.SetFeatureToggle(FeatureKeys.ReplayManualSave, () => Settings.ReplayOn && Settings.ManualSave);
                 SpectrePatchHub.SetFeatureToggle(FeatureKeys.ReplayCancelSave, () => Settings.ReplayOn && Settings.CancelSave);
                 SpectrePatchHub.SetFeatureToggle(FeatureKeys.ReplayAsyncInput, () => Settings.ReplayOn && Settings.GetDataFromAsyncInput);
-                // 命中误差采集 + 校准建议。**这两个必须注册**：ResultsPlus/CalibAdvice
-                // 下的补丁（Patch_HitError 的四个）没有开关时按"未注册 = 关闭"处理，
-                // 一个都不会挂载 —— 而 HitErrorData/CalibrationAdvisor 的数据链
-                // 就此断在源头，表现为"校准建议永远出不来"且日志无异常。
-                SpectrePatchHub.SetFeatureToggle(FeatureKeys.ResultsPlus, () => Settings.ResultsPlusOn || Settings.CalibAdviceOn);
-                SpectrePatchHub.SetFeatureToggle(FeatureKeys.CalibAdvice, () => Settings.CalibAdviceOn);
                 // 渲染时钟（实验性，默认关）。**必须注册**：未注册的功能其补丁
                 // 按"关闭"处理且日志告警——而这条补丁正是离线渲染拿确定性时钟
                 // 的来源，漏注册会表现为"渲染能用但音画偶有抖动"，很难联想到是接线。

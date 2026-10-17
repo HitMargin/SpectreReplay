@@ -90,9 +90,6 @@ public static class ConfigManager
         public bool JudgeBarFailureBandAlwaysOn { get; set; }
         public bool JudgeBarTickOutlineOn { get; set; }
         public bool OverloadBarOn { get; set; }
-        public bool ResultsPlusOn { get; set; }
-        public bool CalibAdviceOn { get; set; }
-        public bool ResultsKeysOn { get; set; }
         public bool DecorationPreviewOn { get; set; }
         public bool MemoryOptimizerOn { get; set; }
         public bool EditorBugfixOn { get; set; }
@@ -144,7 +141,6 @@ public static class ConfigManager
         public float judgebar_bg_opacity { get; set; }
         public float judgebar_pos_x { get; set; }
         public float judgebar_pos_y { get; set; }
-        public int calib_games { get; set; }
     }
 
     private class StringsData
@@ -156,7 +152,6 @@ public static class ConfigManager
         public string key_code_convert { get; set; }
         public List<string> judgetext_texts { get; set; }
         public string render_output_dir { get; set; }
-        public string calib_samples { get; set; }
     }
 
     private class StringListsData
@@ -272,9 +267,6 @@ public static class ConfigManager
                 JudgeBarFailureBandAlwaysOn = Settings.JudgeBarFailureBandAlwaysOn,
                 JudgeBarTickOutlineOn = Settings.JudgeBarTickOutlineOn,
                 OverloadBarOn = Settings.OverloadBarOn,
-                ResultsPlusOn = Settings.ResultsPlusOn,
-                CalibAdviceOn = Settings.CalibAdviceOn,
-                ResultsKeysOn = Settings.ResultsKeysOn,
                 DecorationPreviewOn = Settings.DecorationPreviewOn,
                 MemoryOptimizerOn = Settings.MemoryOptimizerOn,
                 EditorBugfixOn = Settings.EditorBugfixOn,
@@ -320,8 +312,7 @@ public static class ConfigManager
                 judgebar_edge_span = Settings.JudgeBarEdgeSpan,
                 judgebar_bg_opacity = Settings.JudgeBarBackgroundOpacity,
                 judgebar_pos_x = Settings.JudgeBarPositionX,
-                judgebar_pos_y = Settings.JudgeBarPositionY,
-                calib_games = Settings.CalibGames
+                judgebar_pos_y = Settings.JudgeBarPositionY
             },
             Strings = new StringsData
             {
@@ -331,8 +322,7 @@ public static class ConfigManager
                 microphone_device_name = Settings.MicrophoneDeviceName,
                 key_code_convert = Settings.KeyCodeConvert,
                 judgetext_texts = new List<string>(Settings.JudgeTexts),
-                render_output_dir = Settings.RenderOutputDir,
-                calib_samples = Settings.CalibSamples
+                render_output_dir = Settings.RenderOutputDir
             },
             StringLists = new StringListsData
             {
@@ -621,9 +611,6 @@ public static class ConfigManager
                 Settings.JudgeBarShowFailureJudgement = sets.Value<bool?>("JudgeBarShowFailureJudgement") ?? Settings.JudgeBarShowFailureJudgement;
                 Settings.JudgeBarFailureBandAlwaysOn = sets.Value<bool?>("JudgeBarFailureBandAlwaysOn") ?? Settings.JudgeBarFailureBandAlwaysOn;
                 Settings.OverloadBarOn = sets.Value<bool?>("OverloadBarOn") ?? Settings.OverloadBarOn;
-                Settings.ResultsPlusOn = sets.Value<bool?>("ResultsPlusOn") ?? Settings.ResultsPlusOn;
-                Settings.CalibAdviceOn = sets.Value<bool?>("CalibAdviceOn") ?? Settings.CalibAdviceOn;
-                Settings.ResultsKeysOn = sets.Value<bool?>("ResultsKeysOn") ?? Settings.ResultsKeysOn;
                 Settings.DecorationPreviewOn = sets.Value<bool?>("DecorationPreviewOn") ?? Settings.DecorationPreviewOn;
                 Settings.MemoryOptimizerOn = sets.Value<bool?>("MemoryOptimizerOn") ?? Settings.MemoryOptimizerOn;
                 Settings.EditorBugfixOn = sets.Value<bool?>("EditorBugfixOn") ?? Settings.EditorBugfixOn;
@@ -692,7 +679,6 @@ public static class ConfigManager
                 Settings.JudgeBarBackgroundOpacity = Mathf.Clamp(ints.Value<float?>("judgebar_bg_opacity") ?? Settings.JudgeBarBackgroundOpacity, 0f, 1f);
                 Settings.JudgeBarPositionX = Mathf.Clamp(ints.Value<float?>("judgebar_pos_x") ?? Settings.JudgeBarPositionX, -960f, 960f);
                 Settings.JudgeBarPositionY = Mathf.Clamp(ints.Value<float?>("judgebar_pos_y") ?? Settings.JudgeBarPositionY, -960f, 960f);
-                Settings.CalibGames = ints.Value<int?>("calib_games") ?? Settings.CalibGames;
             }
             }
             catch (Exception ex)
@@ -714,8 +700,6 @@ public static class ConfigManager
                     for (int i = 0; i < Settings.JudgeTexts.Length && i < judgeTexts.Count; i++)
                         Settings.JudgeTexts[i] = judgeTexts[i] ?? "";
                 Settings.RenderOutputDir = strs.Value<string>("render_output_dir") ?? Settings.RenderOutputDir;
-                Settings.CalibSamples = strs.Value<string>("calib_samples") ?? Settings.CalibSamples;
-                SpectreReplay.Features.ResultsPlus.CalibrationAdvisor.LoadState();
             }
             }
             catch (Exception ex)

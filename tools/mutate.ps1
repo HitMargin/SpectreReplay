@@ -171,15 +171,6 @@ switch ($Which) {
     # 这一组把三个真缺口逐个退回"未接上"的旧样子。它们都是同一类形态：
     # 数据类搬过来了、喂它的代码没搬 —— 编译通过、闸门（在加这组断言之前）全绿，
     # 而功能对玩家等于不存在。
-    'MUT-P8' {
-        # ①/②：把整个 Patch_HitError.cs 删掉 = 回到"没搬这两个补丁"的旧状态
-        #       HitErrorData/CalibrationAdvisor 就此没有任何读写方
-        $p = PathOf 'Features\Replay\Patch_HitError.cs'
-        if (-not (Test-Path $p)) { throw 'MUT-P8：找不到 Patch_HitError.cs' }
-        Copy-Item $p (Join-Path $env:TEMP ('mut_' + $Which + '_hit')) -Force
-        [void]$touched.Add(@{ Rel = 'Features\Replay\Patch_HitError.cs'; Saved = (Join-Path $env:TEMP ('mut_' + $Which + '_hit')) })
-        Remove-Item $p -Force
-    }
     'MUT-P9' {
         # ③：只删 Analyzer 的调用点，保留补丁 —— 证明判据盯的是调用点而非声明。
         # 只数**代码行**：方法名在注释里也出现（"为什么要在这里动手"那段），

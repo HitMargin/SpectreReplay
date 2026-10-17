@@ -69,16 +69,6 @@ internal class Patch_StartRewind
         HitLocked = false;
         Settings.checklang();
 
-        // 偏移统计跨局清零：HitErrorData.Record 的裁尾逻辑靠 TrackerIndex（hitMargins
-        // 的序号）判断"回退"，而换局/重开后序号从 1 重新开始 —— 裁尾会把上一局裁到只剩
-        // TrackerIndex==1 那一条，**恰好留下上一局的第一个命中**。实测：新局统计里会混入
-        // 上一个样本（-10ms），污染早/晚方向、均值与 σ；CalibrationAdvisor 读同一份数据，
-        // 校准建议也会被跨局污染。Start_Rewind 是"新一局开始"的统一点（重开/换关/进关都经过）。
-        Features.ResultsPlus.HitErrorData.ResetForNewRun();
-        // 校准样本的"本次结算"去重哨兵也要重置：反复练习同一关时每局命中数相同，
-        // 不重置会让第 2 局起被误判成重复触发而丢弃，校准建议永远停在第 1 局的结论
-        Features.ResultsPlus.CalibrationAdvisor.OnNewRun();
-
         Scene scene = SceneManager.GetActiveScene();
         Debug.Log(scene.name);
 

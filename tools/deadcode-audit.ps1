@@ -50,7 +50,6 @@ $whitelistClass = @(
     'Patch_MarkFail','Patch_LightUp','Patch_UpdateFreeroam','Patch_Won_Update',
     'Patch_PlayerControlUpdate','Patch_HoldKeysCrashGuard','Patch_Fail2Action',
     'Patch_OnLandOnPortal','Patch_Hit','Patch_UpdateInputConsumeAsync',
-    'Patch_HitErrorSwitchChosen','Patch_HitErrorAddHit','Patch_ResultsCommitCalib',
     'Patch_RenderClockConductor','Patch_RenderClockAsyncPosition','Patch_VideoPinSet',
     'Patch_VideoPinGet','Patch_VideoLockAsyncAngle'
 )
@@ -69,7 +68,7 @@ $pluginCallbackNames = @(
 
 # C 类清单：Spectre 侧确有调用方、但那些调用方所属特性本项目按裁决"不补"。
 # 每个都核过 Spectre 那边的调用点存在（见 2026-10-06 的 we/them 计数对比）。
-#   结算附加文本（HitErrorData 统计/MaxCombo、GameCompat.DeadTiles） → ResultsText 不补
+#   结算附加文本（MaxCombo、GameCompat.DeadTiles） → ResultsText 不补
 #   ReplayManager.UnLoadReplay           → Spectre 在设置页"卸载当前回放"里调，我们无该页
 #   LocalizationManager.CodeToLang 等    → 语言管理工具函数，Spectre 的设置 UI 用
 # （2026-10-17：CustomJudge 整套按用户裁决删除，档位/TierJudgeState/BoundaryRaw 等

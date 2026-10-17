@@ -5,8 +5,6 @@ namespace SpectreReplay;
 // 不能命名为 Features——会与命名空间 Spectre.Features 在子命名空间内撞名
 internal static class FeatureKeys
 {
-    public const string ResultsPlus = "ResultsPlus";
-    public const string CalibAdvice = "CalibAdvice";
     public const string JudgeText = "JudgeText";
     public const string JudgeFx = "JudgeFx";
     public const string JudgeFilter = "JudgeFilter";

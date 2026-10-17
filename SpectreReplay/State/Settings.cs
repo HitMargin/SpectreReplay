@@ -253,14 +253,6 @@ public static class Settings
     public static float JudgeBarBackgroundOpacity = 0.4f;
 
 
-    // ── ResultsPlus settings ────────────────────────────
-    public static bool ResultsPlusOn = true;
-    public static bool CalibAdviceOn = true;
-    public static bool ResultsKeysOn = true;
-    // 以下两个是 CalibrationAdvisor 的持久化载体（非用户设置），ConfigManager 落盘
-    public static string CalibSamples = "";
-    public static int CalibGames = 0;
-
     // ── PlanetColors settings ───────────────────────────
     public static bool PlanetColorOn = false;
     public static bool[] PlanetColorPlayerOn = InitPlanetOn();

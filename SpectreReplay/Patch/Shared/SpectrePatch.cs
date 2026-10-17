@@ -111,7 +111,7 @@ internal enum PatchPriority
 //     契约：谓词为假时补丁根本不挂载，拨开关同拍卸载——补丁体内**无需再查
 //     主开关**，体内检查只留给 Feature 之下的子选项。
 //     多值：',' 或 '|' 分隔 = 任一开启即挂载（共享补丁不必宿主侧写 OR 谓词）：
-//     Feature = "ResultsPlus,CalibAdvice"
+//     Feature = "Replay,ReplayManualSave"
 //     '&' 分隔 = 全部开启才挂载（AND；与 ,/| 不可混用，混用进探针）：
 //     Feature = "HitErrorMeter&CustomJudge"
 //

@@ -1,28 +1,19 @@
 // 移植完整性：Spectre 有、我们却缺的那部分，是否真的"缺得有理由"。
 //
 // 这一轮为什么要有它：SpectreReplay 是 Spectre 的**部分**移植。移植的方式是
-// 逐文件搬，搬完之后 HitsErrorData / CalibrationAdvisor / ReplayAnalyzer
-// 这类**数据类**都在（纯逻辑、不碰引擎），而**喂数据的补丁**是另一批文件。
-// 于是出现过一个真缺口：
+// 逐文件搬，搬完之后 ReplayAnalyzer 这类**数据类**都在（纯逻辑、不碰引擎），
+// 而**喂数据的补丁**是另一批文件。于是出现过一个真缺口：
 //
-//   · HitErrorData.CapturePending / Record 全仓零调用点
-//     → 喂它的两个补丁（Patch_HitError.cs）没搬
-//     → Patch_Lifecycle 每局在调 ResetForNewRun() 清一份永远是空的表
-//     → 校准建议永远攒不够样本，玩家再练也不出建议，日志无异常
-//
-//   · CalibrationAdvisor.CommitRun 同样零调用点（消费方没搬）
 //   · ReplayAnalyzer.Analyze / VideoEncoder.DescribeEncoder 零调用点
 //
 // 共同形态：**"代码在、但没有任何一条路径会执行到它"**。这对任何
 // "检查声明在/不在"的闸门都是隐形的——上一轮 UI 逻辑 11 条缺陷已经栽过一次。
 //
 // 判据因此落在**调用点**上，不在声明上：
-//   ① HitErrorData 的两个入口各有一个补丁调它（喂数据）
-//   ② CalibrationAdvisor.CommitRun 有一个补丁调它（消费数据）
 //   ③ ReplayAnalyzer.Analyze 在 UI 层被调用（分析结果要显示给玩家）
 //   ④ VideoEncoder.DescribeEncoder 在 UI 层被调用（NVENC 静默降级要说出来）
-// 每条都是"至少要有一个调用点"这种弱判据——换个措辞写个死调用骗不过 ② 的反向验证：
-// ⑤ 上面四个补丁类都必须真的带 [SpectrePatch]（否则调用点是死代码）
+// 每条都是"至少要有一个调用点"这种弱判据——换个措辞写个死调用骗不过 ⑤ 的反向验证：
+// ⑤ 上面那些补丁类都必须真的带 [SpectrePatch]（否则调用点是死代码）
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -36,12 +27,6 @@ namespace UiPreview
         {
             Console.WriteLine("  ── 移植完整性（数据类必须有喂它的补丁） ──");
             int fail = 0;
-            fail += Check(projectRoot, "① HitErrorData 采集入口有补丁喂",
-                new[] { "Features\\Replay\\Patch_HitError.cs" },
-                new[] { "CapturePending", "Record" });
-            fail += Check(projectRoot, "② CalibrationAdvisor 有消费方",
-                new[] { "Features\\Replay\\Patch_HitError.cs" },
-                new[] { "CommitRun" });
             fail += Check(projectRoot, "③ ReplayAnalyzer 的结果显示给玩家",
                 new[] { "Pages\\Pages.cs" },
                 new[] { "Analyze(" });

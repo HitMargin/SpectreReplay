@@ -99,8 +99,6 @@ $knownDeviations = @(
     @{ Pat = 'SpectrePatchHub.LogTag';               Why = '日志前缀统一为 SpectreReplay' }
     @{ Pat = 'SpectrePatchHub.ApplyFailureCount';    Why = '补丁挂载失败计数（我们自写补丁层的能力）' }
     @{ Pat = 'Ui.OnGui.FlushConfig';                 Why = '关窗/退出时统一收口落盘' }
-    @{ Pat = 'Settings.CalibAdviceOn';               Why = 'ResultsPlus/CalibAdvice 开关在 Main.cs 注册' }
-    @{ Pat = 'Settings.ResultsPlusOn';               Why = '同上' }
     @{ Pat = 'VideoRender.PinnedSongPosition';       Why = '渲染时钟钉时间轴（round 早）' }
     @{ Pat = 'System.Collections.Generic.List';      Why = 'using 区按我们自己的需要裁剪' }
     @{ Pat = 'UMM';                                  Why = '上游用 Quartz 壳，我们用 UMM 自带 OnGUI' }
