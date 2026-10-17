@@ -64,15 +64,25 @@ namespace SpectreReplay.Pages
                 OnGui.Row("record.failsave", FailSave, v => { FailSave = v; Commit(); });
                 OnGui.Row("record.backup", Backup, v => { Backup = v; Commit(); });
                 OnGui.Row("record.limitkey", LimitKey, v => { LimitKey = v; Commit(); });
-                // 这三项都是**真的行为开关**（不是摆设）：ManualSave 管 F9 手动保存
-                // 那条补丁挂不挂（Main.cs:96 + Patch_Misc.cs:50）、GetDataFromAsyncInput
-                // 管按键从异步输入还是轮询取（Main.cs:98 + AsyncKeyRecorder.cs:43）、
-                // FollowGameLanguage 管界面语言是否跟着游戏走（Settings.cs:375 +
-                // LocalizationManager.cs:5915）。之前界面上一个都没有，改它们只能手改
-                // Configs.json——而 ManualSave 关掉后 F9 直接失效，玩家会以为按键没绑上。
+                // 这两项都是**真的行为开关**（不是摆设）：ManualSave 管 F9 手动保存
+                // 那条补丁挂不挂（Main.cs + Patch_Misc.cs）、GetDataFromAsyncInput
+                // 管按键从异步输入还是轮询取（Main.cs + AsyncKeyRecorder.cs）。
+                // 之前界面上一个都没有，改它们只能手改 Configs.json——
+                // 而 ManualSave 关掉后 F9 直接失效，玩家会以为按键没绑上。
+                // （原先这里还有第三个「界面语言跟随游戏」，2026-10-17 已删除：
+                //   面板语言由 Ui.Loc.RefreshLanguage 始终跟随游戏，那个开关只影响
+                //   14 语言大表里的通知文案，留着只会让人以为界面语言能单独设。）
                 OnGui.Row("record.manualsave", ManualSave, v => { ManualSave = v; Commit(); });
-                OnGui.Row("record.asyncinput", GetDataFromAsyncInput, v => { GetDataFromAsyncInput = v; Commit(); });
-                OnGui.Row("record.followlang", FollowGameLanguage, v => { FollowGameLanguage = v; Commit(); });
+                // 异步输入：**开关前先看游戏侧有没有开。** 这条设置只在游戏的
+                // "使用异步输入"打开时才有意义——`AsyncKeyRecorder.FlushFrame`
+                // 里那个 `AsyncInputManager.isActive` 守卫就是它：游戏侧没开时
+                // 我们即使勾了也一个按键都取不到，而界面上完全看不出原因，
+                // 玩家只会觉得"勾了没效果"。
+                // 所以这里把游戏侧的状态直接说出来，没开就明确告诉他去哪儿开。
+                DrawAsyncInputRow();
+                // （原「界面语言跟随游戏」开关已删除：面板语言由 Ui.Loc.RefreshLanguage
+                //   始终跟随游戏，那个开关实际只影响 14 语言大表里的通知文案，
+                //   默认 true 就是对的，留着只会让人以为界面语言能单独设。）
                 Gui.Divider();
                 // 把**真实**目录摆出来。原先只在 record.note 里写了一句
                 // "保存在 Mods/SpectreReplay/Replays/"，而 SavePath 实际是模组根
@@ -92,8 +102,7 @@ namespace SpectreReplay.Pages
                 // 按任意键改键：等待期间 Esc 取消并独占 Esc（见 OnGui.RowHotkey）。
                 // 这两个键是**手动存这一局**的入口——没有它，练到一半的短局
                 // 只能等通关自动保存，等于存不下来。
-                OnGui.RowHotkey("record.savekey", () => SaveButton, k => { SaveButton = k; Commit(); });
-                OnGui.RowHotkey("record.cancelsavekey", () => CancelSaveButton, k => { CancelSaveButton = k; Commit(); });
+                OnGui.RowHotkey("record.savekey", () => SaveButton, k => { SaveButton = k; Commit(); });                OnGui.RowHotkey("record.cancelsavekey", () => CancelSaveButton, k => { CancelSaveButton = k; Commit(); });
                 OnGui.Note("record.note");
             });
 
@@ -875,9 +884,53 @@ namespace SpectreReplay.Pages
         /// 配对会错位。所以点击只置一个待办，真正的调用交给 MainThread.Defer，
         /// 在下一拍 Update（OnGUI 之外）执行。
         /// </summary>
-        private static void DrawSaveDirRow()
+        /// <summary>
+        /// 「从异步输入取按键」这一行。**必须先报出游戏侧的状态。**
+        ///
+        /// 我们自己的实现是清楚的（`Settings.GetDataFromAsyncInput` → Main 挂
+        /// `Patch_UpdateInputConsumeAsync`、`AsyncKeyRecorder.FlushFrame` 里判它），
+        /// 但它**依赖游戏先打开异步输入**：`FlushFrame` 的第三个条件就是
+        /// `AsyncInputManager.isActive`，为假时整帧直接丢弃（DiscardPending）。
+        ///
+        /// 也就是说：游戏侧没开时，勾上这个开关**一点效果都没有、也不报错**。
+        /// 这是「有界面但改不了」的变体——「有开关但没效果」，比没开关更糟：
+        /// 玩家会以为自己配错了别的东西（键位？输入法？），永远查不到真正原因。
+        ///
+        /// 游戏侧的权威判据是 `RDC.useAsyncInput`（= `AsyncInputManager.isActive`，
+        /// 反编译 RDC.cs:210-215 核实）。它同时也是游戏「异步输入」选项的 setter，
+        /// 所以读它不会产生副作用。
+        /// </summary>
+        private static void DrawAsyncInputRow()
         {
+            OnGui.Row("record.asyncinput", GetDataFromAsyncInput,
+                v => { GetDataFromAsyncInput = v; Commit(); });
+
+            bool gameOn;
+            try
+            {
+                gameOn = RDC.useAsyncInput;
+            }
+            catch
+            {
+                // 游戏还没初始化：不下结论，也不显示可能误导的红字。
+                return;
+            }
+            if (gameOn)
+            {
+                // 游戏侧已开 ⇒ 本开关是生效的，不再加噪音。
+                return;
+            }
+            // 游戏侧没开：说明"现在不生效"以及去哪儿开。
+            // **不替玩家改写设置值**——他可能只是临时在游戏里关了异步输入，
+            // 我们不替他做决定，只把事实讲清楚。
             GUILayout.BeginHorizontal();
+            GUILayout.Space(Gui.LabelW);
+            GUILayout.Label(Loc.T("record.asyncinput.off"), Gui.NoteStyle,
+                GUILayout.ExpandWidth(true));
+            GUILayout.EndHorizontal();
+        }
+        private static void DrawSaveDirRow()
+        {            GUILayout.BeginHorizontal();
             GUILayout.Label(Loc.T("record.savedir"), Gui.LabelStyle, GUILayout.Width(Gui.LabelW));
             // 路径可能很长（换到别的盘之后尤其），中段省略：盘符/开头与目录名/
             // 结尾是玩家用来确认"是不是我选的那个"的两端，尾巴省略反而认不出。

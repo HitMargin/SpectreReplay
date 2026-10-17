@@ -194,7 +194,7 @@ public static class LocalizationManager
             ["editor.editor_ui_horizontal"] = "横向属性行",
             ["editor.timeline"] = "时间轴条",
             ["editor.fix_chart_load"] = "谱面加载修复",
-            ["editor.fix_chart_load_hint"] = "默认关闭。这是一组深度改写编辑器行为的补丁，用于修复增删砖块/事件的粒度问题；开启后编辑器行为会明显偏离原版。关闭后增删砖块、事件与撤销粒度都回到原版行为。",
+            ["editor.fix_chart_load_hint"] = "默认关闭。这是一组深度改写编辑器行为的补丁，用于修复增删砖块/事件的粒度问题；开启后编辑器行为会明显偏离原版。关闭后增删砖块、事件与撤销粒度都回到原版行为。",
             ["perf.footnote"] = "注：实际挂载数还要过版本门控与目标解析，通常少于上表。PACL2 的补丁不计入。",
             ["perf.footnote"] = "Note: the actually mounted count also passes version gating and target resolution, so it is usually lower. PACL2 patches are not included.",
             ["perf.footnote"] = "참고: 실제 적용 개수는 버전 게이트와 대상 해석을 추가로 거치므로 대개 더 적습니다. PACL2 패치는 포함되지 않습니다.",
@@ -564,7 +564,7 @@ public static class LocalizationManager
             ["editor.editor_ui_horizontal"] = "Horizontal Property Rows",
             ["editor.timeline"] = "Timeline Strip",
             ["editor.fix_chart_load"] = "Chart load fixes",
-            ["editor.fix_chart_load_hint"] = "Off by default. This is a set of patches that rewrite editor behaviour to fix the granularity of tile/event edits; turning it on makes the editor behave noticeably differently from vanilla. With it off, tile/event editing and undo granularity return to vanilla behaviour.",
+            ["editor.fix_chart_load_hint"] = "Off by default. This is a set of patches that rewrite editor behaviour to fix the granularity of tile/event edits; turning it on makes the editor behave noticeably differently from vanilla. With it off, tile/event editing and undo granularity return to vanilla behaviour.",
             ["perf.footnote"] = "注：实际挂载数还要过版本门控与目标解析，通常少于上表。PACL2 的补丁不计入。",
             ["perf.footnote"] = "Note: the actually mounted count also passes version gating and target resolution, so it is usually lower. PACL2 patches are not included.",
             ["perf.footnote"] = "참고: 실제 적용 개수는 버전 게이트와 대상 해석을 추가로 거치므로 대개 더 적습니다. PACL2 패치는 포함되지 않습니다.",
@@ -942,7 +942,7 @@ public static class LocalizationManager
             ["editor.editor_ui_horizontal"] = "가로 속성 행",
             ["editor.timeline"] = "타임라인 스트립",
             ["editor.fix_chart_load"] = "차트 불러오기 수정",
-            ["editor.fix_chart_load_hint"] = "기본 꺼짐. 타일/이벤트 편집의 세분도를 고치기 위해 편집기 동작을 크게 다시 쓰는 패치 모음이라, 켜면 원본과 눈에 띄게 달라집니다. 끄면 타일/이벤트 편집과 실행취소 세분도가 원본 동작으로 돌아갑니다.",
+            ["editor.fix_chart_load_hint"] = "기본 꺼짐. 타일/이벤트 편집의 세분도를 고치기 위해 편집기 동작을 크게 다시 쓰는 패치 모음이라, 켜면 원본과 눈에 띄게 달라집니다. 끄면 타일/이벤트 편집과 실행취소 세분도가 원본 동작으로 돌아갑니다.",
             ["perf.footnote"] = "注：实际挂载数还要过版本门控与目标解析，通常少于上表。PACL2 的补丁不计入。",
             ["perf.footnote"] = "Note: the actually mounted count also passes version gating and target resolution, so it is usually lower. PACL2 patches are not included.",
             ["perf.footnote"] = "참고: 실제 적용 개수는 버전 게이트와 대상 해석을 추가로 거치므로 대개 더 적습니다. PACL2 패치는 포함되지 않습니다.",
@@ -1311,7 +1311,7 @@ public static class LocalizationManager
             ["editor.editor_ui_horizontal"] = "橫向屬性行",
             ["editor.timeline"] = "時間軸條",
             ["editor.fix_chart_load"] = "譜面載入修復",
-            ["editor.fix_chart_load_hint"] = "預設關閉。這是一組深度改寫編輯器行為的補丁，用於修正增刪磚塊/事件的細粒度問題；開啟後編輯器行為會明顯偏離原版。關閉後增刪磚塊、事件與復原粒度都回到原版行為。",
+            ["editor.fix_chart_load_hint"] = "預設關閉。這是一組深度改寫編輯器行為的補丁，用於修正增刪磚塊/事件的細粒度問題；開啟後編輯器行為會明顯偏離原版。關閉後增刪磚塊、事件與復原粒度都回到原版行為。",
             ["perf.footnote"] = "注：实际挂载数还要过版本门控与目标解析，通常少于上表。PACL2 的补丁不计入。",
             ["perf.footnote"] = "Note: the actually mounted count also passes version gating and target resolution, so it is usually lower. PACL2 patches are not included.",
             ["perf.footnote"] = "참고: 실제 적용 개수는 버전 게이트와 대상 해석을 추가로 거치므로 대개 더 적습니다. PACL2 패치는 포함되지 않습니다.",
@@ -1681,7 +1681,7 @@ public static class LocalizationManager
             ["editor.editor_ui_horizontal"] = "Filas de propiedades horizontales",
             ["editor.timeline"] = "Barra de línea de tiempo",
             ["editor.fix_chart_load"] = "Correcciones de carga de gráficos",
-            ["editor.fix_chart_load_hint"] = "Desactivada por defecto. Es un conjunto de parches que reescribe el comportamiento del editor para corregir la granularidad al editar Baldosas/Eventos; al activarla el editor se comporta de forma claramente distinta al original. Desactivada, la edición de Baldosas/Eventos y la granularidad de deshacer vuelven al comportamiento original.",
+            ["editor.fix_chart_load_hint"] = "Desactivada por defecto. Es un conjunto de parches que reescribe el comportamiento del editor para corregir la granularidad al editar Baldosas/Eventos; al activarla el editor se comporta de forma claramente distinta al original. Desactivada, la edición de Baldosas/Eventos y la granularidad de deshacer vuelven al comportamiento original.",
             ["perf.footnote"] = "注：实际挂载数还要过版本门控与目标解析，通常少于上表。PACL2 的补丁不计入。",
             ["perf.footnote"] = "Note: the actually mounted count also passes version gating and target resolution, so it is usually lower. PACL2 patches are not included.",
             ["perf.footnote"] = "참고: 실제 적용 개수는 버전 게이트와 대상 해석을 추가로 거치므로 대개 더 적습니다. PACL2 패치는 포함되지 않습니다.",
@@ -2051,7 +2051,7 @@ public static class LocalizationManager
             ["editor.editor_ui_horizontal"] = "Linhas de propriedades horizontais",
             ["editor.timeline"] = "Barra de linha do tempo",
             ["editor.fix_chart_load"] = "Correções de carregamento de gráficos",
-            ["editor.fix_chart_load_hint"] = "Desativado por padrão. É um conjunto de patches que reescreve o comportamento do editor para corrigir a granularidade da edição de Ladrilhos/Eventos; ao ativá-lo o editor se comporta de forma bem diferente do original. Desativado, a edição de Ladrilhos/Eventos e a granularidade do desfazer voltam ao comportamento original.",
+            ["editor.fix_chart_load_hint"] = "Desativado por padrão. É um conjunto de patches que reescreve o comportamento do editor para corrigir a granularidade da edição de Ladrilhos/Eventos; ao ativá-lo o editor se comporta de forma bem diferente do original. Desativado, a edição de Ladrilhos/Eventos e a granularidade do desfazer voltam ao comportamento original.",
             ["perf.footnote"] = "注：实际挂载数还要过版本门控与目标解析，通常少于上表。PACL2 的补丁不计入。",
             ["perf.footnote"] = "Note: the actually mounted count also passes version gating and target resolution, so it is usually lower. PACL2 patches are not included.",
             ["perf.footnote"] = "참고: 실제 적용 개수는 버전 게이트와 대상 해석을 추가로 거치므로 대개 더 적습니다. PACL2 패치는 포함되지 않습니다.",
@@ -2421,7 +2421,7 @@ public static class LocalizationManager
             ["editor.editor_ui_horizontal"] = "横向きプロパティ行",
             ["editor.timeline"] = "タイムラインストリップ",
             ["editor.fix_chart_load"] = "譜面読み込みの修正",
-            ["editor.fix_chart_load_hint"] = "初期状態ではオフ。タイル/イベントの編集の細分化を修正するためにエディタの動作を大きく書き換えるパッチ群で、オンにするとオリジナルと明显に挙動が異なります。オフにするとタイル/イベントの編集とUndoの細分化はオリジナルの動作に戻ります。",
+            ["editor.fix_chart_load_hint"] = "初期状態ではオフ。タイル/イベントの編集の細分化を修正するためにエディタの動作を大きく書き換えるパッチ群で、オンにするとオリジナルと明显に挙動が異なります。オフにするとタイル/イベントの編集とUndoの細分化はオリジナルの動作に戻ります。",
             ["perf.footnote"] = "注：实际挂载数还要过版本门控与目标解析，通常少于上表。PACL2 的补丁不计入。",
             ["perf.footnote"] = "Note: the actually mounted count also passes version gating and target resolution, so it is usually lower. PACL2 patches are not included.",
             ["perf.footnote"] = "참고: 실제 적용 개수는 버전 게이트와 대상 해석을 추가로 거치므로 대개 더 적습니다. PACL2 패치는 포함되지 않습니다.",
@@ -2791,7 +2791,7 @@ public static class LocalizationManager
             ["editor.editor_ui_horizontal"] = "Poziome wiersze właściwości",
             ["editor.timeline"] = "Pasek osi czasu",
             ["editor.fix_chart_load"] = "Poprawki wczytywania",
-            ["editor.fix_chart_load_hint"] = "Domyślnie wyłączone. To zestaw łatek przepisujących zachowanie edytora, aby poprawić szczegółowość edycji Kafelków/Zdarzeń; włączenie sprawia, że edytor wyraźnie odbiega od oryginału. Wyłączone, edycja Kafelków/Zdarzeń i szczegółowość cofania wracają do zachowania oryginalnego.",
+            ["editor.fix_chart_load_hint"] = "Domyślnie wyłączone. To zestaw łatek przepisujących zachowanie edytora, aby poprawić szczegółowość edycji Kafelków/Zdarzeń; włączenie sprawia, że edytor wyraźnie odbiega od oryginału. Wyłączone, edycja Kafelków/Zdarzeń i szczegółowość cofania wracają do zachowania oryginalnego.",
             ["perf.footnote"] = "注：实际挂载数还要过版本门控与目标解析，通常少于上表。PACL2 的补丁不计入。",
             ["perf.footnote"] = "Note: the actually mounted count also passes version gating and target resolution, so it is usually lower. PACL2 patches are not included.",
             ["perf.footnote"] = "참고: 실제 적용 개수는 버전 게이트와 대상 해석을 추가로 거치므로 대개 더 적습니다. PACL2 패치는 포함되지 않습니다.",
@@ -3161,7 +3161,7 @@ public static class LocalizationManager
             ["editor.editor_ui_horizontal"] = "Горизонтальные строки свойств",
             ["editor.timeline"] = "Полоса таймлайна",
             ["editor.fix_chart_load"] = "Исправления загрузки",
-            ["editor.fix_chart_load_hint"] = "По умолчанию выключено. Это набор патчей, переписывающих поведение редактора ради более точной работы с Плитками/Событиями; при включении редактор заметно отличается от оригинала. Если выключено, редактирование Плиток/Событий и гранулярность отмены возвращаются к исходному поведению.",
+            ["editor.fix_chart_load_hint"] = "По умолчанию выключено. Это набор патчей, переписывающих поведение редактора ради более точной работы с Плитками/Событиями; при включении редактор заметно отличается от оригинала. Если выключено, редактирование Плиток/Событий и гранулярность отмены возвращаются к исходному поведению.",
             ["perf.footnote"] = "注：实际挂载数还要过版本门控与目标解析，通常少于上表。PACL2 的补丁不计入。",
             ["perf.footnote"] = "Note: the actually mounted count also passes version gating and target resolution, so it is usually lower. PACL2 patches are not included.",
             ["perf.footnote"] = "참고: 실제 적용 개수는 버전 게이트와 대상 해석을 추가로 거치므로 대개 더 적습니다. PACL2 패치는 포함되지 않습니다.",
@@ -3531,7 +3531,7 @@ public static class LocalizationManager
             ["editor.editor_ui_horizontal"] = "Rânduri orizontale proprietăți",
             ["editor.timeline"] = "Bandă cronologică",
             ["editor.fix_chart_load"] = "Remediări la încărcare",
-            ["editor.fix_chart_load_hint"] = "Dezactivat implicit. Este un set de patch-uri care rescriu comportamentul editorului pentru a corecta granularitatea editării Dalelor/Evenimentelor; când este activ, editorul se comportă vizibil diferit de original. Când este dezactivat, editarea Dalelor/Evenimentelor și granularitatea anulării revin la comportamentul original.",
+            ["editor.fix_chart_load_hint"] = "Dezactivat implicit. Este un set de patch-uri care rescriu comportamentul editorului pentru a corecta granularitatea editării Dalelor/Evenimentelor; când este activ, editorul se comportă vizibil diferit de original. Când este dezactivat, editarea Dalelor/Evenimentelor și granularitatea anulării revin la comportamentul original.",
             ["perf.footnote"] = "注：实际挂载数还要过版本门控与目标解析，通常少于上表。PACL2 的补丁不计入。",
             ["perf.footnote"] = "Note: the actually mounted count also passes version gating and target resolution, so it is usually lower. PACL2 patches are not included.",
             ["perf.footnote"] = "참고: 실제 적용 개수는 버전 게이트와 대상 해석을 추가로 거치므로 대개 더 적습니다. PACL2 패치는 포함되지 않습니다.",
@@ -3901,7 +3901,7 @@ public static class LocalizationManager
             ["editor.editor_ui_horizontal"] = "Hàng thuộc tính ngang",
             ["editor.timeline"] = "Dải dòng thời gian",
             ["editor.fix_chart_load"] = "Sửa lỗi tải",
-            ["editor.fix_chart_load_hint"] = "Tắt mặc định. Đây là nhóm vá ghi lại hành vi trình soạn thảo để sửa độ mịn khi sửa Ô/Sự kiện; bật lên thì trình soạn thảo khác hẳn bản gốc. Tắt thì việc sửa Ô/Sự kiện và độ mịn hoàn tác trở về hành vi gốc.",
+            ["editor.fix_chart_load_hint"] = "Tắt mặc định. Đây là nhóm vá ghi lại hành vi trình soạn thảo để sửa độ mịn khi sửa Ô/Sự kiện; bật lên thì trình soạn thảo khác hẳn bản gốc. Tắt thì việc sửa Ô/Sự kiện và độ mịn hoàn tác trở về hành vi gốc.",
             ["perf.footnote"] = "注：实际挂载数还要过版本门控与目标解析，通常少于上表。PACL2 的补丁不计入。",
             ["perf.footnote"] = "Note: the actually mounted count also passes version gating and target resolution, so it is usually lower. PACL2 patches are not included.",
             ["perf.footnote"] = "참고: 실제 적용 개수는 버전 게이트와 대상 해석을 추가로 거치므로 대개 더 적습니다. PACL2 패치는 포함되지 않습니다.",
@@ -4271,7 +4271,7 @@ public static class LocalizationManager
             ["editor.editor_ui_horizontal"] = "Lignes de propriétés horizontales",
             ["editor.timeline"] = "Bande de chronologie",
             ["editor.fix_chart_load"] = "Correctifs de chargement",
-            ["editor.fix_chart_load_hint"] = "Désactivé par défaut. Il sagit dun ensemble de correctifs qui réécrit le comportement de léditeur pour corriger la granularité de lédition des Tuiles/Évènements ; lactiver rend léditeur sensiblement différent de loriginal. Désactivé, lédition des Tuiles/Évènements et la granularité de lannulation reviennent au comportement dorigine.",
+            ["editor.fix_chart_load_hint"] = "Désactivé par défaut. Il sagit dun ensemble de correctifs qui réécrit le comportement de léditeur pour corriger la granularité de lédition des Tuiles/Évènements ; lactiver rend léditeur sensiblement différent de loriginal. Désactivé, lédition des Tuiles/Évènements et la granularité de lannulation reviennent au comportement dorigine.",
             ["perf.footnote"] = "注：实际挂载数还要过版本门控与目标解析，通常少于上表。PACL2 的补丁不计入。",
             ["perf.footnote"] = "Note: the actually mounted count also passes version gating and target resolution, so it is usually lower. PACL2 patches are not included.",
             ["perf.footnote"] = "참고: 실제 적용 개수는 버전 게이트와 대상 해석을 추가로 거치므로 대개 더 적습니다. PACL2 패치는 포함되지 않습니다.",
@@ -4641,7 +4641,7 @@ public static class LocalizationManager
             ["editor.editor_ui_horizontal"] = "Vodorovné řádky vlastností",
             ["editor.timeline"] = "Pás časové osy",
             ["editor.fix_chart_load"] = "Opravy načítání",
-            ["editor.fix_chart_load_hint"] = "Ve výchozím stavu vypnuto. Jde o sadu patchů, které přepisují chování editoru, aby zpřesnily granularitu úprav Dlaždic/UDálostí; po zapnutí se editor chová výrazně jinak než originál. Když je vypnuto, úpravy Dlaždic/UDálostí i granularita vracení se vrátí k původnímu chování.",
+            ["editor.fix_chart_load_hint"] = "Ve výchozím stavu vypnuto. Jde o sadu patchů, které přepisují chování editoru, aby zpřesnily granularitu úprav Dlaždic/UDálostí; po zapnutí se editor chová výrazně jinak než originál. Když je vypnuto, úpravy Dlaždic/UDálostí i granularita vracení se vrátí k původnímu chování.",
             ["perf.footnote"] = "注：实际挂载数还要过版本门控与目标解析，通常少于上表。PACL2 的补丁不计入。",
             ["perf.footnote"] = "Note: the actually mounted count also passes version gating and target resolution, so it is usually lower. PACL2 patches are not included.",
             ["perf.footnote"] = "참고: 실제 적용 개수는 버전 게이트와 대상 해석을 추가로 거치므로 대개 더 적습니다. PACL2 패치는 포함되지 않습니다.",
@@ -5011,7 +5011,7 @@ public static class LocalizationManager
             ["editor.editor_ui_horizontal"] = "Horizontale Eigenschaftszeilen",
             ["editor.timeline"] = "Zeitleistenstreifen",
             ["editor.fix_chart_load"] = "Ladefehler-Korrekturen",
-            ["editor.fix_chart_load_hint"] = "Standardmäßig aus. Dabei handelt es sich um einen Satz Patches, der das Verhalten des Editors überschreibt, um die Granularität beim Bearbeiten von Feldern/Ereignissen zu korrigieren; eingeschaltet verhält sich der Editor deutlich anders als im Original. Ausgeschaltet kehren Felder-/Ereignisbearbeitung und Undo-Granularität zum Originalverhalten zurück.",
+            ["editor.fix_chart_load_hint"] = "Standardmäßig aus. Dabei handelt es sich um einen Satz Patches, der das Verhalten des Editors überschreibt, um die Granularität beim Bearbeiten von Feldern/Ereignissen zu korrigieren; eingeschaltet verhält sich der Editor deutlich anders als im Original. Ausgeschaltet kehren Felder-/Ereignisbearbeitung und Undo-Granularität zum Originalverhalten zurück.",
             ["perf.footnote"] = "注：实际挂载数还要过版本门控与目标解析，通常少于上表。PACL2 的补丁不计入。",
             ["perf.footnote"] = "Note: the actually mounted count also passes version gating and target resolution, so it is usually lower. PACL2 patches are not included.",
             ["perf.footnote"] = "참고: 실제 적용 개수는 버전 게이트와 대상 해석을 추가로 거치므로 대개 더 적습니다. PACL2 패치는 포함되지 않습니다.",
@@ -5254,7 +5254,7 @@ public static class LocalizationManager
         // 跟随游戏语言时每次取词都同步：mod 加载早于游戏应用用户语言设置（日志里
         // Spectre 先 Active、后 setting language），开局路径上又没有 checklang 时机，
         // "不开设置窗口直接玩到结算"会拿到过期的启动默认语言（英文）
-        if (lang == null && Settings.FollowGameLanguage)
+        if (lang == null)
             GetLanguages();
         lang ??= currentLanguage;
         if (languageData.TryGetValue(lang, out var dict) && dict.TryGetValue(key, out var val))
@@ -5264,12 +5264,4 @@ public static class LocalizationManager
         return key;
     }
 
-    internal static void SwitchLanguage(string langCode)
-    {
-        if (languageData.ContainsKey(langCode))
-        {
-            currentLanguage = langCode;
-            Debug.Log(("Language switched to " + langCode + "."));
-        }
-    }
 }

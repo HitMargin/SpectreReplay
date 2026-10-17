@@ -22,7 +22,7 @@ public static class Settings
     public static bool CancelSave = true;
     public static bool LegacyEngine = true;
     public static bool KeybdSoundRecordActive = true;
-    public static bool FollowGameLanguage = true;
+
     public static bool KeyConvertEnabled = false;
     public static bool LimitKey = false;
     public static bool GetDataFromAsyncInput = false;
@@ -371,12 +371,13 @@ public static class Settings
         }
     }
 
+    // 面板/通知的语言**一律跟随游戏**。原先这里是 if (FollowGameLanguage) 二选一，
+    // 但那个开关实际只影响 14 语言大表（通知文案），而界面语言由
+    // Ui.Loc.RefreshLanguage 独立跟随游戏——两套并存的结果是玩家以为
+    // "界面语言可以单独设"，实际调不动。2026-10-17 按用户要求删掉分叉。
     internal static void checklang()
     {
-        if (FollowGameLanguage)
-            LocalizationManager.GetLanguages();
-        else if (LocalizationManager.currentLanguage != CurrLanguage)
-            LocalizationManager.SwitchLanguage(CurrLanguage);
+        LocalizationManager.GetLanguages();
     }
 
     // 启动时兜底：保存路径/语言/麦克风/键表缺省值补齐与解析

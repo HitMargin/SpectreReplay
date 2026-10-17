@@ -219,6 +219,31 @@ namespace UiPreview
                 new[] { "ReplayManager.UnLoadReplay(out data)" });
             fail += CheckPredicate(projectRoot, "⑫g 界面必须给出卸载入口（回放中与已装弹两处都要）",
                 "Pages\\Pages.cs", HasUnloadEntryPoints);
+            // ⑫h 「从异步输入取按键」必须**先检测游戏侧有没有开**（2026-10-17 用户要求）。
+            //
+            //    我们这侧的实现是完整的（Settings 字段 → Main 挂 Patch_UpdateInputConsumeAsync
+            //    → AsyncKeyRecorder.FlushFrame 里判它），但它依赖**游戏先打开异步输入**：
+            //    FlushFrame 的第三个条件就是 `AsyncInputManager.isActive`，为假时整帧
+            //    直接 DiscardPending。也就是说游戏侧没开时，勾上这个开关
+            //    **一点效果都没有、也不报错**。
+            //
+            //    这是「有界面但改不了」的变体——「有开关但没效果」，比没开关更糟：
+            //    玩家会以为自己配错了别的东西（键位？输入法？），永远查不到原因。
+            //
+            //    判据：该行必须读游戏侧状态 `RDC.useAsyncInput`
+            //    （= AsyncInputManager.isActive，反编译 RDC.cs:210-215 核实），
+            //    且未开时给出明确提示文案。
+            fail += CheckPredicate(projectRoot, "⑫h 异步输入开关必须先检测游戏侧是否已开启",
+                "Pages\\Pages.cs", AsyncInputChecksGameSide);
+            // ⑫i 「界面语言跟随游戏」开关必须保持删除（2026-10-17 用户要求）。
+            //
+            //    删它的理由不是"多余"而是**误导**：面板语言由 Ui.Loc.RefreshLanguage
+            //    始终跟随游戏（每次开面板重算），而 Settings.FollowGameLanguage 只
+            //    影响 14 语言大表里的通知文案。两个东西并存会让玩家以为
+            //    "界面语言可以单独设"，而实际上调了没反应。
+            //    这条判据防它被"顺手加回来"。
+            fail += CheckPredicate(projectRoot, "⑫i 「界面语言跟随游戏」开关不得回归（界面语言始终跟随游戏）",
+                "Pages\\Pages.cs", NoFollowLangToggle);
             // ⑬ 编辑器跳转必须等场景就绪再定位起始砖。
             //    **这条最容易漏**：编辑器试玩从"当前选中砖"起跳，不定位就会从
             //    第 0 块开始，整份回放的按键位置全错——而界面看不出任何异常，
@@ -518,6 +543,50 @@ namespace UiPreview
                 return true;
             }
             return false;
+        }
+
+        /// <summary>
+        /// 异步输入开关是否**真的先检测了游戏侧状态**。
+        ///
+        /// 三件必须同时成立：
+        ///   ① 存在 `RDC.useAsyncInput` 的读取（游戏侧权威判据）；
+        ///   ② 该读取处在 try/catch 里——游戏未初始化时读它会抛，
+        ///      不能因为一个提示行把整个设置页带走；
+        ///   ③ 未开时真的画出提示（`record.asyncinput.off`），
+        ///      而不是只读一下就算了。
+        ///
+        /// 只查 ① 不够：读了不提示 = 玩家依然不知道为什么不生效。
+        /// </summary>
+        private static bool AsyncInputChecksGameSide(string code)
+        {
+            string body = MethodBody(code, "DrawAsyncInputRow");
+            if (body == null) return false;
+            return body.Contains("RDC.useAsyncInput", StringComparison.Ordinal)
+                && body.Contains("catch", StringComparison.Ordinal)
+                && body.Contains("record.asyncinput.off", StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// 「界面语言跟随游戏」开关不得回归。
+        ///
+        /// 判法：`record.followlang` 这个文案键不得再被用作**控件**。
+        /// 只查"键名出现过"会把注释里的说明文字也算进去（Pages.cs 与 Loc.cs
+        /// 都留着"为什么删掉它"的解释），所以这里要求的是
+        /// 「`OnGui.Row("record.followlang"` 这种控件调用」为零。
+        /// </summary>
+        private static bool NoFollowLangToggle(string code)
+        {
+            foreach (string raw in code.Replace("\r\n", "\n").Split('\n'))
+            {
+                string line = raw.TrimStart();
+                if (line.StartsWith("//", StringComparison.Ordinal)
+                    || line.StartsWith("*", StringComparison.Ordinal)) continue;
+                if (line.Contains("Row(\"record.followlang\"", StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+            return true;
         }
 
         private static bool HasOpenLevelButton(string code)

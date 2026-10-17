@@ -36,7 +36,6 @@ public static class ConfigManager
         public bool CancelSave { get; set; }
         public bool LegacyEngine { get; set; }
         public bool KeybdSoundRecordActive { get; set; }
-        public bool FollowGameLanguage { get; set; }
         public bool KeyConvertEnabled { get; set; }
         public bool LimitKey { get; set; }
         public bool GetDataFromAsyncInput { get; set; }
@@ -219,7 +218,6 @@ public static class ConfigManager
                 CancelSave = Settings.CancelSave,
                 LegacyEngine = Settings.LegacyEngine,
                 KeybdSoundRecordActive = Settings.KeybdSoundRecordActive,
-                FollowGameLanguage = Settings.FollowGameLanguage,
                 KeyConvertEnabled = Settings.KeyConvertEnabled,
                 LimitKey = Settings.LimitKey,
                 GetDataFromAsyncInput = Settings.GetDataFromAsyncInput,
@@ -570,7 +568,6 @@ public static class ConfigManager
                 Settings.ManualSave = sets.Value<bool?>("ManualSave") ?? Settings.ManualSave;
                 Settings.LegacyEngine = sets.Value<bool?>("LegacyEngine") ?? Settings.LegacyEngine;
                 Settings.KeybdSoundRecordActive = sets.Value<bool?>("KeybdSoundRecordActive") ?? Settings.KeybdSoundRecordActive;
-                Settings.FollowGameLanguage = sets.Value<bool?>("FollowGameLanguage") ?? Settings.FollowGameLanguage;
                 Settings.KeyConvertEnabled = sets.Value<bool?>("KeyConvertEnabled") ?? Settings.KeyConvertEnabled;
                 Settings.LimitKey = sets.Value<bool?>("LimitKey") ?? Settings.LimitKey;
                 Settings.GetDataFromAsyncInput = sets.Value<bool?>("GetDataFromAsyncInput") ?? Settings.GetDataFromAsyncInput;

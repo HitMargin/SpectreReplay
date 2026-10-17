@@ -369,6 +369,20 @@ switch ($Which) {
             '            bool hot = Hover(track);' `
             '            bool hot = false;'
     }
+    'MUT-U24' {
+        # ⑫h：异步输入开关不读游戏侧状态（退回'有开关但没效果'的形态）。
+        #      做法：把游戏侧判据换成读我们自己的设置值——编译照样过、
+        #      提示照样画，但游戏侧没开时玩家永远不知道为什么。
+        #      用唯一行做锚：RDC.useAsyncInput 在 Pages.cs 只出现一次。
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' '                gameOn = RDC.useAsyncInput;' '                gameOn = GetDataFromAsyncInput;'
+    }
+    'MUT-U25' {
+        # ⑫i：把已删除的「界面语言跟随游戏」开关加回来（防回归变异）。
+        #      用单引号字符串拼出双引号，避免在 here-string 外层写转义。
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' ('                DrawAsyncInputRow();') ('                DrawAsyncInputRow(); OnGui.Row(' + [char]34 + 'record.followlang' + [char]34 + ', true, v => { });')
+    }
     'MUT-U22' {
         # ⑫e：卸载顺序颠倒——把 UnLoadReplay 与 SwitchToRecordMode 对调。
         #      形态：State 已清空却还把 PlayMode 翻回去之后才换 data，
@@ -884,7 +898,7 @@ switch ($Which) {
         ReplaceExact 'Features\Replay\KeyboardSimulation.cs' 'internal static class KeyboardSimulation' 'internal static class KeyboardSimulation { /* accidental drift */ internal static int __driftProbe = 1;'
     }
     default {
-        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-PORT1）"
+        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-PORT1）"
     }
 }
 
