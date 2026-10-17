@@ -6,5 +6,5 @@
   "Description": "关卡录制、回放与视频渲染。可边玩边录，不必重跑关卡。独立模组，不依赖 Spectre。",
   "AssemblyName": "SpectreReplay.dll",
   "EntryMethod": "SpectreReplay.Main.Load",
-  "MinimumGameVersion": "1.0.0.0"
+  "GameVersion": "2.7.0"
 }

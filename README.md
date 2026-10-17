@@ -1,5 +1,7 @@
 # SpectreReplay
 
+**English** | [简体中文](README_zh.md)
+
 Replay recording, replay playback and video rendering for *A Dance of Fire and Ice* — record as you play, no re-run needed.
 
 SpectreReplay is a UnityModManager mod (mod id `com.spectre.replay`). It records every run while you play it, plays the recording back inside the live game, and renders a replay to a video file with the audio track included. Nothing is re-simulated behind your back: playback and rendering both run on the game itself, so what you see is what the game produced.
@@ -36,7 +38,7 @@ SpectreReplay is a UnityModManager mod (mod id `com.spectre.replay`). It records
 
 ### Effect removal
 
-- **Strips chart effects before they run.** Filters and flashes, particles, decorations, camera moves, planet rotation, track animation and colour, hit and hold sounds, checkpoints, input events, frame-rate changes and repeat events can each be removed independently, so a chart can be watched clean or rendered on a machine that cannot keep up with it.
+- **Strips chart effects before they run.** Filters and flashes, particles, decorations, camera moves, planet orbit, track animation and colour, hit and hold sounds, checkpoints, input events, frame-rate changes and repeat events can each be removed independently, so a chart can be watched clean or rendered on a machine that cannot keep up with it.
 - **Applied at chart decode.** Events are dropped from the decoded level data in one place rather than by intercepting each event type at runtime, so nothing is left behind and patching stays out of it.
 - **Does not touch the file on disk.** It edits the in-memory chart only. Saving from the editor is blocked while it is active, so previewing once does not write the stripped chart back over the original; overwriting is a separate switch that is off by default.
 - **Keeps conditional decorations.** Unless you ask for *all* decorations to go, decorations referenced by conditional events are kept — otherwise those branches could never fire and the chart would look broken.
