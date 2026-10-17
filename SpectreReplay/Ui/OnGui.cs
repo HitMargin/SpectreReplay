@@ -161,6 +161,9 @@ namespace SpectreReplay.Ui
             }
 
             _openSeq = 0;
+            // 悬浮说明同理：控件在画的过程中只"登记"，鼠标移开必须当帧就清掉，
+            // 否则说明框会挂在上一次悬停的那一行上（看着像卡住了）。
+            Gui.ResetTips();
             // **不要再自己包一层 ScrollView。** UMM 已经把整个 Mods 页（含模组
             // OnGUI 的调用点）包在它自己的滚动区里：
             //   :3738  BeginScrollView(..., ExpandHeight(false))
@@ -179,6 +182,9 @@ namespace SpectreReplay.Ui
             DrawTabs();
             GUILayout.Space(4f);
             DrawPage();
+            // 说明框必须在**整页画完之后**画：它要盖在别的控件之上，
+            // 而且不能参与布局（否则会把下面的行往下顶，鼠标一动整页就跳）。
+            Gui.DrawTooltip();
             GUILayout.Space(12f);
             // 拖动滑条时落盘被推迟（见 Pages.Commit）。放在**画完**之后：
             // 这时 Input.GetMouseButton(0) 反映的是本帧真实状态，松手那一帧
@@ -327,6 +333,11 @@ namespace SpectreReplay.Ui
             // 所以它永远是 Unity 默认的圆头灰条（见 Gui.Slider 的说明）。
             Rect track = GUILayoutUtility.GetRect(Gui.CtrlW, 20f,
                 GUILayout.Width(Gui.CtrlW), GUILayout.Height(20f));
+            // 悬停说明覆盖「标签 + 滑条 + 数值框 + 单位」整行。玩家想被解释的是
+            // 这一项设置，不是那条 6px 高的槽；只认槽的话等于要求他先猜准位置。
+            // 右侧留 46+4 与下面单位区的宽度一致，改那边时别忘了这里。
+            Gui.Tip(new Rect(track.x - LabelW, track.y,
+                LabelW + track.width + FieldW + 50f, track.height), labelKey);
             float now = Gui.Slider(track, value, min, max);
             float shown = Mathf.Approximately(now, value) ? value : now;
             // 右侧数值框。**从只读 Label 改成可编辑输入框**（用户 2026-10-17 要求）：
@@ -464,8 +475,12 @@ namespace SpectreReplay.Ui
             GUILayout.BeginHorizontal();
             GUILayout.Label(Loc.T(labelKey), Gui.LabelStyle, GUILayout.Width(LabelW));
             string shown = current >= 0 && current < options.Length ? options[current] : "—";
-            if (GUILayout.Button(shown, Gui.ButtonStyle,
-                    GUILayout.Width(Gui.CtrlW), GUILayout.Height(24f)))
+            Rect dd = GUILayoutUtility.GetRect(Gui.CtrlW, 24f,
+                GUILayout.Width(Gui.CtrlW), GUILayout.Height(24f));
+            // 说明覆盖整行(标签 + 下拉框)。**不登记在展开的选项列表上**:
+            // 玩家点开下拉时是在挑值，这时候弹说明正好把选项挡住。
+            Gui.Tip(new Rect(dd.x - LabelW, dd.y, LabelW + dd.width, dd.height), labelKey);
+            if (GUI.Button(dd, shown, Gui.ButtonStyle))
             {
                 _openRow = _openRow == seq ? -1 : seq;
             }
@@ -514,9 +529,11 @@ namespace SpectreReplay.Ui
                 : (cur > 0 ? KeyName((KeyCode)cur) : Loc.T("ui.nokey"));
             // 等待按键时换成强调色按钮：这是"现在轮到你按键"的唯一提示。
             // 同页签那处：用专门样式而不是 GUI.backgroundColor（乘算会双重变暗）。
-            if (GUILayout.Button(text,
-                    waiting ? Gui.AccentButtonStyle : Gui.ButtonStyle,
-                    GUILayout.Width(Gui.CtrlW), GUILayout.Height(24f)))
+            Rect hk = GUILayoutUtility.GetRect(Gui.CtrlW, 24f,
+                GUILayout.Width(Gui.CtrlW), GUILayout.Height(24f));
+            Gui.Tip(new Rect(hk.x - LabelW, hk.y, LabelW + hk.width, hk.height), labelKey);
+            if (GUI.Button(hk, text,
+                    waiting ? Gui.AccentButtonStyle : Gui.ButtonStyle))
             {
                 int id = GetCaptureId(labelKey);
                 _capturing = _capturing == id ? 0 : id;
@@ -595,9 +612,11 @@ namespace SpectreReplay.Ui
             GUILayout.BeginHorizontal();
             // 同上：wide 用专门的强调样式，不再靠 GUI.backgroundColor 染色
             // （乘算会把贴图里烘好的底色再压一遍）。
-            bool hit = GUILayout.Button(Loc.T(labelKey),
-                wide ? Gui.PrimaryButtonStyle : Gui.ButtonStyle,
-                GUILayout.Height(28f), GUILayout.Width(wide ? 220f : 140f));
+            Rect bt = GUILayoutUtility.GetRect(wide ? 220f : 140f, 28f,
+                GUILayout.Width(wide ? 220f : 140f), GUILayout.Height(28f));
+            Gui.Tip(bt, labelKey);
+            bool hit = GUI.Button(bt, Loc.T(labelKey),
+                wide ? Gui.PrimaryButtonStyle : Gui.ButtonStyle);
             GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
             if (hit)
@@ -631,6 +650,9 @@ namespace SpectreReplay.Ui
             // LabelW+360 先溢出（下拉宽 70px 才会露不出来）。
             Rect box = GUILayoutUtility.GetRect(Gui.CtrlW, 24f,
                 GUILayout.Width(Gui.CtrlW), GUILayout.Height(24f));
+            // 悬停说明只认输入框那一块，不并上右边的「更改…」按钮：
+            // 那颗按钮有自己的说明，两个控件的解释挤在一起就分不清在说谁。
+            Gui.Tip(box, labelKey);
             // 选目录按钮。**放在方框右边而不是另起一行**：截图里方框右侧本来
             // 就空着约 120px（后面跟的是 FlexibleSpace），按钮塞进那块空地，
             // 既不用加宽控件列、也不会让这一行比上下行宽一截。
@@ -640,8 +662,7 @@ namespace SpectreReplay.Ui
                     GUILayout.Width(90f), GUILayout.Height(24f)))
             {
                 _pickOutDirPending = true;
-            }
-            GUILayout.FlexibleSpace();
+            }            GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
 
             // 画在 EndHorizontal 之后：本控件不参与 GUILayout 布局（矩形已经取好），

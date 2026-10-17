@@ -99,6 +99,12 @@ namespace SpectreReplay.Ui
         internal static readonly Color FieldBgHover     = new Color(0.26f, 0.30f, 0.37f, 1f);
         internal static readonly Color FieldBorderHover = new Color(1f, 1f, 1f, 0.45f);
 
+        // ── 悬浮说明（tooltip）调色板 ────────────────────────────
+        // **底色必须接近不透明。** 说明框会盖在卡片与文字之上，半透明底会把
+        // 下面的行文字透上来，两层字叠在一起比没有说明更难读。
+        internal static readonly Color TipBg     = new Color(0.05f, 0.06f, 0.08f, 0.98f);
+        internal static readonly Color TipBorder = new Color(0.35f, 0.68f, 0.95f, 0.95f);
+
         /// <summary>标签列的固定宽度。不同语言下标签长短差很多，
         /// 自动排布会让控件列左右跳动，拖滑条时尤其明显。</summary>
         internal const float LabelW = 190f;
@@ -112,7 +118,7 @@ namespace SpectreReplay.Ui
         // 改字号/字体），不重建就会一直用旧字号。
         private static GUISkin _skin;
         private static Font _font;
-        private static GUIStyle _label, _labelC, _bold, _boldC, _h1, _h2, _small, _smallC, _note, _pad, _btn, _btnPrimary, _btnQuiet, _btnAccent;
+        private static GUIStyle _label, _labelC, _bold, _boldC, _h1, _h2, _small, _smallC, _note, _pad, _btn, _btnPrimary, _btnQuiet, _btnAccent, _tipStyle;
 
         private static void Ensure()
         {
@@ -145,6 +151,16 @@ namespace SpectreReplay.Ui
             _btnPrimary = MakeButton(GUI.skin.button, Accent, Lighten(Accent, 0.15f), Color.white, true);
             _btnQuiet = MakeButton(GUI.skin.button, BtnQuiet, Lighten(BtnQuiet, 0.10f), DimCol, false);
             _btnAccent = MakeButton(GUI.skin.button, Accent, Lighten(Accent, 0.15f), Color.white, true);
+            // 说明框正文。**必须 wordWrap**（长句不折行会一路画出框外），
+            // 且字号与正文一致——说明文字比正文小一档时，在 1080p 下
+            // 中文字形会糊成一团。
+            _tipStyle = new GUIStyle(GUI.skin.label)
+            {
+                alignment = TextAnchor.UpperLeft,
+                wordWrap = true,
+                clipping = TextClipping.Clip,
+                fontSize = GUI.skin.label.fontSize,
+            };
         }
 
         /// <summary>
@@ -494,7 +510,10 @@ namespace SpectreReplay.Ui
             GUILayout.Label(Loc.T(labelKey), _label, GUILayout.Width(LabelW));
             Rect track = GUILayoutUtility.GetRect(44f, 20f, GUILayout.Width(44f), GUILayout.Height(20f));
             bool clicked = GUI.Button(track, GUIContent.none, GUIStyle.none);
-            // hover：与按钮同一套语汇（悬停即提亮）。关闭态的 pill 底色是
+            // 悬停区 = 标签列 + 开关本体。标签列宽固定（LabelW），所以不用
+            // GetLastRect 就能反推出整行的矩形——而 GetLastRect 在本文件里是
+            // 被判据 ③ 明令禁止的（它返回的是最后一个子控件，不是组的矩形）。
+            Tip(RowHit(track, LabelW), labelKey);            // hover：与按钮同一套语汇（悬停即提亮）。关闭态的 pill 底色是
             // 半透明白，在深色卡片上本来就淡，不给反馈会让人以为点不动。
             bool hot = Hover(track);
             Fill(track, value ? (hot ? Lighten(Accent, 0.10f) : Accent)
@@ -515,6 +534,117 @@ namespace SpectreReplay.Ui
             {
                 onChange?.Invoke(!value);
             }
+        }
+
+        // ── 悬浮说明（tooltip） ─────────────────────────────────
+        //
+        // **为什么必须集中到一处画。** IMGUI 只能按调用顺序画，而说明框要盖在
+        // 别的控件之上、又不能把布局撑开——所以控件只"登记"自己这一行在哪，
+        // 真正的绘制留到整页画完（<see cref="DrawTooltip"/>）再一次性做。
+        //
+        // **为什么不复用 UMM 的 tooltipBox。** 那是 UnityModManager 的内部字段，
+        // 私有且没有公开的绘制入口（本文件开头那条注释记的就是这件事）。
+        private static string _tipKey;
+        private static Rect _tipAnchor;
+
+        /// <summary>每帧开头清一次：鼠标移开后说明必须消失，不能挂在上一帧的控件上。</summary>
+        internal static void ResetTips()
+        {
+            _tipKey = null;
+        }
+
+        /// <summary>
+        /// 把控件矩形向左扩出标签列，得到「整行」的命中区。
+        ///
+        /// **为什么要扩到标签上。** 玩家说「鼠标移到功能上」，而一行里真正写名字
+        /// 的是左边那段标签——只认右边那颗小小的开关/滑条，等于要求玩家先猜
+        /// 「哪块算这个功能」。扩出去之后指针落在名字上也会弹说明。
+        ///
+        /// **为什么不用 <c>GetLastRect</c> 去拿标签自己的矩形。** 判据 ③ 明令
+        /// 禁止它（返回的是最后一个**控件**的矩形，紧跟 Begin* 还会抛异常），
+        /// 而标签宽度是固定的 <see cref="LabelW"/>，向左推即可，不必回头去取。
+        /// </summary>
+        private static Rect RowHit(Rect ctrl, float labelW)
+            => new Rect(ctrl.x - labelW, ctrl.y, labelW + ctrl.width, ctrl.height);
+
+        /// <summary>
+        /// 登记「鼠标悬停在 <paramref name="r"/> 上时显示 <paramref name="labelKey"/> 的说明」。
+        ///
+        /// 说明正文的键是 <c>labelKey + ".tip"</c>，另有专门的闸门判据保证每个
+        /// 控件都写了两种语言——漏写时这里**什么都不弹**，而不是把
+        /// "render.fps.tip" 这种原始键名糊到玩家脸上。
+        ///
+        /// 同一帧内后登记的赢：它画在更上层，视觉上就该由它解释。
+        /// </summary>
+        internal static void Tip(Rect r, string labelKey)
+        {
+            if (string.IsNullOrEmpty(labelKey) || Event.current == null)
+            {
+                return;
+            }
+            if (!r.Contains(Event.current.mousePosition))
+            {
+                return;
+            }
+            _tipKey = labelKey;
+            _tipAnchor = r;
+        }
+
+        /// <summary>
+        /// 画当前登记的说明框。**必须在整页画完之后调用**（见 <see cref="Tip"/>）。
+        ///
+        /// 三处容易踩的点：
+        /// ① 只在 Repaint 趟画——Layout 趟画的东西会被丢掉，文字测量还会算两遍；
+        /// ② 宽度写死、高度按内容算（<c>CalcHeight</c>）。反过来（高度写死）会让
+        ///    长句被裁掉半句，而它恰好是本项目最容易被忽略的缺陷形态；
+        /// ③ 贴边时翻到控件上方。悬停最后一行时说明框往下画会落到窗口外，
+        ///    玩家看到的不是"说明没了"，而是"这一行没有说明"——两种现象分不开。
+        /// </summary>
+        internal static void DrawTooltip()
+        {
+            if (_tipKey == null || Event.current == null)
+            {
+                return;
+            }
+            if (Event.current.type != EventType.Repaint)
+            {
+                return;
+            }
+            string key = _tipKey + ".tip";
+            string text = Loc.T(key);
+            // Loc.T 查不到时返回键名本身：那是"没写说明"，不是说明内容
+            if (string.IsNullOrEmpty(text) || text == key)
+            {
+                return;
+            }
+
+            Ensure();
+            const float W = 320f;
+            const float PadX = 10f;
+            const float PadY = 8f;
+            float inner = W - PadX * 2f;
+            var content = new GUIContent(text);
+            float h = _tipStyle.CalcHeight(content, inner) + PadY * 2f;
+
+            float x = _tipAnchor.x;
+            float maxX = Screen.width - W - 8f;
+            if (x > maxX) x = maxX;
+            if (x < 8f) x = 8f;
+
+            float below = _tipAnchor.yMax + 6f;
+            float above = _tipAnchor.y - h - 6f;
+            float y = below;
+            if (below + h > Screen.height - 8f && above > 8f)
+            {
+                y = above;
+            }
+
+            Rect box = new Rect(x, y, W, h);
+            // 底色近乎不透明：说明框盖在别的行文字上，半透明会让两层字叠起来
+            Fill(box, TipBg);
+            Frame(box, TipBorder);
+            Text(new Rect(box.x + PadX, box.y + PadY, inner, h - PadY * 2f),
+                text, TextCol, _tipStyle);
         }
     }
 }

@@ -261,8 +261,48 @@ namespace UiPreview
                 "Ui\\TextField.cs",
                 s => s.Contains("Gui.Hover(box)", StringComparison.Ordinal)
                      && s.Contains("FieldBgHover", StringComparison.Ordinal));
+            // ⑫ 每个控件标签都必须有悬停说明(.<key>.tip 中英两套齐)。
+            //
+            //    2026-10-17 用户要求：「鼠标移到功能上 自动弹出功能的介绍」。
+            //    这条判据守的不是"画得出框"(那是 Gui.DrawTooltip 的事)，而是
+            //    **每一项功能都真的写了说明**--没写的那个控件悬停上去毫无反应，
+            //    而玩家分不清"这行没有说明"和"说明功能坏了"，只会重复悬停。
+            //
+            //    **为什么按标签键判而不是按控件个数判**：说明是挂在 labelKey 上的
+            //    (见 Gui.Tip)，同一个键在两处用到只需要写一条说明;反过来按
+            //    调用行数判，会把"同一键两处用"误报成漏写。
+            fail += Check(projectRoot,
+                "⑫ 每个控件标签都必须有悬停说明(中英两套齐)",
+                "Pages\\\\Pages.cs",
+                s => EveryControlHasTip(s, projectRoot));
+            // ⑬ 悬停说明必须**真的接上**(⑫ 只管"说明写了没有")。
+            //
+            //    ⑫ 与 ⑬ 的分工正好是"内容"与"接线"：说明文案写得再齐，
+            //    只要 DrawTooltip 没被调用、或者 ResetTips 没在帧首清空，
+            //    悬停上去照样毫无反应 -- 而那正是本项目反复栽的
+            //    「有数据、链路断、界面没效果」那一族。
+            fail += Check(projectRoot,
+                "⑬a 每帧必须清空悬停登记(否则说明框挂在上一次悬停的行上)",
+                "Ui\\\\OnGui.cs",
+                s => s.Contains("Gui.ResetTips();", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "⑬b 说明框必须在整页画完之后画(先于 DrawPage 会被后面的控件盖住)",
+                "Ui\\\\OnGui.cs",
+                s => TooltipDrawnAfterPage(s));
+            fail += Check(projectRoot,
+                "⑬c 开关必须登记悬停说明",
+                "Ui\\\\Gui.cs",
+                s => { var body = MethodBody(s, "Switch"); return body != null && body.Contains("Tip(", StringComparison.Ordinal); });
+            fail += Check(projectRoot,
+                "⑬d 五种行控件都必须登记悬停说明(slider/dropdown/hotkey/input/button)",
+                "Ui\\\\OnGui.cs",
+                s => AllRowControlsTip(s));
+            fail += Check(projectRoot,
+                "⑬e 说明框必须只在 Repaint 画且高度按内容算",
+                "Ui\\\\Gui.cs",
+                s => TooltipBodyIsSane(s));
             if (fail == 0)
-                Console.WriteLine("    ✓ 十六条界面形状判据都成立");
+                Console.WriteLine("    ✓ 二十二条界面形状判据都成立");
             return fail;
         }
 
@@ -595,6 +635,109 @@ namespace UiPreview
             return sb.ToString();
         }
 
+        /// <summary>
+        /// 页面里每一个控件标签键，是否都有对应的 `<key>.tip` 说明(中英两套齐)。
+        ///
+        /// **判据的输入是外部事实**(Loc.cs 的两张表与页面源码)，不是"我自己以为
+        /// 写了"。提取方式按调用形状匹配 `OnGui.Row*("<key>"` 与
+        /// `OnGui.Button("<key>"`--键都在**第一个实参**，与后续参数无关。
+        ///
+        /// 三种失败都要能抓：
+        ///   ① 某个控件**根本没有** .tip(悬停无反应，玩家分不清是没写还是坏了);
+        ///   ② 只有中文有、英文没有(英文界面下弹不出说明);
+        ///   ③ 只有英文有、中文没有(中文界面下弹不出说明)。
+        ///
+        /// 找不到任何控件调用时返回 false--判据的默认姿态是不信："一处都没
+        /// 匹配到"更可能是判据自己失效(有人改了调用形状)，而不是"全都合规"。
+        /// </summary>
+        private static bool EveryControlHasTip(string pagesCode, string projectRoot)
+        {
+            var keys = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
+            // Row / RowSlider / RowDropdown / RowHotkey / RowInput / Button
+            // 共用同一个形状：OnGui.<Method>("<key>", ...
+            foreach (System.Text.RegularExpressions.Match m in
+                     System.Text.RegularExpressions.Regex.Matches(pagesCode,
+                         @"OnGui\.(?:Row|RowSlider|RowDropdown|RowHotkey|RowInput|Button)\(\s*""([a-z][a-z0-9_.]+)"""))
+            {
+                keys.Add(m.Groups[1].Value);
+            }
+            if (keys.Count == 0) return false;
+
+            string locPath = Path.Combine(projectRoot, "Ui", "Loc.cs");
+            if (!File.Exists(locPath)) return false;
+            string loc = SrcUtil.Clean(File.ReadAllText(locPath));
+
+            // 中英两表分开取：只查"整文件出现过 <key>.tip"会让"只写了一种语言"
+            // 蒙混过关，而那正是英文玩家看不到说明的形态。
+            int zhStart = loc.IndexOf("Dictionary<string, string> Zh", StringComparison.Ordinal);
+            int enStart = loc.IndexOf("Dictionary<string, string> En", StringComparison.Ordinal);
+            if (zhStart < 0 || enStart < 0 || enStart < zhStart) return false;
+            string zhTable = loc.Substring(zhStart, enStart - zhStart);
+            string enTable = loc.Substring(enStart);
+
+            foreach (string k in keys)
+            {
+                string tip = k + ".tip";
+                // 比较的是**带引号的键名**（"<key>.tip"），不是裸键名：
+                // 裸串会让 "render.fps.tip" 命中 "render.fps.tip.extra" 这类前缀重叠，
+                // 而本项目已经栽过一次前缀假判据（playback.openlevel）。
+                string want = "\"" + tip + "\"";
+                if (!zhTable.Contains(want, StringComparison.Ordinal)) return false;
+                if (!enTable.Contains(want, StringComparison.Ordinal)) return false;
+            }
+            return true;
+        }
+        /// <summary>
+        /// 说明框是否画在整页**之后**(DrawPage 之后、Space 之前)。
+        ///
+        /// 顺序是这条判据的全部内容：IMGUI 按调用顺序画，先画的会被后画的盖住。
+        /// 把 DrawTooltip 挪到 DrawPage 前面，说明框就会压在页签与卡片底下--
+        /// 而"完全看不见"与"没写说明"在玩家眼里是同一件事。
+        ///
+        /// 同时要求 ResetTips 出现在 DrawPage 之前：清空必须早于登记，
+        /// 否则本帧登记完又被自己清掉，永远弹不出来。
+        /// </summary>
+        private static bool TooltipDrawnAfterPage(string code)
+        {
+            int page = code.IndexOf("DrawPage();", StringComparison.Ordinal);
+            int tip = code.IndexOf("Gui.DrawTooltip();", StringComparison.Ordinal);
+            int reset = code.IndexOf("Gui.ResetTips();", StringComparison.Ordinal);
+            return page >= 0 && tip >= 0 && reset >= 0 && page < tip && reset < page;
+        }
+
+        /// <summary>
+        /// 五种行控件(RowSlider / RowDropdown / RowHotkey / RowInput / 整行 Button)
+        /// 是否都在自己的方法体里登记了悬停说明。
+        ///
+        /// **逐个方法判而不是整文件搜 <c>Tip(</c>**：整文件搜的话，只要有一处
+        /// 调了 Tip，其余四处漏写也会绿--正是"改一处算全篇"那种假判据。
+        /// </summary>
+        private static bool AllRowControlsTip(string code)
+        {
+            foreach (string m in new[] { "RowSlider", "RowDropdown", "RowHotkey", "RowInput", "Button" })
+            {
+                string body = MethodBody(code, m);
+                if (body == null || !body.Contains("Tip(", StringComparison.Ordinal)) return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 说明框的实现是否三件齐：只在 Repaint 画、高度按内容算、宽度不随内容膨胀。
+        ///
+        /// ① **只在 Repaint**：Layout 趟画的东西会被丢掉，文字测量还会多算一遍;
+        /// ② **高度按内容**：写死高度会让长句被裁掉半句，而"说明只显示半句话"
+        ///    玩家不会当成缺陷报回来，只会以为说明就这么点内容;
+        /// ③ **宽度写死**：跟着内容走会让长说明撑满整行甚至溢出窗口。
+        /// </summary>
+        private static bool TooltipBodyIsSane(string code)
+        {
+            string body = MethodBody(code, "DrawTooltip");
+            if (body == null) return false;
+            return body.Contains("EventType.Repaint", StringComparison.Ordinal)
+                && body.Contains("CalcHeight(", StringComparison.Ordinal)
+                && body.Contains("const float W =", StringComparison.Ordinal);
+        }
         private static int Check(string projectRoot, string name, string rel,
             Func<string, bool> predicate)
         {

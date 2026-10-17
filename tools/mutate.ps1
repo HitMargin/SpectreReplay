@@ -377,6 +377,55 @@ switch ($Which) {
         Backup 'Pages\Pages.cs'
         ReplaceExact 'Pages\Pages.cs' '                gameOn = RDC.useAsyncInput;' '                gameOn = GetDataFromAsyncInput;'
     }
+    'MUT-U32' {
+        # (4) 滑条那行不再登记说明(只删一处：其余四处仍在，整文件搜 Tip( 的假判据会绿)。
+        # **两行一起删**：这条调用跨两行，只删首行会留下孤立的续行，括号深度
+        # 从此错位，HardTextCheck 的 Debug.Log 记账跟着失效，误报两条不存在的
+        # 硬编码中文(实测)。也不能写成 Gui.Tip2(...)：那是编译错误，证明的是
+        # '编译不过'而不是'被判据抓到'。
+        Backup 'Ui\OnGui.cs'
+        $ls = Lines 'Ui\OnGui.cs'
+        $n = 0
+        $out2 = New-Object 'Collections.Generic.List[string]'
+        $skip = 0
+        foreach ($ln in $ls) {
+            if ($skip -gt 0) { $skip--; $n++; continue }
+            if ($ln.Contains('Gui.Tip(new Rect(track.x - LabelW, track.y,')) { $skip = 1; $n++; continue }
+            $out2.Add($ln)
+        }
+        if ($n -ne 2) { throw ('MUT-U32 unexpected count=' + $n) }
+        SetLines 'Ui\OnGui.cs' $out2.ToArray()
+    }
+    'MUT-U26' {
+        # (1)(2)只留 1 个都算没做。删掉某条 .tip 中文表项。
+        Backup 'Ui\Loc.cs'
+        ReplaceExact 'Ui\Loc.cs' ('{ "render.fps.tip", "成片帧率。越高越流畅，渲染耗时按比例增长。" },') ('')
+    }
+    'MUT-U27' {
+        # (2) 只删英文表项(中英漂移)。
+        Backup 'Ui\Loc.cs'
+        ReplaceExact 'Ui\Loc.cs' ('{ "render.fps.tip", "Output framerate. Higher means smoother, and render time grows proportionally." },') ('')
+    }
+    'MUT-U28' {
+        # (3) 删掉整段说明框绘制(内容齐但接线断)。
+        Backup 'Ui\OnGui.cs'
+        ReplaceExact 'Ui\OnGui.cs' ('            Gui.DrawTooltip();') ('')
+    }
+    'MUT-U29' {
+        # (3) 把清空挪到页末(等价于没清空：本帧登记完好清掉)。
+        Backup 'Ui\OnGui.cs'
+        ReplaceExact 'Ui\OnGui.cs' ('            Gui.ResetTips();') ('')
+    }
+    'MUT-U30' {
+        # (1) 开关不再登记说明。
+        Backup 'Ui\Gui.cs'
+        ReplaceExact 'Ui\Gui.cs' ('            Tip(RowHit(track, LabelW), labelKey);') ('')
+    }
+    'MUT-U31' {
+        # (5) 说明框改成 Layout 趟也画。
+        Backup 'Ui\Gui.cs'
+        ReplaceExact 'Ui\Gui.cs' ('            if (Event.current.type != EventType.Repaint)') ('            if (false)')
+    }
     'MUT-U25' {
         # ⑫i：把已删除的「界面语言跟随游戏」开关加回来（防回归变异）。
         #      用单引号字符串拼出双引号，避免在 here-string 外层写转义。
@@ -898,7 +947,7 @@ switch ($Which) {
         ReplaceExact 'Features\Replay\KeyboardSimulation.cs' 'internal static class KeyboardSimulation' 'internal static class KeyboardSimulation { /* accidental drift */ internal static int __driftProbe = 1;'
     }
     default {
-        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-PORT1）"
+        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-PORT1）"
     }
 }
 
