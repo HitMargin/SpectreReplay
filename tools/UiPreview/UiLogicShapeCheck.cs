@@ -1,4 +1,4 @@
-// 界面层的控制流/接线断言。
+﻿// 界面层的控制流/接线断言。
 //
 // 为什么单独一组：上一轮（偏差 25）11 条界面缺陷在 116 条断言全绿的情况下
 // 全部漏网，原因是闸门没有界面层。补上的 UiLogicCheck 那 6 组盯着"控制流形状"，
@@ -273,7 +273,7 @@ namespace UiPreview
             //    调用行数判，会把"同一键两处用"误报成漏写。
             fail += Check(projectRoot,
                 "⑫ 每个控件标签都必须有悬停说明(中英两套齐)",
-                "Pages\\\\Pages.cs",
+                "Pages\\Pages.cs",
                 s => EveryControlHasTip(s, projectRoot));
             // ⑬ 悬停说明必须**真的接上**(⑫ 只管"说明写了没有")。
             //
@@ -328,19 +328,19 @@ namespace UiPreview
             //    Pages.cs（⑫ 就是），放在这里才真的测到。
             fail += Check(projectRoot,
                 "⑱b 去特效六个子分组必须挂总开关(关掉时整块压暗)",
-                "Pages\\\\Pages.cs",
+                "Pages\\Pages.cs",
                 s => EffectsSectionsDimWithMaster(s));
             fail += Check(projectRoot,
                 "⑱c 录制页保存策略必须挂录制总开关",
-                "Pages\\\\Pages.cs",
+                "Pages\\Pages.cs",
                 s => RecordRowsDimWithReplay(s));
             fail += Check(projectRoot,
                 "⑱d 渲染参数整块必须挂渲染总开关",
-                "Pages\\\\Pages.cs",
+                "Pages\\Pages.cs",
                 s => s.Contains("Gui.Dim(!RenderOn, DrawRenderOptions)", StringComparison.Ordinal));
             fail += Check(projectRoot,
                 "⑱e 键盘音两项必须挂录音开关",
-                "Pages\\\\Pages.cs",
+                "Pages\\Pages.cs",
                 s => KeybdRowsDimWithRecord(s));
             // ⑲ 更新检查：三种态必须分开说，且版本比较方向不能反。
             //
@@ -359,27 +359,178 @@ namespace UiPreview
             //    整个 else 分支删掉时照样绿。
             fail += Check(projectRoot,
                 "⑲a 更新状态：有新版/已最新/未检查三态必须分开（已最新必须依据「查过没有」，不是 newest!=null）",
-                "Pages\\\\Pages.cs",
+                "Pages\\Pages.cs",
                 s => UpdateStatesAreDistinct(s));
             fail += Check(projectRoot,
                 "⑲a2 必须真去读 UMM 的 Params.LastUpdateCheck(区分查过与没查过的唯一旁证)",
-                "Pages\\\\Pages.cs",
+                "Pages\\Pages.cs",
                 s => UpdateReadsLastUpdateCheck(s));
             fail += Check(projectRoot,
                 "⑲b 版本比较方向必须是 newest > current",
-                "Pages\\\\Pages.cs",
+                "Pages\\Pages.cs",
                 s => UpdateVersionCompareDirection(s));
             fail += Check(projectRoot,
                 "⑲c 当前版本必须读 ModEntry.Version(Version 类型),不是 Info.Version(string)",
-                "Pages\\\\Pages.cs",
+                "Pages\\Pages.cs",
                 s => UpdateUsesModEntryVersion(s));
             fail += Check(projectRoot,
                 "⑲d info.json 必须填 Repository 与 HomePage(UMM 靠这两个字段检查更新)",
                 "info.json",
                 s => InfoJsonHasUpdateFields(s));
+            // ⑳ 拨开关必须**当场**刷新编辑器保存按钮（2026-10-18 用户报的缺陷：
+            //    「为什么去特效的允许覆盖关卡开关后不会实时生效？」）。
+            //
+            //    形态：`Commit()` 只做「落盘 + 重挂补丁」，`SpectrePatchHub.Refresh()`
+            //    只重挂补丁——**两者都不碰任何 UI 状态**。而全仓唯一写
+            //    `buttonSave.interactable` 的是 `EffectRemover.SetEditorSaveButtons`，
+            //    它只被 `scnEditor.LoadGameScene` 的 Postfix 调一次。于是按钮态是
+            //    **进编辑器那一刻定死的**，之后拨开关纹丝不动。
+            //
+            //    最坏的后果不是「按钮没变」，而是**两边脱节**：`EffectRemoverEnableSave`
+            //    已改成允许、`SaveLevelEditorAction.Execute` 的 Prefix 也已放行，
+            //    但按钮仍是禁用态 ⇒ 玩家根本点不动；反过来按钮亮着、Prefix 在拦，
+            //    点了没反应且不报错。
+            //
+            //    ⑳a 与 ⑳b 分开判：单看「文件里出现过 RefreshEditorSaveButtons」
+            //    是假判据——总开关那一处的 RestoreEditorSaveButtons 也在同一段附近，
+            //    漏掉「允许覆盖关卡」那一处照样绿。
+            fail += Check(projectRoot,
+                "⑳a 「允许覆盖关卡」拨动后必须当场刷新保存按钮(Commit 只落盘、不碰 UI)",
+                "Pages\\Pages.cs",
+                s => RowOnChangeCalls(s, "effects.enablesave", "RefreshEditorSaveButtons"));
+            fail += Check(projectRoot,
+                "⑳b 去特效总开关 onChange 两半都要刷新按钮(只接关掉那一半会留下脱节)",
+                "Pages\\Pages.cs",
+                s => EffectMasterToggleRefreshesButtons(s));
+            // ㉑ 特殊按键过滤必须**真的会生效**（2026-10-18 接线）。
+            //
+            //    这功能的失败方式是本项目最典型的一种：补丁、界面、配置三段全在，
+            //    只差 `FeatureKeys` 与 `SetFeatureToggle` —— PatchHub 对未注册的
+            //    功能按「关闭」处理、只打一行告警，于是玩家勾了一堆键、回放里照样
+            //    没有，而这个现象与「游戏本来就不录这些键」一模一样。
+            //
+            //    ㉑a 两条输入路径**各自**都要挂 Feature —— 只挂一条时，玩家切到
+            //    另一种输入模式就静默失效，现象与「根本没实现」无法区分。
+            //    ㉑b Main 必须注册谓词（否则 ㉑a 挂的 Feature 永远不会被求值成真）。
+            //    ㉑c Escape 不能被放开 —— 它来自同一个返回列表里的 `Cancel()`，
+            //    放开会让回放真的按下取消键、打断进关流程。
+            fail += Check(projectRoot,
+                "㉑a 特殊按键两条输入路径都要挂 Feature(轮询 + 异步，缺一是静默半残)",
+                "Features\\Replay\\Patch_SpecialKeys.cs",
+                s => CountClosedArgs(s, "Feature = FeatureKeys.SpecialKeys") == 2);
+            fail += Check(projectRoot,
+                "㉑b Main 必须注册 SpecialKeys 的谓词(未注册 = 按关闭处理)",
+                "Main.cs",
+                s => s.Contains("FeatureKeys.SpecialKeys,", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㉑c Escape 不得进入允许集(它是取消键，放开会打断进关流程)",
+                "Features\\Replay\\Patch_SpecialKeys.cs",
+                s => s.Contains("KeyCode.Escape", StringComparison.Ordinal)
+                     && s.Contains("\"Escape\"", StringComparison.Ordinal));
             if (fail == 0)
-                Console.WriteLine("    ✓ 三十一条界面形状判据都成立");
+                Console.WriteLine("    ✓ 三十六条界面形状判据都成立");
             return fail;
+        }
+
+        /// <summary>
+        /// 某个 <c>OnGui.Row(&quot;key&quot;, ...)</c> 的 **onChange 回调体**里是否调用了
+        /// <paramref name="call"/>。
+        ///
+        /// **必须限定在这条调用的范围内**，不能整段 Contains：那一行收尾还有
+        /// <c>, EffectRemoverOn</c> 这种门控实参，整段搜会把「挂了开关」当成
+        /// 「刷新了按钮」。做法：从键名那行扫到收尾 <c>);</c>，在拼起来的整段里找。
+        ///
+        /// 键名要带引号一起匹配：<c>("effects.on"</c> 不加尾引号的话会命中
+        /// <c>OnGui.Note("effects.on.note")</c>——前缀重叠，锚点就飘了。
+        /// </summary>
+        private static bool RowOnChangeCalls(string code, string key, string call)
+        {
+            string body = CallBody(code, "(\"" + key + "\"");
+            return body != null && body.Contains(call, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// 取出以 <paramref name="open"/> 开头的那一条调用的**完整实参文本**。
+        ///
+        /// **不能靠「某一行以 <c>);</c> 结尾」找收尾**：本文件第一版就是那么写的，
+        /// 而 onChange 体里第一句 <c>Commit();</c> 恰好以 <c>);</c> 结尾，循环当场
+        /// 停在它上面，后面的 <c>RefreshEditorSaveButtons();</c> 根本没被扫到
+        /// ⇒ 判据恒红，而红的样子看起来像「代码真没接刷新」（实测）。
+        /// 真正的收尾只能按**括号深度**判。
+        ///
+        /// 返回 null 表示找不到锚点。判据的默认姿态是不信：找不到更可能是
+        /// 锚点失效（有人改了调用形状），而不是「全都合规」。
+        /// </summary>
+        private static string CallBody(string code, string open)
+        {
+            int at = code.IndexOf(open, StringComparison.Ordinal);
+            if (at < 0) return null;
+            // open 的**首字符就是那个 '('**。这里第一版写成从 at + open.Length - 1
+            // 往后找 '('，结果落到了收尾引号之后、命中括号体里的 `Commit(`，
+            // 深度从那里起算 ⇒ 判据恒红而看起来像代码没接刷新（实测）。
+            int start = at;
+            int depth = 0, i = start;
+            for (; i < code.Length; i++)
+            {
+                char c = code[i];
+                if (c == '(') depth++;
+                else if (c == ')')
+                {
+                    depth--;
+                    if (depth == 0) { i++; break; }
+                }
+            }
+            return code.Substring(at, i - at);
+        }
+
+        /// <summary>
+        /// 去特效总开关的 onChange 是否**两半都**刷新了保存按钮。
+        ///
+        /// 只判「出现过 RestoreEditorSaveButtons」是假判据——原先就只接了那一半，
+        /// 而它恰好就是这个缺陷的形态。必须同时看到「关掉→恢复」与「打开→按设置重算」。
+        /// </summary>
+        private static bool EffectMasterToggleRefreshesButtons(string code)
+        {
+            string body = CallBody(code, "(\"effects.on\"");
+            if (body == null) return false;
+            return body.Contains("RestoreEditorSaveButtons", StringComparison.Ordinal)
+                && body.Contains("RefreshEditorSaveButtons", StringComparison.Ordinal);
+        }
+
+        private static int CountOccurrences(string s, string needle)
+        {
+            int n = 0, i = 0;
+            while (true)
+            {
+                int at = s.IndexOf(needle, i, StringComparison.Ordinal);
+                if (at < 0) return n;
+                n++;
+                i = at + needle.Length;
+            }
+        }
+
+        /// <summary>
+        /// 数「**完整闭合**的实参」出现次数：<paramref name="needle"/> 之后必须紧跟
+        /// <c>)</c> 或 <c>,</c>（允许中间有空白）。
+        ///
+        /// **为什么不能直接用 <c>CountOccurrences</c>**：那是子串计数，把
+        /// <c>Feature = FeatureKeys.SpecialKeys</c> 改成
+        /// <c>...SpecialKeys_DISABLED</c> 之后，前者仍是后者的**前缀**，
+        /// 计数照样是 2 ⇒ 变异改了代码而判据仍绿（MUT-U42 实测踩到，
+        /// 与本项目早前「playback.openlevel 前缀假判据」同一形态）。
+        /// </summary>
+        private static int CountClosedArgs(string s, string needle)
+        {
+            int n = 0, i = 0;
+            while (true)
+            {
+                int at = s.IndexOf(needle, i, StringComparison.Ordinal);
+                if (at < 0) return n;
+                int k = at + needle.Length;
+                while (k < s.Length && (s[k] == ' ' || s[k] == '\t' || s[k] == '\r' || s[k] == '\n')) k++;
+                if (k >= s.Length || s[k] == ')' || s[k] == ',') n++;
+                i = at + needle.Length;
+            }
         }
 
         // ── ⑱ 系列：总开关关掉时子设置必须压暗 ─────────────────────

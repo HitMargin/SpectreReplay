@@ -920,20 +920,48 @@ namespace SpectreReplay.Pages
                 {
                     EffectRemoverOn = v;
                     Commit();
-                    // 关掉时把编辑器的保存按钮放回可用态。**不接这一下会留下
-                    // 一颗永远点不动的保存按钮**——补丁被卸载了，但按钮的
-                    // interactable 还停在禁用态，玩家只能重启游戏。
+                    // 总开关一动，编辑器的保存按钮**必须当场重算**。
+                    //
+                    // **两半都要，只接一半是 2026-10-18 用户报的那个缺陷**
+                    // （「允许覆盖关卡开关后不会实时生效」）：
+                    //   · 关掉 → 补丁被卸载，但按钮的 interactable 还停在禁用态，
+                    //     玩家只能重启游戏（这一半原先就有）；
+                    //   · 打开 → 按钮**仍停在旧态**，而 Prefix 已经放行。于是
+                    //     「能不能存盘」由那颗按钮的 UI 状态决定，不是由
+                    //     SaveLevelEditorAction.Execute 的 Prefix 决定——两边脱节。
+                    //
+                    // 为什么原先不生效：`Commit()` 只做「落盘 + 重挂补丁」，
+                    // 它**不碰任何 UI 状态**；而全仓唯一写 buttonSave.interactable
+                    // 的是 EffectRemover.SetEditorSaveButtons，只在
+                    // `scnEditor.LoadGameScene` 的 Postfix 被调一次。也就是说
+                    // 按钮态是**进编辑器那一刻定死的**，之后拨开关纹丝不动。
+                    //
+                    // 非编辑器场景调用安全：SetEditorSaveButtons 里先判
+                    // `SceneManager.GetActiveScene().name != "scnEditor"` 就早退。
                     if (!v)
                     {
                         EffectRemover.RestoreEditorSaveButtons();
+                    }
+                    else
+                    {
+                        EffectRemover.RefreshEditorSaveButtons();
                     }
                 });
                 OnGui.Note("effects.on.note");
                 // 「允许覆盖关卡」跟着去特效开关走：功能没开时它毫无意义。
                 // **现在有禁用态了**（Gui.Dim），所以这两项真的会压暗；
                 // 原先那句「不禁用——本项目没有禁用态样式」已经过期。
+                //
+                // **拨动后必须当场刷新按钮**（同上：Commit 只落盘、不碰 UI）。
+                // 少了这一下，玩家在编辑器里把「允许覆盖关卡」打开，保存按钮
+                // 仍停在上次进编辑器时算出的禁用态——他会以为功能坏了。
                 OnGui.Row("effects.enablesave", EffectRemoverEnableSave,
-                    v => { EffectRemoverEnableSave = v; Commit(); }, EffectRemoverOn);
+                    v =>
+                    {
+                        EffectRemoverEnableSave = v;
+                        Commit();
+                        EffectRemover.RefreshEditorSaveButtons();
+                    }, EffectRemoverOn);
                 OnGui.Note("effects.enablesave.note");
             });
 

@@ -1116,6 +1116,111 @@ switch ($Which) {
         }
         SetLines 'Pages\Pages.cs' ($out2.ToArray())
     }
+    # ── 2026-10-18 保存按钮实时刷新(用户报：拨「允许覆盖关卡」不实时生效)──
+    'MUT-U40' {
+        # ⑳a：把「允许覆盖关卡」拨动后的刷新删掉 = 退回用户报的那个样子。
+        #      只删这一处：总开关那段里的 Restore/Refresh 仍在，整文件搜
+        #      RefreshEditorSaveButtons 的假判据会绿。
+        Backup 'Pages\Pages.cs'
+        $ls = Lines 'Pages\Pages.cs'
+        $n = 0
+        $out2 = New-Object 'Collections.Generic.List[string]'
+        foreach ($l in $ls) {
+            if ($l.Trim() -eq 'EffectRemover.RefreshEditorSaveButtons();' -and $n -lt 2) {
+                $n++
+                # 第一处是「允许覆盖关卡」那行(总开关那处带缩进在 else 里)
+                if ($n -eq 1) { continue }
+            }
+            $out2.Add($l)
+        }
+        if ($n -ne 2) { throw ('MUT-U40 unexpected count=' + $n) }
+        SetLines 'Pages\Pages.cs' $out2.ToArray()
+    }
+    'MUT-U41' {
+        # ⑳b：总开关只留「关掉→恢复」那一半(打开那半删掉)= 修复前的原样。
+        #      这正是那条判据要抓的形态：只判出现过 RestoreEditorSaveButtons 会绿。
+        Backup 'Pages\Pages.cs'
+        $ls = Lines 'Pages\Pages.cs'
+        $n = 0
+        $out2 = New-Object 'Collections.Generic.List[string]'
+        $skip = 0
+        for ($i = 0; $i -lt $ls.Count; $i++) {
+            if ($skip -gt 0) { $skip--; continue }
+            # **不要写成跨行 if**：Windows PowerShell 在行尾是字符串字面量时不续行，
+            # 下一行的 -and 会被当成新语句起始（实测整份 mutate.ps1 因此解析失败）。
+            # 先取值再单行判断。
+            $isElse = $ls[$i].Trim() -eq 'else'
+            $isBrace = ($i + 1) -lt $ls.Count -and $ls[$i + 1].Trim() -eq '{'
+            $isCall = ($i + 2) -lt $ls.Count -and $ls[$i + 2].Trim() -eq 'EffectRemover.RefreshEditorSaveButtons();'
+            if ($isElse -and $isBrace -and $isCall) {
+                $skip = 2; $n++
+                if (($i + 3) -lt $ls.Count -and $ls[$i + 3].Trim() -eq '}') { $skip = 3 }
+                continue
+            }
+            $out2.Add($ls[$i])
+        }
+        if ($n -ne 1) { throw ('MUT-U41 unexpected count=' + $n) }
+        SetLines 'Pages\Pages.cs' $out2.ToArray()
+    }
+    'MUT-U42' {
+        # ㉑a：把异步那条补丁的 Feature 摘掉 = 只挂轮询一条(静默半残)。
+        #      这正是这条判据要抓的形态：只数「出现过 FeatureKeys.SpecialKeys」
+        #      的假判据会绿(还有一处)。
+        Backup 'Features\Replay\Patch_SpecialKeys.cs'
+        $ls = Lines 'Features\Replay\Patch_SpecialKeys.cs'
+        $n = 0
+        $removed = 0
+        for ($i = 0; $i -lt $ls.Count; $i++) {
+            if ($ls[$i].Contains('Feature = FeatureKeys.SpecialKeys')) {
+                $n++
+                if ($n -eq 2) {
+                    # **锚点必须与判据同源。** 第一版写的是 -replace ', Feature = ...'，
+                    # 而实际代码里 Feature 前面是换行不是逗号 ⇒ 一次都没替换到；
+                    # 计数却用 Contains(另一个条件) ⇒ 不 throw、变异静默没改文件，
+                    # 闸门全绿被误判成"判据是假的"(实测)。现在按同一子串替换并
+                    # 用替换后的差异做自检。
+                    $before = $ls[$i]
+                    # **必须整段删掉，不能加后缀。** 加 _DISABLED 的话原串仍是
+                    # 前缀，任何子串计数判据都会照样命中（实测 MUT-U42 第一次
+                    # 就是这么假绿的）。这里保留行尾的逗号/右括号，语法仍然完整。
+                    $ls[$i] = $ls[$i].Replace('Feature = FeatureKeys.SpecialKeys, ', '')
+                    $ls[$i] = $ls[$i].Replace('Feature = FeatureKeys.SpecialKeys)', ')')
+                    if ($ls[$i] -ne $before) { $removed++ }
+                }
+            }
+        }
+        if ($n -ne 2) { throw ('MUT-U42 unexpected count=' + $n) }
+        if ($removed -ne 1) { throw ('MUT-U42 锚点没改动任何字节(removed=' + $removed + ')') }
+        SetLines 'Features\Replay\Patch_SpecialKeys.cs' $ls
+    }
+    'MUT-U43' {
+        # ㉑b：把 Main 里 SpecialKeys 的注册删掉 = 回到「未注册按关闭处理」。
+        Backup 'Main.cs'
+        $ls = Lines 'Main.cs'
+        $n = 0
+        $out2 = New-Object 'Collections.Generic.List[string]'
+        $skip = 0
+        for ($i = 0; $i -lt $ls.Count; $i++) {
+            if ($skip -gt 0) { $skip--; continue }
+            if ($ls[$i].Contains('FeatureKeys.SpecialKeys,')) {
+                $n++
+                # 整条调用跨多行：从这里扫到以 ');' 结尾那行一起删
+                for ($j = $i; $j -lt $ls.Count; $j++) {
+                    if ($ls[$j].TrimEnd().EndsWith(');')) { $skip = $j - $i; break }
+                }
+                continue
+            }
+            $out2.Add($ls[$i])
+        }
+        if ($n -ne 1) { throw ('MUT-U43 unexpected count=' + $n) }
+        SetLines 'Main.cs' $out2.ToArray()
+    }
+    'MUT-U44' {
+        # ㉑c：把键盘侧的 Escape 守卫删掉 = 允许放开取消键。
+        #      判据要抓的是「存在 Escape 护栏」而不是「文件里提过 Escape」。
+        Backup 'Features\Replay\Patch_SpecialKeys.cs'
+        ReplaceExact 'Features\Replay\Patch_SpecialKeys.cs' 'if (code == KeyCode.Escape || code == KeyCode.None)' 'if (code == KeyCode.None)'
+    }
     'MUT-PORT1' {
         # 移植保真度：在 KeyboardSimulation.cs 里引入一处**上游没有、也登记不上**的
         # 改动 = 模拟"抄错"。port-diff-audit 应当报"未登记差异"并 exit 1。
