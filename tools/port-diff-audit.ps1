@@ -178,6 +178,45 @@ $knownDeviations = @(
     # 下面两条是这轮删除的连带 token(上游当然还留着那些分支)。
     @{ Pat = 'ReplayConstants.Magic';              Why = '2026-10-18 删旧格式：解码端只认一个魔数(上游还认 LegacyMagic)' }
     @{ Pat = 'raw.Length';                          Why = '2026-10-18 删旧格式：LoadReplay 合一后新增的过短文件判定' }
+    # -- 2026-10-18 加密层整体重写(用户要求：换掉固定密钥，用动态派生)--------
+    # 旧实现是 SHA256("qwerty") 单次散列当 AES 密钥 + SHA256("potato") 当固定 IV，
+    # 两个都是源码里的短字符串 ⇒ 同一份明文每次加密得到相同密文(确定性)，
+    # 且密文可被任意篡改而无从察觉。新实现：PBKDF2(HMAC-SHA256, 6万次迭代,
+    # 每文件随机 salt) 派生加密密钥与 MAC 密钥两把 + 随机 IV + encrypt-then-MAC。
+    # 旧格式仅保留在解密侧作回落(存量文件与上游 Spectre 的 .sprp 都得读得开)，
+    # 写侧只产出新格式。下面这批是 BCL 密码学 API 的名字，不是游戏 API，
+    # 不会随游戏版本漂移;逐条登记而不是用一条宽泛串盖住整个文件。
+    @{ Pat = 'HashAlgorithmName.SHA256';             Why = '2026-10-18 加密重写：PBKDF2 显式指定 HMAC-SHA256(与默认 SHA1 不同)' }
+    @{ Pat = 'RandomNumberGenerator';                Why = '2026-10-18 加密重写：salt 与 IV 每文件随机取(确定性缺陷的根治点)' }
+    @{ Pat = 'rng.GetBytes';                         Why = '2026-10-18 加密重写：同上，随机源取数' }
+    @{ Pat = 'HMACSHA256';                           Why = '2026-10-18 加密重写：encrypt-then-MAC 的完整性校验' }
+    @{ Pat = 'ComputeMac';                           Why = '2026-10-18 加密重写：MAC 计算入口(覆盖魔数+版本+salt+IV+正文)' }
+    @{ Pat = 'ConstantTimeEquals';                   Why = '2026-10-18 加密重写：定长时间比较(避免提前返回泄漏前缀匹配)' }
+    @{ Pat = 'DecryptV2';                            Why = '2026-10-18 加密重写：新容器版本的解密分支' }
+    @{ Pat = 'DecryptLegacy';                        Why = '2026-10-18 加密重写：旧格式仅解密回落(写侧不再产出)' }
+    @{ Pat = 'LegacyKeyStorageKey';                  Why = '2026-10-18 加密重写：上游那两个常量改名后仅服务回落解密' }
+    @{ Pat = 'LegacyIVStorageKey';                   Why = '2026-10-18 加密重写：同上' }
+    @{ Pat = 'LegacyDerive';                         Why = '2026-10-18 加密重写：旧派生的独立函数(无盐无迭代，只读路径用)' }
+    @{ Pat = 'Pbkdf2Iterations';                     Why = '2026-10-18 加密重写：迭代次数常量化' }
+    @{ Pat = 'SaltLen';                              Why = '2026-10-18 加密重写：容器头字段长度常量' }
+    @{ Pat = 'MacLen';                               Why = '2026-10-18 加密重写：同上' }
+    @{ Pat = 'HeaderLen';                            Why = '2026-10-18 加密重写：容器头总长(测试侧也要用同一数值)' }
+    @{ Pat = 'buf, p,';                              Why = '2026-10-18 加密重写：MAC 输入拼装的连带 token' }
+    @{ Pat = 'aes.';                                 Why = '2026-10-18 加密重写：Aes 实例的属性设置(Key/IV/CreateDecryptor)' }
+    @{ Pat = 'Aes.Create';                           Why = '2026-10-18 加密重写：AES 实例创建(上游也调，但重写后调用点变了)' }
+    @{ Pat = 'Buffer.BlockCopy';                     Why = '2026-10-18 加密重写：容器头/正文的字节拼装' }
+    @{ Pat = 'CryptoStreamMode.Write';               Why = '2026-10-18 加密重写：CryptoStream 的写法方向' }
+    @{ Pat = 'cs.Write';                             Why = '2026-10-18 加密重写：CryptoStream 写入口' }
+    @{ Pat = 'a.Length';                             Why = '2026-10-18 加密重写：定长比较与派生里的数组长度取值' }
+    @{ Pat = 'b.Length';                             Why = '2026-10-18 加密重写：同上' }
+    @{ Pat = 'body.Length';                          Why = '2026-10-18 加密重写：正文长度(MAC 输入与解密缓冲)' }
+    @{ Pat = 'data.Length';                          Why = '2026-10-18 加密重写：容器总长' }
+    @{ Pat = 'cipherText.Length';                    Why = '2026-10-18 加密重写：密文长度' }
+    @{ Pat = 'Encoding.UTF8.GetBytes';               Why = '2026-10-18 加密重写：口令材料转字节(PBKDF2 输入)' }
+    @{ Pat = 'hmac.ComputeHash';                     Why = '2026-10-18 加密重写：MAC 计算' }
+    @{ Pat = 'kdf.GetBytes';                         Why = '2026-10-18 加密重写：PBKDF2 派生输出(一次取加密+MAC 两把)' }
+    @{ Pat = 'Magic.Length';                         Why = '2026-10-18 加密重写：容器头拼接与 MAC 覆盖范围都要用它' }
+    @{ Pat = 'ms.ToArray';                           Why = '2026-10-18 加密重写：CryptoStream 收尾取字节' }
 )
 
 Write-Output ""

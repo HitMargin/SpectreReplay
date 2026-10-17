@@ -20,7 +20,11 @@
     <RootNamespace>UiPreview</RootNamespace>
     <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
     <UseWindowsForms>false</UseWindowsForms>
-    <NoWarn>$(NoWarn);CS0067;CS0414;CS0649</NoWarn>
+    <!-- SYSLIB0060：Rfc2898DeriveBytes 的构造函数在 net6+ 被标过时，指定的
+         替代品是静态 Pbkdf2 方法 —— 而那个 API **netstandard2.1 上不存在**
+         （主项目目标框架）。所以只能继续用构造函数。本节链接的是主项目真源码，
+         若为此消警告就得为主项目保留一份只能用旧 API 的分支，得不偿失。 -->
+    <NoWarn>$(NoWarn);CS0067;CS0414;CS0649;SYSLIB0060</NoWarn>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <Deterministic>false</Deterministic>
   </PropertyGroup>

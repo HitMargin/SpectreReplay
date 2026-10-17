@@ -90,15 +90,28 @@ function ReplaceExact([string]$rel, [string]$old, [string]$new) {
 }
 
 function Cleanup() {
+    $failed = @()
     foreach ($t in $touched) {
         $dst = PathOf $t.Rel
-        Copy-Item $t.Saved $dst -Force
-        Remove-Item $t.Saved -Force
+        if (-not (Test-Path $t.Saved)) {
+            $failed += ($t.Rel + ' 的备份不见了（' + $t.Saved + '）')
+            continue
+        }
+        try {
+            Copy-Item $t.Saved $dst -Force -ErrorAction Stop
+            Remove-Item $t.Saved -Force -ErrorAction Stop
+        } catch {
+            $failed += ($t.Rel + ' 还原失败：' + $_.Exception.Message)
+            continue
+        }
         # Copy-Item 会保留源文件的 LastWriteTime，还原后该文件比上一次
         # 构建产物还旧 —— 增量构建据此判定"没变过"，继续沿用带变异的
         # 旧二进制，于是**下一次**变异跑的是上一次的代码（已实测：
         # MUT-P3 还原后 MUT-P4 仍报 ui.nokey）。顶到当下即可破除。
         (Get-Item $dst).LastWriteTime = Get-Date
+    }
+    if ($failed.Count -gt 0) {
+        throw ('还原失败，源码可能仍停在变异态：' + ($failed -join '；'))
     }
 }
 
@@ -113,6 +126,35 @@ $DEC = 'Features\Replay\ReplayDecoder.cs'
 $LOC = 'Ui\Loc.cs'
 $ONGUI = 'Ui\OnGui.cs'
 $LMMGR = 'State\LocalizationManager.cs'
+
+# ── 变异名唯一性自检（2026-10-18 实测踩到）────────────────────────────
+# PowerShell 的 switch 是**字符串分派**：同一个 label 出现两次时，**只有第一个
+# 会被选中，第二个成为永不执行的死代码** —— 而它的失效样子完全无声：
+# 名字在脚本里搜得到、块里注释写得明明白白、跑 -Which <名> 也有输出，
+# 只是跑的是别人的那条变异。
+#
+# 本次实测：三条加密变异插进来用了 MUT-C1/C2/C3 这组已经被「旧配置迁移」占用的
+# 名字，于是它们永远轮不到执行。**计数还从 104 掉到 101**（去重后按名字数），
+# 反而更容易被误读成「插进去的块丢了」——真正的病灶是重名。
+#
+# 注释里不要用 ASCII 双引号：PowerShell 在注释中仍把它当字符串定界符。
+$__selfPath = $MyInvocation.MyCommand.Path
+$__selfText = [IO.File]::ReadAllText($__selfPath)
+$__swIdx = $__selfText.IndexOf('switch ($Which)')
+# 锚点必须**拼接出来**，不能直接写成字面量：否则 IndexOf 会先命中本行自己，
+# 把检查范围截成"自检代码本身"，于是永远查不到重名(实测踩到，静默空转)。
+$__throwAnchor = 'throw "' + '未知变异'
+$__thrIdx = $__selfText.IndexOf($__throwAnchor)
+if ($__swIdx -ge 0 -and $__thrIdx -gt $__swIdx) {
+    $__swBody = $__selfText.Substring($__swIdx, $__thrIdx - $__swIdx)
+    $__labels = @([regex]::Matches($__swBody, "'(MUT-[A-Z0-9]+)'\s*\{") |
+        ForEach-Object { $_.Groups[1].Value })
+    $__dups = @($__labels | Group-Object | Where-Object { $_.Count -gt 1 })
+    if ($__dups.Count -gt 0) {
+        $__msg = (@($__dups | ForEach-Object { $_.Name + ' x' + $_.Count }) -join ', ')
+        throw ('变异名重复：' + $__msg + ' —— switch 只会选中第一条，同名的其余定义永远不执行')
+    }
+}
 
 switch ($Which) {
     # 无操作对照：只把一行注释改个说法，语义完全不变。它用来证明这套
@@ -1233,6 +1275,25 @@ switch ($Which) {
         #      那种文件磁盘上有、列表里没有，玩家点不了也找不到。
         Backup 'Features\Replay\ReplayManager.cs'
         ReplaceExact 'Features\Replay\ReplayManager.cs' '        ReplayConstants.ExtensionNoEncrypt,  // .psprp 不解密' ''
+    }
+    'MUT-CR1' {
+        # ③ 确定性回归：把 salt 与 IV 两个随机源都固定 = 退回旧格式那个缺陷。
+        #      必须**两个都固定**才表达得了这条缺陷：只固定 IV 时 salt 仍随机、
+        #      密钥仍每次不同，密文照样不同(第一版就是这么"没变红"的)。
+        Backup 'Features\Replay\ReplayCrypto.cs'
+        ReplaceExact 'Features\Replay\ReplayCrypto.cs' 'rng.GetBytes(salt);' 'for (int i = 0; i < salt.Length; i++) salt[i] = 0x5A;'
+        ReplaceExact 'Features\Replay\ReplayCrypto.cs' 'rng.GetBytes(iv);' 'for (int i = 0; i < iv.Length; i++) iv[i] = 0x33;'
+    }
+    'MUT-CR2' {
+        # ④⑤ 完整性回归：删掉 MAC 比对 = 篡改不再被拒。
+        #      CBC 的性质是"改首块只毁首块、padding 完好"，所以只有 MAC 能拦。
+        Backup 'Features\Replay\ReplayCrypto.cs'
+        ReplaceExact 'Features\Replay\ReplayCrypto.cs' 'if (!ConstantTimeEquals(expected, mac))' 'if (false)'
+    }
+    'MUT-CR3' {
+        # ⑤ MAC 覆盖范围回归：不再把 IV 纳入 HMAC。
+        Backup 'Features\Replay\ReplayCrypto.cs'
+        ReplaceExact 'Features\Replay\ReplayCrypto.cs' 'Buffer.BlockCopy(iv, 0, buf, p, IVLen); p += IVLen;' 'p += IVLen;'
     }
     'MUT-PORT1' {
         # 移植保真度：在 KeyboardSimulation.cs 里引入一处**上游没有、也登记不上**的
