@@ -102,6 +102,12 @@ namespace SpectreReplay
                 // 就此断在源头，表现为"校准建议永远出不来"且日志无异常。
                 SpectrePatchHub.SetFeatureToggle(FeatureKeys.ResultsPlus, () => Settings.ResultsPlusOn || Settings.CalibAdviceOn);
                 SpectrePatchHub.SetFeatureToggle(FeatureKeys.CalibAdvice, () => Settings.CalibAdviceOn);
+                // 渲染时钟（实验性，默认关）。**必须注册**：未注册的功能其补丁
+                // 按"关闭"处理且日志告警——而这条补丁正是离线渲染拿确定性时钟
+                // 的来源，漏注册会表现为"渲染能用但音画偶有抖动"，很难联想到是接线。
+                // 与 Replay 相乘：回放系统整个关掉时，渲染时钟也没有存在意义。
+                SpectrePatchHub.SetFeatureToggle(FeatureKeys.RenderClock,
+                    () => Settings.ReplayOn && Settings.RenderClockOn);
                 SpectrePatchHub.SetMasterToggle(() => Settings.UiPowerOn);
                 SpectrePatchHub.Refresh();
 

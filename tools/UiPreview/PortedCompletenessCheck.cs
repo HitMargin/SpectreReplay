@@ -196,9 +196,81 @@ namespace UiPreview
             //    方法体内**，要求"复用分支既判了 _tex 非空、又真的把它返回"。
             fail += CheckPredicate(projectRoot, "⑭ 命中分布图必须复用缓存贴图（不许每帧重建）",
                 "Ui\\HitScatter.cs", ScatterReusesCache);
+            // ⑮ 渲染时钟开关必须**四件齐**（2026-10-17 用户要求把它做成实验性开关）。
+            //
+            //    这条防的是一类特别隐蔽的半成品：把 Settings 字段和界面控件都加了，
+            //    但**忘了给补丁挂 Feature 或忘了 SetFeatureToggle**。后果是
+            //    开关看着能拨、也落盘了，而补丁**始终常开**（或始终不挂）——
+            //    界面上完全看不出异常，玩家以为自己在控制它。
+            //
+            //    四件必须同时成立（缺任一件都是假开关）：
+            //      ① 补丁的 attribute 真的挂了这个 Feature（否则拨开关不影响挂载）；
+            //      ② Main 里真的注册了谓词（未注册 = 按关闭处理 + 日志告警，
+            //         表现为"开关拨了没反应"）；
+            //      ③ ConfigManager 双向持久化（只写不读/只读不写都会让开关不生效）；
+            //      ④ 界面有控件（否则只能手改 Configs.json）。
+            //    每条独立判、各自能单独变红，不用一条大判据蒙混。
+            fail += Check(projectRoot, "⑮a 渲染时钟补丁必须挂在 FeatureKeys.RenderClock 上（否则开关是假的）",
+                new[] { "Features\\VideoRender\\VideoRenderClockPatches.cs" },
+                new[] { "Feature = FeatureKeys.RenderClock" });
+            fail += Check(projectRoot, "⑮b Main 必须注册该 Feature 的谓词（未注册 = 按关闭处理）",
+                new[] { "Main.cs" },
+                new[] { "FeatureKeys.RenderClock," });
+            fail += Check(projectRoot, "⑮c 该开关必须双向持久化（字段/写入/读取三处齐）",
+                new[] { "State\\Settings.cs", "State\\ConfigManager.cs" },
+                new[] { "RenderClockOn" });
+            fail += CheckPredicate(projectRoot, "⑮d 该开关必须双向持久化到 render_clock_on",
+                "State\\ConfigManager.cs", RenderClockPersisted);
+            fail += Check(projectRoot, "⑮e 渲染页要有该开关的控件",
+                new[] { "Pages\\Pages.cs" },
+                new[] { "render.clock.experimental" });
             if (fail == 0)
                 Console.WriteLine("    ✓ 随移植搬来的模块都已被接上");
             return fail;
+        }
+
+        /// <summary>
+        /// 渲染时钟开关是否**真的**双向持久化。
+        ///
+        /// 只查 "RenderClockOn" 或 "render_clock_on" 出现在 ConfigManager 里是不够的
+        /// ——第一版就是这么写的，被 MUT-U18 当场证伪：变异体把读取行改成
+        /// `Settings.RenderClockOn = Settings.RenderClockOn; if (false) Settings.RenderClockOn = ints.Value<bool?>("render_clock_on") ...`，
+        /// **原来那段子串仍然在里面**，子串判据照样绿，而开关已经读不回来了。
+        ///
+        /// 所以判据必须是**语义的**：把注释剥掉后逐行看，
+        ///   ① DTO 里有 `bool render_clock_on` 字段；
+        ///   ② 存在**赋值给它**的行（`render_clock_on = Settings.RenderClockOn`）；
+        ///   ③ 存在**从它读出来写回设置**的行——而且那一行**不能**是先自赋值
+        ///      再用 `if (false)` 之类挡住的形态。
+        ///
+        /// ③ 的判法：读回行必须以 `Settings.RenderClockOn = ints.Value<bool?>` 开头
+        /// （左值就是 Settings，不是先给自己赋一次），且不含 `if (false)`。
+        /// </summary>
+        private static bool RenderClockPersisted(string code)
+        {
+            if (!code.Contains("bool render_clock_on { get; set; }", StringComparison.Ordinal))
+                return false;
+            if (!code.Contains("render_clock_on = Settings.RenderClockOn", StringComparison.Ordinal))
+                return false;
+
+            // 逐行找"真正的读回"：左值必须是 Settings.RenderClockOn，
+            // 且整行不是被条件挡住的死代码。
+            string[] lines = code.Replace("\r\n", "\n").Split('\n');
+            foreach (string raw in lines)
+            {
+                string line = raw.Trim();
+                if (!line.StartsWith("Settings.RenderClockOn = ints.Value<bool?>", StringComparison.Ordinal))
+                    continue;
+                // 自赋值 + 死条件 的伪装形态一律不算（MUT-U18 复现的就是它）
+                if (line.Contains("Settings.RenderClockOn = Settings.RenderClockOn", StringComparison.Ordinal))
+                    continue;
+                if (line.Contains("if (false)", StringComparison.Ordinal))
+                    continue;
+                if (!line.Contains("\"render_clock_on\"", StringComparison.Ordinal))
+                    continue;
+                return true;
+            }
+            return false;
         }
 
         /// <summary>

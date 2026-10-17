@@ -284,8 +284,18 @@ public static class Settings
     /// 玩家以为关的是渲染，实际关掉的是整条回放链。
     /// </summary>
     public static bool RenderOn = true;
-    // 默认「游戏画面(含UI)」：纯净相机不含界面，玩家往往出片后才发现进度条、
-    // 判定反馈全没了（不可逆，只能重渲）。游戏画面所见即所得，是更安全的默认。
+    // ── 实验性：确定性渲染时钟 ────────────────────────────────────────
+    // 打开 = 挂 scrConductor.Update 的时间源 Transpiler（Patch_RenderClockConductor），
+    // 把 AudioSettings.dspTime / Time.unscaled* 四个调用换成帧号驱动的 RenderClock，
+    // 于是游戏自己的节拍推进/相机事件/倒计时/hitsound 调度链**全部自动确定性化**。
+    // 关（默认）= 补丁根本不挂载（Feature 契约：谓词为假就不应用），
+    // 渲染走 audio-cursor 兜底时钟（±2.7ms 抖动，音画同步精度较低）。
+    //
+    // **为什么默认关**：它动的是游戏的时间源本身，影响面比"只拦输出"大得多——
+    // 时间源一歪，节拍/相机/倒计时全都跟着歪。而且它与别的 mod 的同款
+    // transpiler 天然竞争（Harmony 按注册顺序先到先得）。实验性功能默认关，
+    // 由玩家自己打开并承担风险，是这类改动应有的默认。
+    public static bool RenderClockOn = false;
     public static int RenderCaptureMode = 1;  // 0 纯净相机 1 游戏画面(含UI)
     public static int RenderWidth = 1920;
     public static int RenderHeight = 1080;

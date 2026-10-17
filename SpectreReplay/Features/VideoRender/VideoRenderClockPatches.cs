@@ -64,7 +64,12 @@ internal static class RenderClockSource
 /// </summary>
 internal static class Patch_RenderClockConductor
 {
-    [SpectrePatch(typeof(scrConductor), "Update", PatchType.Transpiler)]
+    // 挂在 FeatureKeys.RenderClock 上（**实验性开关，默认关**）。
+    // Feature 契约：谓词为假时补丁根本不挂载、拨开关同拍卸载——所以这里
+    // **不需要**在补丁体内再查 Settings.RenderClockOn，体内检查只留给
+    // Feature 之下的子选项。开关一关，scrConductor.Update 立刻恢复原样，
+    // 渲染自动落到 VideoRenderJob 的 audio-cursor 兜底路径。
+    [SpectrePatch(typeof(scrConductor), "Update", PatchType.Transpiler, Feature = FeatureKeys.RenderClock)]
     internal static IEnumerable<CodeInstruction> ConductorTranspiler(IEnumerable<CodeInstruction> instructions)
         => ReplaceTimeSource(instructions, "scrConductor.Update");
 

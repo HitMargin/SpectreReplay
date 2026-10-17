@@ -36,4 +36,11 @@ internal static class FeatureKeys
     public const string ReplayManualSave = "ReplayManualSave";
     public const string ReplayCancelSave = "ReplayCancelSave";
     public const string ReplayAsyncInput = "ReplayAsyncInput";
+    // 渲染时钟补丁（scrConductor.Update 的时间源 Transpiler）。**实验性，默认关**：
+    // 它把 AudioSettings.dspTime / Time.unscaled* 四个调用整体换掉，收益是
+    // "游戏自己的节拍推进/相机/倒计时/hitsound 全部自动确定性化"，代价是
+    // ①改了游戏时间源本身，出问题的面比"只拦输出"大得多；
+    // ②与别的 mod 的同款 transpiler 竞争（先到先得，见 RenderClockSource 让位逻辑）。
+    // 做成开关后：关闭 = 补丁根本不挂载，渲染走 audio-cursor 兜底时钟。
+    public const string RenderClock = "RenderClock";
 }

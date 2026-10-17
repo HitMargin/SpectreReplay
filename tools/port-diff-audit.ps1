@@ -149,6 +149,15 @@ $knownDeviations = @(
     @{ Pat = 'Features.Compat.MarginBoundary.Raw';  Why = '同上：调用点改指新家' }
     @{ Pat = 'Features.Compat';                    Why = '2026-10-17 CustomJudge 移除：窗口数学落到 Compat 命名空间（上游在 Features.CustomJudge）' }
     @{ Pat = 'perfectWins.Add';                     Why = '同上：散点图完美窗口（原调 CustomJudge.BoundaryRaw）' }
+    # -- 2026-10-17 RenderClock 做成实验性开关（用户要求）------------------
+    # 上游这条 transpiler 是无条件常开的；我们把它挂到 FeatureKeys.RenderClock
+    # 上，默认关，由玩家在渲染页自己打开。差异只在这一层接线，
+    # 让位逻辑/时间源替换本身与上游一致。
+    @{ Pat = 'FeatureKeys.RenderClock';              Why = '2026-10-17 渲染时钟做成实验性开关（默认关）' }
+    @{ Pat = 'Settings.RenderClockOn';               Why = '同上：开关的 Settings 字段与谓词' }
+    @{ Pat = 'SpectrePatchHub.SetFeatureToggl';      Why = '同上：Main 里注册该 Feature 的谓词' }
+    @{ Pat = 'PatchType.Transpiler';                 Why = '2026-10-17 Attribute 表达式的连带 token（开关接线本身）' }
+    @{ Pat = 'Settings.ReplayOn';                    Why = '2026-10-17 渲染时钟谓词与回放总开关相乘（ReplayOn && RenderClockOn）' }
     @{ Pat = 'pureWins.Add';                        Why = '同上：散点图纯判窗口' }
 )
 

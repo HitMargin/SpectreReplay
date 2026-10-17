@@ -587,6 +587,13 @@ namespace SpectreReplay.Pages
             // 加字段参数反而会暗示一个它并不具备的绑定能力）。
             OnGui.RowInput("render.outdir");
             DrawEncoderNote();
+            // ── 实验性：确定性渲染时钟 ──────────────────────────────
+            // 放在最後、并明确标"实验性"：它动的是游戏的时间源本身，影响面比
+            // 其余选项都大，不该混在常规选项里让人顺手就开。
+            Gui.Divider();
+            OnGui.Row("render.clock.experimental", RenderClockOn,
+                v => { RenderClockOn = v; Commit(); });
+            OnGui.Note("render.clock.hint");
         }
 
         /// <summary>
