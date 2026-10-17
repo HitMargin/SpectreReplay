@@ -84,6 +84,30 @@ namespace UiPreview
             if (fail == 0)
                 Console.WriteLine("    ✓ " + used.Count + " 个运行时键在全部 "
                     + langs.Count + " 种语言下都齐");
+
+            // 反向：表里定义了的键，必须真有人取词。
+            // 只在"每个键都齐"上判是不够的——这套表历史上从 Spectre 整块搬来，
+            // 搬完大功能（CustomJudge / ResultsPlus / 编辑器增强 / 21 个去特效分组）
+            // 被裁掉后，键没人删，于是 315 个键里真正在用的只有 33 个。
+            // 死键的害处不是体积（几十 KB 而已），而是下一次读这段表的人
+            // 会照着它去理解界面——他看到的是一份早就不是现状的清单。
+            // 这条判据钉住"表里不许有没人取的键"。
+            var defined = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var lang in langs)
+                foreach (string k in perLang[lang]) defined.Add(k);
+
+            var deadKeys = new List<string>();
+            foreach (string k in defined)
+                if (!used.ContainsKey(k)) deadKeys.Add(k);
+            deadKeys.Sort(StringComparer.Ordinal);
+            if (deadKeys.Count == 0)
+                Console.WriteLine("    ✓ 表里 " + defined.Count + " 个键全部有人取，没有死键");
+            else
+            {
+                Console.WriteLine("    ✗ 有 " + deadKeys.Count + " 个键定义了却没人取（应从表里删掉）:");
+                foreach (string k in deadKeys) Console.WriteLine("        " + k);
+                fail++;
+            }
             return fail;
         }
 

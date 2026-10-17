@@ -30,7 +30,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify.ps1
 | HardTextCheck | 没有被写死的用户可见中文；文案表文件里没有漏网的中文字符串 |
 | ReplayCheck | 链接真实 ReplayEncoder/Decoder 的回放格式往返（五种数据形状含巨大 count 被干净拒绝） |
 | WavRoundTripCheck | 键盘音 WAV 的写读往返：写侧头部契约**取自真源码**、读侧接受范围覆盖写侧产出、拒 6 种坏头（非 PCM/位深 12,64/声道 0,负/FormatTag 0）、四种合法位深全接受、位深下限常量与判定一致 |
-| LocRuntimeCheck | 34 个运行时键（`GetLocalizedText` 那套）在全部 14 种语言下都齐 |
+| LocRuntimeCheck | 两个方向：**正向**——被取词的运行时键（`GetLocalizedText` 字面量 + `SetPhase` 第二实参）在全部 14 种语言下都齐；**反向**——表里定义的键必须真有人取，死键即为红（2026-10-17 加，此前表里有 315 个键、真正在用的只有 33 个） |
 | PortedCompletenessCheck | 移植搬来的模块都真有调用点：ReplayAnalyzer 显示、DescribeEncoder 降级提示、playback.ready 装弹提示、VideoConverter 入口、**转换目标来自 `Settings.ConvertTarget` 且必须可编辑 + 双向持久化（⑦/⑦b/⑦c）**、回放列表覆盖全部可读格式、键盘音三项有界面入口（⑨a/⑨b）、回放驱动开关有界面入口（⑩/⑩b）、保存目录有界面入口（⑪/⑪b）、**「打开这一关」按钮（⑫/⑫b）+ 编辑器跳转等就绪后定位起始砖（⑬）+ 命中分布图复用缓存（⑭）+ 渲染时钟开关四件齐（⑮a~⑮f）**、**去特效总开关默认关（⑯）+ 中文文案不得把关卡称作存档（⑰）**、没有孤儿检查 |
 | UiLogicShapeCheck | 界面控制流形状：停止录制不许借用「取消保存」文案、文本框必须**自绘**（不许用内建输入框）且宽度走 Gui.CtrlW、分组边框不许用 GetLastRect、**阻塞式原生目录选择框必须 Defer 到 OnGUI 之外（两个调用点各一条）**、**输入框底色必须比卡片更亮**、**按钮必须传自定义样式 + 滑条必须自绘 + 圆角贴图必须有缓存**（2026-10-12 用户报「UI 还是原生控件」后加的）、**混音轨 Render 容器必须精确**（⑧）、**卡片不许用 GUI.backgroundColor 染色**（⑨，乘算会抹平按钮 hover） |
 | MissingRuntimeKeyCheck | 运行时键必须有定义（`GetLocalizedText` 查不到时 `return key`，玩家会看到原始键名） |
@@ -47,7 +47,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify.ps1
 | InstanceInjectionCheck | 16 处 `__instance` 全部作用于**实例方法**（Harmony 只对非静态目标注入） |
 | LogPrefixCheck | 全部日志用 `[SpectreReplay]` 前缀（真实 Spectre 模组也装着会跑，前缀是区分来源的唯一依据） |
 
-**总数 57 个 ✓ 行**（2026-10-12 实测 57 ✓ / 0 ✗）。这个数字会随轮次变，
+**总数 58 个 ✓ 行**（2026-10-17 实测 58 ✓ / 0 ✗）。这个数字会随轮次变，
 引用前先跑一遍 `verify.ps1` 看真实条数。
 
 > **口径修正（2026-10-12）：`✓ 行数 ≠ 断言单元数`，早先"两者相等"的说法是错的。**
@@ -61,11 +61,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify.ps1
 每加一条断言，**必须用 `tools\mutate.ps1 -Which MUT-X` 证明它会红**（自动还原）。
 已累计 10 条以上假断言、2 条假变异——形态见 `docs\SPECTRE_COMPARISON.md`
 与记忆库的「六条铁律」。`-ExpectGreen` 是反向对照（证明"全绿"本身可达）。
-`tools\mutate-regression.ps1` 全量回归 **85 条**变异（计数口径：`mutate.ps1` 里 `'MUT-XXX' {` 块的去重数；2026-10-17 实测 85）。新增 `MUT-V11` 守「Render 容器必须精确尺寸」；
+`tools\mutate-regression.ps1` 全量回归 **90 条**变异（计数口径：`mutate.ps1` 里 `'MUT-XXX' {` 块的去重数；2026-10-17 实测 90）。新增 `MUT-V11` 守「Render 容器必须精确尺寸」；
 `MUT-V12`/`MUT-V13` 分别守判据⑨的两半（卡片底图必须是卡色贴图、
 不许再出现 `GUI.backgroundColor` 赋值——乘算会抹平按钮 hover）。
 2026-10-17 另加两条：`MUT-U34` 守「去特效总开关必须默认关」（⑯）、
 `MUT-U35` 守「中文文案不得把关卡称作存档」（⑰）。
+`MUT-K3` 守 LocRuntimeCheck 的反向那一半（往表里塞一条没人取的键 ⇒ 必须红）。
 
 > **变异锚点会跟着代码改而失效，且失效的样子是 exit 2 而不是红。** 删掉
 > `GUILayout.TextField` 那次，MUT-U2 的锚点（`TextField` + `CtrlW` 那一行）

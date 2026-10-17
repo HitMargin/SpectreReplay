@@ -1011,6 +1011,25 @@ switch ($Which) {
         }
         SetLines 'Pages\Pages.cs' ($out2.ToArray())
     }
+    'MUT-K3' {
+        # LocRuntimeCheck 反向判据（表里不许有没人取的键）的自证。
+        # 做法是给中文表加一条运行时永远取不到的键，而不是删一条：反向判据要抓的
+        # 正是「表比代码多」，删键只会让正向那条（每语言都齐）变红，两个方向各须
+        # 一条变异，否则分不清是哪一半在守。
+        Backup $LMMGR
+        $ls = Lines $LMMGR
+        $at = -1
+        for ($i = 0; $i -lt $ls.Count; $i++) {
+            if ($ls[$i].Contains('["note.cancel_save"] = ')) { $at = $i; break }
+        }
+        if ($at -lt 0) { throw 'MUT-K3: cannot find note.cancel_save line' }
+        $out3 = New-Object System.Collections.Generic.List[string]
+        for ($i = 0; $i -lt $ls.Count; $i++) {
+            $out3.Add($ls[$i])
+            if ($i -eq $at) { $out3.Add('            ["note.dead_probe_key"] = "who fetches this?",') }
+        }
+        SetLines $LMMGR ($out3.ToArray())
+    }
     'MUT-D2' {
         # ⑩b：把回放驱动开关那段整段删掉 = 回到 round 53 之前的原样。
         # Settings.LegacyEngine 名字骗人（听着像"废弃的自研引擎"），实际它控制
