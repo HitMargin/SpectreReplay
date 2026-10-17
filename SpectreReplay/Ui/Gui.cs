@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace SpectreReplay.Ui
@@ -541,6 +542,87 @@ namespace SpectreReplay.Ui
             }
 
             return min + k * (max - min);
+        }
+
+        // ── 按键标签组（多选） ─────────────────────────────────
+
+        /// <summary>
+        /// 一排可切换的按键标签，用于「特殊按键过滤」这类"从固定集合里多选"的场景。
+        ///
+        /// **为什么不用 <see cref="Switch"/> 逐行摆**：那组候选有 22 + 40 个，
+        /// 逐行摆会占满好几屏，而这只是个很少调的开关集合——玩家要的是
+        /// "一眼看完、点谁谁亮"。
+        ///
+        /// **为什么每行自己 GetRect 而不算格子**：IMGUI 的布局是流式的，
+        /// 手动算 x/y 会在窗口缩放时错位。这里每行取一个满宽矩形，再把它
+        /// 均分成 n 份，行高固定——缩放时自动跟着走。
+        ///
+        /// **禁用态**（父分组灰掉时）：整块压暗且点不动。与 Switch 同理，
+        /// 自绘 + GUIStyle.none 必须自己拦 <c>GUI.Button</c>。
+        /// </summary>
+        /// <param name="names">候选键名（同时是显示文本与存储值）。</param>
+        /// <param name="chosen">已选集合；本方法就地增删。</param>
+        /// <param name="columns">每行几个。</param>
+        /// <param name="onChanged">任一标签状态变化后回调（用于落盘）。</param>
+        /// <param name="tipKey">可选：悬停说明的**标签键**（该键 + ".tip" 是文案）。
+        /// 传空 = 不登记说明——只在"这组标签自解释"时才允许，特殊按键那种
+        /// "Print/SysReq 到底是哪个键"的场景必须传。</param>
+        /// <param name="enabled">父级是否可用（同 <see cref="Section"/> 的末参：
+        /// 为假时整组压暗且点不动）。**必须传**——录制总开关关掉时补丁根本没挂载，
+        /// 这时还能勾格子就是"能点但不生效"。</param>
+        internal static void KeyChips(string[] names, HashSet<string> chosen, int columns,
+            Action onChanged, bool enabled, string tipKey = null)
+        {
+            Ensure();
+            if (names == null || names.Length == 0 || chosen == null) return;
+            if (columns < 1) columns = 1;
+
+            const float rowH = 26f;
+            const float gap = 4f;
+
+            // 走 Section 同一套压暗机制（Dim）。**不能只用局部 enabled 变量**：
+            // 本方法是纯自绘的，Fill/Text 各自把颜色乘 Tint 才有压暗效果；
+            // 少了 Dim 就变成"颜色照旧、只是点不动"，玩家会以为界面卡了。
+            Dim(!enabled, () =>
+            {
+                for (int i = 0; i < names.Length; i += columns)
+                {
+                    int cols = Math.Min(columns, names.Length - i);
+                    Rect row = GUILayoutUtility.GetRect(1f, rowH, GUILayout.ExpandWidth(true));
+                    float cellW = (row.width - gap * (cols - 1)) / cols;
+
+                    for (int j = 0; j < cols; j++)
+                    {
+                        string key = names[i + j];
+                        Rect cell = new Rect(row.x + j * (cellW + gap), row.y, cellW, rowH);
+                        bool on = chosen.Contains(key);
+
+                        // 先画底与框，再叠文字——顺序反了文字会被盖掉。
+                        bool hot = !IsDim && Hover(cell);
+                        // **选中态用 Accent 的浅一档，不是 Lighten(Accent)**：整组只画
+                        // 一排小格子时，"选中"必须与"悬停"能被一眼区分。两者若都只是
+                        // 提亮 Accent，鼠标扫过去的那一格会看起来像已选中。
+                        Fill(cell, on ? (hot ? Lighten(Accent, 0.12f) : Accent)
+                                      : (hot ? BtnHover : BtnFace));
+                        Frame(cell, on ? new Color(0.55f, 0.82f, 1f, 0.9f)
+                                       : new Color(1f, 1f, 1f, hot ? 0.34f : 0.22f));
+                        Text(cell, key, on ? Color.white : TextCol, _smallC);
+
+                        // 说明按**格**登记（不是整组一条）：玩家悬停的是具体哪个键，
+                        // 一条整组说明回答不了"Print 和 SysReq 有什么区别"。
+                        if (!string.IsNullOrEmpty(tipKey))
+                            Tip(cell, tipKey);
+
+                        // 透明热区压在最上层接管点击；禁用态直接不建热区。
+                        if (!IsDim && GUI.Button(cell, GUIContent.none, GUIStyle.none))
+                        {
+                            if (!chosen.Remove(key)) chosen.Add(key);
+                            onChanged?.Invoke();
+                        }
+                    }
+                    GUILayout.Space(gap);
+                }
+            });
         }
 
         // ── 徽章 / 标签 ───────────────────────────────────────

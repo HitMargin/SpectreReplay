@@ -107,6 +107,16 @@ namespace SpectreReplay
                 // 表现为"开关拨到开、谱面一点没变"，日志里只有一行未注册告警。
                 SpectrePatchHub.SetFeatureToggle(FeatureKeys.EffectRemover,
                     () => Settings.EffectRemoverOn);
+                // 特殊按键过滤。**必须注册**（同 EffectRemover 的理由）：它的两条补丁
+                // 分别接管轮询输入与异步输入两条路径，未注册时按"关闭"处理——
+                // 玩家勾了一堆键、回放里照样没有它们，而这个现象与"游戏本来就
+                // 不录这些键"一模一样，几乎不可能从界面上追到注册漏了。
+                // 谓词要「至少勾了一个键」而不是恒真：这条路径在每帧输入处理上，
+                // 没勾键的玩家不该为一个用不到的功能付每帧委托调用的代价。
+                SpectrePatchHub.SetFeatureToggle(FeatureKeys.SpecialKeys,
+                    () => Settings.ReplayOn
+                          && (Settings.AllowedKeyboardSpecialKeys.Count > 0
+                              || Settings.AllowedAsyncSpecialKeys.Count > 0));
                 SpectrePatchHub.SetMasterToggle(() => Settings.UiPowerOn);
                 SpectrePatchHub.Refresh();
 

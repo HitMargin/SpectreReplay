@@ -41,4 +41,10 @@ internal static class FeatureKeys
     // ②与别的 mod 的同款 transpiler 竞争（先到先得，见 RenderClockSource 让位逻辑）。
     // 做成开关后：关闭 = 补丁根本不挂载，渲染走 audio-cursor 兜底时钟。
     public const string RenderClock = "RenderClock";
+    // 特殊按键过滤（F1~F12 / Tab / Alt / Win / Print 等不再被游戏剔除）。
+    // **没有对应的设置开关**：界面上的"勾选"直接就是这组设置本身，
+    // 谓词 = 回放总开关 && 至少勾了一个键（见 Main 的注册行）。
+    // 为什么不在"一个键都没勾"时也挂着：这条路径在**每帧输入处理**上，
+    // 没勾键的玩家不该为一个用不到的功能付每帧一次委托调用的代价。
+    public const string SpecialKeys = "SpecialKeys";
 }

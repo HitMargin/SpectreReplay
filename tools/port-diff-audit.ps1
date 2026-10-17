@@ -162,6 +162,15 @@ $knownDeviations = @(
     # '开→渲染→关→再渲染' 会继续走确定性轨、两条时间轴混用。
     @{ Pat = 'RenderClockSource.TranspilerReady';  Why = '2026-10-17 就绪判断必须 AND 开关（TranspilerReady 卸载后不清）' }
     @{ Pat = 'pureWins.Add';                        Why = '同上：散点图纯判窗口' }
+    # -- 2026-10-18 特殊按键过滤（移植上游 Patch_AllowSpecialKeys）----------
+    # 上游这条补丁**没有 Feature 门控**（常开）。我们把它挂到
+    # FeatureKeys.SpecialKeys 上，且谓词是「回放开 && 至少勾了一个键」：
+    # 这条路径在每帧输入处理上，没勾键的玩家不该为用不到的功能付委托调用。
+    # 代价是**必须注册**——未注册的功能按关闭处理，只留一行告警，
+    # 现象是「勾了键、回放里照样没有」，与「游戏本来就不录这些键」分不开。
+    @{ Pat = 'FeatureKeys.SpecialKeys';             Why = '2026-10-18 特殊按键过滤做成 Feature 门控（上游常开）' }
+    @{ Pat = 'Settings.AllowedKeyboardSpecialKeys'; Why = '同上：谓词读勾选集合（勾了才挂补丁）' }
+    @{ Pat = 'Settings.AllowedAsyncSpecialKeys';    Why = '同上：异步那一组的勾选集合' }
 )
 
 Write-Output ""

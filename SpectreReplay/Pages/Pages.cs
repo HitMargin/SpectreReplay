@@ -136,6 +136,82 @@ namespace SpectreReplay.Pages
                     KeybdSoundRecordActive);
                 OnGui.Note("record.keybd.note");
             });
+
+            // ── 特殊按键 ────────────────────────────────────────
+            //
+            // 游戏把 F1~F12 / Tab / End / Alt / Win / Print 等当作"不算数"的按键，
+            // 按下也不计入按键数，因此**不会进回放**。对普通游玩这是合理的
+            // （多半是误触或截图），但对录制来说假设是错的：玩家有意用这些键
+            // 打谱时，回放里就是缺的，而界面上完全看不出为什么。
+            //
+            // 候选集不是随手写的。键盘那 22 个来自
+            // `RDInputType_Keyboard.SpecialKeys` 的静态初始化数据（反编译读出来的
+            // 实际值：Print/SysReq/左右 Alt/左右 Win/左右 Meta/Tab/End/F1~F12），
+            // 异步那 4 个来自 `RDInputType_AsyncKeyboard.SpecialKeys`
+            // （PrintScreen/F12/LAlt/Super）。**候选集必须跟着游戏的实际数组走**，
+            // 否则玩家会看到一堆勾了也没用的键。
+            Gui.Section("record.specialkeys", Gui.Accent, () =>
+            {
+                OnGui.Note("record.specialkeys.note");
+                // 分组标签用 KeyValue 而不是 Row：这两行是**标题**不是控件，
+                // 用 Row 会多画一颗开关，而玩家会去点它（真正的开关是下面的格子）。
+                Gui.KeyValue("record.specialkeys.kb", "", Gui.DimCol);
+                // **整块挂录制总开关**：录制关掉时 `SetFeatureToggle(SpecialKeys)`
+                // 的谓词里 `Settings.ReplayOn` 为假 ⇒ 两条补丁整个不挂载，
+                // 勾了也不会有任何效果。灰掉比"能点但不生效"诚实。
+                Gui.KeyChips(KeyboardSpecialKeyNames, AllowedKeyboardSpecialKeys, 6,
+                    () => Commit(), ReplayOn, "record.specialkeys.kb");
+                // 异步那一组只在游戏侧真的开了异步输入时才有意义——与
+                // DrawAsyncInputRow 同一套判据。没开就整块不显示，而不是
+                // 画一组勾了也不生效的标签。
+                if (GameAsyncInputOn())
+                {
+                    Gui.KeyValue("record.specialkeys.async", "", Gui.DimCol);
+                    Gui.KeyChips(AsyncSpecialKeyNames, AllowedAsyncSpecialKeys, 4,
+                        () => Commit(), ReplayOn, "record.specialkeys.async");
+                }
+                else
+                {
+                    OnGui.Note("record.specialkeys.async.off");
+                }
+            });
+        }
+
+        /// <summary>
+        /// 键盘侧被游戏排除的特殊键。**顺序与分组照着游戏的 SpecialKeys 排**，
+        /// 前后两组（功能键 / 修饰与系统键）在视觉上能连读。
+        /// 名字必须是 <see cref="UnityEngine.KeyCode"/> 的真实成员——
+        /// 存的是名字，解析失败会被静默跳过（见 Patch_SpecialKeys.EnsureCodes）。
+        /// </summary>
+        private static readonly string[] KeyboardSpecialKeyNames =
+        {
+            "Print", "SysReq", "Tab", "End",
+            "LeftAlt", "RightAlt", "LeftWindows", "RightWindows",
+            "LeftMeta", "RightMeta",
+            "F1", "F2", "F3", "F4", "F5", "F6",
+            "F7", "F8", "F9", "F10", "F11", "F12",
+        };
+
+        /// <summary>
+        /// 异步侧被游戏排除的特殊键（SkyHook.KeyLabel 的成员名）。
+        /// 游戏那边只有这 4 个，不要照"看起来像"往里加。
+        /// </summary>
+        private static readonly string[] AsyncSpecialKeyNames =
+        {
+            "PrintScreen", "F12", "LAlt", "Super",
+        };
+
+        /// <summary>游戏侧是否开了异步输入。取不到就当没开（宁可不显示，也不误导）。</summary>
+        private static bool GameAsyncInputOn()
+        {
+            try
+            {
+                return RDC.useAsyncInput;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         // ── 回放 ────────────────────────────────────────────────
