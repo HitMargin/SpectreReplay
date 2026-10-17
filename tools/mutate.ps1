@@ -396,6 +396,35 @@ switch ($Which) {
         if ($n -ne 2) { throw ('MUT-U32 unexpected count=' + $n) }
         SetLines 'Ui\OnGui.cs' $out2.ToArray()
     }
+    'MUT-U33' {
+        # (6) ⑬f：只删掉**一个**行助手里的行距(其余五处仍在)。
+        #      整文件搜 RowGap(); 的假判据会绿——这正是这条变异要证明的事。
+        #      锚在 RowHotkey 的 GUILayout.EndHorizontal(); 之后那一段：
+        #      该处 RowGap(); 紧跟着一个空行与 if (Event.current == null，
+        #      三行合起来在文件里唯一。
+        Backup 'Ui\OnGui.cs'
+        $ls = Lines 'Ui\OnGui.cs'
+        $n = 0
+        $out2 = New-Object 'Collections.Generic.List[string]'
+        # 锚定 RowHotkey 那一处：它的 RowGap(); 紧跟在 EndHorizontal(); 后面，
+        # 而**紧跟其后的非空行**是 if (Event.current == null || _capturing。
+        # 用"前一行 + 后一行"双锚，避免依赖行号(行号会随无关改动漂移)。
+        for ($i = 0; $i -lt $ls.Count; $i++) {
+            $ln = $ls[$i]
+            $hit = $false
+            if ($ln.Trim() -eq 'RowGap();' -and $i -gt 0 -and $ls[$i - 1].Trim() -eq 'GUILayout.EndHorizontal();') {
+                $j = $i + 1
+                while ($j -lt $ls.Count -and $ls[$j].Trim() -eq '') { $j++ }
+                if ($j -lt $ls.Count -and $ls[$j].Contains('if (Event.current == null || _capturing != GetCaptureId')) {
+                    $hit = $true
+                }
+            }
+            if ($hit) { $n++; continue }
+            $out2.Add($ln)
+        }
+        if ($n -ne 1) { throw ('MUT-U33 unexpected count=' + $n) }
+        SetLines 'Ui\OnGui.cs' $out2.ToArray()
+    }
     'MUT-U26' {
         # (1)(2)只留 1 个都算没做。删掉某条 .tip 中文表项。
         Backup 'Ui\Loc.cs'

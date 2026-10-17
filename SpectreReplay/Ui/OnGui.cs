@@ -316,10 +316,33 @@ namespace SpectreReplay.Ui
 
         internal const float LabelW = Gui.LabelW;
 
+        /// <summary>
+        /// 行与行之间的竖向间距。**每个行助手收尾时都要调它。**
+        ///
+        /// 为什么必须补：圆角按钮的贴图半径是 8，而按钮高只有 22~28。
+        /// 两行紧贴时上一颗的下圆角与下一颗的上圆角正好咬在一起，中间
+        /// 没有卡片底色透出来——一列按钮连成一根粗色条，看着像"一个被
+        /// 弄坏的控件"而不是三个独立项（2026-10-17 用户截图报
+        /// 「按钮的布局似乎融合到了一起」，指的就是它）。
+        ///
+        /// **为什么不设在 ButtonStyle.margin 里**（那是最省事的写法）：
+        /// margin 是布局尺寸，而 UMM 的 ScaleGUI 会给按钮另外设
+        /// fixedHeight；两者叠加时按钮实高不再等于各调用点写的 22/28，
+        /// 页签与行高会一起漂。行距归布局、贴图归样式，两边互不干扰。
+        ///
+        /// 用「行尾补」而不是「行首补」：第一个行助手前面不会多出一条
+        /// 空白，卡片顶部与标题条仍然贴着。最后一行多出这一档间距无害。
+        /// </summary>
+        private static void RowGap()
+        {
+            GUILayout.Space(4f);
+        }
+
         /// <summary>一行开关。视觉走 Gui.Switch（自绘 pill）。</summary>
         internal static void Row(string labelKey, bool value, Action<bool> onChange)
         {
             Gui.Switch(labelKey, value, onChange);
+            RowGap();
         }
 
         /// <summary>一行滑条 + 右侧**可编辑**当前值。</summary>
@@ -390,6 +413,7 @@ namespace SpectreReplay.Ui
             {
                 onChange(now);
             }
+            RowGap();
         }
 
         /// <summary>数值框宽度。与原先只读 Label 的 90f 一致，列宽不变。</summary>
@@ -486,6 +510,9 @@ namespace SpectreReplay.Ui
             }
             GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
+            // 展开时这一段同时把「触发按钮」与「选项列表」分开，否则它们
+            // 也咬成一根，看不出哪个是当前值、哪几个是可选项。
+            RowGap();
 
             if (_openRow != seq)
             {
@@ -497,6 +524,13 @@ namespace SpectreReplay.Ui
             GUILayout.BeginVertical(GUILayout.Width(Gui.CtrlW));
             for (int i = 0; i < options.Length; i++)
             {
+                // 选项之间同样要留缝：贴在一起时三张圆角贴图的边角互相
+                // 吃掉，整列融成一根粗色条——2026-10-17 截图里那两块
+                // 粘连的，正是这里和相邻下拉的触发按钮。
+                if (i > 0)
+                {
+                    GUILayout.Space(4f);
+                }
                 // 当前项标出来：选项多的时候光靠位置认不出来
                 string mark = i == current ? "● " : "    ";
                 if (GUILayout.Button(mark + options[i], Gui.ButtonStyle, GUILayout.Height(22f)))
@@ -540,6 +574,7 @@ namespace SpectreReplay.Ui
             }
             GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
+            RowGap();
 
             if (Event.current == null || _capturing != GetCaptureId(labelKey))
             {
@@ -619,6 +654,7 @@ namespace SpectreReplay.Ui
                 wide ? Gui.PrimaryButtonStyle : Gui.ButtonStyle);
             GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
+            RowGap();
             if (hit)
             {
                 onClick();
@@ -664,6 +700,7 @@ namespace SpectreReplay.Ui
                 _pickOutDirPending = true;
             }            GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
+            RowGap();
 
             // 画在 EndHorizontal 之后：本控件不参与 GUILayout 布局（矩形已经取好），
             // 放在水平组里画反而会和 UMM 自己的滚动区互相干扰。

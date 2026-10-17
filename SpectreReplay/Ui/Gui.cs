@@ -185,6 +185,11 @@ namespace SpectreReplay.Ui
                 padding = new RectOffset(10, 10, 4, 4),
             };
             st.border = new RectOffset(Radius + 1, Radius + 1, Radius + 1, Radius + 1);
+            // **不要在这里设 margin 去补行距。** 圆角按钮竖向紧贴确实会咬边
+            // （2026-10-17 用户截图报「按钮的布局似乎融合到了一起」），但
+            // margin 是**布局**尺寸：UMM 的 ScaleGUI 会给按钮定 fixedHeight，
+            // 两者叠加时按钮实际高度会变，页签与行高一起漂。行距统一由
+            // OnGui.RowGap 在行助手那一层补。
 
             st.normal.background = RoundedTex.Get(Size, Size, Radius, face);
             st.normal.textColor = text;

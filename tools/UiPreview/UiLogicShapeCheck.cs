@@ -301,8 +301,19 @@ namespace UiPreview
                 "⑬e 说明框必须只在 Repaint 画且高度按内容算",
                 "Ui\\\\Gui.cs",
                 s => TooltipBodyIsSane(s));
+            // ⑬f 行与行之间必须留竖向间距。
+            //
+            //    圆角贴图半径 8、按钮高 22~28：两行紧贴时上一颗的下圆角与
+            //    下一颗的上圆角正好咬合，中间没有卡片底色透出来，一列按钮
+            //    连成一根粗色条（2026-10-17 用户截图报「按钮的布局似乎
+            //    融合到了一起」）。**逐方法判**：只查文件里出现过 RowGap(
+            //    的话，写一处就全绿，其余五处漏掉照样看不出来。
+            fail += Check(projectRoot,
+                "⑬f 五种行控件与整行按钮都必须留出行距(否则圆角咬合成一根)",
+                "Ui\\\\OnGui.cs",
+                s => AllRowsHaveGap(s));
             if (fail == 0)
-                Console.WriteLine("    ✓ 二十二条界面形状判据都成立");
+                Console.WriteLine("    ✓ 二十三条界面形状判据都成立");
             return fail;
         }
 
@@ -718,6 +729,28 @@ namespace UiPreview
             {
                 string body = MethodBody(code, m);
                 if (body == null || !body.Contains("Tip(", StringComparison.Ordinal)) return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 是否每个行助手在收尾时都补了行距。
+        ///
+        /// **必须逐个方法判。** 整文件搜 <c>RowGap();</c> 的话，只要有一处
+        /// 调了它就全绿——而"其余行照旧咬在一起"正是这条判据要拦的形态，
+        /// 也正是 ⑬d（悬停说明）必须逐方法判的同一个理由。
+        ///
+        /// <c>Row</c> 也在这里：它只是一行开关，没有任何按钮，但它同样
+        /// 参与"行与行要不要分开"——开关 pill 与下面那颗按钮贴在一起时，
+        /// 视觉上会被读成同一组的延续。
+        /// </summary>
+        private static bool AllRowsHaveGap(string code)
+        {
+            foreach (string m in new[]
+                     { "Row", "RowSlider", "RowDropdown", "RowHotkey", "RowInput", "Button" })
+            {
+                string body = MethodBody(code, m);
+                if (body == null || !body.Contains("RowGap();", StringComparison.Ordinal)) return false;
             }
             return true;
         }
