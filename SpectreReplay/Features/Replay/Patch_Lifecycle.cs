@@ -294,7 +294,23 @@ internal class Patch_StartRewind
                 data.strings[SongName] = songName;
                 data.strings[LevelPath] = "OfficialLevel " + songName;
                 data.ints[Pitch] = 0;
-                data.doubles[Bpm] = 0.0;
+                // **BPM 不能硬写 0。** 这里原先两行都是 0，理由是"官方关卡
+                // 不比 Pitch/BPM"——但那是不比，不是不知道。写 0 的直接后果
+                // 是详情面板把它显示成「?」（2026-10-18 用户截图报的就是它），
+                // 而玩家展开一份蓝盘回放，最想看的信息之一恰恰是这关多快。
+                //
+                // 填真值不改变任何校验：TryStartPlayback 里那一句
+                // `!ADOBase.isOfficialLevel && (Pitch/Bpm 比对)` 对官方关卡
+                // 整段跳过，存什么都不会被比。所以这里只是把已知信息记下来。
+                //
+                // **取值走 conductor 而不是 scnGame.instance.levelData。**
+                // 两者是同一个值（scrConductor.SetupConductorWithLevelData 里
+                // `bpm = levelData.bpm`），但 scnGame.instance 在编辑器、
+                // 回放重开等时点可能为 null，取它会把一次空引用变成录制失败；
+                // conductor 的 instance getter 自带 FindAnyObjectByType 兜底。
+                // Pitch 仍留 0：面板不显示它，而数值一旦变成真值就会让"官方
+                // 关卡 Pitch 恒为 0"这个既有约定悄悄失效。
+                data.doubles[Bpm] = CurrentBpm();
             }
             else
             {
@@ -325,6 +341,33 @@ internal class Patch_StartRewind
         catch (Exception ex)
         {
             Debug.Log("start recording error: " + ex);
+        }
+    }
+
+    /// <summary>
+    /// 当前这关的 BPM（官方关卡也要能用）。
+    ///
+    /// **为什么不直接用 <c>scnGame.instance.levelData.bpm</c>。** 那是最短的一条路，
+    /// 但 <c>scnGame.instance</c> 是 `public static scnGame instance;`（scnGame.cs:28），
+    /// 只在 <c>scnGame.Awake</c> 里赋值——编辑器、从回放重开、练习模式这些时点
+    /// 取它可能拿到 null，而这里在 <c>TryStartRecording</c> 的 try 里，一旦
+    /// 抛异常整次录制就失败（日志里只有一句 "start recording error"）。
+    ///
+    /// **为什么 conductor 是安全的。** <c>scrConductor.instance</c> 的 getter 自带
+    /// <c>FindAnyObjectByType</c> 兜底（scrConductor.cs:270-278），且它的 bpm 就是
+    /// `SetupConductorWithLevelData` 从同一份 levelData 抄过来的（:380），两者
+    /// 语义完全等价。取不到就返回 0（= 面板显示「?」，与旧行为一致），不抛。
+    /// </summary>
+    private static double CurrentBpm()
+    {
+        try
+        {
+            var c = ADOBase.conductor;
+            return c != null ? c.bpm : 0.0;
+        }
+        catch
+        {
+            return 0.0;
         }
     }
 

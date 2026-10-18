@@ -1,4 +1,4 @@
-﻿// 界面层的控制流/接线断言。
+// 界面层的控制流/接线断言。
 //
 // 为什么单独一组：上一轮（偏差 25）11 条界面缺陷在 116 条断言全绿的情况下
 // 全部漏网，原因是闸门没有界面层。补上的 UiLogicCheck 那 6 组盯着"控制流形状"，
@@ -301,6 +301,22 @@ namespace UiPreview
                 "⑬e 说明框必须只在 Repaint 画且高度按内容算",
                 "Ui\\\\Gui.cs",
                 s => TooltipBodyIsSane(s));
+            // ⑬g 说明框的边界必须是「我们所在的那个窗口」，不能是 Screen。
+            //
+            //    2026-10-18 用户截图报「tip显示超过UMM的界面了」。根因不是配色
+            //    也不是宽度，而是坐标系搞错了：我们的 OnGUI 是 UMM 用 GUI.Window
+            //    回调起来的，控件矩形与鼠标位置**全是窗口内局部坐标**，而原实现
+            //    拿 Screen.width/height 判越界。窗口宽约 700、屏幕 1920 ⇒
+            //    `x + W > 1920 - 8` 恒不成立，贴边翻折那段**形同不存在**。
+            //
+            //    这条特别值得固化成判据：它不报错、不抛异常、不改变任何布局，
+            //    只在窗口窄于屏幕时把框画到窗口外——而绝大多数玩家的屏幕都宽于
+            //    UMM 窗口，所以它稳定复现却完全不像代码问题。
+            //    判据钉两件事：不许再用 Screen 判边界；必须去取可视矩形。
+            fail += Check(projectRoot,
+                "⑬g 说明框边界必须按窗口可视区算(用 Screen 判越界会画出面板被裁)",
+                "Ui\\Gui.cs",
+                s => TooltipBoundsUseViewport(s));
             // ⑬f 行与行之间必须留竖向间距。
             //
             //    圆角贴图半径 8、按钮高 22~28：两行紧贴时上一颗的下圆角与
@@ -488,8 +504,26 @@ namespace UiPreview
                 "㉓d 判定分布文案键必须是字面量表(动态拼键会被判成死键)",
                 "Features\\Replay\\ReplayFileInfo.cs",
                 s => CountOccurrences(s, "\"playback.judge.") >= 16
-                     && s.Contains("JudgmentLocaleKeys", StringComparison.Ordinal));            if (fail == 0)
-                Console.WriteLine("    ✓ 四十四条界面形状判据都成立");
+                     && s.Contains("JudgmentLocaleKeys", StringComparison.Ordinal));
+            // ㉔ 官方关卡回放必须记录**真实 BPM**（2026-10-18 用户截图报「官方关卡
+            //    的 BPM 怎么是个问号」）。
+            //
+            //    根因不在面板：录制时 `if (ADOBase.isOfficialLevel)` 那一段把
+            //    `data.doubles[Bpm]` 硬写成 0.0，面板再把 `<= 0` 渲染成「?」。
+            //    面板的显示规则本身是对的（0 确实不该显示成 0 BPM）——所以
+            //    修的地方在录制侧，判据也必须钉在录制侧，否则改面板只会把
+            //    「?」变成「0」，仍然是错的。
+            //
+            //    **为什么填真值不会破坏校验**：TryStartPlayback 里的 Pitch/Bpm
+            //    比对整段包在 `!ADOBase.isOfficialLevel &&` 后面，官方关卡从不比
+            //    这两个值。判据因此要同时钉住两件事：写入的是活的取值函数，
+            //    且该函数走 conductor（scnGame.instance 可能为 null）。
+            fail += Check(projectRoot,
+                "㉔ 官方关卡回放必须记录真实 BPM(硬写 0 会让详情面板显示「?」)",
+                "Features\\Replay\\Patch_Lifecycle.cs",
+                s => OfficialLevelBpmIsReal(s));
+            if (fail == 0)
+                Console.WriteLine("    ✓ 四十六条界面形状判据都成立");
             return fail;
         }
 
@@ -501,6 +535,27 @@ namespace UiPreview
         /// 「有 _pendingDelete」不够——把它赋值放在 File.Delete 之后也能过，
         /// 而那等价于单点即删。
         /// </summary>
+        /// <summary>
+        /// 官方关卡分支是否记录了**真实**的 BPM。
+        ///
+        /// 三条一起判，缺一条都能被"看起来改了"骗过：
+        /// ① `data.doubles[Bpm] = 0.0;` 这一行**必须消失**——只判"有没有赋值"
+        ///    的话，硬写 0 那行照样命中；
+        /// ② 必须改成调用 <c>CurrentBpm()</c>；
+        /// ③ 那个助手必须走 <c>ADOBase.conductor</c>，不许碰
+        ///    <c>scnGame.instance</c>（它在编辑器/重开时点可能为 null，
+        ///    而这段代码在 try 里，一抛就是整次录制失败）。
+        /// </summary>
+        private static bool OfficialLevelBpmIsReal(string code)
+        {
+            if (!code.Contains("data.doubles[Bpm] = CurrentBpm();", StringComparison.Ordinal))
+                return false;
+            string body = MethodBody(code, "CurrentBpm");
+            if (body == null) return false;
+            return body.Contains("ADOBase.conductor", StringComparison.Ordinal)
+                && !body.Contains("scnGame.instance", StringComparison.Ordinal);
+        }
+
         private static bool DeleteIsTwoStep(string body)
         {
             if (body == null) return false;
@@ -1308,6 +1363,32 @@ namespace UiPreview
         ///    玩家不会当成缺陷报回来，只会以为说明就这么点内容;
         /// ③ **宽度写死**：跟着内容走会让长说明撑满整行甚至溢出窗口。
         /// </summary>
+        /// <summary>
+        /// 说明框的越界判定是否用了**窗口可视区**而不是屏幕尺寸。
+        ///
+        /// 判法有两条，缺一不可：
+        /// ① <c>DrawTooltip</c> 体内**不许**再出现 <c>Screen.width</c>/<c>Screen.height</c>
+        ///    ——它们判的是整块屏幕，而我们在窗口里，比较必然不成立；
+        /// ② 必须真的去取可视矩形（<c>Viewport()</c>），且它内部要落到
+        ///    <c>GUIClip.visibleRect</c> 上。只判 ① 会放过"删掉了越界判断、
+        ///    什么夹取都不做"的写法——那同样会把框画到窗口外。
+        ///
+        /// **为什么不直接判越界数学**：`x + W > right` 这种表达式容易被
+        /// 换个变量名就骗过；而"边界从哪来"是这件事的根因，钉它更稳。
+        /// </summary>
+        private static bool TooltipBoundsUseViewport(string code)
+        {
+            string body = MethodBody(code, "DrawTooltip");
+            if (body == null) return false;
+            // ① 不许拿屏幕尺寸当窗口边界。
+            if (body.Contains("Screen.width", StringComparison.Ordinal)) return false;
+            if (body.Contains("Screen.height", StringComparison.Ordinal)) return false;
+            // ② 必须取可视区，且那个助手真的去问 GUIClip。
+            if (!body.Contains("Viewport()", StringComparison.Ordinal)) return false;
+            string vp = MethodBody(code, "Viewport");
+            return vp != null && vp.Contains("visibleRect", StringComparison.Ordinal);
+        }
+
         private static bool TooltipBodyIsSane(string code)
         {
             string body = MethodBody(code, "DrawTooltip");

@@ -1320,6 +1320,17 @@ switch ($Which) {
         if ($hit -ne 1) { throw "MUT-D7 命中 $hit 次" }
         SetLines 'Pages\Pages.cs' $lines
     }
+    'MUT-D13' {
+        # ⑬g 边界回归：说明框退回用 Screen 判越界（窗口窄于屏幕时永远不翻折，
+        #      框子直接画出面板右缘被裁——2026-10-18 用户截图报的就是它）。
+        Backup 'Ui\Gui.cs'
+        ReplaceExact 'Ui\Gui.cs' 'Rect view = Viewport();' 'Rect view = new Rect(0f, 0f, Screen.width, Screen.height);'
+    }
+    'MUT-D14' {
+        # ㉔ BPM 回归：官方关卡退回硬写 0（详情面板重新显示成问号）。
+        Backup 'Features\Replay\Patch_Lifecycle.cs'
+        ReplaceExact 'Features\Replay\Patch_Lifecycle.cs' 'data.doubles[Bpm] = CurrentBpm();' 'data.doubles[Bpm] = 0.0;'
+    }
     'MUT-D8' {
         # ㉓b 副作用回归：读详情改用会碰键盘音的 LoadReplay。
         Backup 'Features\Replay\ReplayFileInfo.cs'

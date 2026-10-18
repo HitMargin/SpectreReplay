@@ -70,6 +70,9 @@ $knownDeviations = @(
     @{ Pat = 'conductor == null';                    Why = 'round 58 丢键修复（先出队后解引用）' }
     @{ Pat = '(conductor null)';                     Why = 'round 58 同类守卫：录制侧 ReplayRecorder 补上回放侧早就有的导体判空（漏了会 NRE 灌进游戏 Won_Update）' }
     @{ Pat = 'conductor null || conductor.song';     Why = 'round 58 AsyncKeyRecorder 的导体判空（先出队后解引用会整批丢键）' }
+    @{ Pat = 'ADOBase.conductor';                     Why = '官方关卡回放要记真实 BPM：走 conductor 而不是 scnGame.instance（后者在编辑器/重开时点可能为 null，而这段在 try 里，一抛就是整次录制失败）' }
+    @{ Pat = 'c.bpm';                                 Why = '同上：conductor.bpm 与 levelData.bpm 是同一个值（scrConductor.SetupConductorWithLevelData 抄的），取不到返回 0' }
+    @{ Pat = 'CurrentBpm';                            Why = '同上：把「官方关卡 BPM 恒为 0」的硬编码换成活取值，详情面板才不会显示成问号' }
     @{ Pat = 'global using PatchShared';              Why = '我们自写补丁层，接线方式与上游不同' }
     @{ Pat = 'RenderOn';                              Why = '渲染总开关（原先绑 ReplayOn 会连带关录制）' }
     @{ Pat = 'rendervideo.disabled';                 Why = 'RenderOn 守卫的提示文案' }

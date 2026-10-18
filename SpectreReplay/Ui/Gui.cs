@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using UnityEngine;
 
 namespace SpectreReplay.Ui
@@ -808,6 +809,71 @@ namespace SpectreReplay.Ui
         }
 
         /// <summary>
+        /// 当前真正可画的矩形（我们所在窗口/滚动视口，而不是整块屏幕）。
+        ///
+        /// **为什么不能用 <c>Screen.width/height</c>。** UMM 是用 <c>GUI.Window</c>
+        /// 把模组 OnGUI 回调起来的（<c>UnityModManager.UI::OnGUI</c> 里
+        /// <c>GUILayout.Window(0, mWindowRect, WindowFunction, …)</c>），控件的
+        /// 矩形、<c>Event.current.mousePosition</c> 与它交给我们的坐标系**全是
+        /// 窗口内的局部坐标**；而 UMM 又把整个模组页包在自己的一层 ScrollView
+        /// 里（见 OnGui.cs 类注释第 3 条）。拿屏幕尺寸当边界 ⇒
+        /// 「窗口 700 宽、屏幕 1920 宽」时 `x + W > 1920 - 8` 恒不成立，
+        /// 越界分支等于不存在，说明框直接画出面板右缘被裁掉。
+        ///
+        /// <c>GUIClip.visibleRect</c> 是 Unity 自己维护的**当前裁剪矩形**，
+        /// 正好就是"这一时刻允许画到哪里"——它随 Window 与 ScrollView 一起变，
+        /// 不需要我们去读任何私有字段、也不用假定窗口宽度。UMM 内部画 tooltip
+        /// 时比的是 <c>mWindowRect.width</c>（私有字段），我们能拿到的等价信息
+        /// 就是它。
+        ///
+        /// **取不到就退回 Screen。** 反射失败只会让边界重新变成"屏幕"，
+        /// 也就是退回本缺陷修复前的行为——难看，但不会把说明框画到窗口外面去，
+        /// 更不会让整个面板消失（OnGUI 抛异常 = UMM 收掉面板）。
+        /// </summary>
+        private static Rect Viewport()
+        {
+            if (_guiClipProp == null && !_guiClipProbed)
+            {
+                _guiClipProbed = true;
+                try
+                {
+                    // GUIClip 是 **internal** 类型（UnityEngine.dll 里 IsPublic=False），
+                    // 所以只能按名字找类型 + 取非公开静态属性。
+                    Type t = Type.GetType("UnityEngine.GUIClip, UnityEngine.IMGUIModule")
+                             ?? Type.GetType("UnityEngine.GUIClip, UnityEngine");
+                    if (t != null)
+                    {
+                        _guiClipProp = t.GetProperty("visibleRect",
+                            BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                    }
+                }
+                catch
+                {
+                    _guiClipProp = null;
+                }
+            }
+            if (_guiClipProp != null)
+            {
+                try
+                {
+                    object v = _guiClipProp.GetValue(null, null);
+                    if (v is Rect r && r.width > 0f && r.height > 0f)
+                    {
+                        return r;
+                    }
+                }
+                catch
+                {
+                    // 运行时取不到（理论上不会有）：下面的兜底照样能画。
+                }
+            }
+            return new Rect(0f, 0f, Screen.width, Screen.height);
+        }
+
+        private static PropertyInfo _guiClipProp;
+        private static bool _guiClipProbed;
+
+        /// <summary>
         /// 画当前登记的说明框。**必须在整页画完之后调用**（见 <see cref="Tip"/>）。
         ///
         /// 三处容易踩的点：
@@ -836,27 +902,59 @@ namespace SpectreReplay.Ui
             }
 
             Ensure();
+            // **边界必须是"我们所在的那个窗口"，不是 Screen。**
+            // 这一段原先前后两处都拿 Screen.width / Screen.height 判越界，
+            // 而我们的 OnGUI 是 UMM 用 GUI.Window 回调起来的：控件矩形与
+            // Event.current.mousePosition 全都是**窗口内的局部坐标**。
+            // 窗口宽约 700、屏幕宽 1920 ⇒ `x + W > Screen.width - 8` 永远
+            // 不成立，"贴边翻折"整个分支等于不存在，框子直接画出面板右缘
+            // 被窗口裁掉（2026-10-18 用户截图报的就是它）。
+            // UMM 自己画 tooltip 时比的是 mWindowRect.width，也是这个道理。
+            Rect view = Viewport();
+            // **宽度仍由常量给上限**（跟着内容走会让长说明撑满整行），
+            // 只是再夹到可视区内：窗口窄于 320+边距时，写死的宽度会顶出
+            // 右缘——与"位置越界"是同一个坏结果，只是原因在宽度。
             const float W = 320f;
+            float w = Mathf.Min(W, view.width - 16f);
+            if (w < 80f)
+            {
+                return;   // 窄到放不下一句说明：宁可不弹，也不画一条挤烂的字
+            }
             const float PadX = 10f;
             const float PadY = 8f;
-            float inner = W - PadX * 2f;
+            float inner = w - PadX * 2f;
             var content = new GUIContent(text);
             float h = _tipStyle.CalcHeight(content, inner) + PadY * 2f;
 
+            float right = view.width - 8f;
             float x = _tipAnchor.x;
-            float maxX = Screen.width - W - 8f;
-            if (x > maxX) x = maxX;
-            if (x < 8f) x = 8f;
+            if (x + w > right)
+            {
+                x = right - w;
+            }
+            if (x < 8f)
+            {
+                x = 8f;
+            }
 
+            float bottom = view.height - 8f;
             float below = _tipAnchor.yMax + 6f;
             float above = _tipAnchor.y - h - 6f;
             float y = below;
-            if (below + h > Screen.height - 8f && above > 8f)
+            if (y + h > bottom)
             {
-                y = above;
+                y = above;          // 先翻到控件上方
+            }
+            if (y + h > bottom)
+            {
+                y = bottom - h;     // 上方也放不下：贴底，整块仍在窗口内
+            }
+            if (y < 8f)
+            {
+                y = 8f;             // 最后夹到顶部：宁可盖住控件，也不画出窗口
             }
 
-            Rect box = new Rect(x, y, W, h);
+            Rect box = new Rect(x, y, w, h);
             // 底色近乎不透明：说明框盖在别的行文字上，半透明会让两层字叠起来
             Fill(box, TipBg);
             Frame(box, TipBorder);
