@@ -1,4 +1,4 @@
-﻿// 界面层的控制流/接线断言。
+// 界面层的控制流/接线断言。
 //
 // 为什么单独一组：上一轮（偏差 25）11 条界面缺陷在 116 条断言全绿的情况下
 // 全部漏网，原因是闸门没有界面层。补上的 UiLogicCheck 那 6 组盯着"控制流形状"，
@@ -427,9 +427,65 @@ namespace UiPreview
                 "Features\\Replay\\Patch_SpecialKeys.cs",
                 s => s.Contains("KeyCode.Escape", StringComparison.Ordinal)
                      && s.Contains("\"Escape\"", StringComparison.Ordinal));
+            // ㉒ 「删除回放文件」必须是**两段式**（2026-10-18 用户要求新增该按钮）。
+            //
+            //    这条按钮的失败方式与别的不同：它不是「没反应」，而是**删错**。
+            //    回放文件是玩家唯一产出，不走回收站、不可撤销，而它旁边就是
+            //    「回放」主按钮——单点即删时手滑一次那局就没了。所以判据不看
+            //    「有没有删除调用」，只看「删除是不是发生在第二次点击之后」。
+            //
+            //    ㉒a 必须真的删文件（否则按钮是个摆设）；
+            //    ㉒b 第一次点击**不许**出现 File.Delete——这是两段式的全部意义；
+            //    ㉒c 删的若是当前载入那份，必须连带清 _loadedPath（否则界面
+            //        一直写着「已载入」一个不存在的文件，看起来像删除失败）；
+            //    ㉒d 删完必须刷列表缓存（1 秒缓存会把已删的行再挂 1 秒，
+            //        玩家再点一下就是删一个不存在的路径）。
+            fail += Check(projectRoot,
+                "㉒a 每行要有删除按钮且真的调 File.Delete",
+                "Pages\\Pages.cs",
+                s => s.Contains("DrawDeleteFileButton(captured)", StringComparison.Ordinal)
+                     && MethodBody(s, "DrawDeleteFileButton") is string db
+                     && db.Contains("File.Delete(path)", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㉒b 删除必须两段式：第一次点击不许删文件",
+                "Pages\\Pages.cs",
+                s => DeleteIsTwoStep(MethodBody(s, "DrawDeleteFileButton")));
+            fail += Check(projectRoot,
+                "㉒c 删掉当前载入的回放要连带卸载(否则界面还显示已载入一个不存在的文件)",
+                "Pages\\Pages.cs",
+                s => MethodBody(s, "AfterReplayDeleted") is string ab
+                     && ab.Contains("_loadedPath = \"\"", StringComparison.Ordinal)
+                     && ab.Contains("UnloadReplay", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㉒d 删完要刷列表缓存(1 秒缓存会让已删的行还在，再点就是删不存在的路径)",
+                "Pages\\Pages.cs",
+                s => MethodBody(s, "AfterReplayDeleted") is string ab2
+                     && ab2.Contains("_replayCache = null", StringComparison.Ordinal));
             if (fail == 0)
-                Console.WriteLine("    ✓ 三十六条界面形状判据都成立");
+                Console.WriteLine("    ✓ 四十条界面形状判据都成立");
             return fail;
+        }
+
+        /// <summary>
+        /// 「删除」是不是**两段式**：第一下只进入待确认态、第二下才删。
+        ///
+        /// 判法：在方法体里找到 <c>File.Delete</c> 的位置，它之前必须既有
+        /// 「记录待确认路径」又有「未处于待确认就 return」的早退。只判
+        /// 「有 _pendingDelete」不够——把它赋值放在 File.Delete 之后也能过，
+        /// 而那等价于单点即删。
+        /// </summary>
+        private static bool DeleteIsTwoStep(string body)
+        {
+            if (body == null) return false;
+            int del = body.IndexOf("File.Delete(path)", StringComparison.Ordinal);
+            if (del < 0) return false;
+            int mark = body.IndexOf("_pendingDelete = path;", StringComparison.Ordinal);
+            if (mark < 0 || mark > del) return false;   // 记录待确认必须发生在删除之前
+            // 早退：`if (!pending)` 里 return，且该 return 在 File.Delete 之前
+            int guard = body.IndexOf("if (!pending)", StringComparison.Ordinal);
+            if (guard < 0 || guard > del) return false;
+            int ret = body.IndexOf("return;", guard, StringComparison.Ordinal);
+            return ret > guard && ret < del;
         }
 
         /// <summary>

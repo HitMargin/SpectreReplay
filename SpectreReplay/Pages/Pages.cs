@@ -42,6 +42,20 @@ namespace SpectreReplay.Pages
         private static List<string> _replayCache;
         private static int _replayCacheTick = int.MinValue;
 
+        /// <summary>
+        /// 正在等第二次点击确认删除的那个文件（空 = 没有待确认的删除）。
+        ///
+        /// **删除只能两段式**：第一下把按钮变成「确认删除」并把路径记在这里，
+        /// 第二下才真删。IMGUI 里没有宿主级确认框（UMM 不提供），而
+        /// 回放文件是玩家的**唯一产出**、删掉不可恢复（没有回收站、没有撤销），
+        /// 一颗单点即删的按钮放在每行——行里还有「回放」那颗主按钮——
+        /// 手滑一次就没了。
+        ///
+        /// 存路径而不是 bool：玩家点 A 再点 B 时，B 必须是**第一次**点击
+        /// （若只存 bool，B 一点就直接删了）。
+        /// </summary>
+        private static string _pendingDelete = "";
+
         // ── 录制 ────────────────────────────────────────────────
         internal static void DrawRecord()
         {
@@ -265,6 +279,10 @@ namespace SpectreReplay.Pages
                     {
                         LoadReplayFile(captured);
                     }
+                    // **删除放在最后一列、用最轻的样式。** 这一行已经有
+                    // 「回放」那颗主按钮，删除是破坏性操作，不该和它抢位置与
+                    // 视觉权重；用 QuietButtonStyle 与「卸载回放」同一档。
+                    DrawDeleteFileButton(captured);
                     GUILayout.EndHorizontal();
                 }
             });
@@ -272,6 +290,7 @@ namespace SpectreReplay.Pages
 
         private static void LoadReplayFile(string path)
         {
+            _pendingDelete = "";
             try
             {
                 if (!Features.Replay.ReplayManager.LoadReplayAuto(
@@ -299,6 +318,87 @@ namespace SpectreReplay.Pages
             {
                 Debug.LogWarning("[SpectreReplay] 载入回放失败：" + ex);
             }
+        }
+
+        /// <summary>
+        /// 每行末尾那颗「删除」按钮。**两段式**：第一下只把按钮文案换成
+        /// 「确认删除」，第二下才真的删文件。
+        ///
+        /// <para><b>为什么必须两段。</b>回放文件是玩家的唯一产出，删掉不可恢复
+        /// （不走回收站、没有撤销）。而它所在的那一行左边就是「回放」主按钮，
+        /// 手滑一次那局就没了。UMM 不提供宿主级确认框，所以在原地做。</para>
+        ///
+        /// <para><b>为什么记路径而不是 bool。</b>玩家先点 A 再点 B 时，B 必须是
+        /// 「第一次点击」。只存 bool 的话 B 一点就直接删——两次点击落在两个
+        /// 不同文件上，语义完全不同。</para>
+        ///
+        /// <para><b>为什么删的若是当前载入的那个要连带卸载。</b>文件没了而
+        /// <c>data</c> 还装着它的内容，界面会一直显示「已载入」一个不存在的
+        /// 文件；玩家再点重开还能播——这会让人以为删除失败了。</para>
+        /// </summary>
+        private static void DrawDeleteFileButton(string path)
+        {
+            bool pending = string.Equals(path, _pendingDelete, StringComparison.OrdinalIgnoreCase);
+            string label = Loc.T(pending ? "playback.delete.confirm" : "playback.delete");
+            float w = pending ? 110f : 70f;
+            // 显式取矩形而不是让 GUILayout.Button 自己排：Gui.Tip 需要一个 Rect，
+            // 而本项目「每个控件都能自我解释」的约定要靠它（删除尤其需要——
+            // 它是这一页唯一的破坏性操作）。
+            Rect r = GUILayoutUtility.GetRect(w, 22f,
+                GUILayout.Width(w), GUILayout.Height(22f));
+            Gui.Tip(r, "playback.delete");
+            if (!GUI.Button(r, label,
+                    pending ? Gui.AccentButtonStyle : Gui.QuietButtonStyle))
+            {
+                return;
+            }
+            if (!pending)
+            {
+                // 第一下：只进入待确认态，绝不碰文件。
+                _pendingDelete = path;
+                return;
+            }
+
+            // 第二下：真删。
+            _pendingDelete = "";
+            try
+            {
+                File.Delete(path);
+                AfterReplayDeleted(path);
+                Status.Say("playback.delete.done", Path.GetFileNameWithoutExtension(path));
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[SpectreReplay] 删除回放失败：" + ex);
+                Status.Warn("playback.delete.err", Path.GetFileNameWithoutExtension(path));
+            }
+        }
+
+        /// <summary>
+        /// 文件删掉之后的连带处理。**两件事都必须做，且都不是可选的：**
+        ///
+        /// ① 删的若是当前载入那份，必须卸载并清 <c>_loadedPath</c>。否则界面
+        ///    一直显示「已载入」一个已经不存在的文件，而玩家再点「重开这关」
+        ///    还能播（数据在内存里）——看起来就像删除失败了。
+        /// ② 必须刷列表缓存。列表有 1 秒缓存，不刷的话被删的那行还会挂着，
+        ///    玩家再点一下就是 <c>File.Delete</c> 一个不存在的路径（异常 + 红字）。
+        /// </summary>
+        private static void AfterReplayDeleted(string path)
+        {
+            if (string.Equals(path, _loadedPath, StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    PlayActions.UnloadReplay();
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning("[SpectreReplay] 删除后卸载回放失败：" + ex.Message);
+                }
+                _loadedPath = "";
+            }
+            _replayCache = null;
+            _replayCacheTick = int.MinValue;
         }
 
         /// <summary>

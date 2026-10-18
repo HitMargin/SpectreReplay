@@ -1295,7 +1295,57 @@ switch ($Which) {
         Backup 'Features\Replay\ReplayCrypto.cs'
         ReplaceExact 'Features\Replay\ReplayCrypto.cs' 'Buffer.BlockCopy(iv, 0, buf, p, IVLen); p += IVLen;' 'p += IVLen;'
     }
-    'MUT-PORT1' {
+    'MUT-D3' {
+        # ㉒b 两段式回归：把「第一次点击只进入待确认」那道早退去掉，
+        #      第一次点击就直接删 —— 手滑一次那局回放就没了。
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' 'if (!pending)' 'if (false)'
+    }
+    'MUT-D4' {
+        # ㉒c 连带卸载回归：删掉当前载入的那份后不清 _loadedPath，
+        #      界面会一直写着「已载入」一个不存在的文件。
+        Backup 'Pages\Pages.cs'
+        $lines = Lines 'Pages\Pages.cs'
+        $start = -1
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Contains('private static void AfterReplayDeleted')) { $start = $i; break }
+        }
+        if ($start -lt 0) { throw 'MUT-D4 锚点未找到' }
+        $hit = 0
+        for ($i = $start; $i -lt [Math]::Min($start + 40, $lines.Count); $i++) {
+            if ($lines[$i].Contains('_loadedPath = "";')) {
+                $lines[$i] = $lines[$i].Replace('_loadedPath = "";', '// mutated')
+                $hit++
+            }
+        }
+        if ($hit -ne 1) { throw "MUT-D4 命中 $hit 次" }
+        SetLines 'Pages\Pages.cs' $lines
+    }
+    'MUT-D5' {
+        # ㉒d 列表缓存回归：删完不刷缓存，被删的那行还会挂 1 秒，
+        #      玩家再点一下就是删一个不存在的路径。
+        Backup 'Pages\Pages.cs'
+        $lines = Lines 'Pages\Pages.cs'
+        $start = -1
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Contains('private static void AfterReplayDeleted')) { $start = $i; break }
+        }
+        if ($start -lt 0) { throw 'MUT-D5 锚点未找到' }
+        $hit = 0
+        for ($i = $start; $i -lt [Math]::Min($start + 40, $lines.Count); $i++) {
+            if ($lines[$i].Contains('_replayCache = null;')) {
+                $lines[$i] = $lines[$i].Replace('_replayCache = null;', '// mutated')
+                $hit++
+            }
+        }
+        if ($hit -ne 1) { throw "MUT-D5 命中 $hit 次" }
+        SetLines 'Pages\Pages.cs' $lines
+    }
+    'MUT-D6' {
+        # ㉒a 入口回归：列表行里不再画删除按钮（功能整个消失）。
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' 'DrawDeleteFileButton(captured);' ''
+    }    'MUT-PORT1' {
         # 移植保真度：在 KeyboardSimulation.cs 里引入一处**上游没有、也登记不上**的
         # 改动 = 模拟"抄错"。port-diff-audit 应当报"未登记差异"并 exit 1。
         # 这条守的是 round 60 立的约定：每处与上游的差异都必须挂到一条修改记录。
