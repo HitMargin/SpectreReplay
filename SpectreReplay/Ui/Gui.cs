@@ -38,22 +38,22 @@ namespace SpectreReplay.Ui
     internal static class Gui
     {
         // ── 调色板（一处定义，四个页面共用）─────────────────────
-        internal static readonly Color CardBg  = new Color(0.13f, 0.15f, 0.19f, 1f);
-        internal static readonly Color HeadBg  = new Color(0.09f, 0.11f, 0.14f, 1f);
+        internal static readonly Color CardBg = new Color(0.13f, 0.15f, 0.19f, 1f);
+        internal static readonly Color HeadBg = new Color(0.09f, 0.11f, 0.14f, 1f);
         internal static readonly Color LineCol = new Color(1f, 1f, 1f, 0.09f);
-        internal static readonly Color Accent  = new Color(0.24f, 0.62f, 0.92f, 1f);
+        internal static readonly Color Accent = new Color(0.24f, 0.62f, 0.92f, 1f);
         internal static readonly Color TextCol = new Color(0.90f, 0.93f, 0.96f, 1f);
-        internal static readonly Color DimCol  = new Color(0.60f, 0.66f, 0.74f, 1f);
-        internal static readonly Color OkCol   = new Color(0.30f, 0.82f, 0.46f, 1f);
+        internal static readonly Color DimCol = new Color(0.60f, 0.66f, 0.74f, 1f);
+        internal static readonly Color OkCol = new Color(0.30f, 0.82f, 0.46f, 1f);
         internal static readonly Color WarnCol = new Color(0.96f, 0.72f, 0.22f, 1f);
-        internal static readonly Color BadCol  = new Color(0.93f, 0.34f, 0.34f, 1f);
+        internal static readonly Color BadCol = new Color(0.93f, 0.34f, 0.34f, 1f);
         internal static readonly Color PillOff = new Color(1f, 1f, 1f, 0.16f);
-        internal static readonly Color BtnOff  = new Color(1f, 1f, 1f, 0.14f);
+        internal static readonly Color BtnOff = new Color(1f, 1f, 1f, 0.14f);
         // 按钮面。**必须是"比卡片亮"的实色**（同 FieldBg 那条教训）：
         // 圆角贴图自带颜色，不再靠 GUI.backgroundColor 染色，所以这里要直接给对。
         // 注意：GUI.backgroundColor 是**乘算**的，谁要是再对圆角按钮设它，
         // 颜色会被再乘一遍变暗——所以原来那几处染色点已改成用专门的样式。
-        internal static readonly Color BtnFace  = new Color(0.20f, 0.23f, 0.29f, 1f);
+        internal static readonly Color BtnFace = new Color(0.20f, 0.23f, 0.29f, 1f);
         internal static readonly Color BtnHover = new Color(0.28f, 0.32f, 0.39f, 1f);
         // 分段/页签的"未选中"底色（比按钮面再暗一点，让选中态更跳）。
         // 用**不透明**色而不是半透明白：贴图把颜色烘进去了，半透明会在卡片上
@@ -70,13 +70,13 @@ namespace SpectreReplay.Ui
         // 一个黑洞，与修复前的原生黑框毫无区别，于是"黑框还在"被反馈回来。
         // 判据不是"颜色是多少"，而是**与卡片的明度差**：凹槽要比承载它的平面亮，
         // 才读得出"这里可以输入"。描边同理，0.18 太淡，视觉上等于没有边。
-        internal static readonly Color FieldBg     = new Color(0.21f, 0.24f, 0.30f, 1f);
+        internal static readonly Color FieldBg = new Color(0.21f, 0.24f, 0.30f, 1f);
         internal static readonly Color FieldBorder = new Color(1f, 1f, 1f, 0.30f);
-        internal static readonly Color FieldFocus  = new Color(0.35f, 0.68f, 0.95f, 1f);
-        internal static readonly Color FieldSel    = new Color(0.24f, 0.62f, 0.92f, 0.45f);
+        internal static readonly Color FieldFocus = new Color(0.35f, 0.68f, 0.95f, 1f);
+        internal static readonly Color FieldSel = new Color(0.24f, 0.62f, 0.92f, 0.45f);
         // 占位文案单独一色：DimCol (0.60,0.66,0.74) 在 (0.21,0.24,0.30) 上偏亮，
         // 会被误当成"已填好的真路径"。压暗到能读但不抢眼。
-        internal static readonly Color FieldHint   = new Color(0.55f, 0.60f, 0.68f, 1f);
+        internal static readonly Color FieldHint = new Color(0.55f, 0.60f, 0.68f, 1f);
         // 自绘滑条：轨道凹槽 + 滑块。滑块要比轨道亮得多才抓得住眼睛。
         internal static readonly Color SliderTrack = new Color(0.14f, 0.16f, 0.21f, 1f);
         internal static readonly Color SliderThumb = new Color(0.88f, 0.91f, 0.95f, 1f);
@@ -92,19 +92,19 @@ namespace SpectreReplay.Ui
         // 反而更像 bug。判据 ⑪ 钉的是"取用了 hover 判据与 hover 色"，
         // 不是某几个具体数字——数字可以调，形态不能丢。
         internal static readonly Color SliderTrackHover = new Color(0.20f, 0.23f, 0.29f, 1f);
-        internal static readonly Color SliderFillHover  = new Color(0.36f, 0.72f, 1f, 1f);
+        internal static readonly Color SliderFillHover = new Color(0.36f, 0.72f, 1f, 1f);
         internal static readonly Color SliderThumbHover = new Color(1f, 1f, 1f, 1f);
-        internal static readonly Color PillOffHover     = new Color(1f, 1f, 1f, 0.26f);
+        internal static readonly Color PillOffHover = new Color(1f, 1f, 1f, 0.26f);
         // 输入框 hover 必须**另起名字**、不能改 FieldBg：判据 ⑤ 拿 FieldBg 与
         // CardBg 比 Rec.709 亮度（凹槽要比承载面亮），FieldBg 是非悬停的基准色，
         // 改它就等于把基准改掉了。
-        internal static readonly Color FieldBgHover     = new Color(0.26f, 0.30f, 0.37f, 1f);
+        internal static readonly Color FieldBgHover = new Color(0.26f, 0.30f, 0.37f, 1f);
         internal static readonly Color FieldBorderHover = new Color(1f, 1f, 1f, 0.45f);
 
         // ── 悬浮说明（tooltip）调色板 ────────────────────────────
         // **底色必须接近不透明。** 说明框会盖在卡片与文字之上，半透明底会把
         // 下面的行文字透上来，两层字叠在一起比没有说明更难读。
-        internal static readonly Color TipBg     = new Color(0.05f, 0.06f, 0.08f, 0.98f);
+        internal static readonly Color TipBg = new Color(0.05f, 0.06f, 0.08f, 0.98f);
         internal static readonly Color TipBorder = new Color(0.35f, 0.68f, 0.95f, 0.95f);
 
         // ── 禁用态（总开关关掉时，它下面的子设置压暗）──────────────
@@ -187,26 +187,26 @@ namespace SpectreReplay.Ui
             }
             _skin = GUI.skin;
             _font = GUI.skin.font;
-            _label    = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft };
-            _labelC   = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter };
-            _bold     = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold };
-            _boldC    = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
-            _h1       = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, fontSize = 19 };
-            _h2       = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, fontSize = 13 };
-            _small    = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft,  fontSize = 11 };
-            _smallC   = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontSize = 11, fontStyle = FontStyle.Bold };
+            _label = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft };
+            _labelC = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter };
+            _bold = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold };
+            _boldC = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
+            _h1 = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, fontSize = 19 };
+            _h2 = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, fontSize = 13 };
+            _small = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontSize = 11 };
+            _smallC = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontSize = 11, fontStyle = FontStyle.Bold };
             // 说明文字要**换行**：UMM 把 GUI.skin.label.clipping 改成了 Overflow
             // （decompiled :3509），照抄 Skin.label 的话长句会一路画出窗口外
             // 而不是折行——玩家看到半句话被硬生生截断。
-            _note     = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.UpperLeft, wordWrap = true, clipping = TextClipping.Clip };
-            _pad      = new GUIStyle { padding = new RectOffset(12, 12, 8, 8), margin = new RectOffset(0, 0, 0, 0) };
+            _note = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.UpperLeft, wordWrap = true, clipping = TextClipping.Clip };
+            _pad = new GUIStyle { padding = new RectOffset(12, 12, 8, 8), margin = new RectOffset(0, 0, 0, 0) };
             // 卡片底色**必须由贴图自带**，绝不能用 GUI.backgroundColor 去染一张白底：
             // 它是**乘算**的，会乘到之后画的每个控件背景上——卡片里那些圆角按钮的
             // 底色是烘在贴图里的，再乘一遍就把 hover 与 normal 的色差从 20/23/26
             // 压成 3/3/5（≈1%，肉眼不可辨）。2026-10-16 用户报「打开编辑器按钮
             // hover 没颜色变化」正是它。判据 ⑨ / MUT-V12 守这里。
             _pad.normal.background = RoundedTex.Get(2, 2, 0, CardBg);
-            _btn      = MakeButton(GUI.skin.button, BtnFace, BtnHover, TextCol, false);
+            _btn = MakeButton(GUI.skin.button, BtnFace, BtnHover, TextCol, false);
             _btnPrimary = MakeButton(GUI.skin.button, Accent, Lighten(Accent, 0.15f), Color.white, true);
             _btnQuiet = MakeButton(GUI.skin.button, BtnQuiet, Lighten(BtnQuiet, 0.10f), DimCol, false);
             _btnAccent = MakeButton(GUI.skin.button, Accent, Lighten(Accent, 0.15f), Color.white, true);
@@ -535,28 +535,28 @@ namespace SpectreReplay.Ui
             {
                 switch (e.GetTypeForControl(id))
                 {
-                case EventType.MouseDown:
-                    if (e.button == 0 && track.Contains(e.mousePosition))
-                    {
-                        GUIUtility.hotControl = id;
-                        k = Mathf.Clamp01((e.mousePosition.x - bar.x - Thumb * 0.5f) / span);
-                        e.Use();
-                    }
-                    break;
-                case EventType.MouseDrag:
-                    if (GUIUtility.hotControl == id)
-                    {
-                        k = Mathf.Clamp01((e.mousePosition.x - bar.x - Thumb * 0.5f) / span);
-                        e.Use();
-                    }
-                    break;
-                case EventType.MouseUp:
-                    if (GUIUtility.hotControl == id)
-                    {
-                        GUIUtility.hotControl = 0;
-                        e.Use();
-                    }
-                    break;
+                    case EventType.MouseDown:
+                        if (e.button == 0 && track.Contains(e.mousePosition))
+                        {
+                            GUIUtility.hotControl = id;
+                            k = Mathf.Clamp01((e.mousePosition.x - bar.x - Thumb * 0.5f) / span);
+                            e.Use();
+                        }
+                        break;
+                    case EventType.MouseDrag:
+                        if (GUIUtility.hotControl == id)
+                        {
+                            k = Mathf.Clamp01((e.mousePosition.x - bar.x - Thumb * 0.5f) / span);
+                            e.Use();
+                        }
+                        break;
+                    case EventType.MouseUp:
+                        if (GUIUtility.hotControl == id)
+                        {
+                            GUIUtility.hotControl = 0;
+                            e.Use();
+                        }
+                        break;
                 }
             }
 

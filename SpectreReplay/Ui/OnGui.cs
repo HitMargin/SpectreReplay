@@ -364,70 +364,70 @@ namespace SpectreReplay.Ui
             // 所以门控走 Gui.Dim 包住**整段**，让 Tip/RowGap 仍在体内。
             Gui.Dim(!enabled, () =>
             {
-            GUILayout.BeginHorizontal();
-            GUILayout.Label(Loc.T(labelKey), Gui.LabelStyle, GUILayout.Width(LabelW));
-            // 自绘滑条：原生 HorizontalSlider 的贴图来自 GUI.skin.horizontalSlider，
-            // 而 UMM 只改它的 fixedHeight/border/padding/margin、**从不换贴图**，
-            // 所以它永远是 Unity 默认的圆头灰条（见 Gui.Slider 的说明）。
-            Rect track = GUILayoutUtility.GetRect(Gui.CtrlW, 20f,
-                GUILayout.Width(Gui.CtrlW), GUILayout.Height(20f));
-            // 悬停说明覆盖「标签 + 滑条 + 数值框 + 单位」整行。玩家想被解释的是
-            // 这一项设置，不是那条 6px 高的槽；只认槽的话等于要求他先猜准位置。
-            // 右侧留 46+4 与下面单位区的宽度一致，改那边时别忘了这里。
-            Gui.Tip(new Rect(track.x - LabelW, track.y,
-                LabelW + track.width + FieldW + 50f, track.height), labelKey);
-            float now = Gui.Slider(track, value, min, max);
-            float shown = Mathf.Approximately(now, value) ? value : now;
-            // 右侧数值框。**从只读 Label 改成可编辑输入框**（用户 2026-10-17 要求）：
-            // 滑条拖到 1920 与 1921 在像素上分不出来，而帧率/偏移这类值往往
-            // 玩家心里已有确数——只能拖是"看得见却打不进去"。
-            //
-            // **框里只放数字，单位画在框外**：fmt 产出的是 "1920 px" 这种带单位
-            // 的串，直接当可编辑内容的话，玩家一进去就得先删单位才打得动，
-            // 而且解析必然失败。拆开之后显示与编辑各归各的。
-            Rect field = GUILayoutUtility.GetRect(FieldW, 20f,
-                GUILayout.Width(FieldW), GUILayout.Height(20f));
-            string full = fmt(shown);
-            string suffix = UnitOf(full);
-            if (suffix.Length > 0)
-            {
-                // 单位不占 GUILayout 宽度，直接画在框和 FlexibleSpace 之间的空地上
-                Gui.Text(new Rect(field.xMax + 4f, field.y, 46f, field.height),
-                    suffix, Gui.DimCol, Gui.SmallStyle);
-            }
-            GUILayout.FlexibleSpace();
-            GUILayout.EndHorizontal();
-
-            // 与 RowInput 同理：自绘控件不参与 GUILayout 布局，画在组外。
-            var st = GetField(labelKey);
-            SyncField(st, NumberOf(full));
-            bool canceled;
-            bool commit = st.Draw(field, Gui.LabelStyle, "", out canceled);
-            if (canceled)
-            {
-                // Esc = 放弃本次编辑，还原成滑条当前值
-                st.Text = NumberOf(full);
-            }
-            else if (commit)
-            {
-                if (TryParse(st.Text, out float typed))
+                GUILayout.BeginHorizontal();
+                GUILayout.Label(Loc.T(labelKey), Gui.LabelStyle, GUILayout.Width(LabelW));
+                // 自绘滑条：原生 HorizontalSlider 的贴图来自 GUI.skin.horizontalSlider，
+                // 而 UMM 只改它的 fixedHeight/border/padding/margin、**从不换贴图**，
+                // 所以它永远是 Unity 默认的圆头灰条（见 Gui.Slider 的说明）。
+                Rect track = GUILayoutUtility.GetRect(Gui.CtrlW, 20f,
+                    GUILayout.Width(Gui.CtrlW), GUILayout.Height(20f));
+                // 悬停说明覆盖「标签 + 滑条 + 数值框 + 单位」整行。玩家想被解释的是
+                // 这一项设置，不是那条 6px 高的槽；只认槽的话等于要求他先猜准位置。
+                // 右侧留 46+4 与下面单位区的宽度一致，改那边时别忘了这里。
+                Gui.Tip(new Rect(track.x - LabelW, track.y,
+                    LabelW + track.width + FieldW + 50f, track.height), labelKey);
+                float now = Gui.Slider(track, value, min, max);
+                float shown = Mathf.Approximately(now, value) ? value : now;
+                // 右侧数值框。**从只读 Label 改成可编辑输入框**（用户 2026-10-17 要求）：
+                // 滑条拖到 1920 与 1921 在像素上分不出来，而帧率/偏移这类值往往
+                // 玩家心里已有确数——只能拖是"看得见却打不进去"。
+                //
+                // **框里只放数字，单位画在框外**：fmt 产出的是 "1920 px" 这种带单位
+                // 的串，直接当可编辑内容的话，玩家一进去就得先删单位才打得动，
+                // 而且解析必然失败。拆开之后显示与编辑各归各的。
+                Rect field = GUILayoutUtility.GetRect(FieldW, 20f,
+                    GUILayout.Width(FieldW), GUILayout.Height(20f));
+                string full = fmt(shown);
+                string suffix = UnitOf(full);
+                if (suffix.Length > 0)
                 {
-                    // 夹进滑条自身的区间：输入框能写 99999，而滑条给不出那个值——
-                    // 不夹的话下一帧滑条按越界值算 k，滑块会黏在端点上而数值显示
-                    // 一个永远拖不回来的数。
-                    float clamped = Mathf.Clamp(typed, min, max);
-                    if (!Mathf.Approximately(clamped, value))
-                    {
-                        onChange(clamped);
-                        return;   // 本帧以输入框为准，别再让滑条覆盖一次
-                    }
+                    // 单位不占 GUILayout 宽度，直接画在框和 FlexibleSpace 之间的空地上
+                    Gui.Text(new Rect(field.xMax + 4f, field.y, 46f, field.height),
+                        suffix, Gui.DimCol, Gui.SmallStyle);
                 }
-                st.Text = NumberOf(full);   // 解析失败：复位成当前值（自愈）
-            }
-            if (!Mathf.Approximately(now, value))
-            {
-                onChange(now);
-            }
+                GUILayout.FlexibleSpace();
+                GUILayout.EndHorizontal();
+
+                // 与 RowInput 同理：自绘控件不参与 GUILayout 布局，画在组外。
+                var st = GetField(labelKey);
+                SyncField(st, NumberOf(full));
+                bool canceled;
+                bool commit = st.Draw(field, Gui.LabelStyle, "", out canceled);
+                if (canceled)
+                {
+                    // Esc = 放弃本次编辑，还原成滑条当前值
+                    st.Text = NumberOf(full);
+                }
+                else if (commit)
+                {
+                    if (TryParse(st.Text, out float typed))
+                    {
+                        // 夹进滑条自身的区间：输入框能写 99999，而滑条给不出那个值——
+                        // 不夹的话下一帧滑条按越界值算 k，滑块会黏在端点上而数值显示
+                        // 一个永远拖不回来的数。
+                        float clamped = Mathf.Clamp(typed, min, max);
+                        if (!Mathf.Approximately(clamped, value))
+                        {
+                            onChange(clamped);
+                            return;   // 本帧以输入框为准，别再让滑条覆盖一次
+                        }
+                    }
+                    st.Text = NumberOf(full);   // 解析失败：复位成当前值（自愈）
+                }
+                if (!Mathf.Approximately(now, value))
+                {
+                    onChange(now);
+                }
             });
             RowGap();
         }
@@ -714,7 +714,8 @@ namespace SpectreReplay.Ui
                     GUILayout.Width(90f), GUILayout.Height(24f)))
             {
                 _pickOutDirPending = true;
-            }            GUILayout.FlexibleSpace();
+            }
+            GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
             RowGap();
 

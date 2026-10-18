@@ -386,26 +386,26 @@ internal sealed class VideoEncoder : IDisposable
         switch (PickCodec(quality, container))
         {
             case Codec.Vp9:
-            {
-                string cpuUsed = quality == Quality.Fastest ? "5" : quality == Quality.Sharpest ? "2" : "4";
-                EncoderName = "libvpx-vp9";
-                return "-c:v libvpx-vp9 -deadline good -cpu-used " + cpuUsed + " -row-mt 1 "
-                    + RateControl(false) + " -g " + gop;
-            }
+                {
+                    string cpuUsed = quality == Quality.Fastest ? "5" : quality == Quality.Sharpest ? "2" : "4";
+                    EncoderName = "libvpx-vp9";
+                    return "-c:v libvpx-vp9 -deadline good -cpu-used " + cpuUsed + " -row-mt 1 "
+                        + RateControl(false) + " -g " + gop;
+                }
             case Codec.Nvenc:
-            {
-                string nvPreset = quality == Quality.Fastest ? "p1" : quality == Quality.Sharpest ? "p6" : "p4";
-                string tune = quality == Quality.Fastest ? "ll" : "hq";
-                EncoderName = "h264_nvenc " + nvPreset;
-                return "-c:v h264_nvenc -preset " + nvPreset + " -tune " + tune
-                    + " " + RateControl(true) + " -g " + gop;
-            }
+                {
+                    string nvPreset = quality == Quality.Fastest ? "p1" : quality == Quality.Sharpest ? "p6" : "p4";
+                    string tune = quality == Quality.Fastest ? "ll" : "hq";
+                    EncoderName = "h264_nvenc " + nvPreset;
+                    return "-c:v h264_nvenc -preset " + nvPreset + " -tune " + tune
+                        + " " + RateControl(true) + " -g " + gop;
+                }
             default:
-            {
-                string x264Preset = quality == Quality.Fastest ? "ultrafast" : quality == Quality.Sharpest ? "fast" : "veryfast";
-                EncoderName = "libx264 " + x264Preset;
-                return "-c:v libx264 -preset " + Quote(x264Preset) + " " + RateControl(false) + " -g " + gop;
-            }
+                {
+                    string x264Preset = quality == Quality.Fastest ? "ultrafast" : quality == Quality.Sharpest ? "fast" : "veryfast";
+                    EncoderName = "libx264 " + x264Preset;
+                    return "-c:v libx264 -preset " + Quote(x264Preset) + " " + RateControl(false) + " -g " + gop;
+                }
         }
     }
 

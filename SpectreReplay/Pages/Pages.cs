@@ -122,7 +122,7 @@ namespace SpectreReplay.Pages
                 // 按任意键改键：等待期间 Esc 取消并独占 Esc（见 OnGui.RowHotkey）。
                 // 这两个键是**手动存这一局**的入口——没有它，练到一半的短局
                 // 只能等通关自动保存，等于存不下来。
-                OnGui.RowHotkey("record.savekey", () => SaveButton, k => { SaveButton = k; Commit(); });                OnGui.RowHotkey("record.cancelsavekey", () => CancelSaveButton, k => { CancelSaveButton = k; Commit(); });
+                OnGui.RowHotkey("record.savekey", () => SaveButton, k => { SaveButton = k; Commit(); }); OnGui.RowHotkey("record.cancelsavekey", () => CancelSaveButton, k => { CancelSaveButton = k; Commit(); });
                 OnGui.Note("record.note");
             });
 
@@ -1428,7 +1428,8 @@ namespace SpectreReplay.Pages
             GUILayout.EndHorizontal();
         }
         private static void DrawSaveDirRow()
-        {            GUILayout.BeginHorizontal();
+        {
+            GUILayout.BeginHorizontal();
             GUILayout.Label(Loc.T("record.savedir"), Gui.LabelStyle, GUILayout.Width(Gui.LabelW));
             // 路径可能很长（换到别的盘之后尤其），中段省略：盘符/开头与目录名/
             // 结尾是玩家用来确认"是不是我选的那个"的两端，尾巴省略反而认不出。

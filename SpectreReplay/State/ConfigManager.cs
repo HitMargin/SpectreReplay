@@ -544,95 +544,95 @@ public static class ConfigManager
             // 每个分区自带 try 后，坏值只影响它自己所在的分区。
             try
             {
-            var sets = json["Sets"];
-            if (sets != null)
-            {
-                Settings.ReplayOn = sets.Value<bool?>("ReplayOn") ?? Settings.ReplayOn;
-                Settings.AutoSave = sets.Value<bool?>("AutoSave") ?? Settings.AutoSave;
-                Settings.CompleteSave = sets.Value<bool?>("CompleteSave") ?? Settings.CompleteSave;
-                Settings.DontSaveWhenAuto = sets.Value<bool?>("DontSaveWhenAuto") ?? Settings.DontSaveWhenAuto;
-                Settings.DontSaveWhenMiss = sets.Value<bool?>("DontSaveWhenMiss") ?? Settings.DontSaveWhenMiss;
-                Settings.LateSave = sets.Value<bool?>("LateSave") ?? Settings.LateSave;
-                Settings.FailSave = sets.Value<bool?>("FailSave") ?? Settings.FailSave;
-                Settings.Backup = sets.Value<bool?>("Backup") ?? Settings.Backup;
-                Settings.ManualSave = sets.Value<bool?>("ManualSave") ?? Settings.ManualSave;
-                Settings.LegacyEngine = sets.Value<bool?>("LegacyEngine") ?? Settings.LegacyEngine;
-                Settings.KeybdSoundRecordActive = sets.Value<bool?>("KeybdSoundRecordActive") ?? Settings.KeybdSoundRecordActive;
-                Settings.KeyConvertEnabled = sets.Value<bool?>("KeyConvertEnabled") ?? Settings.KeyConvertEnabled;
-                Settings.LimitKey = sets.Value<bool?>("LimitKey") ?? Settings.LimitKey;
-                Settings.GetDataFromAsyncInput = sets.Value<bool?>("GetDataFromAsyncInput") ?? Settings.GetDataFromAsyncInput;
+                var sets = json["Sets"];
+                if (sets != null)
+                {
+                    Settings.ReplayOn = sets.Value<bool?>("ReplayOn") ?? Settings.ReplayOn;
+                    Settings.AutoSave = sets.Value<bool?>("AutoSave") ?? Settings.AutoSave;
+                    Settings.CompleteSave = sets.Value<bool?>("CompleteSave") ?? Settings.CompleteSave;
+                    Settings.DontSaveWhenAuto = sets.Value<bool?>("DontSaveWhenAuto") ?? Settings.DontSaveWhenAuto;
+                    Settings.DontSaveWhenMiss = sets.Value<bool?>("DontSaveWhenMiss") ?? Settings.DontSaveWhenMiss;
+                    Settings.LateSave = sets.Value<bool?>("LateSave") ?? Settings.LateSave;
+                    Settings.FailSave = sets.Value<bool?>("FailSave") ?? Settings.FailSave;
+                    Settings.Backup = sets.Value<bool?>("Backup") ?? Settings.Backup;
+                    Settings.ManualSave = sets.Value<bool?>("ManualSave") ?? Settings.ManualSave;
+                    Settings.LegacyEngine = sets.Value<bool?>("LegacyEngine") ?? Settings.LegacyEngine;
+                    Settings.KeybdSoundRecordActive = sets.Value<bool?>("KeybdSoundRecordActive") ?? Settings.KeybdSoundRecordActive;
+                    Settings.KeyConvertEnabled = sets.Value<bool?>("KeyConvertEnabled") ?? Settings.KeyConvertEnabled;
+                    Settings.LimitKey = sets.Value<bool?>("LimitKey") ?? Settings.LimitKey;
+                    Settings.GetDataFromAsyncInput = sets.Value<bool?>("GetDataFromAsyncInput") ?? Settings.GetDataFromAsyncInput;
 
-                Settings.EffectRemoverOn = sets.Value<bool?>("EffectRemoverOn") ?? Settings.EffectRemoverOn;
-                Settings.EffectRemoverEnableSave = sets.Value<bool?>("EffectRemoverEnableSave") ?? Settings.EffectRemoverEnableSave;
-                Settings.EffectRemoverFilters = sets.Value<bool?>("EffectRemoverFilters") ?? Settings.EffectRemoverFilters;
-                Settings.EffectRemoverAdvancedFilters = sets.Value<bool?>("EffectRemoverAdvancedFilters") ?? Settings.EffectRemoverAdvancedFilters;
-                Settings.EffectRemoverParticles = sets.Value<bool?>("EffectRemoverParticles") ?? Settings.EffectRemoverParticles;
-                Settings.EffectRemoverDecorations = sets.Value<bool?>("EffectRemoverDecorations") ?? Settings.EffectRemoverDecorations;
-                Settings.EffectRemoverBackgrounds = sets.Value<bool?>("EffectRemoverBackgrounds") ?? Settings.EffectRemoverBackgrounds;
-                Settings.EffectRemoverCameras = sets.Value<bool?>("EffectRemoverCameras") ?? Settings.EffectRemoverCameras;
-                Settings.EffectRemoverRepeatEvents = sets.Value<bool?>("EffectRemoverRepeatEvents") ?? Settings.EffectRemoverRepeatEvents;
-                Settings.EffectRemoverFrameRate = sets.Value<bool?>("EffectRemoverFrameRate") ?? Settings.EffectRemoverFrameRate;
-                Settings.EffectRemoverHitSounds = sets.Value<bool?>("EffectRemoverHitSounds") ?? Settings.EffectRemoverHitSounds;
-                Settings.EffectRemoverCheckpoints = sets.Value<bool?>("EffectRemoverCheckpoints") ?? Settings.EffectRemoverCheckpoints;
-                Settings.EffectRemoverInputEvents = sets.Value<bool?>("EffectRemoverInputEvents") ?? Settings.EffectRemoverInputEvents;
-                Settings.EffectRemoverPlanetOrbit = sets.Value<bool?>("EffectRemoverPlanetOrbit") ?? Settings.EffectRemoverPlanetOrbit;
-                Settings.EffectRemoverPlanetScale = sets.Value<bool?>("EffectRemoverPlanetScale") ?? Settings.EffectRemoverPlanetScale;
-                Settings.EffectRemoverPlanetRadius = sets.Value<bool?>("EffectRemoverPlanetRadius") ?? Settings.EffectRemoverPlanetRadius;
-                Settings.EffectRemoverTrackAnimations = sets.Value<bool?>("EffectRemoverTrackAnimations") ?? Settings.EffectRemoverTrackAnimations;
-                Settings.EffectRemoverTrackPositions = sets.Value<bool?>("EffectRemoverTrackPositions") ?? Settings.EffectRemoverTrackPositions;
-                Settings.EffectRemoverTrackMoves = sets.Value<bool?>("EffectRemoverTrackMoves") ?? Settings.EffectRemoverTrackMoves;
-                Settings.EffectRemoverTrackColors = sets.Value<bool?>("EffectRemoverTrackColors") ?? Settings.EffectRemoverTrackColors;
-                Settings.EffectRemoverHoldSounds = sets.Value<bool?>("EffectRemoverHoldSounds") ?? Settings.EffectRemoverHoldSounds;
-                Settings.EffectRemoverHideIcons = sets.Value<bool?>("EffectRemoverHideIcons") ?? Settings.EffectRemoverHideIcons;
-                Settings.EffectRemoverRemoveAllDecorations = sets.Value<bool?>("EffectRemoverRemoveAllDecorations") ?? Settings.EffectRemoverRemoveAllDecorations;
-                Settings.EffectRemoverResetTrackOpacity = sets.Value<bool?>("EffectRemoverResetTrackOpacity") ?? Settings.EffectRemoverResetTrackOpacity;
-                Settings.EffectRemoverResetTrackAnimation = sets.Value<bool?>("EffectRemoverResetTrackAnimation") ?? Settings.EffectRemoverResetTrackAnimation;
-                Settings.EffectRemoverResetTrackColor = sets.Value<bool?>("EffectRemoverResetTrackColor") ?? Settings.EffectRemoverResetTrackColor;
-                Settings.EffectRemoverSetCameraZoom = sets.Value<bool?>("EffectRemoverSetCameraZoom") ?? Settings.EffectRemoverSetCameraZoom;
-                Settings.AlwaysShowMaxUsedKeys = sets.Value<bool?>("AlwaysShowMaxUsedKeys") ?? Settings.AlwaysShowMaxUsedKeys;
-                Settings.LegacyPauseCalculation = sets.Value<bool?>("LegacyPauseCalculation") ?? Settings.LegacyPauseCalculation;
-                Settings.PlanetColorOn = sets.Value<bool?>("PlanetColorOn") ?? Settings.PlanetColorOn;
-                Settings.JudgeTextOn = sets.Value<bool?>("JudgeTextOn") ?? Settings.JudgeTextOn;
-                Settings.JudgeFxOn = sets.Value<bool?>("JudgeFxOn") ?? Settings.JudgeFxOn;
-                Settings.JudgeFilterOn = sets.Value<bool?>("JudgeFilterOn") ?? Settings.JudgeFilterOn;
-                Settings.JudgeColorOn = sets.Value<bool?>("JudgeColorOn") ?? Settings.JudgeColorOn;
-                Settings.JudgeGlowOn = sets.Value<bool?>("JudgeGlowOn") ?? Settings.JudgeGlowOn;
-                Settings.JudgeTextOutlineOn = sets.Value<bool?>("JudgeTextOutlineOn") ?? Settings.JudgeTextOutlineOn;
-                Settings.JudgeTextOutlineGradientOn = sets.Value<bool?>("JudgeTextOutlineGradientOn") ?? Settings.JudgeTextOutlineGradientOn;
-                Settings.JudgeTextParticleOn = sets.Value<bool?>("JudgeTextParticleOn") ?? Settings.JudgeTextParticleOn;
-                Settings.JudgeBarOn = sets.Value<bool?>("JudgeBarOn") ?? Settings.JudgeBarOn;
-                Settings.JudgeBarDynamicOn = sets.Value<bool?>("JudgeBarDynamicOn") ?? Settings.JudgeBarDynamicOn;
-                Settings.JudgeBarUnlockStrict = sets.Value<bool?>("JudgeBarUnlockStrict") ?? Settings.JudgeBarUnlockStrict;
-                Settings.JudgeBarEdgeColorOn = sets.Value<bool?>("JudgeBarEdgeColorOn") ?? Settings.JudgeBarEdgeColorOn;
-                Settings.JudgeBarZonePureOn = sets.Value<bool?>("JudgeBarZonePureOn") ?? Settings.JudgeBarZonePureOn;
-                Settings.JudgeBarZonePerfectOn = sets.Value<bool?>("JudgeBarZonePerfectOn") ?? Settings.JudgeBarZonePerfectOn;
-                Settings.JudgeBarZoneCountedOn = sets.Value<bool?>("JudgeBarZoneCountedOn") ?? Settings.JudgeBarZoneCountedOn;
-                Settings.JudgeBarTickOutlineOn = sets.Value<bool?>("JudgeBarTickOutlineOn") ?? Settings.JudgeBarTickOutlineOn;
-                Settings.JudgeBarShowFailureJudgement = sets.Value<bool?>("JudgeBarShowFailureJudgement") ?? Settings.JudgeBarShowFailureJudgement;
-                Settings.JudgeBarFailureBandAlwaysOn = sets.Value<bool?>("JudgeBarFailureBandAlwaysOn") ?? Settings.JudgeBarFailureBandAlwaysOn;
-                Settings.OverloadBarOn = sets.Value<bool?>("OverloadBarOn") ?? Settings.OverloadBarOn;
-                Settings.DecorationPreviewOn = sets.Value<bool?>("DecorationPreviewOn") ?? Settings.DecorationPreviewOn;
-                Settings.MemoryOptimizerOn = sets.Value<bool?>("MemoryOptimizerOn") ?? Settings.MemoryOptimizerOn;
-                Settings.EditorBugfixOn = sets.Value<bool?>("EditorBugfixOn") ?? Settings.EditorBugfixOn;
-                Settings.BpmBeatCalculatorOn = sets.Value<bool?>("BpmBeatCalculatorOn") ?? Settings.BpmBeatCalculatorOn;
-                Settings.SpeedPauseConverterOn = sets.Value<bool?>("SpeedPauseConverterOn") ?? Settings.SpeedPauseConverterOn;
-                Settings.BetterUndoRedoOn = sets.Value<bool?>("BetterUndoRedoOn") ?? Settings.BetterUndoRedoOn;
-                Settings.BGAModeOn = sets.Value<bool?>("BGAModeOn") ?? Settings.BGAModeOn;
-                Settings.EditorUIOn = sets.Value<bool?>("EditorUIOn") ?? Settings.EditorUIOn;
-                Settings.EditorUIFloorPanelOn = sets.Value<bool?>("EditorUIFloorPanelOn") ?? Settings.EditorUIFloorPanelOn;
-                Settings.EditorUIHorizontalOn = sets.Value<bool?>("EditorUIHorizontalOn") ?? Settings.EditorUIHorizontalOn;
-                Settings.TimelineOn = sets.Value<bool?>("TimelineOn") ?? Settings.TimelineOn;
-                Settings.FixChartLoadOn = sets.Value<bool?>("FixChartLoadOn") ?? Settings.FixChartLoadOn;
-                Settings.CustomEventsOn = sets.Value<bool?>("CustomEventsOn") ?? Settings.CustomEventsOn;
-                Settings.EnableProEvents = sets.Value<bool?>("EnableProEvents") ?? Settings.EnableProEvents;
-                // 旧配置迁移：P1/P2 开关写入对应星球
-                bool? p1On = sets.Value<bool?>("PlanetColorP1On");
-                if (p1On.HasValue)
-                    Settings.PlanetColorPlayerOn[0] = p1On.Value;
-                bool? p2On = sets.Value<bool?>("PlanetColorP2On");
-                if (p2On.HasValue)
-                    Settings.PlanetColorPlayerOn[1] = p2On.Value;
-            }
+                    Settings.EffectRemoverOn = sets.Value<bool?>("EffectRemoverOn") ?? Settings.EffectRemoverOn;
+                    Settings.EffectRemoverEnableSave = sets.Value<bool?>("EffectRemoverEnableSave") ?? Settings.EffectRemoverEnableSave;
+                    Settings.EffectRemoverFilters = sets.Value<bool?>("EffectRemoverFilters") ?? Settings.EffectRemoverFilters;
+                    Settings.EffectRemoverAdvancedFilters = sets.Value<bool?>("EffectRemoverAdvancedFilters") ?? Settings.EffectRemoverAdvancedFilters;
+                    Settings.EffectRemoverParticles = sets.Value<bool?>("EffectRemoverParticles") ?? Settings.EffectRemoverParticles;
+                    Settings.EffectRemoverDecorations = sets.Value<bool?>("EffectRemoverDecorations") ?? Settings.EffectRemoverDecorations;
+                    Settings.EffectRemoverBackgrounds = sets.Value<bool?>("EffectRemoverBackgrounds") ?? Settings.EffectRemoverBackgrounds;
+                    Settings.EffectRemoverCameras = sets.Value<bool?>("EffectRemoverCameras") ?? Settings.EffectRemoverCameras;
+                    Settings.EffectRemoverRepeatEvents = sets.Value<bool?>("EffectRemoverRepeatEvents") ?? Settings.EffectRemoverRepeatEvents;
+                    Settings.EffectRemoverFrameRate = sets.Value<bool?>("EffectRemoverFrameRate") ?? Settings.EffectRemoverFrameRate;
+                    Settings.EffectRemoverHitSounds = sets.Value<bool?>("EffectRemoverHitSounds") ?? Settings.EffectRemoverHitSounds;
+                    Settings.EffectRemoverCheckpoints = sets.Value<bool?>("EffectRemoverCheckpoints") ?? Settings.EffectRemoverCheckpoints;
+                    Settings.EffectRemoverInputEvents = sets.Value<bool?>("EffectRemoverInputEvents") ?? Settings.EffectRemoverInputEvents;
+                    Settings.EffectRemoverPlanetOrbit = sets.Value<bool?>("EffectRemoverPlanetOrbit") ?? Settings.EffectRemoverPlanetOrbit;
+                    Settings.EffectRemoverPlanetScale = sets.Value<bool?>("EffectRemoverPlanetScale") ?? Settings.EffectRemoverPlanetScale;
+                    Settings.EffectRemoverPlanetRadius = sets.Value<bool?>("EffectRemoverPlanetRadius") ?? Settings.EffectRemoverPlanetRadius;
+                    Settings.EffectRemoverTrackAnimations = sets.Value<bool?>("EffectRemoverTrackAnimations") ?? Settings.EffectRemoverTrackAnimations;
+                    Settings.EffectRemoverTrackPositions = sets.Value<bool?>("EffectRemoverTrackPositions") ?? Settings.EffectRemoverTrackPositions;
+                    Settings.EffectRemoverTrackMoves = sets.Value<bool?>("EffectRemoverTrackMoves") ?? Settings.EffectRemoverTrackMoves;
+                    Settings.EffectRemoverTrackColors = sets.Value<bool?>("EffectRemoverTrackColors") ?? Settings.EffectRemoverTrackColors;
+                    Settings.EffectRemoverHoldSounds = sets.Value<bool?>("EffectRemoverHoldSounds") ?? Settings.EffectRemoverHoldSounds;
+                    Settings.EffectRemoverHideIcons = sets.Value<bool?>("EffectRemoverHideIcons") ?? Settings.EffectRemoverHideIcons;
+                    Settings.EffectRemoverRemoveAllDecorations = sets.Value<bool?>("EffectRemoverRemoveAllDecorations") ?? Settings.EffectRemoverRemoveAllDecorations;
+                    Settings.EffectRemoverResetTrackOpacity = sets.Value<bool?>("EffectRemoverResetTrackOpacity") ?? Settings.EffectRemoverResetTrackOpacity;
+                    Settings.EffectRemoverResetTrackAnimation = sets.Value<bool?>("EffectRemoverResetTrackAnimation") ?? Settings.EffectRemoverResetTrackAnimation;
+                    Settings.EffectRemoverResetTrackColor = sets.Value<bool?>("EffectRemoverResetTrackColor") ?? Settings.EffectRemoverResetTrackColor;
+                    Settings.EffectRemoverSetCameraZoom = sets.Value<bool?>("EffectRemoverSetCameraZoom") ?? Settings.EffectRemoverSetCameraZoom;
+                    Settings.AlwaysShowMaxUsedKeys = sets.Value<bool?>("AlwaysShowMaxUsedKeys") ?? Settings.AlwaysShowMaxUsedKeys;
+                    Settings.LegacyPauseCalculation = sets.Value<bool?>("LegacyPauseCalculation") ?? Settings.LegacyPauseCalculation;
+                    Settings.PlanetColorOn = sets.Value<bool?>("PlanetColorOn") ?? Settings.PlanetColorOn;
+                    Settings.JudgeTextOn = sets.Value<bool?>("JudgeTextOn") ?? Settings.JudgeTextOn;
+                    Settings.JudgeFxOn = sets.Value<bool?>("JudgeFxOn") ?? Settings.JudgeFxOn;
+                    Settings.JudgeFilterOn = sets.Value<bool?>("JudgeFilterOn") ?? Settings.JudgeFilterOn;
+                    Settings.JudgeColorOn = sets.Value<bool?>("JudgeColorOn") ?? Settings.JudgeColorOn;
+                    Settings.JudgeGlowOn = sets.Value<bool?>("JudgeGlowOn") ?? Settings.JudgeGlowOn;
+                    Settings.JudgeTextOutlineOn = sets.Value<bool?>("JudgeTextOutlineOn") ?? Settings.JudgeTextOutlineOn;
+                    Settings.JudgeTextOutlineGradientOn = sets.Value<bool?>("JudgeTextOutlineGradientOn") ?? Settings.JudgeTextOutlineGradientOn;
+                    Settings.JudgeTextParticleOn = sets.Value<bool?>("JudgeTextParticleOn") ?? Settings.JudgeTextParticleOn;
+                    Settings.JudgeBarOn = sets.Value<bool?>("JudgeBarOn") ?? Settings.JudgeBarOn;
+                    Settings.JudgeBarDynamicOn = sets.Value<bool?>("JudgeBarDynamicOn") ?? Settings.JudgeBarDynamicOn;
+                    Settings.JudgeBarUnlockStrict = sets.Value<bool?>("JudgeBarUnlockStrict") ?? Settings.JudgeBarUnlockStrict;
+                    Settings.JudgeBarEdgeColorOn = sets.Value<bool?>("JudgeBarEdgeColorOn") ?? Settings.JudgeBarEdgeColorOn;
+                    Settings.JudgeBarZonePureOn = sets.Value<bool?>("JudgeBarZonePureOn") ?? Settings.JudgeBarZonePureOn;
+                    Settings.JudgeBarZonePerfectOn = sets.Value<bool?>("JudgeBarZonePerfectOn") ?? Settings.JudgeBarZonePerfectOn;
+                    Settings.JudgeBarZoneCountedOn = sets.Value<bool?>("JudgeBarZoneCountedOn") ?? Settings.JudgeBarZoneCountedOn;
+                    Settings.JudgeBarTickOutlineOn = sets.Value<bool?>("JudgeBarTickOutlineOn") ?? Settings.JudgeBarTickOutlineOn;
+                    Settings.JudgeBarShowFailureJudgement = sets.Value<bool?>("JudgeBarShowFailureJudgement") ?? Settings.JudgeBarShowFailureJudgement;
+                    Settings.JudgeBarFailureBandAlwaysOn = sets.Value<bool?>("JudgeBarFailureBandAlwaysOn") ?? Settings.JudgeBarFailureBandAlwaysOn;
+                    Settings.OverloadBarOn = sets.Value<bool?>("OverloadBarOn") ?? Settings.OverloadBarOn;
+                    Settings.DecorationPreviewOn = sets.Value<bool?>("DecorationPreviewOn") ?? Settings.DecorationPreviewOn;
+                    Settings.MemoryOptimizerOn = sets.Value<bool?>("MemoryOptimizerOn") ?? Settings.MemoryOptimizerOn;
+                    Settings.EditorBugfixOn = sets.Value<bool?>("EditorBugfixOn") ?? Settings.EditorBugfixOn;
+                    Settings.BpmBeatCalculatorOn = sets.Value<bool?>("BpmBeatCalculatorOn") ?? Settings.BpmBeatCalculatorOn;
+                    Settings.SpeedPauseConverterOn = sets.Value<bool?>("SpeedPauseConverterOn") ?? Settings.SpeedPauseConverterOn;
+                    Settings.BetterUndoRedoOn = sets.Value<bool?>("BetterUndoRedoOn") ?? Settings.BetterUndoRedoOn;
+                    Settings.BGAModeOn = sets.Value<bool?>("BGAModeOn") ?? Settings.BGAModeOn;
+                    Settings.EditorUIOn = sets.Value<bool?>("EditorUIOn") ?? Settings.EditorUIOn;
+                    Settings.EditorUIFloorPanelOn = sets.Value<bool?>("EditorUIFloorPanelOn") ?? Settings.EditorUIFloorPanelOn;
+                    Settings.EditorUIHorizontalOn = sets.Value<bool?>("EditorUIHorizontalOn") ?? Settings.EditorUIHorizontalOn;
+                    Settings.TimelineOn = sets.Value<bool?>("TimelineOn") ?? Settings.TimelineOn;
+                    Settings.FixChartLoadOn = sets.Value<bool?>("FixChartLoadOn") ?? Settings.FixChartLoadOn;
+                    Settings.CustomEventsOn = sets.Value<bool?>("CustomEventsOn") ?? Settings.CustomEventsOn;
+                    Settings.EnableProEvents = sets.Value<bool?>("EnableProEvents") ?? Settings.EnableProEvents;
+                    // 旧配置迁移：P1/P2 开关写入对应星球
+                    bool? p1On = sets.Value<bool?>("PlanetColorP1On");
+                    if (p1On.HasValue)
+                        Settings.PlanetColorPlayerOn[0] = p1On.Value;
+                    bool? p2On = sets.Value<bool?>("PlanetColorP2On");
+                    if (p2On.HasValue)
+                        Settings.PlanetColorPlayerOn[1] = p2On.Value;
+                }
             }
             catch (Exception ex)
             {
@@ -640,46 +640,46 @@ public static class ConfigManager
             }
             try
             {
-            var ints = json["Ints"];
-            if (ints != null)
-            {
-                // 记住上次停留的页签（越界时回首页，防页签数量变化后指错）
-                /* selected_tab 由新 UI 维护，此处不再持久化 */
-                Settings.SaveButton = ints.Value<int?>("save_button") ?? Settings.SaveButton;
-                Settings.CancelSaveButton = ints.Value<int?>("cancel_save_button") ?? Settings.CancelSaveButton;
-                Settings.KeybdSoundVolume = ints.Value<int?>("KeybdSoundVolume") ?? Settings.KeybdSoundVolume;
-                Settings.MicrophoneOffset = ints.Value<int?>("MicrophoneOffset") ?? Settings.MicrophoneOffset;
-                Settings.EffectRemoverCameraZoomScale = ints.Value<float?>("EffectRemoverCameraZoomScale") ?? Settings.EffectRemoverCameraZoomScale;
-                // 范围与 UI 滑条一致（judgetext.size / judgetext.fadespeed）。这两个值每次飘字
-                // 都直接乘到游戏的 scale / fadeSpeed 上（Patch_HitTextShowFx），手改配置写入
-                // 极大值会让文本缩放爆掉，写 1e400 会被解析成 Infinity 灌进 Unity 变换。
-                // 同区块的 outline_width / render_* 都已 Clamp，此前只有这两个漏了。
-                Settings.JudgeTextSizeMult = Mathf.Clamp(ints.Value<float?>("judge_size_mult") ?? Settings.JudgeTextSizeMult, 0.5f, 3f);
-                Settings.JudgeTextOutlineWidth = Mathf.Clamp(ints.Value<float?>("judgetext_outline_width") ?? Settings.JudgeTextOutlineWidth, 0f, 1f);
-                Settings.JudgeTextFadeMult = Mathf.Clamp(ints.Value<float?>("judge_fade_mult") ?? Settings.JudgeTextFadeMult, 0.25f, 5f);
-                Settings.RenderWidth = Mathf.Clamp(ints.Value<int?>("render_width") ?? Settings.RenderWidth, 320, 7680);
-                Settings.RenderHeight = Mathf.Clamp(ints.Value<int?>("render_height") ?? Settings.RenderHeight, 240, 4320);
-                Settings.RenderFps = Mathf.Clamp(ints.Value<int?>("render_fps") ?? Settings.RenderFps, 15, 480);
-                Settings.RenderEncoderMode = Mathf.Clamp(ints.Value<int?>("render_encoder") ?? Settings.RenderEncoderMode, 0, 3);
-                Settings.RenderQualityMode = Mathf.Clamp(ints.Value<int?>("render_quality") ?? Settings.RenderQualityMode, 0, 3);
-                Settings.RenderOutputFormat = Mathf.Clamp(ints.Value<int?>("render_output_format") ?? Settings.RenderOutputFormat, 0, 3);
-                // 旧配置没有这个键：缺省时**跟随渲染格式**，保持升级前的行为
-                // （升级前转换用的就是 RenderOutputFormat）。
-                Settings.ConvertTarget = Mathf.Clamp(ints.Value<int?>("convert_target") ?? Settings.RenderOutputFormat, 0, 3);
-                Settings.RenderCaptureMode = Mathf.Clamp(ints.Value<int?>("render_capture_mode") ?? Settings.RenderCaptureMode, 0, 1);
-                Settings.RenderTailSeconds = Mathf.Clamp(ints.Value<float?>("render_tail") ?? Settings.RenderTailSeconds, 0f, 15f);
-                Settings.RenderOn = ints.Value<bool?>("render_on") ?? Settings.RenderOn;
-                Settings.RenderClockOn = ints.Value<bool?>("render_clock_on") ?? Settings.RenderClockOn;
-                Settings.JudgeBarAnimationDuration = Mathf.Clamp(ints.Value<float?>("judgebar_anim_duration") ?? Settings.JudgeBarAnimationDuration, 0f, 1f);
-                Settings.JudgeBarSensitivity = Mathf.Clamp(ints.Value<float?>("judgebar_sensitivity") ?? Settings.JudgeBarSensitivity, 0f, 1f);
-                Settings.JudgeBarTickLife = Mathf.Clamp(ints.Value<float?>("judgebar_life") ?? Settings.JudgeBarTickLife, 0f, 10f);
-                Settings.OverloadBarX = Mathf.Clamp(ints.Value<float?>("overloadbar_x") ?? Settings.OverloadBarX, -960f, 960f);
-                Settings.OverloadBarY = Mathf.Clamp(ints.Value<float?>("overloadbar_y") ?? Settings.OverloadBarY, -960f, 960f);
-                Settings.JudgeBarEdgeSpan = Mathf.Clamp(ints.Value<float?>("judgebar_edge_span") ?? Settings.JudgeBarEdgeSpan, 60f, 70f);
-                Settings.JudgeBarBackgroundOpacity = Mathf.Clamp(ints.Value<float?>("judgebar_bg_opacity") ?? Settings.JudgeBarBackgroundOpacity, 0f, 1f);
-                Settings.JudgeBarPositionX = Mathf.Clamp(ints.Value<float?>("judgebar_pos_x") ?? Settings.JudgeBarPositionX, -960f, 960f);
-                Settings.JudgeBarPositionY = Mathf.Clamp(ints.Value<float?>("judgebar_pos_y") ?? Settings.JudgeBarPositionY, -960f, 960f);
-            }
+                var ints = json["Ints"];
+                if (ints != null)
+                {
+                    // 记住上次停留的页签（越界时回首页，防页签数量变化后指错）
+                    /* selected_tab 由新 UI 维护，此处不再持久化 */
+                    Settings.SaveButton = ints.Value<int?>("save_button") ?? Settings.SaveButton;
+                    Settings.CancelSaveButton = ints.Value<int?>("cancel_save_button") ?? Settings.CancelSaveButton;
+                    Settings.KeybdSoundVolume = ints.Value<int?>("KeybdSoundVolume") ?? Settings.KeybdSoundVolume;
+                    Settings.MicrophoneOffset = ints.Value<int?>("MicrophoneOffset") ?? Settings.MicrophoneOffset;
+                    Settings.EffectRemoverCameraZoomScale = ints.Value<float?>("EffectRemoverCameraZoomScale") ?? Settings.EffectRemoverCameraZoomScale;
+                    // 范围与 UI 滑条一致（judgetext.size / judgetext.fadespeed）。这两个值每次飘字
+                    // 都直接乘到游戏的 scale / fadeSpeed 上（Patch_HitTextShowFx），手改配置写入
+                    // 极大值会让文本缩放爆掉，写 1e400 会被解析成 Infinity 灌进 Unity 变换。
+                    // 同区块的 outline_width / render_* 都已 Clamp，此前只有这两个漏了。
+                    Settings.JudgeTextSizeMult = Mathf.Clamp(ints.Value<float?>("judge_size_mult") ?? Settings.JudgeTextSizeMult, 0.5f, 3f);
+                    Settings.JudgeTextOutlineWidth = Mathf.Clamp(ints.Value<float?>("judgetext_outline_width") ?? Settings.JudgeTextOutlineWidth, 0f, 1f);
+                    Settings.JudgeTextFadeMult = Mathf.Clamp(ints.Value<float?>("judge_fade_mult") ?? Settings.JudgeTextFadeMult, 0.25f, 5f);
+                    Settings.RenderWidth = Mathf.Clamp(ints.Value<int?>("render_width") ?? Settings.RenderWidth, 320, 7680);
+                    Settings.RenderHeight = Mathf.Clamp(ints.Value<int?>("render_height") ?? Settings.RenderHeight, 240, 4320);
+                    Settings.RenderFps = Mathf.Clamp(ints.Value<int?>("render_fps") ?? Settings.RenderFps, 15, 480);
+                    Settings.RenderEncoderMode = Mathf.Clamp(ints.Value<int?>("render_encoder") ?? Settings.RenderEncoderMode, 0, 3);
+                    Settings.RenderQualityMode = Mathf.Clamp(ints.Value<int?>("render_quality") ?? Settings.RenderQualityMode, 0, 3);
+                    Settings.RenderOutputFormat = Mathf.Clamp(ints.Value<int?>("render_output_format") ?? Settings.RenderOutputFormat, 0, 3);
+                    // 旧配置没有这个键：缺省时**跟随渲染格式**，保持升级前的行为
+                    // （升级前转换用的就是 RenderOutputFormat）。
+                    Settings.ConvertTarget = Mathf.Clamp(ints.Value<int?>("convert_target") ?? Settings.RenderOutputFormat, 0, 3);
+                    Settings.RenderCaptureMode = Mathf.Clamp(ints.Value<int?>("render_capture_mode") ?? Settings.RenderCaptureMode, 0, 1);
+                    Settings.RenderTailSeconds = Mathf.Clamp(ints.Value<float?>("render_tail") ?? Settings.RenderTailSeconds, 0f, 15f);
+                    Settings.RenderOn = ints.Value<bool?>("render_on") ?? Settings.RenderOn;
+                    Settings.RenderClockOn = ints.Value<bool?>("render_clock_on") ?? Settings.RenderClockOn;
+                    Settings.JudgeBarAnimationDuration = Mathf.Clamp(ints.Value<float?>("judgebar_anim_duration") ?? Settings.JudgeBarAnimationDuration, 0f, 1f);
+                    Settings.JudgeBarSensitivity = Mathf.Clamp(ints.Value<float?>("judgebar_sensitivity") ?? Settings.JudgeBarSensitivity, 0f, 1f);
+                    Settings.JudgeBarTickLife = Mathf.Clamp(ints.Value<float?>("judgebar_life") ?? Settings.JudgeBarTickLife, 0f, 10f);
+                    Settings.OverloadBarX = Mathf.Clamp(ints.Value<float?>("overloadbar_x") ?? Settings.OverloadBarX, -960f, 960f);
+                    Settings.OverloadBarY = Mathf.Clamp(ints.Value<float?>("overloadbar_y") ?? Settings.OverloadBarY, -960f, 960f);
+                    Settings.JudgeBarEdgeSpan = Mathf.Clamp(ints.Value<float?>("judgebar_edge_span") ?? Settings.JudgeBarEdgeSpan, 60f, 70f);
+                    Settings.JudgeBarBackgroundOpacity = Mathf.Clamp(ints.Value<float?>("judgebar_bg_opacity") ?? Settings.JudgeBarBackgroundOpacity, 0f, 1f);
+                    Settings.JudgeBarPositionX = Mathf.Clamp(ints.Value<float?>("judgebar_pos_x") ?? Settings.JudgeBarPositionX, -960f, 960f);
+                    Settings.JudgeBarPositionY = Mathf.Clamp(ints.Value<float?>("judgebar_pos_y") ?? Settings.JudgeBarPositionY, -960f, 960f);
+                }
             }
             catch (Exception ex)
             {
@@ -687,20 +687,20 @@ public static class ConfigManager
             }
             try
             {
-            var strs = json["Strings"];
-            if (strs != null)
-            {
-                Settings.SavePath = strs.Value<string>("savepath") ?? Settings.SavePath;
-                Settings.InputedKey = strs.Value<string>("inputedKey") ?? Settings.InputedKey;
-                Settings.CurrLanguage = strs.Value<string>("currlanguage") ?? Settings.CurrLanguage;
-                Settings.MicrophoneDeviceName = strs.Value<string>("microphone_device_name") ?? Settings.MicrophoneDeviceName;
-                Settings.KeyCodeConvert = strs.Value<string>("key_code_convert") ?? Settings.KeyCodeConvert;
-                var judgeTexts = strs["judgetext_texts"]?.ToObject<List<string>>();
-                if (judgeTexts != null)
-                    for (int i = 0; i < Settings.JudgeTexts.Length && i < judgeTexts.Count; i++)
-                        Settings.JudgeTexts[i] = judgeTexts[i] ?? "";
-                Settings.RenderOutputDir = strs.Value<string>("render_output_dir") ?? Settings.RenderOutputDir;
-            }
+                var strs = json["Strings"];
+                if (strs != null)
+                {
+                    Settings.SavePath = strs.Value<string>("savepath") ?? Settings.SavePath;
+                    Settings.InputedKey = strs.Value<string>("inputedKey") ?? Settings.InputedKey;
+                    Settings.CurrLanguage = strs.Value<string>("currlanguage") ?? Settings.CurrLanguage;
+                    Settings.MicrophoneDeviceName = strs.Value<string>("microphone_device_name") ?? Settings.MicrophoneDeviceName;
+                    Settings.KeyCodeConvert = strs.Value<string>("key_code_convert") ?? Settings.KeyCodeConvert;
+                    var judgeTexts = strs["judgetext_texts"]?.ToObject<List<string>>();
+                    if (judgeTexts != null)
+                        for (int i = 0; i < Settings.JudgeTexts.Length && i < judgeTexts.Count; i++)
+                            Settings.JudgeTexts[i] = judgeTexts[i] ?? "";
+                    Settings.RenderOutputDir = strs.Value<string>("render_output_dir") ?? Settings.RenderOutputDir;
+                }
             }
             catch (Exception ex)
             {
@@ -708,19 +708,19 @@ public static class ConfigManager
             }
             try
             {
-            var strLists = json["StringLists"];
-            if (strLists != null)
-            {
-                var kbKeys = strLists["allowed_keyboard_special_keys"]?.ToObject<HashSet<string>>();
-                if (kbKeys != null)
-                    Settings.AllowedKeyboardSpecialKeys = kbKeys;
-                var asyncKeys = strLists["allowed_async_special_keys"]?.ToObject<HashSet<string>>();
-                if (asyncKeys != null)
-                    Settings.AllowedAsyncSpecialKeys = asyncKeys;
-                var hiddenMargins = strLists["judge_hidden_margins"]?.ToObject<HashSet<string>>();
-                if (hiddenMargins != null)
-                    Settings.JudgeHiddenMargins = hiddenMargins;
-            }
+                var strLists = json["StringLists"];
+                if (strLists != null)
+                {
+                    var kbKeys = strLists["allowed_keyboard_special_keys"]?.ToObject<HashSet<string>>();
+                    if (kbKeys != null)
+                        Settings.AllowedKeyboardSpecialKeys = kbKeys;
+                    var asyncKeys = strLists["allowed_async_special_keys"]?.ToObject<HashSet<string>>();
+                    if (asyncKeys != null)
+                        Settings.AllowedAsyncSpecialKeys = asyncKeys;
+                    var hiddenMargins = strLists["judge_hidden_margins"]?.ToObject<HashSet<string>>();
+                    if (hiddenMargins != null)
+                        Settings.JudgeHiddenMargins = hiddenMargins;
+                }
             }
             catch (Exception ex)
             {
@@ -728,75 +728,75 @@ public static class ConfigManager
             }
             try
             {
-            var colors = json["Colors"];
-            if (colors != null)
-            {
-                var playerOns = colors["planetcolor_player_on"]?.ToObject<bool[]>();
-                if (playerOns != null)
-                    for (int i = 0; i < Settings.PlanetColorPlayerOn.Length && i < playerOns.Length; i++)
-                        Settings.PlanetColorPlayerOn[i] = playerOns[i];
+                var colors = json["Colors"];
+                if (colors != null)
+                {
+                    var playerOns = colors["planetcolor_player_on"]?.ToObject<bool[]>();
+                    if (playerOns != null)
+                        for (int i = 0; i < Settings.PlanetColorPlayerOn.Length && i < playerOns.Length; i++)
+                            Settings.PlanetColorPlayerOn[i] = playerOns[i];
 
-                var bases = colors["planetcolor_base"]?.ToObject<string[]>();
-                if (bases != null)
-                    for (int i = 0; i < Settings.PlanetColorBase.Length && i < bases.Length; i++)
-                        if (TryParseHex(bases[i], out Color c))
-                            Settings.PlanetColorBase[i] = c;
+                    var bases = colors["planetcolor_base"]?.ToObject<string[]>();
+                    if (bases != null)
+                        for (int i = 0; i < Settings.PlanetColorBase.Length && i < bases.Length; i++)
+                            if (TryParseHex(bases[i], out Color c))
+                                Settings.PlanetColorBase[i] = c;
 
-                var parts = colors["planetcolor_parts"]?.ToObject<string[][]>();
-                if (parts != null)
-                    for (int i = 0; i < Settings.PlanetColorParts.Length && i < parts.Length; i++)
-                    {
-                        if (parts[i] == null) continue;
-                        for (int j = 0; j < Settings.PlanetColorParts[i].Length && j < parts[i].Length; j++)
-                            if (TryParseHex(parts[i][j], out Color c))
-                                Settings.PlanetColorParts[i][j] = c;
-                    }
+                    var parts = colors["planetcolor_parts"]?.ToObject<string[][]>();
+                    if (parts != null)
+                        for (int i = 0; i < Settings.PlanetColorParts.Length && i < parts.Length; i++)
+                        {
+                            if (parts[i] == null) continue;
+                            for (int j = 0; j < Settings.PlanetColorParts[i].Length && j < parts[i].Length; j++)
+                                if (TryParseHex(parts[i][j], out Color c))
+                                    Settings.PlanetColorParts[i][j] = c;
+                        }
 
-                var partOns = colors["planetcolor_part_on"]?.ToObject<bool[][]>();
-                if (partOns != null)
-                    for (int i = 0; i < Settings.PlanetColorPartsOn.Length && i < partOns.Length; i++)
-                    {
-                        if (partOns[i] == null) continue;
-                        for (int j = 0; j < Settings.PlanetColorPartsOn[i].Length && j < partOns[i].Length; j++)
-                            Settings.PlanetColorPartsOn[i][j] = partOns[i][j];
-                    }
+                    var partOns = colors["planetcolor_part_on"]?.ToObject<bool[][]>();
+                    if (partOns != null)
+                        for (int i = 0; i < Settings.PlanetColorPartsOn.Length && i < partOns.Length; i++)
+                        {
+                            if (partOns[i] == null) continue;
+                            for (int j = 0; j < Settings.PlanetColorPartsOn[i].Length && j < partOns[i].Length; j++)
+                                Settings.PlanetColorPartsOn[i][j] = partOns[i][j];
+                        }
 
-                var judgeColors = colors["judge_margin_colors"]?.ToObject<string[]>();
-                if (judgeColors != null)
-                    for (int i = 0; i < Settings.JudgeMarginColors.Length && i < judgeColors.Length; i++)
-                        if (TryParseHex(judgeColors[i], out Color jc))
-                            Settings.JudgeMarginColors[i] = jc;
+                    var judgeColors = colors["judge_margin_colors"]?.ToObject<string[]>();
+                    if (judgeColors != null)
+                        for (int i = 0; i < Settings.JudgeMarginColors.Length && i < judgeColors.Length; i++)
+                            if (TryParseHex(judgeColors[i], out Color jc))
+                                Settings.JudgeMarginColors[i] = jc;
 
-                var judgeColorOns = colors["judge_margin_colors_on"]?.ToObject<bool[]>();
-                if (judgeColorOns != null)
-                    for (int i = 0; i < Settings.JudgeMarginColorsOn.Length && i < judgeColorOns.Length; i++)
-                        Settings.JudgeMarginColorsOn[i] = judgeColorOns[i];
+                    var judgeColorOns = colors["judge_margin_colors_on"]?.ToObject<bool[]>();
+                    if (judgeColorOns != null)
+                        for (int i = 0; i < Settings.JudgeMarginColorsOn.Length && i < judgeColorOns.Length; i++)
+                            Settings.JudgeMarginColorsOn[i] = judgeColorOns[i];
 
-                string judgeGlow = colors.Value<string>("judge_glow_color");
-                if (TryParseHex(judgeGlow, out Color glowColor))
-                    Settings.JudgeGlowColor = glowColor;
+                    string judgeGlow = colors.Value<string>("judge_glow_color");
+                    if (TryParseHex(judgeGlow, out Color glowColor))
+                        Settings.JudgeGlowColor = glowColor;
 
-                string textOutline = colors.Value<string>("judgetext_outline_color");
-                if (TryParseHex(textOutline, out Color textOutlineColor))
-                    Settings.JudgeTextOutlineColor = textOutlineColor;
+                    string textOutline = colors.Value<string>("judgetext_outline_color");
+                    if (TryParseHex(textOutline, out Color textOutlineColor))
+                        Settings.JudgeTextOutlineColor = textOutlineColor;
 
-                string edgeColor = colors.Value<string>("judgebar_edge_color");
-                if (TryParseHex(edgeColor, out Color barEdgeColor))
-                    Settings.JudgeBarEdgeColor = barEdgeColor;
+                    string edgeColor = colors.Value<string>("judgebar_edge_color");
+                    if (TryParseHex(edgeColor, out Color barEdgeColor))
+                        Settings.JudgeBarEdgeColor = barEdgeColor;
 
-                string zonePure = colors.Value<string>("judgebar_zone_pure");
-                if (TryParseHex(zonePure, out Color zonePureColor))
-                    Settings.JudgeBarPureColor = zonePureColor;
-                string zonePerfect = colors.Value<string>("judgebar_zone_perfect");
-                if (TryParseHex(zonePerfect, out Color zonePerfectColor))
-                    Settings.JudgeBarPerfectColor = zonePerfectColor;
-                string zoneCounted = colors.Value<string>("judgebar_zone_counted");
-                if (TryParseHex(zoneCounted, out Color zoneCountedColor))
-                    Settings.JudgeBarCountedColor = zoneCountedColor;
-                string tickOutline = colors.Value<string>("judgebar_tick_outline_color");
-                if (TryParseHex(tickOutline, out Color tickOutlineColor))
-                    Settings.JudgeBarTickOutlineColor = tickOutlineColor;
-            }
+                    string zonePure = colors.Value<string>("judgebar_zone_pure");
+                    if (TryParseHex(zonePure, out Color zonePureColor))
+                        Settings.JudgeBarPureColor = zonePureColor;
+                    string zonePerfect = colors.Value<string>("judgebar_zone_perfect");
+                    if (TryParseHex(zonePerfect, out Color zonePerfectColor))
+                        Settings.JudgeBarPerfectColor = zonePerfectColor;
+                    string zoneCounted = colors.Value<string>("judgebar_zone_counted");
+                    if (TryParseHex(zoneCounted, out Color zoneCountedColor))
+                        Settings.JudgeBarCountedColor = zoneCountedColor;
+                    string tickOutline = colors.Value<string>("judgebar_tick_outline_color");
+                    if (TryParseHex(tickOutline, out Color tickOutlineColor))
+                        Settings.JudgeBarTickOutlineColor = tickOutlineColor;
+                }
             }
             catch (Exception ex)
             {
@@ -829,7 +829,7 @@ public static class ConfigManager
         }
     }
 
-    private static string ToHex(Color c) => "#" + ColorUtility.ToHtmlStringRGBA(c);    private static string[] ToHexArray(Color[] colors)
+    private static string ToHex(Color c) => "#" + ColorUtility.ToHtmlStringRGBA(c); private static string[] ToHexArray(Color[] colors)
     {
         // null 兜底：调用方传 null 时返回 null，而不是在这里抛 NRE。
         // 传 null 曾让整份设置写不下去（PlanetColorBase 那次）；这类"助手函数被

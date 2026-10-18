@@ -35,11 +35,11 @@ namespace SpectreReplay.Ui
         private static int _builtCount = -1;
 
         // 配色（与 Gui 的语义色一致：绿=好、黄=中、红=差）
-        private static readonly Color32 Bg     = new Color32(20, 22, 28, 255);
-        private static readonly Color32 Axis   = new Color32(120, 120, 120, 255);
-        private static readonly Color32 Good   = new Color32(64, 217, 115, 255);
-        private static readonly Color32 Warn   = new Color32(242, 204, 51, 255);
-        private static readonly Color32 Bad    = new Color32(230, 77, 77, 255);
+        private static readonly Color32 Bg = new Color32(20, 22, 28, 255);
+        private static readonly Color32 Axis = new Color32(120, 120, 120, 255);
+        private static readonly Color32 Good = new Color32(64, 217, 115, 255);
+        private static readonly Color32 Warn = new Color32(242, 204, 51, 255);
+        private static readonly Color32 Bad = new Color32(230, 77, 77, 255);
 
         /// <summary>
         /// 取（必要时重建）贴图。<paramref name="source"/> 用来判"换了另一份回放"：

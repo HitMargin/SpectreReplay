@@ -401,10 +401,10 @@ namespace SpectreReplay.Ui
 
             switch (e.keyCode)
             {
-                case KeyCode.LeftArrow:  Move(-1, e.shift); return true;
-                case KeyCode.RightArrow: Move(1, e.shift);  return true;
-                case KeyCode.Home:       _caret = 0;             if (!e.shift) _anchor = _caret; return true;
-                case KeyCode.End:        _caret = Text.Length;   if (!e.shift) _anchor = _caret; return true;
+                case KeyCode.LeftArrow: Move(-1, e.shift); return true;
+                case KeyCode.RightArrow: Move(1, e.shift); return true;
+                case KeyCode.Home: _caret = 0; if (!e.shift) _anchor = _caret; return true;
+                case KeyCode.End: _caret = Text.Length; if (!e.shift) _anchor = _caret; return true;
                 case KeyCode.Backspace:
                     if (!DeleteSelection() && _caret > 0)
                     {
@@ -421,9 +421,9 @@ namespace SpectreReplay.Ui
                     }
                     return true;
                 case KeyCode.A: if (ctrl) { SelectAll(); return true; } break;
-                case KeyCode.C: if (ctrl) { Copy();      return true; } break;
+                case KeyCode.C: if (ctrl) { Copy(); return true; } break;
                 case KeyCode.X: if (ctrl) { Copy(); DeleteSelection(); return true; } break;
-                case KeyCode.V: if (ctrl) { Paste();     return true; } break;
+                case KeyCode.V: if (ctrl) { Paste(); return true; } break;
             }
 
             // 可打印字符。**必须排除 Ctrl 组合**（坑 2）：Ctrl+A 的 character

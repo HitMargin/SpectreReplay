@@ -53,7 +53,7 @@ internal static class MainThread
         InvokeSafe(action);
     }
 
-        internal static void Run(Action action)
+    internal static void Run(Action action)
     {
         if (action == null) return;
         if (IsMainThread)

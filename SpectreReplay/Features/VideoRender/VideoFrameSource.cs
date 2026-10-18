@@ -144,7 +144,8 @@ internal sealed class VideoFrameSource
     {
         if (pixels != null && spares.Count < spareLimit)
             spares.Enqueue(pixels);
-    }    internal void Dispose()
+    }
+    internal void Dispose()
     {
         if (surface == VideoSurface.CleanCamera)
         {

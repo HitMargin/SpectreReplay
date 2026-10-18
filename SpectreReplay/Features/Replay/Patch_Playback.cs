@@ -238,7 +238,8 @@ internal class Patch_PlayerControlUpdate
             WavLoader.musicSource.pitch = 1f;
             if (!WavLoader.musicSource.isPlaying)
                 WavLoader.Play_keybdsound(WavLoader.loaded_clip, (float)Settings.KeybdSoundVolume / 10f);
-        }        else if (WavLoader.musicSource.isPlaying)
+        }
+        else if (WavLoader.musicSource.isPlaying)
             WavLoader.Stop_keybdsound();
     }
 }
