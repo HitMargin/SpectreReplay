@@ -57,6 +57,27 @@ internal static class VideoRender
         PinnedSongPosition = 0.0;
     }
 
+    // —— 渲染期倍速钉扎 ——
+    // scnEditor.Play() 对程序化调用**无条件**把倍速重置成 1x（源码
+    // scnEditor.cs:7204-7205：`holdingControl` 只有真按住 Ctrl 才为真），
+    // 随后 RemakePath → SetupConductorWithLevelData 用这个值算 song.pitch。
+    // 而 TryStartPlayback 的倍速校验拿它与回放记录比对——渲染自己重建关卡，
+    // 条件就必须由渲染自己准备，不能要求玩家先按住 Ctrl 再点渲染。
+    internal static bool SpeedOverrideArmed;
+    internal static float SpeedOverride = 1f;
+    internal static bool SpeedOverrideQuickPitched;
+
+    // RemakePath 的 Prefix 与 Start_Rewind 的 Prefix 共用这一处写入。
+    // 必须在 RemakePath 之前写回：pitch 是在 RemakePath 里推导的，
+    // 晚于它的写入只会影响后续判定、救不回已经算错的时间轴。
+    internal static void ApplySpeedOverrideTo(scnEditor editor)
+    {
+        if (!SpeedOverrideArmed || editor == null)
+            return;
+        editor.playbackSpeed = SpeedOverride;
+        GCS.editorQuickPitchedPlaying = SpeedOverrideQuickPitched;
+    }
+
     // 设置页「开始渲染」按钮入口
     internal static void StartRender()
     {

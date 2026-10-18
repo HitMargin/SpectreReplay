@@ -159,6 +159,36 @@ namespace UiPreview
             Console.WriteLine($"    {(minOk ? "✓" : "✗")} ⑤ 位深下限常量与实际判定一致（{MinSupportedBitDepth}）");
             if (!minOk) fail++;
 
+            // ⑥ 写侧必须把多声道**下混成单声道**（2026-10-19 修）。
+            //    ① 已经钉住"头部声明 channels=1"，但那只管头部。GetData 拿到的是
+            //    AudioClip 的交错数据，声道数由麦克风决定——直接按 sampleCount 逐
+            //    样本写盘时，立体声设备会产出"头声明单声道、数据双声道"的文件：
+            //    播放时长只有一半、音调被拉高。① 与 ② 都照样绿，因为头部本身没错。
+            //    判据同时要两段：帧数按 channels 折算 + 取值按 channels 求均值。
+            bool downmixOk = false;
+            string mixInfo = "";
+            try
+            {
+                string root2 = System.IO.Path.GetFullPath(@"..\..\SpectreReplay");
+                string src2 = System.IO.File.ReadAllText(
+                    System.IO.Path.Combine(root2, @"State\AudioRecorder.cs"));
+                var mCh = System.Text.RegularExpressions.Regex.Match(src2,
+                    @"CreateWAVHeader\(\s*(\d+)\s*,\s*recordingFrequency\s*,\s*16\s*,");
+                int declaredCh = mCh.Success ? int.Parse(mCh.Groups[1].Value) : -1;
+                // 帧数折算：单声道时等价于 sampleCount，多声道时必须除
+                bool framesDivided = src2.Contains("sampleCount / channels", StringComparison.Ordinal);
+                // 取值：多声道取均值（不能只取第一个声道）
+                bool averaged = src2.Contains("sum / channels", StringComparison.Ordinal);
+                downmixOk = declaredCh == 1 && framesDivided && averaged;
+                mixInfo = $"声明声道={declaredCh} 帧数折算={framesDivided} 取均值={averaged}";
+            }
+            catch (Exception ex)
+            {
+                mixInfo = "读 AudioRecorder.cs 失败：" + ex.Message;
+            }
+            Console.WriteLine($"    {(downmixOk ? "✓" : "✗")} ⑥ 写侧把多声道下混成单声道（{mixInfo}）");
+            if (!downmixOk) fail++;
+
             if (fail == 0)
                 Console.WriteLine("    ✓ 写侧契约与读侧守卫互相覆盖，无静默空值通道");
             return fail;

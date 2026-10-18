@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using UnityEngine;
 using SpectreReplay.API;
+using SpectreReplay.Features.Replay;
 using static SpectreReplay.SpectreState;
 using static SpectreReplay.Features.Replay.ReplayKeys;
 
@@ -34,6 +35,9 @@ internal sealed class VideoRenderJob : MonoBehaviour
     // 捕获起点计时：ETA 按平均交付速率外推（渲染稳态后速率相当平稳，整体均值足够）
     private System.Diagnostics.Stopwatch captureClock;
     private bool playbackLive;
+    // 回放没能接管时的具体原因（被校验拒 / 关卡已跑但回放未启动）。
+    // 有它才能把「等待回放开始超时」换成一条能指向修法的失败信息。
+    private string playbackRejectReason;
     private double anchorSongPosition;
     private double clockSeconds;
     // 终态先记录、后上报：统一在 TearDown 的 CloseJob 之后触发事件。
@@ -125,6 +129,25 @@ internal sealed class VideoRenderJob : MonoBehaviour
 
         // 走既有回放启动链：重启关卡后 Start_Rewind 补丁会做完整性校验并自动开始回放
         SpectreState.PlayActions.SwitchToPlayMode();
+        Patch_StartRewind.ResetRejectLog();
+
+        // 把回放记录的倍速交给渲染钩子（见 VideoRender.SpeedOverride 与
+        // Patch_VideoSpeedOverride）。**这一步不能省**：scnEditor.Play() 对
+        // 程序化调用会把倍速压成 1x，然后立刻用它推导 song.pitch；不改回来，
+        // TryStartPlayback 的倍速校验必然拒绝，回放永远不接管——现象就是
+        // 「等待回放开始超时」而画面照常跑。录像若没记倍速则保持 1x。
+        // **只在录像确实处于飙速态时才套用倍速。** 校验式的期望值就是
+        // `QuickPitched ? PlaybackSpeed : 1.0`：非飙速录像若把 playerSpeed
+        // 写成 1.5，校验仍按 1.0 通过，但 song.pitch 已被拉高——时间轴与录像
+        // 对不上，成片从头到尾音画不同步。
+        bool quickPitched = SpectreState.data.bools.TryGetValue(QuickPitched, out bool qp) && qp;
+        VideoRender.SpeedOverrideQuickPitched = quickPitched;
+        VideoRender.SpeedOverride = quickPitched
+            && SpectreState.data.doubles.TryGetValue(PlaybackSpeed, out double spd) && spd > 0.0
+            ? (float)spd
+            : 1f;
+        VideoRender.SpeedOverrideArmed = true;
+
         int startTile = SpectreState.data.ints.TryGetValue(StartTile, out int st) ? st : 0;
         if (ADOBase.editor != null && ADOBase.editor.floors != null && ADOBase.editor.floors.Count > 1)
         {
@@ -143,12 +166,19 @@ internal sealed class VideoRenderJob : MonoBehaviour
         SetPhase(VideoRender.Phase.WaitingPlayback, "rendervideo.stage.waiting", "");
         playbackLive = false;
         yield return AwaitReplayAlive(fps);
+        // 顺序有意义：AwaitReplayAlive 在取消时是直接 return 的，playbackLive 会停在 false。
+        // 若先判 !playbackLive，用户点了取消却收到"等待回放开始超时"的失败通知
+        if (cancelRequested) { NotifyCanceled(); yield break; }
         if (!playbackLive)
         {
-            NotifyFailed(LocalizationManager.GetLocalizedText("rendervideo.wait_timeout"));
+            // 有具体原因就报原因：「等待回放开始超时」这句话对玩家没有信息量，
+            // 而真正的原因（倍速不符 / 被别的 mod 阻断）直接指向修法。
+            NotifyFailed(string.IsNullOrEmpty(playbackRejectReason)
+                ? LocalizationManager.GetLocalizedText("rendervideo.wait_timeout")
+                : LocalizationManager.GetLocalizedText("rendervideo.wait_timeout")
+                    + "：" + playbackRejectReason);
             yield break;
         }
-        if (cancelRequested) { NotifyCanceled(); yield break; }
 
         scrConductor conductor = ADOBase.conductor;
         if (conductor == null || conductor.song == null)
@@ -368,6 +398,17 @@ internal sealed class VideoRenderJob : MonoBehaviour
 
         if (cancelRequested) { NotifyCanceled(); yield break; }
 
+        // hardStop 是防死循环的保险丝（FramesTotal + 60s），不是正常出口。
+        // 走到这里说明回放始终没有发出停止信号，endFrame 一直没定下来，循环被硬砍。
+        // 若不拦截，下面会照常 mux 出一段**提前截断**的视频，并上报 Completed ——
+        // 用户拿到一个看起来成功、实际缺了结尾的文件。宁可明确失败。
+        if (frameIndex >= hardStop)
+        {
+            NotifyFailed(LocalizationManager.GetLocalizedText("rendervideo.capture_overrun")
+                + " (" + frameIndex + " / " + VideoRender.Current.FramesTotal + " frames)");
+            yield break;
+        }
+
         // 合成（编码器收尾会阻塞主线程，此时画面已不再变化）
         captureClock = null;
         VideoRender.Current.EtaSeconds = -1;
@@ -408,9 +449,15 @@ internal sealed class VideoRenderJob : MonoBehaviour
             string audioCopy = Path.Combine(dir, stem + "_audioonly" + Path.GetExtension(wavPath));
             File.Copy(rawVideoPath, videoCopy, overwrite: true);
             File.Copy(wavPath, audioCopy, overwrite: true);
+            // 手动合成命令必须与 MuxWith 的实际参数一致：
+            // · webm 只认 Vorbis/Opus，照抄 aac 会让用户拿到 "Could not find tag for codec aac"
+            // · 用实际定位到的编码器路径，而不是假定 ffmpeg 在 PATH 上
+            bool webm = string.Equals(Path.GetExtension(target), ".webm",
+                StringComparison.OrdinalIgnoreCase);
+            string audio = webm ? "libopus -b:a 192k -ar 48000" : "aac -b:a 320k";
             Debug.Log("[SpectreReplay] mux 失败但已抢救原始流: " + videoCopy + "\n  " + audioCopy
-                + "\n  手动合成: ffmpeg -i \"" + videoCopy + "\" -i \"" + audioCopy
-                + "\" -c:v copy -c:a aac -shortest \"" + target + "\""
+                + "\n  手动合成: \"" + encoderPath + "\" -i \"" + videoCopy + "\" -i \"" + audioCopy
+                + "\" -c:v copy -c:a " + audio + " -ac 2 -shortest \"" + target + "\""
                 + "\n  失败原因: " + cause.Message);
         }
         catch (Exception ex)
@@ -420,7 +467,12 @@ internal sealed class VideoRenderJob : MonoBehaviour
     }
 
     // 等回放真正接管：is_playing 只有在 Start_Rewind 校验通过后才会置 true，
-    // 以此为准可避免场景重载后控制器空状态（编辑模式等）被误判为已开始
+    // 以此为准可避免场景重载后控制器空状态（编辑模式等）被误判为已开始。
+    //
+    // 注意 is_playing 会闪：`Patch_StartRewind.Postfix` 每次都先调
+    // `PlayActions.StopPlaying()` 把它清回 false，而编辑器重开关卡时
+    // Start_Rewind 会连发多次。所以这里判的是「某一刻已经接管」，不做持续性
+    // 假设——真要看它是否稳定，靠下面超时那条现场日志，不靠猜。
     private IEnumerator AwaitReplayAlive(int fps)
     {
         int limit = Math.Max(30, fps * 10);
@@ -428,13 +480,30 @@ internal sealed class VideoRenderJob : MonoBehaviour
         {
             if (cancelRequested)
                 yield break;
+
+            // 关卡已经在跑（歌已开始 / 已进 PlayerControl）而回放仍未接管：
+            // 这是**确定的失败**，不是「还没就绪」。继续空转到 10 秒只会把
+            // 真正的现场拖丢，还让用户以为渲染卡住。立即停下并报明原因。
+            //
+            // **三个条件必须同时成立才早退**：关卡已在跑、回放仍未接管、
+            // 且确实有一条校验拒绝记录。少任何一条都保持原语义继续等：
+            // Start_Rewind 会连发多次（前一发被拒、后一发成功是常态），
+            // 只看其中一条会误杀本来能成功的那些轮次。
+            scrConductor conductor = ADOBase.conductor;
+            scrController controller = scrController.instance;
+            bool levelRunning = (conductor != null && conductor.hasSongStarted)
+                || (controller != null
+                    && (controller.state == States.Countdown || controller.state == States.PlayerControl));
             if (!SpectreState.is_playing)
             {
+                if (levelRunning && !string.IsNullOrEmpty(Patch_StartRewind.LastReject))
+                {
+                    playbackRejectReason = Patch_StartRewind.LastReject;
+                    yield break;
+                }
                 yield return null;
                 continue;
             }
-            scrConductor conductor = ADOBase.conductor;
-            scrController controller = scrController.instance;
             if (conductor != null && conductor.hasSongStarted)
             {
                 playbackLive = true;
@@ -448,6 +517,26 @@ internal sealed class VideoRenderJob : MonoBehaviour
             }
             yield return null;
         }
+
+        // 超时必须说清当时到底停在哪。没有这几项，日志里只剩一句
+        // 「failed: 等待回放开始超时」，既看不出回放是被校验拒了、被别的
+        // mod 阻断了，还是根本没进 PlayMode——三种情况的修法完全不同。
+        if (string.IsNullOrEmpty(playbackRejectReason))
+            playbackRejectReason = LocalizationManager.GetLocalizedText("rendervideo.replay_not_taken");
+        var blocks = SpectreAPI.SnapshotBlocks();
+        var blockText = new System.Text.StringBuilder();
+        foreach (var kv in blocks)
+        {
+            if (blockText.Length > 0) blockText.Append("; ");
+            blockText.Append(kv.Key).Append(':').Append(kv.Value);
+        }
+        Debug.Log("[SpectreReplay] 等待回放开始超时，现场状态："
+            + " PlayMode=" + SpectreState.PlayMode
+            + " RecordMode=" + SpectreState.RecordMode
+            + " is_playing=" + SpectreState.is_playing
+            + " songLive=" + (ADOBase.conductor != null && ADOBase.conductor.hasSongStarted)
+            + " state=" + (scrController.instance != null ? scrController.instance.state.ToString() : "<无控制器>")
+            + " blocks=" + (blockText.Length == 0 ? "无" : blockText.ToString()));
     }
 
     // 按序交付已完成的帧；失败的帧用黑帧顶替
@@ -575,13 +664,26 @@ internal sealed class VideoRenderJob : MonoBehaviour
 
     private void RestoreGlobalState()
     {
-        UnscaledDeltaPin.Uninstall();
-        Time.captureFramerate = savedCaptureFramerate;
-        Application.targetFrameRate = savedTargetFrameRate;
-        QualitySettings.vSyncCount = savedVSyncCount;
-        Application.runInBackground = savedRunInBackground;
-        AudioListener.pause = savedAudioPause;
-        GCS.checkpointNum = savedCheckpointNum;
+        // **逐项兜底，不能串行裸调。** 这里恢复的全是 Unity 全局状态，而渲染作业常在
+        // 场景切换途中收尾，任一 API 抛异常都会让后面的项整批跳过：比如卡在
+        // AudioListener.pause 之前就留下永久静音，卡在 vSyncCount 之前就留下异常帧率，
+        // 且都没人再恢复。TearDown 只能兜住"整个方法抛了"，兜不住这种中途截断。
+        void Try(string name, Action restore)
+        {
+            try { restore(); }
+            catch (Exception ex)
+            {
+                Debug.Log("[SpectreReplay] render global state restore failed at "
+                    + name + ": " + ex.Message);
+            }
+        }
+        Try("clock", () => UnscaledDeltaPin.Uninstall());
+        Try("captureFramerate", () => Time.captureFramerate = savedCaptureFramerate);
+        Try("targetFrameRate", () => Application.targetFrameRate = savedTargetFrameRate);
+        Try("vSyncCount", () => QualitySettings.vSyncCount = savedVSyncCount);
+        Try("runInBackground", () => Application.runInBackground = savedRunInBackground);
+        Try("audioPause", () => AudioListener.pause = savedAudioPause);
+        Try("checkpointNum", () => GCS.checkpointNum = savedCheckpointNum);
     }
 
     private void SetPhase(VideoRender.Phase phase, string stageKey, string detail)
@@ -621,6 +723,9 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // Delete 临时目录、二次 Destroy(gameObject)
         if (tornDown) return;
         tornDown = true;
+        // 倍速钉扎随作业结束撤销：之后玩家自己重开关卡必须回到游戏自己的行为，
+        // 否则上一份回放的倍速会泄漏到正常游玩里。
+        VideoRender.SpeedOverrideArmed = false;
         // 新时钟路径：先断开 ActiveClock（Transpiler 的替换函数即刻回落原始值），
         // 再走常规清理——顺序错了收尾期间游戏会多跑一帧确定性时间
         RenderClockSource.ActiveClock = null;
@@ -632,7 +737,20 @@ internal sealed class VideoRenderJob : MonoBehaviour
         frames = null;
         mixdown = null;
         encoder = null;
-        RestoreGlobalState();
+        // **必须兜住异常。** RestoreGlobalState 读写的全是 Unity 全局状态（Time /
+        // Application / QualitySettings / AudioListener）。渲染作业常在场景切换途中收尾，
+        // 此时这些 API 可能抛；一旦抛在这里，下面三件收尾全部跳过：
+        //   临时目录不清（几百 MB 留盘）、VideoRender.CloseJob 不调（Job 永远非 null，
+        //   此后再也起不了任何渲染）、RaiseRenderFinished 不发（调用方永远等不到终态）。
+        // 全局状态恢复失败只是"可能残留一个 vSync/帧率设置"，远轻于上面三样。
+        try
+        {
+            RestoreGlobalState();
+        }
+        catch (Exception ex)
+        {
+            Debug.Log("[SpectreReplay] render global state restore failed: " + ex.Message);
+        }
         try
         {
             if (Directory.Exists(tempDir))
@@ -692,11 +810,12 @@ internal sealed class VideoRenderJob : MonoBehaviour
     {
         pinnedVideos.Clear();
         pinnedVideosWerePlaying.Clear();
-        // FindObjectsByType(FindObjectsSortMode.None)：不去重排序（我们只调速不依赖顺序），
-        // 顺带消掉 FindObjectsOfType 的过时警告。此处仍需覆盖未激活对象——视频背景
+        // FindObjectsByType(FindObjectsInactive.Include, FindObjectsSortMode.None)：
+        // 第二个参数不去重排序（我们只调速不依赖顺序）。
+        // FindObjectsInactive.Include 不可省——单参重载默认 Exclude，而视频背景
         // 可能在接管时刻尚未 SetActive(true)，漏掉就会在首次显示时失去调速控制。
         foreach (UnityEngine.Video.VideoPlayer vp in FindObjectsByType<UnityEngine.Video.VideoPlayer>(
-                    FindObjectsSortMode.None))
+                    FindObjectsInactive.Include, FindObjectsSortMode.None))
         {
             if (vp == null) continue;
             pinnedVideosWerePlaying.Add(vp.isPlaying);

@@ -13,7 +13,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify.ps1
 **只读审计**（7 个离线审计脚本）、线上 dll 与构建产物的 sha256 一致、
 `D:\Projects\Spectre` 工作区干净。
 
-> **当前打印 57 条断言 0 失败**（2026-10-16 实测）。这个数字会随轮次变，
+> **当前打印 67 条断言 0 失败**（2026-10-19 实测）。这个数字会随轮次变，
 > 引用前先跑一遍 `verify.ps1` 看真实条数。**注意它是「✓ 行数」而不是判据数**
 > ——`UiLogicShapeCheck` 现有 13 条判据只印 1 行，所以加判据这个数字不变。
 
@@ -28,8 +28,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify.ps1
 |---|---|
 | LocCheck | 页面引用的键在两种语言下都齐；两张表键集合一致；中文/英文都能解析成文案、不返回键名本身 |
 | HardTextCheck | 没有被写死的用户可见中文；文案表文件里没有漏网的中文字符串 |
-| ReplayCheck | 链接真实 ReplayEncoder/Decoder 的回放格式往返（五种数据形状含巨大 count 被干净拒绝） |
-| WavRoundTripCheck | 键盘音 WAV 的写读往返：写侧头部契约**取自真源码**、读侧接受范围覆盖写侧产出、拒 6 种坏头（非 PCM/位深 12,64/声道 0,负/FormatTag 0）、四种合法位深全接受、位深下限常量与判定一致 |
+| ReplayCheck | 链接真实 ReplayEncoder/Decoder 的回放格式往返（五种数据形状含巨大 count 被干净拒绝；**巨大 count 必须由 ReadCount 守卫拒、异常消息要核对**——2026-10-19 修，此前用裸 gzip 解新格式，在解压阶段就抛 InvalidDataException 被当成「已拒绝」，MUT-P2 把守卫全短路也照样绿） |
+| WavRoundTripCheck | 键盘音 WAV 的写读往返：写侧头部契约**取自真源码**、读侧接受范围覆盖写侧产出、拒 6 种坏头（非 PCM/位深 12,64/声道 0,负/FormatTag 0）、四种合法位深全接受、位深下限常量与判定一致、**写侧多声道必须下混成单声道（⑥，2026-10-19 加）** |
 | LocRuntimeCheck | 两个方向：**正向**——被取词的运行时键（`GetLocalizedText` 字面量 + `SetPhase` 第二实参）在全部 14 种语言下都齐；**反向**——表里定义的键必须真有人取，死键即为红（2026-10-17 加，此前表里有 315 个键、真正在用的只有 33 个） |
 | PortedCompletenessCheck | 移植搬来的模块都真有调用点：ReplayAnalyzer 显示、DescribeEncoder 降级提示、playback.ready 装弹提示、VideoConverter 入口、**转换目标来自 `Settings.ConvertTarget` 且必须可编辑 + 双向持久化（⑦/⑦b/⑦c）**、回放列表走集中清单且只含新格式两种(⑧/⑧b/⑧c)、键盘音三项有界面入口（⑨a/⑨b）、回放驱动开关有界面入口（⑩/⑩b）、保存目录有界面入口（⑪/⑪b）、**「打开这一关」按钮（⑫/⑫b）+ 编辑器跳转等就绪后定位起始砖（⑬）+ 命中分布图复用缓存（⑭）+ 渲染时钟开关四件齐（⑮a~⑮f）**、**去特效总开关默认关（⑯）+ 中文文案不得把关卡称作存档（⑰）**、没有孤儿检查 |
 | UiLogicShapeCheck | 界面控制流形状：停止录制不许借用「取消保存」文案、文本框必须**自绘**（不许用内建输入框）且宽度走 Gui.CtrlW、分组边框不许用 GetLastRect、**阻塞式原生目录选择框必须 Defer 到 OnGUI 之外（两个调用点各一条）**、**输入框底色必须比卡片更亮**、**按钮必须传自定义样式 + 滑条必须自绘 + 圆角贴图必须有缓存**（2026-10-12 用户报「UI 还是原生控件」后加的）、**混音轨 Render 容器必须精确**（⑧）、**卡片不许用 GUI.backgroundColor 染色**（⑨，乘算会抹平按钮 hover）、**更新检查三态不许合并 + 版本比较方向 + 读 ModEntry.Version + info.json 两个字段非空**（⑲a~⑲d，2026-10-17 加）、**拨开关必须当场刷新编辑器保存按钮**（⑳a/⑳b，2026-10-18 用户报「允许覆盖关卡开关后不会实时生效」）、**特殊按键两条输入路径都挂 Feature + Main 已注册 + Escape 不得放开**（㉑a~㉑c，2026-10-18 加） |
@@ -47,7 +47,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify.ps1
 | InstanceInjectionCheck | 16 处 `__instance` 全部作用于**实例方法**（Harmony 只对非静态目标注入） |
 | LogPrefixCheck | 全部日志用 `[SpectreReplay]` 前缀（真实 Spectre 模组也装着会跑，前缀是区分来源的唯一依据） |
 
-**总数 58 个 ✓ 行**（2026-10-17 实测 58 ✓ / 0 ✗）。这个数字会随轮次变，
+**总数 69 个 ✓ 行**（2026-10-19 实测 69 ✓ / 0 ✗）。这个数字会随轮次变，
 引用前先跑一遍 `verify.ps1` 看真实条数。
 
 > **口径修正（2026-10-12）：`✓ 行数 ≠ 断言单元数`，早先"两者相等"的说法是错的。**
@@ -61,7 +61,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify.ps1
 每加一条断言，**必须用 `tools\mutate.ps1 -Which MUT-X` 证明它会红**（自动还原）。
 已累计 10 条以上假断言、2 条假变异——形态见 `docs\SPECTRE_COMPARISON.md`
 与记忆库的「六条铁律」。`-ExpectGreen` 是反向对照（证明"全绿"本身可达）。
-`tools\mutate-regression.ps1` 全量回归 **95 条**变异（计数口径：`mutate.ps1` 里 `'MUT-XXX' {` 块的去重数；2026-10-17 实测 95）。新增 `MUT-V11` 守「Render 容器必须精确尺寸」；
+`tools\mutate-regression.ps1` 全量回归 **122 条**变异（计数口径：`mutate.ps1` 里 `'MUT-XXX' {` 块的去重数；2026-10-19 加 `MUT-W2` 后为 117，加 `MUT-D15`/`MUT-D16`/`MUT-CR4` 后为 120，2026-10-20 加 `MUT-D17`/`MUT-D18` 后为 122）。`MUT-D15` 守悬停说明必须以鼠标为锚点、`MUT-D16` 守详情面板同时显示 Accuracy 与 X-Accuracy、`MUT-CR4` 守 v2 容器仍可解密（迭代次数回落）、`MUT-D17` 守镜头缩放滑条必须挂缩放开关（否则拖了不生效）、`MUT-D18` 守去特效两个「全选本组」按钮都挂总开关（只改第二处，防判据只认首次命中）。新增 `MUT-V11` 守「Render 容器必须精确尺寸」；
 `MUT-V12`/`MUT-V13` 分别守判据⑨的两半（卡片底图必须是卡色贴图、
 不许再出现 `GUI.backgroundColor` 赋值——乘算会抹平按钮 hover）。
 2026-10-17 另加两条：`MUT-U34` 守「去特效总开关必须默认关」（⑯）、

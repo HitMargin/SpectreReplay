@@ -92,9 +92,14 @@ namespace UiPreview
             //    前半段防"少列一种"（`.psprp` 漏掉 → 不解密录的文件点不开）；
             //    后半段防回退——旧格式读写都删了，列表要是还列 `.crpl2`，
             //    玩家点它只会得到"文件头不匹配"，比不显示更像坏了。
-            fail += Check(projectRoot, "⑧b 可读格式清单只含新格式两种",
-                new[] { "Features\\Replay\\ReplayManager.cs" },
-                new[] { "ReplayConstants.Extension,", "ReplayConstants.ExtensionNoEncrypt," });
+            //
+            //    **必须只看数组块内部（2026-10-19 修）。** 原先用 Check 在全文件里
+            //    找 `ReplayConstants.ExtensionNoEncrypt,`，而 ReadReplayData 里
+            //    `filePath.EndsWith(ReplayConstants.ExtensionNoEncrypt, StringComparison…)`
+            //    同样带一个尾逗号 —— 于是把清单里的那一行删掉（MUT-U46）断言照样绿，
+            //    它命中的是**用法**不是**清单**。这是"判据看错了地方"那一族。
+            fail += CheckPredicate(projectRoot, "⑧b 可读格式清单只含新格式两种",
+                "Features\\Replay\\ReplayManager.cs", ReadableListHasBothFormats);
             fail += CheckAbsent(projectRoot, "⑧c 可读格式清单不得再列旧格式",
                 "Features\\Replay\\ReplayManager.cs",
                 new[] { "\".crpl2\"", "\".pcrpl2\"", "\".crpl\"", "\".pcrpl\"" });
@@ -764,6 +769,28 @@ namespace UiPreview
                 }
             }
             return false;
+        }
+
+        /// <summary>
+        /// 可读扩展名清单（<c>ReadableExtensions</c>）的数组块里，两种新格式是否都在。
+        ///
+        /// **只看数组块内部**：这两个常量在文件里另有用法
+        /// （<c>EndsWith(ReplayConstants.ExtensionNoEncrypt, StringComparison…)</c>），
+        /// 全文搜索会把"用了它"当成"清单里有它"——MUT-U46 就是这么漏过的。
+        /// 做法：定位 <c>ReadableExtensions</c> 之后的第一个 <c>{</c>，截到与之配对的
+        /// <c>}</c>，只在这个片段里找两个常量。
+        /// </summary>
+        private static bool ReadableListHasBothFormats(string code)
+        {
+            int decl = code.IndexOf("ReadableExtensions", StringComparison.Ordinal);
+            if (decl < 0) return false;
+            int open = code.IndexOf('{', decl);
+            if (open < 0) return false;
+            int close = code.IndexOf('}', open + 1);
+            if (close < 0) return false;
+            string block = code.Substring(open + 1, close - open - 1);
+            return block.Contains("ReplayConstants.Extension", StringComparison.Ordinal)
+                && block.Contains("ReplayConstants.ExtensionNoEncrypt", StringComparison.Ordinal);
         }
 
         /// <summary>

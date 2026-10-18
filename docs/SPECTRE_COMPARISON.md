@@ -1497,6 +1497,68 @@ Spectre 改用新 API 名 we'd 毫无反应。**两个方向都要钉。**
 
 ---
 
+## 八之二、2026-10-19：健壮性收口 + 两条假断言
+
+这一轮不新增功能，改的全是「出故障时会发生什么」——**失败路径上的行为**。
+
+### 渲染侧：三个静默失败
+
+1. **`RenderTexture.Create()` 的返回值从没被检查**（`VideoFrameSource.cs`）。
+   显存拒绝（分辨率超限、后台无设备、显存耗尽）时它返回 `false`，而原实现
+   照常把这张没建成的纹理指给三台相机，于是异步回读每帧 `hasError`，
+   `Flush()` 用黑帧顶替——**成片是一路黑，却上报 Completed**。
+   现在创建失败即抛，走正常的失败上报。
+2. **`hardStop` 命中的静默截断**（`VideoRenderJob.cs`）。保险丝是
+   `FramesTotal + 60s`，触发说明回放始终没发停止信号。原实现走出循环后
+   照常 mux 并上报 Completed——用户拿到一个**看起来成功、实际缺结尾**的文件。
+   现在明确失败（新文案键 `rendervideo.capture_overrun`，14 种语言都有）。
+3. **全局状态恢复是串行裸调**（`RestoreGlobalState`）。七项 Unity 全局状态
+   恢复，任一项抛就整批跳过——最坏的情况是卡在 `AudioListener.pause` 之前，
+   游戏**永久静音**且没人再恢复。改成逐项兜底；`TearDown` 外层也加了 try，
+   保证临时目录清理 / `CloseJob` / 终态事件三件收尾不会因前面出错而全跳过。
+
+顺带修了 `PinVideoPlayers` 的注释与代码矛盾：注释承诺覆盖未激活对象，
+代码用的单参 `FindObjectsByType` 默认 `Exclude`。已补 `FindObjectsInactive.Include`。
+
+### 音频侧：两个产出畸形文件的缺陷
+
+4. **WAV 头固定声明单声道，数据却按 `clip.channels` 交错落盘**
+   （`AudioRecorder.ProcessAudioChunk`）。立体声设备下产出的文件「头声明 1 声道、
+   数据 2 声道」，播放时长减半、音调升高。现在统一下混成单声道（取各声道均值），
+   让头部声明与落盘数据一致。**这条在 67 条断言、117 条变异下从来没人抓到过**
+   ——因为它只在多声道麦克风上才表现出来。
+5. **RIFF 两个长度字段的 32 位溢出**（`FinalizeWavFile`）。`(int)(fileLength - 44)`
+   超过 2GB 时静默回绕成负数，而读取端见到负数直接判「无效的块大小」——
+   一个内容完好的文件被写成损坏文件。现在显式钳制并报错。
+
+### 闸门自己：两条从没跑过的假断言
+
+6. **`ReplayCheck` 的「巨大 count 被拒绝」从来没验到 `ReadCount`**。
+   它用**裸 gzip** 解压生产端数据，而 2026-10-18 压缩层已换成
+   `[算法号][长度][Brotli 体]` 包装——裸 gzip 解压第一步就抛
+   `InvalidDataException`（首字节是算法号），被外层 `catch (InvalidDataException)`
+   当成「已拒绝」，于是**再也不会走到 ReadCount**。
+   后果：`MUT-P2` 把守卫整个短路掉，这条断言照样绿。
+   现在解压/压缩都走生产端 `ReplayCompression`，且**核对异常消息**
+   （只认 ReadCount 那条），解压阶段的异常会被明确判红。
+7. **`PortedCompletenessCheck` 的 ⑧b 看错了地方**。它全文件搜索
+   `ReplayConstants.ExtensionNoEncrypt,`，而 `ReadReplayData` 里
+   `EndsWith(ReplayConstants.ExtensionNoEncrypt, StringComparison…)`
+   同样带尾逗号——删掉清单里的那一行（`MUT-U46`）断言照样绿，
+   它命中的是**用法**不是**清单**。现在只解析 `ReadableExtensions` 的数组块内部。
+
+这两条都是「判据看错了对象」：一个看错了**阶段**（解压 vs 解析），
+一个看错了**位置**（全文 vs 数组块）。加上本轮新写的 ⑥（下混），
+三条改动各自配了变异证明会红（`MUT-P2` / `MUT-U46` / `MUT-W2`）。
+
+### 顺带：4 条变异锚点因缩进对齐失效
+
+`56c96e1`（全项目缩进对齐）之后，`MUT-U8` / `U13` / `U14` / `U15` 的锚点
+命中 0 次、`MUT-P13` 的计数从 3 变 4。失效形态是 **exit 2（变异自身跑不起来）
+而不是红**——正是 verify.md 里记过的那个坑。已全部对齐，全量回归 117/117。
+
+---
+
 ## 九、这一轮改了什么、没改什么
 
 本轮**没有**新增功能，全是"照着 Spectre 逐项比对之后"的修正。三类：

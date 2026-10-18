@@ -156,7 +156,12 @@ namespace SpectreReplay.Pages
             GUILayout.EndHorizontal();
         }
 
-        /// <summary>两列 × 两行：命中/按键、时长/xacc。</summary>
+        /// <summary>两列 × 三行：命中/按键、时长/Accuracy、X-ACC。</summary>
+        ///
+        /// **Accuracy 与 X-Accuracy 是两回事，必须都显示。** xacc 按判定档位
+        /// 加权（TooEarly 也有 0.2 分），Accuracy 只数"完美命中占多少"再加
+        /// 内档奖励——同一局可以 xacc 99.83%、Accuracy 96.5%。官方结算两个都给，
+        /// 只显示 xacc 会让玩家以为"我全完美，怎么才 97%"。
         private static void DrawStats(ReplayFileInfo info)
         {
             GUILayout.BeginHorizontal();
@@ -166,6 +171,10 @@ namespace SpectreReplay.Pages
 
             GUILayout.BeginHorizontal();
             Gui.KeyValueNarrow("playback.info.duration", DurationText(info), Gui.TextCol);
+            Gui.KeyValueNarrow("playback.info.acc", AccText(info), Gui.TextCol);
+            GUILayout.EndHorizontal();
+
+            GUILayout.BeginHorizontal();
             Gui.KeyValueNarrow("playback.info.xacc", XaccText(info), Gui.TextCol);
             GUILayout.EndHorizontal();
         }
@@ -238,6 +247,16 @@ namespace SpectreReplay.Pages
             double x = info.PercentXacc;
             return x > 0.0 ? (x * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%"
                         : Loc.T("playback.info.na");
+        }
+
+        /// <summary>普通 Accuracy。-1 = 这份回放没有判定分布（老文件或失败局）。
+        /// 不钳上限：官方公式的 1e-4 奖励能让满分局算出 100.05%，游戏界面
+        /// 同样显示成 100.05%，钳成 100 反而与游戏对不上。</summary>
+        private static string AccText(ReplayFileInfo info)
+        {
+            double a = info.Accuracy;
+            return a < 0.0 ? Loc.T("playback.info.na")
+                           : (a * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%";
         }
 
         internal static string SizeText(long bytes)

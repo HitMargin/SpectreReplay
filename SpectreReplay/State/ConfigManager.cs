@@ -350,9 +350,8 @@ public static class ConfigManager
         // 从这里往下的全部工作（序列化、建目录、写盘）都在
         // try 保护内。SaveConfigs 的 4 个调用方都**没有**自己的 try —— UM4 的
         // OnHideGUI 回调、退出钩子、设置页保存按钮，而 UM4 不包异常。异常穿透的后果
-        // 不只是"没存上"，还会**中断调用方后续的清理**：/*SettingsUI*/ 里
-        // AudioRecorder.StopAllMicrophones() 排在保存之后，一旦抛出，麦克风会一直开着；
-        // Glue.SpectreConfMgr.OnSave 里 UiConfigManager.Save() 同理会连带落空。
+        // 不只是"没存上"，还会**中断调用方后续的清理**：AudioRecorder.StopAllMicrophones()
+        // 排在保存之后，一旦抛出，麦克风会一直开着。
         string contents;
         try
         {
@@ -368,9 +367,8 @@ public static class ConfigManager
             return true;
         // 落盘失败必须就地兜住而不是往上抛：SaveConfigs 的 4 个调用方都**没有**自己的
         // try —— UM4 的 OnHideGUI 回调、退出钩子、设置页保存按钮。异常穿透的后果不只是
-        // "没存上"，还会**中断调用方后续的清理**：/*SettingsUI*/ 里
-        // AudioRecorder.StopAllMicrophones() 排在保存之后，一旦抛出，麦克风会一直开着；
-        // UiConfigManager.Save() 同理会连带落空。
+        // "没存上"，还会**中断调用方后续的清理**：AudioRecorder.StopAllMicrophones()
+        // 排在保存之后，一旦抛出，麦克风会一直开着。
         try
         {
             if (!Directory.Exists(directoryName))

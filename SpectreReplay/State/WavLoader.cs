@@ -24,7 +24,11 @@ public static class WavLoader
 
         public int TotalSamples;
 
-        public bool IsValid => FormatTag > 0 && Channels > 0 && SampleRate > 0 && (BitsPerSample == 8 || BitsPerSample == 16 || BitsPerSample == 24 || BitsPerSample == 32);
+        // DataSize/TotalSamples 也必须校验：只有 fmt 块、没有 data 块的文件（录制中途
+        // 断电只留下 44 字节头、下载被截断）能通过前四项，之后 ConvertWavToFloat 返回
+        // 空数组、AudioClip.Create 拿到 0 长度，SetData 必然失败——错误现场离真正原因
+        // （文件本身没有音频数据）很远，日志里看不出是文件坏了
+        public bool IsValid => FormatTag > 0 && Channels > 0 && SampleRate > 0 && DataSize > 0 && TotalSamples > 0 && (BitsPerSample == 8 || BitsPerSample == 16 || BitsPerSample == 24 || BitsPerSample == 32);
     }
 
     public static AudioClip loaded_clip;
@@ -156,7 +160,10 @@ public static class WavLoader
                     result.FormatTag = num2;
                     if (num2 != 1 && num2 != 3)
                     {
-                        Debug.LogError($"[WavLoader] 不支持的音频格式: {num2}（仅支持 PCM）");
+                        // 1=PCM、3=IEEE float；32 位浮点走 case 32 里的 FormatTag==3 分支。
+                        // 文案必须与实际支持范围一致，否则 3 能通过校验、其他值报"仅支持 PCM"，
+                        // 会让人误以为浮点 WAV 不被支持。
+                        Debug.LogError($"[WavLoader] 不支持的音频格式: {num2}（仅支持 PCM=1 与 IEEE float=3）");
                         return result;
                     }
                     result.Channels = binaryReader.ReadInt16();

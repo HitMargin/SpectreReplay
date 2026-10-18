@@ -30,11 +30,10 @@ $settingsFile = $files | Where-Object { $_.Name -eq 'Settings.cs' }
 $uiFiles = @($files | Where-Object { $_.Name -eq 'Pages.cs' -or $_.Name -eq 'OnGui.cs' })
 $uiText = ($uiFiles | ForEach-Object { $texts[$_.FullName] }) -join "`n"
 
-# 纯 UI 几何/主题字段：由 Quartz 壳管，不在设置页露面属正常
-$uiOwned = @(
-    'UiPanelWidthFrac','UiPanelHeightFrac','UiPanelOpacity','UiPanelPosX','UiPanelPosY',
-    'UiAccentR','UiAccentG','UiAccentB','UiFlyDuration','UiHotkey','UiPowerOn','TextSize'
-)
+# 纯 UI 几何/主题字段白名单：本项目用 UMM 自带窗口，没有任何字段属于这一类。
+# （2026-10-18 用户裁决：UiPowerOn 的"总闸"语义与 UMM 开关重复，连同
+#  UiConfigManager / ConfigsUI.json 一并删除，白名单随之清空。）
+$uiOwned = @()
 
 $rows = @()
 foreach ($m in [regex]::Matches($texts[$settingsFile.FullName],

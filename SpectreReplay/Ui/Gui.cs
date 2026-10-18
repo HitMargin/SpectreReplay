@@ -763,7 +763,6 @@ namespace SpectreReplay.Ui
         // **为什么不复用 UMM 的 tooltipBox。** 那是 UnityModManager 的内部字段，
         // 私有且没有公开的绘制入口（本文件开头那条注释记的就是这件事）。
         private static string _tipKey;
-        private static Rect _tipAnchor;
 
         /// <summary>每帧开头清一次：鼠标移开后说明必须消失，不能挂在上一帧的控件上。</summary>
         internal static void ResetTips()
@@ -805,7 +804,6 @@ namespace SpectreReplay.Ui
                 return;
             }
             _tipKey = labelKey;
-            _tipAnchor = r;
         }
 
         /// <summary>
@@ -880,7 +878,7 @@ namespace SpectreReplay.Ui
         /// ① 只在 Repaint 趟画——Layout 趟画的东西会被丢掉，文字测量还会算两遍；
         /// ② 宽度写死、高度按内容算（<c>CalcHeight</c>）。反过来（高度写死）会让
         ///    长句被裁掉半句，而它恰好是本项目最容易被忽略的缺陷形态；
-        /// ③ 贴边时翻到控件上方。悬停最后一行时说明框往下画会落到窗口外，
+        /// ③ 以鼠标为锚点（右下偏移），贴边时翻到指针左侧/上方。画到窗口外时
         ///    玩家看到的不是"说明没了"，而是"这一行没有说明"——两种现象分不开。
         /// </summary>
         internal static void DrawTooltip()
@@ -926,33 +924,36 @@ namespace SpectreReplay.Ui
             var content = new GUIContent(text);
             float h = _tipStyle.CalcHeight(content, inner) + PadY * 2f;
 
-            float right = view.width - 8f;
-            float x = _tipAnchor.x;
-            if (x + w > right)
+            // **锚点必须是鼠标，不是控件矩形。**
+            // UMM 自己画说明框用的就是 Event.current.mousePosition
+            // （UnityModManager.decompiled.cs:3714-3722），我们原先锚的是控件
+            // 矩形：鼠标在一行里左右移动，说明框纹丝不动；更糟的是控件矩形
+            // 与"当前可画区"分属两套坐标（UMM 把我们包在它自己的 ScrollView
+            // 里），窗口一滚动，控件矩形落到视口外，下面的夹取就把框按在
+            // 可视区顶部——现象是"说明永远出现在模组名称那一行的 x 轴上"，
+            // 水平也只剩标签列的起点（2026-10-18 用户报的就是它）。
+            //
+            // 坐标同系已有旁证：Unity 官方 ReorderableListControl 直接把
+            // GUIClip.visibleRect 与 Event.current.mousePosition 做 Contains
+            // （ReorderableListControl.cs:1281），GUIHelper.cs:49 注明
+            // VisibleRect = TopmostRect + scrollViewOffsets。
+            Vector2 mouse = Event.current.mousePosition;
+            float x = mouse.x + 20f;      // 右下偏移：别让框压在指针底下
+            float y = mouse.y + 20f;
+            if (x + w > view.xMax - 8f)
             {
-                x = right - w;
+                x = mouse.x - w - 8f;     // 右边放不下：翻到指针左侧
             }
-            if (x < 8f)
+            if (y + h > view.yMax - 8f)
             {
-                x = 8f;
+                y = mouse.y - h - 8f;     // 下边放不下：翻到指针上方
             }
-
-            float bottom = view.height - 8f;
-            float below = _tipAnchor.yMax + 6f;
-            float above = _tipAnchor.y - h - 6f;
-            float y = below;
-            if (y + h > bottom)
-            {
-                y = above;          // 先翻到控件上方
-            }
-            if (y + h > bottom)
-            {
-                y = bottom - h;     // 上方也放不下：贴底，整块仍在窗口内
-            }
-            if (y < 8f)
-            {
-                y = 8f;             // 最后夹到顶部：宁可盖住控件，也不画出窗口
-            }
+            // 四边都夹进可视区：上面两次翻折只管"优先方向"，窗口窄/矮到
+            // 两边都放不下时仍可能越界。这里宁可盖住指针，也不画出窗口。
+            x = Mathf.Clamp(x, view.xMin + 8f,
+                Mathf.Max(view.xMin + 8f, view.xMax - w - 8f));
+            y = Mathf.Clamp(y, view.yMin + 8f,
+                Mathf.Max(view.yMin + 8f, view.yMax - h - 8f));
 
             Rect box = new Rect(x, y, w, h);
             // 底色近乎不透明：说明框盖在别的行文字上，半透明会让两层字叠起来

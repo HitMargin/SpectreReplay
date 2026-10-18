@@ -46,9 +46,27 @@ internal class Patch_QuitToMainMenu
 // ——— scrController.Start_Rewind ————————————————————————————
 internal class Patch_StartRewind
 {
+    /// <summary>
+    /// 最近一次拒绝启动回放的原因（<c>Reject</c> 写入）；成功启动后清空。
+    ///
+    /// 渲染的等待阶段用它**快速失败**并报出真实原因：否则一条被拒的回放
+    /// 会让渲染空转满 10 秒，最后只得到一句「等待回放开始超时」——
+    /// 2026-10-18 用户报的正是这个，而真正的拒绝原因（倍速不符）在日志里
+    /// 明明有，只是没人把它和超时联系起来。
+    /// 主线程读写（Start_Rewind 与渲染协程都在主线程）。
+    /// </summary>
+    internal static string LastReject;
+
+    internal static void ResetRejectLog() => LastReject = null;
+
     [SpectrePatch(typeof(scrController), "Start_Rewind", PatchType.Prefix, Feature = FeatureKeys.Replay)]
     internal static void Prefix()
     {
+        // 渲染期把倍速钉回回放记录值。scnEditor.Play() 在程序化调用时无条件
+        // 写成 1x，而 Start_Rewind 是重开/换关的统一点——这里每轮补一次，
+        // TryStartPlayback 的倍速校验才可能通过（详见 VideoRender 的说明）。
+        if (VideoRender.VideoRender.Active)
+            VideoRender.VideoRender.ApplySpeedOverrideTo(ADOBase.editor);
         if (Settings.KeybdSoundRecordActive && RecordMode)
         {
             // 这里原本还有两行遗留调试：Debug.Log(Settings.MicrophoneDeviceName) 和
@@ -70,7 +88,13 @@ internal class Patch_StartRewind
         Settings.checklang();
 
         Scene scene = SceneManager.GetActiveScene();
-        Debug.Log(scene.name);
+        // 日志必须带上模式。原先只印场景名，于是"回放没开始"时翻日志只能看到
+        // 一长串裸的 scnEditor，**看不出当时到底是回放态还是录制态**——而这两个
+        // 模式走的是完全不同的分支（PlayMode → TryStartPlayback，
+        // RecordMode → TryStartRecording）。2026-10-18 视频渲染超时就是卡在
+        // 这一步分不出来，只能靠猜。
+        Debug.Log(scene.name + " [模式] PlayMode=" + PlayMode + " RecordMode=" + RecordMode
+            + " is_playing=" + is_playing + " is_recording=" + is_recording);
 
         switch (scene.name)
         {
@@ -101,15 +125,42 @@ internal class Patch_StartRewind
         }
     }
 
+    /// <summary>
+    /// 拒绝启动回放：**必须留日志，不能只弹通知。**
+    ///
+    /// 原先每处拒绝都是 `TriggerMessage(...); return;`——通知几秒后消失、不落日志，
+    /// 于是"回放没开始"在日志里表现成**什么都没发生**。2026-10-18 视频渲染报
+    /// 「等待回放开始超时」，翻遍日志也看不出是被哪条校验拒掉的，只能靠猜——
+    /// 而这一族判据有九条，猜一遍就是半小时。
+    /// </summary>
+    // 通知只给玩家看原本那条本地化文案；诊断细节走日志。
+    // 把「录=x 现=y」这类内部值拼进 TriggerMessage 会让调试信息漏到界面上，
+    // 而且绕开本地化（settings-ui-audit 会直接判红）。
+    private static void Reject(string userMessage, string detail = null)
+    {
+        // 同一份原因既进日志、也留给渲染的等待阶段快速失败用。
+        // 只留最后一条：渲染只关心「这一轮为什么没起来」，历史没有意义。
+        LastReject = userMessage + (string.IsNullOrEmpty(detail) ? "" : " (" + detail + ")");
+        Debug.Log("[SpectreReplay] TryStartPlayback 拒绝: " + userMessage
+            + (string.IsNullOrEmpty(detail) ? "" : " | " + detail));
+        TriggerMessage(userMessage, 3f, NotifType.Warning);
+    }
+
     private static void TryStartPlayback()
     {
         try
         {
+            // **每条拒绝路径都必须留痕。** 下面每处 return 都只弹一条通知（几秒后
+            // 消失、不进日志），于是"回放没开始"在日志里表现成**什么都没发生**——
+            // 2026-10-18 的视频渲染超时就是卡在这里，翻遍日志也看不出是被哪条校验
+            // 拒掉的，只能靠猜。这一行 + 各分支的 Reject 把"静默"变成可查。
+            Debug.Log("[SpectreReplay] TryStartPlayback 进入（PlayMode=" + PlayMode
+                + " RecordMode=" + RecordMode + " is_playing=" + is_playing + "）");
             if (!DebugMode || !debug_skip_Verification)
             {
                 if (DataIntegrity.Check())
                 {
-                    TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error7"), 3f, NotifType.Warning);
+                    Reject(LocalizationManager.GetLocalizedText("note.play_error7"), "DataIntegrity");
                     return;
                 }
                 var blocks = SpectreAPI.SnapshotBlocks();
@@ -118,12 +169,13 @@ internal class Patch_StartRewind
                     var sb = new System.Text.StringBuilder();
                     foreach (var kv in blocks)
                         sb.Append(kv.Key).Append(':').Append(kv.Value).Append('\n');
-                    TriggerMessage(sb.ToString(), 3f, NotifType.Warning);
+                    Reject(LocalizationManager.GetLocalizedText("note.play_error8"), "BlockPlaying: " + sb);
                     return;
                 }
                 if (scrPlayerManager.instance.players.Count() != 1)
                 {
-                    TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error8"), 3f, NotifType.Warning);
+                    Reject(LocalizationManager.GetLocalizedText("note.play_error8"),
+                        "players=" + scrPlayerManager.instance.players.Count());
                     return;
                 }
                 if (data.bools[IsOfficialLevel] != ADOBase.isOfficialLevel)
@@ -141,7 +193,9 @@ internal class Patch_StartRewind
                     if (!string.IsNullOrEmpty(data.strings[InternalLevelName])
                         && data.strings[InternalLevelName] != GCS.internalLevelName)
                     {
-                        TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error1") + data.strings[SongName], 3f, NotifType.Warning);
+                        Reject(LocalizationManager.GetLocalizedText("note.play_error1") + data.strings[SongName]);
+                        Debug.Log("[SpectreReplay]   细节 internal: 录="
+                            + data.strings[InternalLevelName] + " 现=" + GCS.internalLevelName);
                         return;
                     }
                 }
@@ -152,32 +206,41 @@ internal class Patch_StartRewind
                         : ComputeAngleHash(scnGame.instance.levelData.angleData));
                 if (floorHash != data.ints[FloorHash])
                 {
-                    TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error2"), 3f, NotifType.Warning);
+                    Reject(LocalizationManager.GetLocalizedText("note.play_error2"));
+                    Debug.Log("[SpectreReplay]   细节 floorHash: 录="
+                        + data.ints[FloorHash] + " 现=" + floorHash);
                     return;
                 }
                 if (!ADOBase.isOfficialLevel
                     && (data.ints[Pitch] != scnGame.instance.levelData.pitch
                         || data.doubles[Bpm] != (double)scnGame.instance.levelData.bpm))
                 {
-                    TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error2"), 3f, NotifType.Warning);
+                    Reject(LocalizationManager.GetLocalizedText("note.play_error2"));
+                    Debug.Log("[SpectreReplay]   细节 pitch/bpm: 录="
+                        + data.ints[Pitch] + "/" + data.doubles[Bpm]
+                        + " 现=" + scnGame.instance.levelData.pitch + "/" + scnGame.instance.levelData.bpm);
                     return;
                 }
                 if (GCS.difficulty.ToString() != data.strings[JudgeMode])
                 {
-                    TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error3") + data.strings[JudgeMode], 3f, NotifType.Warning);
+                    Reject(LocalizationManager.GetLocalizedText("note.play_error3") + data.strings[JudgeMode]);
+                    Debug.Log("[SpectreReplay]   细节 当前难度=" + GCS.difficulty);
                     return;
                 }
                 if (!IsFullRun && data.ints.TryGetValue(EndTile, out var endTileVal))
                 {
                     if (GCS.checkpointNum < data.ints[StartTile] || GCS.checkpointNum > endTileVal)
                     {
-                        TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error4") + data.ints[StartTile], 3f, NotifType.Warning);
+                        Reject(LocalizationManager.GetLocalizedText("note.play_error4") + data.ints[StartTile]);
+                        Debug.Log("[SpectreReplay]   细节 checkpointNum=" + GCS.checkpointNum
+                            + " 区间=" + data.ints[StartTile] + ".." + endTileVal);
                         return;
                     }
                 }
                 else if (!IsFullRun && GCS.checkpointNum != data.ints[StartTile])
                 {
-                    TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error4") + data.ints[StartTile], 3f, NotifType.Warning);
+                    Reject(LocalizationManager.GetLocalizedText("note.play_error4") + data.ints[StartTile],
+                        "checkpointNum=" + GCS.checkpointNum);
                     return;
                 }
                 if (data.bools[SpeedTrailMode] || data.bools[QuickPitched])
@@ -202,7 +265,8 @@ internal class Patch_StartRewind
                 }
                 if (actualSpeed != expectedSpeed)
                 {
-                    TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error5") + expectedSpeed, 3f, NotifType.Warning);
+                    Reject(LocalizationManager.GetLocalizedText("note.play_error5") + expectedSpeed,
+                        "actual=" + actualSpeed);
                     return;
                 }
             }
@@ -232,6 +296,10 @@ internal class Patch_StartRewind
                 ReplayPlayer.FastForward(GCS.checkpointNum);
 
             PlayActions.StartPlaying();
+            // 成功了就清掉拒绝记录：否则渲染的等待阶段会把上一轮的失败原因
+            // 当成这一轮的（Start_Rewind 会连发多次，前一发被拒、后一发成功是常态）。
+            if (is_playing)
+                ResetRejectLog();
             TriggerMessage(LocalizationManager.GetLocalizedText("note.start_playing"));
         }
         catch (Exception ex)

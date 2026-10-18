@@ -50,10 +50,14 @@ foreach ($f in $files) {
         }
         if ([string]::IsNullOrEmpty($method)) { continue }
 
-        # 属性访问器（PropertyAccessor.Get/Set）与 Transpiler 的形参不按名匹配
+        # 属性访问器（PropertyAccessor.Get/Set）、Transpiler、Finalizer 的形参**不按名注入**。
+        # Transpiler 拿到的是整段 IEnumerable<CodeInstruction>，Harmony 不按名从目标
+        # 方法取实参——所以它的 "instructions" 与目标 "Update()" 无参这件事无关。
+        # 原实现算出了 $isTranspiler 却从没用过，于是把这个合法形状报成"缺形参"。
         $isAccessor = $attr -match 'PropertyAccessor\.'
         $isTranspiler = $attr -match 'PatchType\.Transpiler'
         $isFinalizer = $attr -match 'PatchType\.Finalizer'
+        $byName = -not ($isAccessor -or $isTranspiler -or $isFinalizer)
 
         # 补丁方法签名
         $sig = $null
@@ -75,13 +79,22 @@ foreach ($f in $files) {
                 if (-not $pname.StartsWith('__')) { $ordinary += $pname }
             }
         }
+        # 非按名注入的类型根本没有『普通形参』这回事。
+        if (-not $byName) { continue }
         if ($ordinary.Count -eq 0) { continue }
 
         # 反射真程序集
         $type = $asm.GetType($typeName)
         $verdict = '目标类型/方法未找到'
         if ($type) {
+            # **属性也算目标。** 形如 songposition_minusi 是 scrConductor 的属性，
+            # 只查 GetMethod 会把它报成"方法未找到"——那是对目标形状的误判，
+            # 不是补丁写错了。
             $mi = $type.GetMethod($method, [Reflection.BindingFlags]::Public -bor [Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Instance -bor [Reflection.BindingFlags]::Static)
+            if (-not $mi) {
+                $pi = $type.GetProperty($method, [Reflection.BindingFlags]::Public -bor [Reflection.BindingFlags]::NonPublic -bor [Reflection.BindingFlags]::Instance -bor [Reflection.BindingFlags]::Static)
+                if ($pi) { $verdict = 'OK (属性访问器)' }
+            }
             if ($mi) {
                 $targetParams = $mi.GetParameters() | ForEach-Object { $_.Name }
                 $missing = @($ordinary | Where-Object { $targetParams -notcontains $_ })
@@ -104,3 +117,8 @@ $rows | Sort-Object Verdict, File | Format-Table -Wrap | Out-String | Write-Outp
 $bad = @($rows | Where-Object { $_.Verdict -notlike 'OK*' -and $_.Verdict -notlike '*正常*' })
 Write-Output ("需关注的: " + $bad.Count)
 $bad | ForEach-Object { "  $($_.File)  $($_.Target)  sig=($($_.Sig))  => $($_.Verdict)" }
+
+# **必须给退出码。** 原先到这里就结束了——verify.ps1 靠退出码判定，
+# 于是这份审计永远绿，哪怕上面印着"需关注的: N"。
+# exit 3 留给「脚本自己没跑成」，exit 1 才是「代码有问题」。
+if ($bad.Count -gt 0) { exit 1 }

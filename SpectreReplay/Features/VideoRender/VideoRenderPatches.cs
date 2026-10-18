@@ -46,6 +46,24 @@ internal static class Patch_VideoLockAsyncAngle
         => !VideoRender.Active;
 }
 
+// ——— scnEditor.RemakePath ————————————————————————————————
+// 渲染期把倍速钉回回放记录值。
+//
+// **时机是这条补丁的全部意义。** scnEditor.Play() 先无条件写
+// `playbackSpeed = holdingControl ? … : 1f`（源码 scnEditor.cs:7204-7205），
+// 紧接着调 RemakePath() → scnGame.RemakePath → SetupConductorWithLevelData，
+// 而后者用 editor.playbackSpeed 推导 song.pitch（scrConductor.cs:378-395）。
+// 只在 Play() 之前设没有用（会被覆盖），只在 Play() 之后设也没有用
+// （pitch 已经算错、时间轴已经按 1x 建好）。必须在两者之间，也就是
+// RemakePath 的 Prefix——这正是 Play() 内部唯一经过的钩子。
+internal static class Patch_VideoSpeedOverride
+{
+    [SpectrePatch(typeof(scnEditor), nameof(scnEditor.RemakePath), PatchType.Prefix,
+        Feature = FeatureKeys.Replay)]
+    internal static void Prefix(scnEditor __instance)
+        => VideoRender.ApplySpeedOverrideTo(__instance);
+}
+
 // 渲染期把 unscaled 时间族整体钉到虚拟时钟：captureFramerate 只钉缩放时间，unscaled 系
 // 按设计走真实耗时——离线渲染每帧真实耗时近似恒定（瓶颈在回读/编码），用它驱动的
 // 动画在成片里会按 帧率×真实帧耗时 变速（120fps≈2 倍）。

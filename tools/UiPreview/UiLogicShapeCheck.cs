@@ -358,6 +358,14 @@ namespace UiPreview
                 "⑱e 键盘音两项必须挂录音开关",
                 "Pages\\Pages.cs",
                 s => KeybdRowsDimWithRecord(s));
+            fail += Check(projectRoot,
+                "⑱f 去特效两个「全选本组」按钮都必须挂总开关",
+                "Pages\\Pages.cs",
+                s => ToggleAllButtonsGatedByMaster(s));
+            fail += Check(projectRoot,
+                "⑱g 镜头缩放：开关挂「镜头移动」，滑条再挂该开关(否则拖了没用)",
+                "Pages\\Pages.cs",
+                s => CameraZoomGatedByParent(s));
             // ⑲ 更新检查：三种态必须分开说，且版本比较方向不能反。
             //
             //    2026-10-17 用户要求「关于列表里加一个检测更新的功能 并且用上UMM
@@ -522,8 +530,82 @@ namespace UiPreview
                 "㉔ 官方关卡回放必须记录真实 BPM(硬写 0 会让详情面板显示「?」)",
                 "Features\\Replay\\Patch_Lifecycle.cs",
                 s => OfficialLevelBpmIsReal(s));
+            // ㉕ 详情面板必须同时给 Accuracy 与 X-Accuracy（2026-10-18 用户报
+            //    「有X-ACC少了ACC」）。
+            //
+            //    **为什么这不算"多加一行好看"**：两者不是同一指标的两种精度。
+            //    xacc 按档位加权（TooEarly 也有 0.2 分），Accuracy 只数完美占比
+            //    再加内档奖励——同一局可以 99.83% 与 96.5% 并存。只显示 xacc
+            //    会让玩家以为"我几乎全完美，怎么才 97%"，且与游戏结算面板对不上。
+            //
+            //    判据钉两件事：① 面板真的两行都画；② Accuracy 不是另存字段，
+            //    而是由判定分布按官方公式还原（老回放没有这个字段，另存必然
+            //    对旧文件显示占位符）——所以必须走 HitMarginCompat.Accuracy。
+            fail += Check(projectRoot,
+                "㉕ 详情面板必须同时显示 Accuracy 与 X-Accuracy",
+                "Pages\\ReplayInfoPanel.cs",
+                s => MethodBody(s, "DrawStats") is string ds
+                    && ds.Contains("playback.info.acc", StringComparison.Ordinal)
+                    && ds.Contains("playback.info.xacc", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㉕b Accuracy 必须由判定分布还原(老回放没存这个字段，另存会显示占位符)",
+                "Features\\Replay\\ReplayFileInfo.cs",
+                s => s.Contains("HitMarginCompat.Accuracy(info.JudgmentCounts)", StringComparison.Ordinal));
+            // ㉖ 渲染必须**自己**把回放记录的倍速装回编辑器（2026-10-18 用户报
+            //    「等待回放开始超时」且画面没变慢）。
+            //
+            //    根因在游戏源码里：`scnEditor.Play()` 对程序化调用无条件写
+            //    `playbackSpeed = holdingControl ? shortcut/100f : 1f`
+            //    （scnEditor.cs:7204-7205，holdingControl 只有真按住 Ctrl 才为真），
+            //    紧接着 `RemakePath → SetupConductorWithLevelData` 用它推导
+            //    `song.pitch`（scrConductor.cs:378-395）。而 TryStartPlayback 的
+            //    倍速校验拿它与录像比对，于是**每次渲染都判 1x ≠ 1.5x 并拒绝**，
+            //    StartPlaying 从未执行——关卡自己跑起来，10 秒后报超时。
+            //
+            //    修法不能是"让用户先按住 Ctrl 再点渲染"：渲染是自己重建关卡的，
+            //    条件必须由渲染准备。判据钉三件事，缺一条都会退回原样：
+            //      ① 注入点必须在 `RemakePath` 的 Prefix（Play() 内部唯一经过的钩子，
+            //         早于 Play() 会被覆盖、晚于 Play() 时 pitch 已算错）；
+            //      ② 写回的是回放数据里的 `PlaybackSpeed`，且受 `QuickPitched` 门控
+            //         （非飙速录像写 1.5 会让校验按 1.0 通过、时间轴却已拉高）；
+            //      ③ 作业收尾必须撤销武装（否则倍速泄漏到之后的手动重开关卡）。
+            fail += Check(projectRoot,
+                "㉖a 渲染必须自己装回录像倍速(Play() 会把程序化调用的倍速压成 1x)",
+                "Features\\VideoRender\\VideoRenderPatches.cs",
+                // **必须锚到带 scnEditor 形参的那个 Prefix。** 本文件里还有
+                // Patch_VideoPinSet.Prefix 等同名方法，MethodBody 取到的是第一个
+                // （实测：第一版写成 MethodBody(s, "Prefix") 直接假红）。
+                s => s.Contains("internal static void Prefix(scnEditor __instance)", StringComparison.Ordinal)
+                    && s.Contains("ApplySpeedOverrideTo", StringComparison.Ordinal)
+                    && s.Contains("nameof(scnEditor.RemakePath)", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㉖b 倍速来源必须是录像的 PlaybackSpeed 且受 QuickPitched 门控",
+                "Features\\VideoRender\\VideoRenderJob.cs",
+                s => SpeedOverrideComesFromReplay(s));
+            fail += Check(projectRoot,
+                "㉖c 渲染收尾必须撤销倍速钉扎(否则泄漏到之后的手动重开关卡)",
+                "Features\\VideoRender\\VideoRenderJob.cs",
+                s => MethodBody(s, "TearDown") is string tb
+                    && tb.Contains("SpeedOverrideArmed = false", StringComparison.Ordinal));
+            // ㉗ 「等待回放开始超时」必须**带出真正原因**（同一次用户报障）。
+            //
+            //    原先失败路径只有一句 wait_timeout；而日志里其实早有
+            //    `拒绝: ... actual=1`——只是没人把它和超时联系起来。
+            //    更糟的是 `!is_playing` 那条 continue 把后面两个接受条件全屏蔽，
+            //    于是哪怕关卡已经在跑（songLive / PlayerControl），也只能空转到
+            //    10 秒。判据：拒绝原因要接线到失败通知，且早退必须同时要求
+            //    「关卡已在跑」——只看拒绝记录会误杀连发 Start_Rewind 中后一发成功的轮次。
+            fail += Check(projectRoot,
+                "㉗a 等待失败时必须报出真实拒绝原因(不许只说超时)",
+                "Features\\VideoRender\\VideoRenderJob.cs",
+                s => s.Contains("playbackRejectReason", StringComparison.Ordinal)
+                    && s.Contains("Patch_StartRewind.LastReject", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㉗b 早退必须同时要求「关卡已在跑」+「有拒绝记录」(只看其一会误杀)",
+                "Features\\VideoRender\\VideoRenderJob.cs",
+                s => AwaitReplayAliveRequiresBoth(s));
             if (fail == 0)
-                Console.WriteLine("    ✓ 四十六条界面形状判据都成立");
+                Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");
             return fail;
         }
 
@@ -554,6 +636,46 @@ namespace UiPreview
             if (body == null) return false;
             return body.Contains("ADOBase.conductor", StringComparison.Ordinal)
                 && !body.Contains("scnGame.instance", StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// 渲染的倍速来源必须是录像的 <c>PlaybackSpeed</c>，且受 <c>QuickPitched</c> 门控。
+        ///
+        /// <c>QuickPitched</c> 这道门是**正确性**要求而不是整洁：校验式的期望值是
+        /// `QuickPitched ? PlaybackSpeed : 1.0`。非飙速录像若也写 1.5，校验仍按
+        /// 1.0 通过，但 <c>song.pitch</c> 已被拉高——成片会整体音画不同步，
+        /// 而这种坏只在成片里看得出来。
+        /// </summary>
+        private static bool SpeedOverrideComesFromReplay(string code)
+        {
+            string body = MethodBody(code, "Phases");
+            if (body == null) return false;
+            return body.Contains("SpeedOverride", StringComparison.Ordinal)
+                && body.Contains("PlaybackSpeed", StringComparison.Ordinal)
+                && body.Contains("QuickPitched", StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// 等待阶段的早退条件是否**同时**包含两条判据。
+        ///
+        /// 只看到拒绝记录就退出会误杀：<c>Start_Rewind</c> 会连发多次，
+        /// 前一发被拒、后一发成功是常态（这正是超时现场里
+        /// `is_playing` 会闪的来源）。只看到关卡在跑就退出也同样错——
+        /// 非渲染的普通游玩本来就会让关卡跑起来。
+        /// </summary>
+        private static bool AwaitReplayAliveRequiresBoth(string code)
+        {
+            string body = MethodBody(code, "AwaitReplayAlive");
+            if (body == null) return false;
+            int at = body.IndexOf("levelRunning", StringComparison.Ordinal);
+            if (at < 0) return false;
+            // 早退那一段必须把两个条件写在同一个判断里
+            int guard = body.IndexOf("if (levelRunning", at, StringComparison.Ordinal);
+            if (guard < 0) return false;
+            int close = body.IndexOf(')', guard);
+            if (close < 0) return false;
+            string cond = body.Substring(guard, close - guard);
+            return cond.Contains("LastReject", StringComparison.Ordinal);
         }
 
         private static bool DeleteIsTwoStep(string body)
@@ -723,28 +845,134 @@ namespace UiPreview
         }
 
         /// <summary>
+        /// 去特效两个「全选本组」按钮（轨道组、行星组各一个）是否都挂了总开关。
+        ///
+        /// 不能用 <c>RowCallEndsWith</c>：它只找**第一处**出现——轨道组挂对了、
+        /// 行星组漏了照样绿。这里逐个调用点判末参，并要求调用点数量正好是 2。
+        /// </summary>
+        private static bool ToggleAllButtonsGatedByMaster(string code)
+            => AllCallsEndWith(code, "effects.toggleall", "EffectRemoverOn", 2);
+
+        /// <summary>
+        /// 「移除镜头移动」的配套控件是否按父子关系门控：
+        ///   ① 缩放开关受「总开关 ∧ 移除镜头移动」管；
+        ///   ② 缩放滑条再受「缩放开关」管——<c>EffectRemover.RemoveCameras</c>
+        ///      一进来就判这个字段，关着直接 return，滑条拖到哪都不会写进谱面。
+        ///
+        /// 只判"源码里出现过 EffectRemoverSetCameraZoom"不够：字段名也在开关那行
+        /// 的 onValue lambda 里（<c>v =&gt; EffectRemoverSetCameraZoom = v</c>），把滑条
+        /// 的门控删掉照样绿。所以判**滑条这一行真正的末参表达式**。
+        /// </summary>
+        private static bool CameraZoomGatedByParent(string code)
+            => AllCallsEndWith(code, "effects.setcamerazoom",
+                   "EffectRemoverOn && EffectRemoverCameras", 1)
+               && AllCallsEndWith(code, "effects.camerazoom",
+                   "EffectRemoverOn && EffectRemoverCameras && EffectRemoverSetCameraZoom", 1);
+
+        /// <summary>
+        /// 每一个 <c>("key"</c> 调用点的末参是否都等于 <paramref name="arg"/>，
+        /// 且调用点数量正好是 <paramref name="expected"/>。
+        ///
+        /// 数量也要判：只判"每个都挂对"的话，按钮被整个删掉会得到零个调用点，
+        /// 循环一次都不进、直接返回 true——判据绿着而控件没了。
+        /// </summary>
+        private static bool AllCallsEndWith(string code, string key, string arg, int expected)
+        {
+            string open = "(\"" + key + "\"";
+            int seen = 0;
+            int at = code.IndexOf(open, StringComparison.Ordinal);
+            while (at >= 0)
+            {
+                seen++;
+                if (!string.Equals(LastArgOfCall(code, at), arg, StringComparison.Ordinal))
+                    return false;
+                at = code.IndexOf(open, at + open.Length, StringComparison.Ordinal);
+            }
+            return seen == expected;
+        }
+
+        /// <summary>
+        /// 从某个左括号起，取这个调用的**最后一个实参**原文（两端去空白）。
+        ///
+        /// 按深度走：`(`/`[`/`{` 加一，`)`/`]`/`}` 减一，回到 0 即收尾。
+        /// 只记深度 1 处的逗号——嵌套 lambda 里的逗号在深度 2，记进来会把真正的
+        /// 末参分隔符覆盖掉（`}, false, EffectRemoverOn` 就会被读成 `false`）。
+        /// 字符串内的括号要跳过，否则 `"("` 这类字面量会把深度带偏。
+        /// </summary>
+        private static string LastArgOfCall(string code, int openParen)
+        {
+            int depth = 0;
+            int lastComma = openParen;
+            bool inStr = false, esc = false;
+            for (int i = openParen; i < code.Length; i++)
+            {
+                char c = code[i];
+                if (esc) { esc = false; continue; }
+                if (c == '\\') { esc = true; continue; }
+                if (c == '"') { inStr = !inStr; continue; }
+                if (inStr) continue;
+                if (c == '(' || c == '[' || c == '{') { depth++; continue; }
+                if (c == ')' || c == ']' || c == '}')
+                {
+                    depth--;
+                    if (depth == 0) return code.Substring(lastComma + 1, i - lastComma - 1).Trim();
+                    continue;
+                }
+                if (c == ',' && depth == 1) lastComma = i;
+            }
+            return "";
+        }
+
+        /// <summary>
         /// 找到 <c>Gui.Section(&quot;title&quot;</c> 那一行，往后找**本组**的收尾
         /// <c>}, X);</c>，判断 X 是否等于 <paramref name="arg"/>。
         ///
         /// **只在这一组的范围内找**：六个分组的收尾长得一模一样，从全文件找
         /// `}, EffectRemoverOn);` 的话，六个里挂了一个就全绿。
+        ///
+        /// **收尾必须按花括号深度认，不能认「第一个以 `},` 开头的行」。**
+        /// 分组体里可以有嵌套的 lambda（比如「全选本组」按钮
+        /// `OnGui.Button("effects.toggleall", () => {...}, false, EffectRemoverOn);`），
+        /// 它的收尾行 `}, false, EffectRemoverOn));` 同样以 `},` 开头，却比整组的
+        /// 收尾早出现----按行首前缀找就会把按钮的实参当成分组的实参，判据恒红，
+        /// 而红的样子像是「分组没挂总开关」（2026-10-18 实测就是这么误报的）。
+        /// 正确地找：从 `Gui.Section(` 的左括号起数深度，回到 0 的那一对就是本组；
+        /// 紧跟其后的 `, X)` 才是总开关实参。
         /// </summary>
         private static bool SectionEndsWith(string code, string title, string arg)
         {
-            string[] lines = code.Replace("\r\n", "\n").Split('\n');
             string open = "Gui.Section(\"" + title + "\"";
-            int start = -1;
-            for (int i = 0; i < lines.Length; i++)
+            int at = code.IndexOf(open, StringComparison.Ordinal);
+            if (at < 0) return false;
+            // 定位到 `Gui.Section(` 的那个左括号本身。
+            int paren = code.IndexOf('(', at);
+            if (paren < 0) return false;
+
+            // 从括号起数：`(`/`[`/`{` 加一，`)`/`]`/`}` 减一。
+            // 必须跳过字符串内的括号，否则 `"("` 这类字面量会把深度带偏。
+            //
+            // `Gui.Section("t", Gui.Accent, () => { ... }, X)` 的形状里，**只记
+            // 深度 1 处的逗号**：嵌套 lambda 里的逗号在深度 2，记进来就会把
+            // `EffectRemoverOn` 前面那个逗号覆盖掉。深度回到 0 时，最后一个
+            // 深度 1 逗号与收尾右括号之间就是最后一个实参 X。
+            int depth = 0, lastComma = -1;
+            bool inStr = false, esc = false;
+            for (int i = paren; i < code.Length; i++)
             {
-                if (lines[i].Contains(open, StringComparison.Ordinal)) { start = i; break; }
-            }
-            if (start < 0) return false;
-            for (int i = start + 1; i < lines.Length; i++)
-            {
-                string t = lines[i].Trim();
-                if (!t.StartsWith("});", StringComparison.Ordinal)
-                    && !t.StartsWith("}, ", StringComparison.Ordinal)) continue;
-                return t.Contains(", " + arg + ");", StringComparison.Ordinal);
+                char c = code[i];
+                if (esc) { esc = false; continue; }
+                if (c == '\\') { esc = true; continue; }
+                if (c == '"') { inStr = !inStr; continue; }
+                if (inStr) continue;
+                if (c == '(' || c == '[' || c == '{') { depth++; continue; }
+                if (c == ')' || c == ']' || c == '}') { depth--; if (depth != 0) continue; }
+                else if (c == ',' && depth == 1) { lastComma = i; continue; }
+                else continue;
+
+                // 深度回到 0：本调用的收尾右括号。
+                if (lastComma < 0) return false;
+                string last = code.Substring(lastComma + 1, i - lastComma - 1).Trim();
+                return string.Equals(last, arg, StringComparison.Ordinal);
             }
             return false;
         }
@@ -1369,17 +1597,22 @@ namespace UiPreview
         /// ③ **宽度写死**：跟着内容走会让长说明撑满整行甚至溢出窗口。
         /// </summary>
         /// <summary>
-        /// 说明框的越界判定是否用了**窗口可视区**而不是屏幕尺寸。
+        /// 说明框的越界判定是否用了**窗口可视区**而不是屏幕尺寸，且锚点是否鼠标。
         ///
-        /// 判法有两条，缺一不可：
+        /// 判法有三条，缺一不可：
         /// ① <c>DrawTooltip</c> 体内**不许**再出现 <c>Screen.width</c>/<c>Screen.height</c>
         ///    ——它们判的是整块屏幕，而我们在窗口里，比较必然不成立；
         /// ② 必须真的去取可视矩形（<c>Viewport()</c>），且它内部要落到
         ///    <c>GUIClip.visibleRect</c> 上。只判 ① 会放过"删掉了越界判断、
         ///    什么夹取都不做"的写法——那同样会把框画到窗口外。
+        /// ③ 锚点必须是 <c>Event.current.mousePosition</c>，不许再用静态的
+        ///    控件矩形（<c>_tipAnchor</c>）。
         ///
-        /// **为什么不直接判越界数学**：`x + W > right` 这种表达式容易被
-        /// 换个变量名就骗过；而"边界从哪来"是这件事的根因，钉它更稳。
+        /// **③ 是 2026-10-18 用户第二次报同一处的根因。** 第一次只修了边界
+        /// 用的坐标系（① ②），但锚点仍是控件矩形：鼠标在一行里移动框不动，
+        /// 而 UMM 的 ScrollView 让控件矩形与可视区不同系，滚动后框被夹到
+        /// 视口顶部——现象是"说明永远出现在模组名称那一行"。修法照 UMM 自己：
+        /// 反编译 :3714-3722 用的就是 mousePosition。
         /// </summary>
         private static bool TooltipBoundsUseViewport(string code)
         {
@@ -1391,7 +1624,10 @@ namespace UiPreview
             // ② 必须取可视区，且那个助手真的去问 GUIClip。
             if (!body.Contains("Viewport()", StringComparison.Ordinal)) return false;
             string vp = MethodBody(code, "Viewport");
-            return vp != null && vp.Contains("visibleRect", StringComparison.Ordinal);
+            if (vp == null || !vp.Contains("visibleRect", StringComparison.Ordinal)) return false;
+            // ③ 锚点必须是鼠标；静态控件矩形会让框不跟手。
+            if (!body.Contains("Event.current.mousePosition", StringComparison.Ordinal)) return false;
+            return !body.Contains("_tipAnchor", StringComparison.Ordinal);
         }
 
         private static bool TooltipBodyIsSane(string code)
@@ -1402,9 +1638,14 @@ namespace UiPreview
                 && body.Contains("CalcHeight(", StringComparison.Ordinal)
                 && body.Contains("const float W =", StringComparison.Ordinal);
         }
+        /// <summary>本文件已执行的判据条数。汇总行按它印，不写字面量——
+        /// 原先硬编码的「四十八条」在加判据后就是一句谎话，而且没人会记得改。</summary>
+        private static int _checksRun;
+
         private static int Check(string projectRoot, string name, string rel,
             Func<string, bool> predicate)
         {
+            _checksRun++;
             string ok = Path.Combine(projectRoot, rel);
             if (!File.Exists(ok))
             {

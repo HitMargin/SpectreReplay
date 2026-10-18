@@ -1086,15 +1086,18 @@ namespace SpectreReplay.Pages
                 OnGui.Row("effects.particles", EffectRemoverParticles, v => { EffectRemoverParticles = v; Commit(); });
                 OnGui.Row("effects.backgrounds", EffectRemoverBackgrounds, v => { EffectRemoverBackgrounds = v; Commit(); });
                 OnGui.Row("effects.cameras", EffectRemoverCameras, v => { EffectRemoverCameras = v; Commit(); });
-                if (EffectRemoverCameras)
-                {
-                    // 二级父子：镜头缩放只在「移除镜头移动」开着时有意义
-                    // ——它是那个动作的配套参数（见 Loc 的 camerazoom.tip）。
-                    // 同时仍受总开关管，所以两个条件相乘。
-                    OnGui.RowSlider("effects.camerazoom", EffectRemoverCameraZoomScale, 100f, 1000f,
-                        v => ((int)v) + " %", v => { EffectRemoverCameraZoomScale = v; Commit(); },
-                        EffectRemoverOn);
-                }
+                // 二级父子（与上游一致）：缩放值是「移除镜头移动」的配套参数，
+                // 但真正生效由 EffectRemoverSetCameraZoom 决定——
+                // EffectRemover.RemoveCameras 里先判它，false 就直接 return，
+                // 滑条拖到哪都不会写进谱面。它默认 false，而全仓原先没有
+                // 任何 UI 能打开它，于是这一行是个**拖得动但毫无作用**的控件。
+                // 所以开关必须在，且滑条受「父项 ∨ 总开关」两个条件管。
+                OnGui.Row("effects.setcamerazoom", EffectRemoverSetCameraZoom,
+                    v => { EffectRemoverSetCameraZoom = v; Commit(); },
+                    EffectRemoverOn && EffectRemoverCameras);
+                OnGui.RowSlider("effects.camerazoom", EffectRemoverCameraZoomScale, 100f, 1000f,
+                    v => ((int)v) + " %", v => { EffectRemoverCameraZoomScale = v; Commit(); },
+                    EffectRemoverOn && EffectRemoverCameras && EffectRemoverSetCameraZoom);
             }, EffectRemoverOn);
 
             Gui.Section("effects.decor", Gui.Accent, () =>
@@ -1107,20 +1110,45 @@ namespace SpectreReplay.Pages
 
             Gui.Section("effects.track", Gui.Accent, () =>
             {
+                // 一键全选本组（上游 effectremover.toggleall 同形）。
+                // 放在组首：这是「先决定这一组要不要」的动作，不是某一项的配套。
+                // 受总开关管——总开关关着时按下去等于什么都没发生，会误导。
+                Gui.Dim(!EffectRemoverOn, () => OnGui.Button("effects.toggleall", () =>
+                {
+                    EffectRemoverTrackAnimations = true;
+                    EffectRemoverTrackPositions = true;
+                    EffectRemoverTrackMoves = true;
+                    EffectRemoverTrackColors = true;
+                    Commit();
+                }, false, EffectRemoverOn));
                 OnGui.Row("effects.trackanim", EffectRemoverTrackAnimations, v => { EffectRemoverTrackAnimations = v; Commit(); });
-                OnGui.Row("effects.trackpos", EffectRemoverTrackPositions, v => { EffectRemoverTrackPositions = v; Commit(); });
+                // 顺序照上游：move 在 pos 之前（move 是最常见的一类，排前面）。
                 OnGui.Row("effects.trackmove", EffectRemoverTrackMoves, v => { EffectRemoverTrackMoves = v; Commit(); });
+                OnGui.Row("effects.trackpos", EffectRemoverTrackPositions, v => { EffectRemoverTrackPositions = v; Commit(); });
                 OnGui.Row("effects.trackcolor", EffectRemoverTrackColors, v => { EffectRemoverTrackColors = v; Commit(); });
                 OnGui.Row("effects.resettrackopacity", EffectRemoverResetTrackOpacity,
                     v => { EffectRemoverResetTrackOpacity = v; Commit(); });
+                // 两个「重置」各自从属同一个父项（上游同）：
+                // 父项关着时对应事件不会被摘，重置也就没有对象可改。
                 OnGui.Row("effects.resettrackanim", EffectRemoverResetTrackAnimation,
-                    v => { EffectRemoverResetTrackAnimation = v; Commit(); });
+                    v => { EffectRemoverResetTrackAnimation = v; Commit(); },
+                    EffectRemoverOn && EffectRemoverTrackAnimations);
                 OnGui.Row("effects.resettrackcolor", EffectRemoverResetTrackColor,
-                    v => { EffectRemoverResetTrackColor = v; Commit(); });
+                    v => { EffectRemoverResetTrackColor = v; Commit(); },
+                    EffectRemoverOn && EffectRemoverTrackColors);
             }, EffectRemoverOn);
 
             Gui.Section("effects.planet", Gui.Accent, () =>
             {
+                // 一键全选本组（同上）。
+                Gui.Dim(!EffectRemoverOn, () => OnGui.Button("effects.toggleall", () =>
+                {
+                    EffectRemoverPlanetOrbit = true;
+                    EffectRemoverPlanetScale = true;
+                    EffectRemoverPlanetRadius = true;
+                    EffectRemoverHideIcons = true;
+                    Commit();
+                }, false, EffectRemoverOn));
                 OnGui.Row("effects.planetorbit", EffectRemoverPlanetOrbit, v => { EffectRemoverPlanetOrbit = v; Commit(); });
                 OnGui.Row("effects.planetscale", EffectRemoverPlanetScale, v => { EffectRemoverPlanetScale = v; Commit(); });
                 OnGui.Row("effects.planetradius", EffectRemoverPlanetRadius, v => { EffectRemoverPlanetRadius = v; Commit(); });

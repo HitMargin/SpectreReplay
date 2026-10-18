@@ -49,11 +49,13 @@ internal static class ReplayCrypto
     private const string LegacyKeyStorageKey = "qwerty";
     private const string LegacyIVStorageKey = "potato";
 
-    // ── 新格式（v2）──────────────────────────────────────────────────
+    // ── 新格式（v3；v2 仍在解密侧）────────────────────────────────────
     // 文件头魔数。4 字节足够区分：旧格式第一个字节是密文，等概率命中 "SRC2"
     // 的概率是 1/2^32；且旧格式解出来是 gzip 流，头部必然 1F 8B，不会再被当成新格式。
+    // 魔数不变：容器版本靠第 5 字节区分，两代共用同一个魔数。
     private static readonly byte[] Magic = { (byte)'S', (byte)'R', (byte)'C', (byte)'2' };
-    private const byte Version = 2;
+    private const byte VersionV2 = 2;
+    private const byte VersionV3 = 3;
 
     private const int SaltLen = 16;
     private const int IVLen = 16;
@@ -61,17 +63,36 @@ internal static class ReplayCrypto
     private const int KeyLen = 32;      // AES-256
     private const int MacKeyLen = 32;
 
-    // 迭代次数：Mono 上实测约 40-90ms（一次保存/一次载入各付一次）。
-    // 不能太低——那是"更高级"的全部意义所在；也不必追高，回放不是高价值目标。
-    private const int Pbkdf2Iterations = 60000;
+    // 头部总长（含 MAC）：
+    //   v2 = 魔数 4 + 版本 1 + salt 16 + IV 16 + MAC 32 = 69
+    //   v3 = 魔数 4 + 版本 1 + 迭代 4 + salt 16 + IV 16 + MAC 32 = 73
+    private const int HeaderLenV2 = 4 + 1 + SaltLen + IVLen + MacLen;
+    private const int HeaderLenV3 = 4 + 1 + 4 + SaltLen + IVLen + MacLen;
+
+    // **v2 的迭代次数只能写死。** v2 文件头里没有这个字段，读的时候除了
+    // 当年的常量没有别的依据——改它等于让 2026-10-18~19 保存的全部回放
+    // 解不开。v3 把它写进文件头，正是为了让这种调整不再是一次格式事故。
+    private const int IterationsV2 = 60000;
+
+    // v3 的迭代次数。**6 万 → 1 万的依据是"这笔开销挡不住谁"**：
+    // 口令材料就编译在 dll 里，拿到 dll 的人无论迭代多少次都能算出密钥，
+    // 迭代只是把某一次计算乘以常数。而保存发生在游戏结算的主线程上，
+    // Mono 上 6 万次实测 150~250ms，一局两遍（主回放 + 备份）= 半秒级卡顿
+    // （2026-10-19 用户报「保存时游戏会卡」）。降低迭代换来的流畅是真实的，
+    // 失去的只是"已经拦不住的人多算几毫秒"。
+    private const int IterationsV3 = 10000;
+
+    // 迭代次数的合法区间。**上限必须有**：文件头来自磁盘，可以是任意值；
+    // 没有上限时一份手改过的文件写 iterations=2^31 就能把游戏卡死几十秒
+    // ——解密发生在主线程，这是一条直接的 DoS 路径。
+    private const int MinIterations = 1000;
+    private const int MaxIterations = 1000000;
 
     // 口令材料。**不是密钥本身**：它要经 PBKDF2 + 每文件随机盐才变成密钥。
     // 分两段拼接是为了不再出现旧格式那种"一个短单词直接当种子"的形态。
+    // 串里的 "v2" 是历史命名，**不要改**：改了 v2 存量的密钥就全变了。
     private const string Passphrase =
         "SpectreReplay/replay-container/v2|7f3a91c2d8e04b6a|9c5e17d3ab28f064|replay";
-
-    // 头部总长：魔数 + 版本 + salt + IV + MAC
-    private const int HeaderLen = 4 + 1 + SaltLen + IVLen + MacLen;
 
     private static readonly byte[] LegacyKey;
     private static readonly byte[] LegacyIV;
@@ -109,10 +130,10 @@ internal static class ReplayCrypto
     /// （密钥复用会把两种用途的代数关系带进攻击面）。这里取 64 字节，
     /// 前 32 字节加密、后 32 字节做 HMAC。
     /// </summary>
-    private static void DeriveV2(byte[] salt, out byte[] encKey, out byte[] macKey)
+    private static void Derive(byte[] salt, int iterations, out byte[] encKey, out byte[] macKey)
     {
         using var kdf = new Rfc2898DeriveBytes(
-            Encoding.UTF8.GetBytes(Passphrase), salt, Pbkdf2Iterations, HashAlgorithmName.SHA256);
+            Encoding.UTF8.GetBytes(Passphrase), salt, iterations, HashAlgorithmName.SHA256);
         byte[] both = kdf.GetBytes(KeyLen + MacKeyLen);
         encKey = new byte[KeyLen];
         macKey = new byte[MacKeyLen];
@@ -138,7 +159,7 @@ internal static class ReplayCrypto
                 rng.GetBytes(iv);
             }
 
-            DeriveV2(salt, out byte[] encKey, out byte[] macKey);
+            Derive(salt, IterationsV3, out byte[] encKey, out byte[] macKey);
 
             byte[] cipherText;
             using (Aes aes = Aes.Create())
@@ -151,12 +172,13 @@ internal static class ReplayCrypto
                 cipherText = ms.ToArray();
             }
 
-            byte[] mac = ComputeMac(macKey, salt, iv, cipherText);
+            byte[] mac = ComputeMac(macKey, VersionV3, IterationsV3, salt, iv, cipherText);
 
-            byte[] output = new byte[HeaderLen + cipherText.Length];
+            byte[] output = new byte[HeaderLenV3 + cipherText.Length];
             int p = 0;
             Buffer.BlockCopy(Magic, 0, output, p, Magic.Length); p += Magic.Length;
-            output[p++] = Version;
+            output[p++] = VersionV3;
+            WriteInt32(output, p, IterationsV3); p += 4;
             Buffer.BlockCopy(salt, 0, output, p, SaltLen); p += SaltLen;
             Buffer.BlockCopy(iv, 0, output, p, IVLen); p += IVLen;
             Buffer.BlockCopy(mac, 0, output, p, MacLen); p += MacLen;
@@ -177,20 +199,31 @@ internal static class ReplayCrypto
             Debug.Log("Decrypt Error: null input");
             return null;
         }
-        if (IsV2(cipherText))
+        if (IsNewContainer(cipherText))
             return DecryptV2(cipherText);
         return DecryptLegacy(cipherText);
     }
 
-    /// <summary>新格式判定：只看前 4 字节，不与旧格式的密文凭概率混淆。</summary>
-    internal static bool IsV2(byte[] data)
+    /// <summary>
+    /// 新容器判定：魔数 + 版本是 2 或 3。
+    ///
+    /// **两代共用同一个魔数**，版本是第 5 字节：v2 没有迭代次数字段，
+    /// v3 有。区分它们只需要看这一字节，不需要试探性解密。
+    /// </summary>
+    internal static bool IsNewContainer(byte[] data)
     {
-        if (data == null || data.Length < HeaderLen) return false;
+        if (data == null || data.Length < HeaderLenV2) return false;
         for (int i = 0; i < Magic.Length; i++)
             if (data[i] != Magic[i]) return false;
-        return data[Magic.Length] == Version;
+        byte v = data[Magic.Length];
+        return v == VersionV2 || v == VersionV3;
     }
 
+    /// <summary>
+    /// 解 v2/v3 容器。两代的区别只有一个：v3 在版本号之后多 4 字节迭代次数。
+    ///
+    /// **v2 的迭代次数写死 6 万**，因为它的头部没存这个值——这是 v3 存在的理由。
+    /// </summary>
     private static byte[] DecryptV2(byte[] data)
     {
         try
@@ -198,10 +231,27 @@ internal static class ReplayCrypto
             int p = 0;
             p += Magic.Length;
             byte version = data[p++];
-            if (version != Version)
+            if (version != VersionV2 && version != VersionV3)
             {
                 Debug.Log("Decrypt Error: 未知容器版本 " + version);
                 return null;
+            }
+            int iterations = IterationsV2;
+            if (version == VersionV3)
+            {
+                if (data.Length < HeaderLenV3)
+                {
+                    Debug.Log("Decrypt Error: v3 容器头不完整");
+                    return null;
+                }
+                iterations = ReadInt32(data, p); p += 4;
+                if (iterations < MinIterations || iterations > MaxIterations)
+                {
+                    // **这里必须拒绝而不是"夹到区间内"**：把头里的值改小再解，
+                    // 解出来的明文与 MAC 无关，但会让攻击者以极低成本反复试探。
+                    Debug.Log("Decrypt Error: 容器头的迭代次数超出合法区间: " + iterations);
+                    return null;
+                }
             }
 
             byte[] salt = new byte[SaltLen];
@@ -220,12 +270,12 @@ internal static class ReplayCrypto
             byte[] body = new byte[bodyLen];
             Buffer.BlockCopy(data, p, body, 0, bodyLen);
 
-            DeriveV2(salt, out byte[] encKey, out byte[] macKey);
+            Derive(salt, iterations, out byte[] encKey, out byte[] macKey);
 
             // **先验 MAC 再解**。顺序反过来的话，篡改过的密文会先喂进 CBC——
             // 好一点是抛出与"文件损坏"分不开的异常，坏一点是产出垃圾明文
             // （CBC 的填充校验只有约 1/256 的漏网率）而被当成正常回放读进去。
-            byte[] expected = ComputeMac(macKey, salt, iv, body);
+            byte[] expected = ComputeMac(macKey, version, iterations, salt, iv, body);
             if (!ConstantTimeEquals(expected, mac))
             {
                 Debug.Log("Decrypt Error: 完整性校验失败（文件被修改过，或不是本模组产出的回放）");
@@ -246,6 +296,17 @@ internal static class ReplayCrypto
             return null;
         }
     }
+
+    private static void WriteInt32(byte[] buf, int offset, int value)
+    {
+        buf[offset] = (byte)value;
+        buf[offset + 1] = (byte)(value >> 8);
+        buf[offset + 2] = (byte)(value >> 16);
+        buf[offset + 3] = (byte)(value >> 24);
+    }
+
+    private static int ReadInt32(byte[] buf, int offset)
+        => buf[offset] | (buf[offset + 1] << 8) | (buf[offset + 2] << 16) | (buf[offset + 3] << 24);
 
     /// <summary>
     /// 旧格式解密：上游 Spectre 与本模组 v1 产出的全部存量文件都走这里。
@@ -271,19 +332,29 @@ internal static class ReplayCrypto
     }
 
     /// <summary>
-    /// HMAC 覆盖「魔数 + 版本 + salt + IV + 密文」。
+    /// HMAC 覆盖「魔数 + 版本 + [迭代次数] + salt + IV + 密文」。
     ///
     /// 把 salt 与 IV 也纳入 MAC 是必须的：只签密文的话，攻击者可以改 salt/IV
     /// 再看解出来什么（IV 篡改会可控地翻转首个明文块），而那是一种可观测的预言机。
+    ///
+    /// **迭代次数也纳入 MAC（v3）**，且按版本决定是否写进 MAC 输入——
+    /// v2 的头部没有这个字段，它的 MAC 自然也不覆盖它；两种布局必须各自
+    /// 自洽，否则存量 v2 文件全部验签失败。
     /// </summary>
-    private static byte[] ComputeMac(byte[] macKey, byte[] salt, byte[] iv, byte[] body)
+    private static byte[] ComputeMac(byte[] macKey, byte version, int iterations,
+        byte[] salt, byte[] iv, byte[] body)
     {
         using var hmac = new HMACSHA256(macKey);
-        int total = Magic.Length + 1 + SaltLen + IVLen + body.Length;
+        int iterLen = version >= VersionV3 ? 4 : 0;
+        int total = Magic.Length + 1 + iterLen + SaltLen + IVLen + body.Length;
         byte[] buf = new byte[total];
         int p = 0;
         Buffer.BlockCopy(Magic, 0, buf, p, Magic.Length); p += Magic.Length;
-        buf[p++] = Version;
+        buf[p++] = version;
+        if (iterLen > 0)
+        {
+            WriteInt32(buf, p, iterations); p += 4;
+        }
         Buffer.BlockCopy(salt, 0, buf, p, SaltLen); p += SaltLen;
         Buffer.BlockCopy(iv, 0, buf, p, IVLen); p += IVLen;
         Buffer.BlockCopy(body, 0, buf, p, body.Length);

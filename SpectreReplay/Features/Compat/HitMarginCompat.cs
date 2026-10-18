@@ -323,6 +323,76 @@ internal static class HitMarginCompat
         return sum;
     }
 
+    /// <summary>
+    /// 原版 Accuracy（与 <c>scrMarginTracker.CalculatePercentAcc</c> 同式）。
+    ///
+    /// <para><b>跟 xacc 不是一回事。</b>xacc 是按判定档位加权的"误差分"；
+    /// Accuracy 是"完美命中占全部判定的比例"，再补一条内档完美的小数奖励。
+    /// 官方式子（scrMarginTracker.cs:189-197）：</para>
+    /// <code>
+    /// num  = Perfect 族 + SemiPerfect 族
+    /// num2 = hitMargins.Count + (FailMiss + FailOverload)
+    /// acc  = num == num2 ? 1 : num / num2
+    /// acc += Perfect 族内档 × 0.0001 − FailedFloor × 0.0001
+    /// </code>
+    ///
+    /// <para><b>为什么能从判定分布算出来。</b><c>hitMargins.Count</c> 就是
+    /// 全部判定的条数，而回放里写的 <c>JudgmentList</c> 正是同一个
+    /// <c>hitMarginsCount</c> 数组；两者是同一份数据的两种形态。所以老回放
+    /// 不用重录、格式不用改，直接由分布还原。</para>
+    ///
+    /// <para><b>版本差异在集合里，不在式子。</b>Perfect 族 / SemiPerfect 族
+    /// 由按名解析的集合给出（旧版 Perfect+Auto，新版三档 Perfect+Auto+中旋+多压），
+    /// 与 <see cref="IsCounted"/> 用的是同一套兼容层，不写死下标。</para>
+    ///
+    /// **分母为 0 → 返回 -1**（不是 0）：0 会被画成"0.00%"，而真实含义是
+    /// "这份回放没有判定数据"，界面应显示占位符。
+    /// </summary>
+    internal static double Accuracy(int[] counts)
+    {
+        if (counts == null)
+            return -1.0;
+        int total = 0;
+        for (int i = 0; i < counts.Length; i++)
+        {
+            total += counts[i];
+        }
+        if (total <= 0)
+            return -1.0;
+
+        int perfect = SumSet(counts, PerfectFamily) + SumSet(counts, SemiPerfectFamily);
+        // **不是 total + deaths。** 官方式子 num2 = hitMargins.Count + GetDeaths()，
+        // 而 hitMargins 里本来就已经记了每次 FailMiss/FailOverload（AddHitInternal
+        // 无条件 Add），GetDeaths() 只是把这两桶再数一遍。照抄即可，
+        // 不要"化简"成 total——那会把失败命中漏出分母，Accuracy 偏高。
+        int denominator = total + SumSet(counts, FailFamily);
+
+        double acc = perfect == denominator ? 1.0 : (double)perfect / denominator;
+        // 完美奖励：**官方加到的是 PerfectHitMargins，与半完美无关**。
+        // 两版本的 PerfectHitMargins 都恰好等于 PerfectFamily 的按名并集
+        // （旧 = Perfect+Auto；r150 = 三档 Perfect+Auto+中旋+多压），
+        // 缺名会自动忽略，所以直接复用同一集合，不另立一套定义。
+        // 扣 FailedFloor 同样 1e-4/个（旧版无此成员 → 空集，扣 0）。
+        acc += SumSet(counts, PerfectFamily) * 0.0001;
+        acc -= SumSet(counts, FailedFloorFamily) * 0.0001;
+        return acc;
+    }
+
+    /// <summary>FailedFloor 单元素集合（旧版本没有这个成员 → 空集，扣 0）。</summary>
+    private static readonly HitMargin[] FailedFloorFamily = Set("FailedFloor");
+
+    private static int SumSet(int[] counts, HitMargin[] set)
+    {
+        int sum = 0;
+        for (int i = 0; i < set.Length; i++)
+        {
+            int index = (int)set[i];
+            if ((uint)index < (uint)counts.Length)
+                sum += counts[index];
+        }
+        return sum;
+    }
+
     /// <summary>失败命中总数（旧 FailMiss + FailOverload 桶，按名解析）。</summary>
     internal static int FailCount(int[] counts)
     {

@@ -658,7 +658,14 @@ namespace SpectreReplay.Ui
         }
 
         /// <summary>一整行按钮。wide = 主要动作（开始渲染），用强调色底 + 加粗。</summary>
-        internal static void Button(string labelKey, Action onClick, bool wide)
+        /// <param name="enabled">
+        /// false 时只画不响应（与 <see cref="Row(string,bool,Action{bool},bool)"/> 的语义对齐）。
+        /// **必须显式拦，不能只靠外层 <see cref="Gui.Dim"/>**：
+        /// Dim 只设 GUI.color 并抬高 depth，而 <c>GUI.Button</c> 是内建控件，
+        /// 不看 depth（Gui 自己的自绘控件才有 <c>!IsDim &amp;&amp;</c> 那一下）。
+        /// 于是外层压暗 + 这里不拦 = 按钮看着灰、点着照常生效。
+        /// </param>
+        internal static void Button(string labelKey, Action onClick, bool wide, bool enabled = true)
         {
             GUILayout.BeginHorizontal();
             // 同上：wide 用专门的强调样式，不再靠 GUI.backgroundColor 染色
@@ -666,8 +673,16 @@ namespace SpectreReplay.Ui
             Rect bt = GUILayoutUtility.GetRect(wide ? 220f : 140f, 28f,
                 GUILayout.Width(wide ? 220f : 140f), GUILayout.Height(28f));
             Gui.Tip(bt, labelKey);
+            // **始终调 GUI.Button，只丢弃结果**，不要短路跳过这次调用：
+            // 那样禁用时按钮整块不画，玩家看到的是位置上的一个空洞，
+            // 而不是「灰着的按钮」。绘制走 Repaint 趟，点中判定走 MouseUp 趟，
+            // 两者由同一次调用内部分流，丢弃返回值正好只砍掉点击、保住外观。
             bool hit = GUI.Button(bt, Loc.T(labelKey),
                 wide ? Gui.PrimaryButtonStyle : Gui.ButtonStyle);
+            if (!enabled || Gui.IsDim)
+            {
+                hit = false;
+            }
             GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
             RowGap();

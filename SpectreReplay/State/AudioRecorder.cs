@@ -263,24 +263,43 @@ public class AudioRecorder : MonoBehaviour
                 _getDataArgs[0] = _sampleBuffer;
                 _getDataArgs[1] = sampleStart;
                 _getDataMethod.Invoke(clip, _getDataArgs);
-                ProcessAudioChunk(_sampleBuffer, needed);
+                ProcessAudioChunk(_sampleBuffer, needed, channels);
                 sampleStart += chunkLength;
                 remaining -= chunkLength;
             }
         }
     }
 
-    private void ProcessAudioChunk(float[] samples, int sampleCount)
+    private void ProcessAudioChunk(float[] samples, int sampleCount, int channels)
     {
         byte[] bytes = _byteBuffer;
-        // _byteBuffer 只增不减，实际有效字节以本次样本数为准；
+        // **必须下混成单声道。** 文件头由 CreateWAVHeader(1, ...) 固定声明为单声道，
+        // 而 samples 是 AudioClip.GetData 出来的交织数据（channels 由麦克风决定）。
+        // 原实现按 sampleCount 逐样本写盘，立体声设备下就产出"头是单声道、数据是
+        // 双声道"的文件：播放时长只有一半（听感像 2 倍速）、音调被拉高。
+        // 这里统一取各声道均值，让头部声明与落盘数据一致。
+        // _byteBuffer 只增不减，实际有效字节以本次帧数为准；
         // 若按 bytes.Length 写盘/哈希，缓冲被大块撑大后每块都会把上一块的陈旧编码灌进文件
-        int byteCount = sampleCount * 2;
-        for (int i = 0; i < sampleCount; i++)
+        if (channels < 1) channels = 1;
+        int frames = sampleCount / channels;
+        int byteCount = frames * 2;
+        for (int f = 0; f < frames; f++)
         {
-            short sample = (short)Mathf.Clamp(samples[i] * 32767f, -32768f, 32767f);
-            bytes[i * 2] = (byte)(sample & 0xFF);
-            bytes[i * 2 + 1] = (byte)((sample >> 8) & 0xFF);
+            int baseIndex = f * channels;
+            float value;
+            if (channels == 1)
+            {
+                value = samples[baseIndex];
+            }
+            else
+            {
+                float sum = 0f;
+                for (int c = 0; c < channels; c++) sum += samples[baseIndex + c];
+                value = sum / channels;
+            }
+            short sample = (short)Mathf.Clamp(value * 32767f, -32768f, 32767f);
+            bytes[f * 2] = (byte)(sample & 0xFF);
+            bytes[f * 2 + 1] = (byte)((sample >> 8) & 0xFF);
         }
         lock (bufferLock)
         {
@@ -456,10 +475,27 @@ public class AudioRecorder : MonoBehaviour
         {
             return null;
         }
+        // Length 取的是**逻辑长度**（FileStream 在 Write 时就已推进内部长度，
+        // 不依赖缓冲区是否落盘），所以这里不是为了"让 Length 变准"。
+        // 先 Flush 的理由是：回填头部要 seek 到文件头再写，若此时缓冲区里还压着
+        // 未落盘的 PCM，后续任一步抛异常就会留下"长度字段没回填、数据也被截断"的
+        // 文件；先落盘至少保证内容是完整的前缀。
+        fileStream.Flush();
         long fileLength = fileStream.Length;
-        int dataSize = (int)(fileLength - 44);
+        long dataSizeLong = fileLength - 44;
+        // RIFF 的两个长度字段是 32 位，读取端（WavLoader.ParseHeader）按有符号 int
+        // 解析、负数直接判为"无效的块大小"。(int) 强转在超过 2GB 时会静默回绕成
+        // 负数，等于把一个内容完好的文件写成损坏文件。这里显式夹住并报错：
+        // 真正的 4GB+ 支持要换 RF64，不在本方法职责内，截断至少保证前 2GB 可读。
+        if (dataSizeLong > int.MaxValue)
+        {
+            Debug.LogError($"[AudioRecorder] WAV 数据超过 32 位长度字段上限（{dataSizeLong} 字节），" +
+                "头部按 2GB 截断，超出部分不会被加载器读取");
+        }
+        int dataSize = (int)Math.Min(Math.Max(0L, dataSizeLong), int.MaxValue);
+        int riffSize = (int)Math.Min(Math.Max(0L, fileLength - 8), int.MaxValue);
         fileStream.Position = 4L;
-        byte[] riffSizeBytes = BitConverter.GetBytes((int)(fileLength - 8));
+        byte[] riffSizeBytes = BitConverter.GetBytes(riffSize);
         fileStream.Write(riffSizeBytes, 0, 4);
         fileStream.Position = 40L;
         byte[] dataSizeBytes = BitConverter.GetBytes(dataSize);

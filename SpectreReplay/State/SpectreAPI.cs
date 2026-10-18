@@ -210,8 +210,26 @@ public static class SpectreAPI
     internal static void RaiseRenderFinished(RenderEndStatus status, string outputPath, string error)
         => Raise(RenderFinished, new RenderResult(status, outputPath, error));
 
+    // **从枚举派生，不再手写顺序。** 原先这里是手写字面量数组，靠"数组顺序 ==
+    // 枚举序号"隐式对齐：往 Phase 中间插一个新值（比如在 WaitingPlayback 后加
+    // Encoding），所有后续阶段名会整体错一位被静默报错名，且下面的长度检查
+    // 因为总数没变根本拦不住。Enum.GetNames 按枚举值升序返回，天然对齐。
     private static readonly string[] PhaseNames =
-        { "Idle", "Restarting", "WaitingPlayback", "Capturing", "Finalizing" };
+        Enum.GetNames(typeof(Features.VideoRender.VideoRender.Phase));
+
+    // 枚举值超出上表时回落 "Idle" 并留一条日志（比让查询接口抛异常友好）；
+    // 负数同样走这里。只在真的失配时打日志，正常路径零噪声
+    private static string PhaseOf(Features.VideoRender.VideoRender.Phase phase)
+    {
+        int index = (int)phase;
+        if (index >= 0 && index < PhaseNames.Length)
+            return PhaseNames[index];
+        Debug.LogWarning("[SpectreReplay] GetRenderStatus: unknown render phase " + index
+            + " (" + phase + "), PhaseNames has " + PhaseNames.Length + " entries");
+        // 回落固定"Idle"而不是 PhaseNames[0]——后者现在语义是"序号最小的枚举名"，
+        // 若将来给 Phase 加了个负值成员就不再是 Idle 了
+        return "Idle";
+    }
 
     /// <summary>
     /// 当前是否有渲染作业在跑。
@@ -227,7 +245,9 @@ public static class SpectreAPI
         return new RenderStatus
         {
             Active = Features.VideoRender.VideoRender.Active,
-            Phase = PhaseNames[(int)Features.VideoRender.VideoRender.CurrentPhase],
+            // 越界保护：Phase 枚举增长时这张表若忘了同步，裸索引会在这里抛
+            // IndexOutOfRange，把一次进度查询变成调用方（可能是外部 mod）的崩溃点。
+            Phase = PhaseOf(Features.VideoRender.VideoRender.CurrentPhase),
             Stage = s.Stage ?? "",
             Detail = s.Detail ?? "",
             OutputPath = s.Output ?? "",

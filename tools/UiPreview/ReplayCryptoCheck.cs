@@ -26,10 +26,14 @@ namespace UiPreview
 {
     internal static class ReplayCryptoCheck
     {
-        // 与 ReplayCrypto 的新格式头布局**必须一致**：魔数 4 + 版本 1 + salt 16
-        // + IV 16 + MAC 32 = 69。改容器头的人要同时改这里，两处对不上时
-        // ④⑤ 会去改错偏移量（表现为"篡改没生效"而不是"判据失败"）。
-        private const int HeaderLen = 4 + 1 + 16 + 16 + 32;
+        // 与 ReplayCrypto 的新格式头布局**必须一致**：
+        //   v3 = 魔数 4 + 版本 1 + 迭代次数 4 + salt 16 + IV 16 + MAC 32 = 73。
+        // 改容器头的人要同时改这里，两处对不上时 ④⑤ 会去改错偏移量
+        // （表现为"篡改没生效"而不是"判据失败"）。
+        private const int HeaderLen = 4 + 1 + 4 + 16 + 16 + 32;
+
+        // v2 的头部（无迭代次数字段）与 IV 偏移，只用于读夹具的越界断言。
+        private const int HeaderLenV2 = 4 + 1 + 16 + 16 + 32;
 
         // 旧格式常量：只用于"上游文件能不能解开"这一组的本地复算。
         private static byte[] LegacyDerive(string s, int len)
@@ -92,9 +96,9 @@ namespace UiPreview
                 //    salt 参与**密钥派生**，改它密钥就变了，解密必然失败，与 MAC
                 //    在不在无关。IV 不参与派生，改它 ⇒ 密钥不变、CBC 仍能解，
                 //    只是首个明文块被可控翻转。**只有 MAC 覆盖 IV 才能拦下它。**
-                //    （IV 位于 魔数 4 + 版本 1 + salt 16 之后。）
+                //    （IV 位于 魔数 4 + 版本 1 + 迭代 4 + salt 16 之后。）
                 byte[] ivSwapped = (byte[])enc.Clone();
-                ivSwapped[4 + 1 + 16] ^= 0x01;
+                ivSwapped[4 + 1 + 4 + 16] ^= 0x01;
                 byte[] bad2 = SpectreReplay.Features.Replay.ReplayCrypto.Decrypt(ivSwapped);
                 bool rejected2 = bad2 == null;
                 Console.WriteLine($"    {(rejected2 ? "✓" : "✗")} ⑤ 篡改 IV 被拒（IV 参与 MAC，不是仅参与解密）");
@@ -103,6 +107,30 @@ namespace UiPreview
             catch (Exception ex)
             {
                 Console.WriteLine("    ✗ 往返抛异常：" + ex.GetType().Name + ": " + ex.Message);
+                fail++;
+            }
+
+            // ⑧ v2 容器仍能解开（2026-10-19 升级到 v3：迭代次数写进文件头）。
+            //
+            //    **这条是格式升级的保险。** v3 把迭代次数从"代码里的常量"
+            //    搬进"文件头字段"，读侧必须仍按 v2 的 6 万次去派生——
+            //    否则 2026-10-18~19 保存的全部回放会在升级当天集体打不开，
+            //    而玩家看到的只是"文件损坏"。夹具是一份真 v2 容器。
+            try
+            {
+                // projectRoot 是**源码目录**（…\SpectreReplay），夹具在仓库根的 tools 下。
+                string fixture = Path.GetFullPath(Path.Combine(
+                    projectRoot, "..", "tools", "UiPreview", "fixtures", "v2-container.bin"));
+                byte[] raw = File.Exists(fixture) ? File.ReadAllBytes(fixture) : null;
+                byte[] dec = raw == null ? null : SpectreReplay.Features.Replay.ReplayCrypto.Decrypt(raw);
+                bool okV2 = dec != null && dec.Length == 777 && dec[0] == 11 && dec[776] == (byte)((776 * 37 + 11) & 0xFF);
+                Console.WriteLine($"    {(okV2 ? "✓" : "✗")} ⑧ v2 容器（迭代次数未入头）仍可解开"
+                    + (okV2 ? "（853 B）" : "（夹具缺失或回落逻辑坏了；v2 存量回放会集体打不开）"));
+                if (!okV2) fail++;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("    ✗ ⑧ 解 v2 容器抛异常：" + ex.GetType().Name + ": " + ex.Message);
                 fail++;
             }
 

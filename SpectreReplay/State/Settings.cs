@@ -27,32 +27,10 @@ public static class Settings
     public static bool LimitKey = false;
     public static bool GetDataFromAsyncInput = false;
 
-    // UI 电源钮（Quartz 壳左下角总开关）：false = 暂时禁用全部功能补丁（总闸）
-    public static bool UiPowerOn = true;
-
-    // 设置面板几何持久化（Quartz Conf 的 Spectre 落盘通道；位置为 Spectre 增量）
-    public static float UiPanelWidthFrac = 0f;
-    public static float UiPanelHeightFrac = 0f;
-    public static float UiPanelOpacity = 1f;
-    public static float UiPanelPosX = 0f;
-    public static float UiPanelPosY = 0f;
-
-    // 界面主题色（Quartz accent；默认 = Quartz 原版橙红）
-    public static float UiAccentR = 1.0f;
-    public static float UiAccentG = 0.5995077f;
-    public static float UiAccentB = 0.5995077f;
-
-    // 面板飞入/飞出动画时长（秒；0 = 瞬时）
-    public static float UiFlyDuration = 0.25f;
-
-    public static int TextSize = 20;
     public static int SaveButton = 290;
     public static int CancelSaveButton = 291;
     public static int KeybdSoundVolume = 10;
     public static int MicrophoneOffset = 0;
-
-    // uGUI 设置界面呼出热键（KeyCode；默认 F8=289，避开手动保存 F9/取消保存 F10）
-    public static int UiHotkey = 289;
 
     public static string SavePath = "";
     public static string InputedKey = "";

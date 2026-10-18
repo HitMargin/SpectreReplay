@@ -236,6 +236,104 @@ $knownDeviations = @(
     @{ Pat = 'filePath.EndsWith';                    Why = '2026-10-18 修 .psprp 打不开：按扩展名自动跳过解密（上游没有这个变体的载入路径）' }
     @{ Pat = 'StringComparison.OrdinalIgnoreCase';    Why = '2026-10-18 同上：扩展名大小写不敏感' }
     @{ Pat = 'ReplayConstants.Compression';          Why = '2026-10-18 同上：算法号/头长常量(Raw=0/Gzip=1/Brotli=2/HeaderLen=5)' }
+    # -- 2026-10-19 渲染健壮性收口（RT 创建失败 / 读回失败 / 取消语义）------
+    # 上游 RenderTexture.Create() 无视返回值、三台子相机不判空。一旦显存拒绝
+    # （分辨率超限/后台无设备），异步回读每帧 hasError，上游靠黑帧顶替把整片
+    # 渲染成一路黑却上报成功。这里改成创建失败即抛，交给正常的失败上报路径。
+    @{ Pat = 'RenderTexture.Create';                 Why = '渲染健壮性：Create() 返回 false 时明确报错，不再产出全黑成片' }
+    @{ Pat = 'texture.Create';                       Why = '同上：接住返回值的连带 token（上游是裸调用）' }
+    @{ Pat = 'cam.Bgcamstatic';                      Why = '同上：子相机判空后再取原 targetTexture' }
+    @{ Pat = 'cam.BGcam';                            Why = '同上：同上' }
+    @{ Pat = 'Object.Destroy';                       Why = '同上：创建失败时先销毁半成熟的 RT 再抛' }
+    @{ Pat = 'VideoRender.Current.FramesTotal';      Why = '渲染健壮性：hardStop 命中要明确失败，避免静默产出截断视频' }
+    @{ Pat = 'rendervideo.capture_overrun';          Why = '同上：帧数超上限的提示文案键（14 种语言都有定义）' }
+    @{ Pat = 'UnscaledDeltaPin.Uninstall';           Why = '渲染健壮性：全局状态恢复逐项兜底（任一项抛不能带走后面的项）' }
+    @{ Pat = 'FindObjectsInactive.Include';          Why = '渲染健壮性：单参重载默认 Exclude，与注释承诺的覆盖未激活对象矛盾' }
+    @{ Pat = 'Path.GetExtension';                    Why = '渲染健壮性：救援命令要按目标容器选音频编码器（webm 只认 Opus）' }
+    @{ Pat = 'string.Equals';                        Why = '同上：扩展名比较的连带 token' }
+    # -- 2026-10-19 编码器管道 stderr 捕获 ----------------------------------
+    # 上游只重定向 stdin。ffmpeg 因未知编码器/参数不支持而立即退出时，用户只看到
+    # exited unexpectedly，真实原因全丢。这里加 stderr 重定向并把它拼进异常消息。
+    @{ Pat = 'started.ErrorDataReceived';            Why = '编码器 stderr 捕获：接上异步读错误流（否则抛错时没有原因）' }
+    @{ Pat = 'started.BeginErrorReadLine';           Why = '同上：启动异步读取' }
+    @{ Pat = 'pipeStderr';                           Why = '同上：stderr 环形缓冲（只留尾部，失败原因在最后几行）' }
+    @{ Pat = 'stderrLock';                           Why = '同上：泵线程与主线程共用的锁' }
+    @{ Pat = 'e.Data';                               Why = '同上：ErrorDataReceived 回调取行' }
+    @{ Pat = 'pipe.ExitCode';                        Why = '同上：退出码非零时附上 stderr 尾部' }
+    @{ Pat = 'string.IsNullOrEmpty';                 Why = '同上：stderr 为空时不加任何后缀' }
+    @{ Pat = 'tail.Length';                          Why = '同上：同上' }
+    # -- 2026-10-19 回放详情补 Accuracy（用户报「有X-ACC少了ACC」）------------
+    # 上游只有 xacc。Accuracy 是另一项指标（完美占比 + 内档奖励），官方式子
+    # 在 scrMarginTracker.CalculatePercentAcc。我们不新增回放字段，直接由
+    # JudgmentList 判定分布还原——老回放也能显示，格式不用改。
+    @{ Pat = 'Accuracy(';                            Why = '2026-10-19 详情面板补 Accuracy：由判定分布按官方公式还原(老回放无此字段)' }
+    @{ Pat = 'SumSet';                               Why = '同上：按名解析的判定集合求和助手' }
+    @{ Pat = 'FailedFloorFamily';                    Why = '同上：官方从 Accuracy 里扣 FailedFloor 的 1e-4/个' }
+    @{ Pat = 'counts.Length';                        Why = '同上：判定桶数组的长度(越界保护)' }
+    # -- 2026-10-20 回放没开始时的可诊断性（用户报「等待回放开始超时」）--------
+    # 上游每处拒绝都是 TriggerMessage(...); return;：通知几秒后消失、**不进日志**，
+    # 于是「回放没开始」在 Player.log 里表现为什么都没发生。九条校验全这样，
+    # 排查时只能一条条猜。这里把拒绝收口到 Reject(msg, detail)：玩家仍只看到
+    # 原本那条本地化文案，现场值（录制/当前的地板哈希、难度、起点砖等）另打一行
+    # Debug.Log。**故意不用 TriggerMessage 拼诊断**——那会把内部值漏到界面上，
+    # 且绕开本地化（HardTextCheck 会直接判红，实测踩过）。
+    @{ Pat = 'Reject(';                              Why = '2026-10-20 拒绝启动回放时留日志：Reject(玩家文案, 现场值)，通知内容不变' }
+    @{ Pat = 'note.play_error';                      Why = '同上：被收口的九条本地化文案键（原先每处各自 TriggerMessage）' }
+    @{ Pat = 'scnGame.instance.levelData';           Why = '同上：地板哈希与 pitch/bpm 的现场值要打进日志' }
+    @{ Pat = 'GCS.internalLevelName';                Why = '同上：InternalLevelName 校验的现场值（录/现 两边）' }
+    @{ Pat = 'GCS.checkpointNum';                    Why = '同上：起点砖校验的现场值' }
+    @{ Pat = 'scrPlayerManager.instance';            Why = '同上：单人校验的现场值（players.Count）' }
+    @{ Pat = 'players.Count';                        Why = '同上：单人校验的现场值（Compare-Object 会把片段切在点号处）' }
+    @{ Pat = 'scene.name';                           Why = '同上：Start_Rewind 入口日志要带场景名与模式' }
+    @{ Pat = 'data.ints';                            Why = '同上：现场值取自回放数据（StartTile/EndTile/FloorHash/Pitch）' }
+    @{ Pat = 'data.strings';                         Why = '同上：现场值取自回放数据（InternalLevelName/JudgeMode/SongName）' }
+    @{ Pat = 'state.ToString';                       Why = '2026-10-20 渲染超时快照：把 States 枚举转成日志文本' }
+    @{ Pat = 'debug_skip_Verification';              Why = '同上：入口日志紧邻这条调试开关判断' }
+    # 超时那一刻要能看出停在哪：是我们自己的标志没翻、被别的 mod 阻断，
+    # 还是压根没进 PlayMode——三种情况修法完全不同，而原先日志只有一句
+    # 「failed: 等待回放开始超时」。快照本身不改任何行为。
+    @{ Pat = 'SpectreAPI.SnapshotBlocks';            Why = '2026-10-20 渲染超时快照：打出当前玩法的阻断来源（别的 mod 可能挂了 BlockPlaying）' }
+    @{ Pat = 'SpectreState.PlayMode';                Why = '同上：快照要含 PlayMode/RecordMode/is_playing 三个标志' }
+    @{ Pat = 'SpectreState.RecordMode';              Why = '同上' }
+    @{ Pat = 'SpectreState.is_playing';              Why = '同上' }
+    @{ Pat = 'blockText';                            Why = '同上：阻断来源拼成一行文本（不引 LINQ，保持与上游一致的手写循环）' }
+    @{ Pat = 'System.Text.StringBuilder';            Why = '同上：快照的拼接缓冲（用全名，免得动 using 区）' }
+    @{ Pat = 'kv.Key';                               Why = '同上：遍历阻断表拼 k:v' }
+    @{ Pat = 'kv.Value';                             Why = '同上' }
+    @{ Pat = 'scrController.instance';               Why = '同上：快照要报出当前 States（Countdown/PlayerControl 之外都算没接管）' }
+    # -- 2026-10-18 渲染自己装回录像倍速（用户报「等待回放开始超时」且画面没变慢）--
+    # 游戏源码 scnEditor.Play() 对程序化调用无条件写 playbackSpeed=1x
+    # （scnEditor.cs:7204-7205，holdingControl 只有真按住 Ctrl 才为真），
+    # 紧接着 RemakePath → SetupConductorWithLevelData 用它推导 song.pitch
+    # （scrConductor.cs:378-395）。TryStartPlayback 的倍速校验因此每轮都拒，
+    # StartPlaying 从未执行。上游没有这条是因为它同样只能靠玩家手动按住 Ctrl。
+    # 上游 RemakePath 的 Prefix 钩子是 Play() 内部唯一经过的注入点：
+    # 早于 Play() 会被覆盖，晚于 Play() 则 pitch 已按 1x 算完。
+    @{ Pat = 'VideoRender.ApplySpeedOverrideTo';     Why = '2026-10-18 渲染期倍速注入：RemakePath Prefix 是 Play() 内部唯一的钩子（见 VideoRender 注释）' }
+    @{ Pat = 'VideoRender.VideoRender.Active';       Why = '同上：只有渲染作业在跑时才钉倍速（正常游玩不干预）' }
+    @{ Pat = 'VideoRender.VideoRender.ApplySpeedOverrideTo'; Why = '同上：Start_Rewind Prefix 每轮再补一次（重开关卡会重写 playbackSpeed）' }
+    @{ Pat = 'editor.playbackSpeed';                 Why = '同上：写回编辑器倍速（pitch 由它推导）' }
+    @{ Pat = 'GCS.editorQuickPitchedPlaying';        Why = '同上：校验式 actualSpeed 的另一半（QuickPitched ? playbackSpeed : 1）' }
+    @{ Pat = 'VideoRender.SpeedOverride';            Why = '同上：渲染期倍速钉扎的三个状态字段' }
+    @{ Pat = 'VideoRender.SpeedOverrideArmed';       Why = '同上' }
+    @{ Pat = 'VideoRender.SpeedOverrideQuickPitched'; Why = '同上' }
+    @{ Pat = 'scnEditor.RemakePath';                 Why = '同上：注入点的目标方法' }
+    @{ Pat = 'ADOBase.editor';                       Why = '同上：从 ADOBase 取编辑器实例（可能为 null，ApplySpeedOverrideTo 内部判空）' }
+    # -- 同上：等待阶段快速失败并报出真实原因 ------------------------------
+    @{ Pat = 'Patch_StartRewind.LastReject';         Why = '2026-10-18 等待失败要报真实原因：拒绝记录接线到渲染失败通知' }
+    @{ Pat = 'Patch_StartRewind.ResetRejectLog';     Why = '同上：作业启动时清掉上一轮残留' }
+    @{ Pat = 'rendervideo.replay_not_taken';         Why = '同上：新增的 14 语言文案键（关卡已跑但回放未接管）' }
+    @{ Pat = 'rendervideo.wait_timeout';             Why = '同上：失败通知从「只说超时」改为「超时 + 真实原因」' }
+    @{ Pat = 'SpectreState.data.bools.TryGetValue';  Why = '同上：倍速来源读录像的 QuickPitched 门控' }
+    @{ Pat = 'controller.state';                     Why = '同上：早退判据要同时看关卡是否已在跑' }
+    @{ Pat = 'States.Countdown';                     Why = '同上：Countdown/PlayerControl 视为关卡已开始' }
+    @{ Pat = 'States.PlayerControl';                 Why = '同上' }
+    @{ Pat = 'Features.Replay';                      Why = '同上：渲染侧要引用回放命名空间里的拒绝记录（using 行）' }
+    @{ Pat = 'FeatureKeys.Replay';                   Why = '同上：RemakePath 钩子挂回放总开关' }
+    @{ Pat = 'FeatureKeys.Replay,';                  Why = '同上：属性实参里的逗号形态' }
+    @{ Pat = 'PatchType.Prefix';                     Why = '同上：钩子类型' }
+    @{ Pat = 'scnEditor.RemakePath';                 Why = '同上：nameof 形式的注入点' }
+    @{ Pat = '__instance';                          Why = '同上：注入钩子的目标实例形参（本仓补丁层约定，上游没有这条补丁）' }
 )
 
 Write-Output ""

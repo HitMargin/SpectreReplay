@@ -99,8 +99,7 @@ internal static class PatchManager
             {
                 if (registration.IsLazy) continue;
                 bool isApplied = _appliedPatches.Contains(registration.PatchType);
-                // UI 电源总闸：关闭时一律视为禁用（与 SpectrePatchHub 的 master 同语义）
-                bool shouldBeEnabled = Settings.UiPowerOn && registration.IsEnabled();
+                bool shouldBeEnabled = registration.IsEnabled();
                 if (shouldBeEnabled && !isApplied)
                 {
                     try
@@ -297,8 +296,7 @@ internal static class PatchManager
                 if (!registration.IsLazy) continue;
                 if (_failedPatches.Contains(registration.PatchType)) continue;
                 bool isApplied = _appliedPatches.Contains(registration.PatchType);
-                // 电源总闸同经典路径：关闭时懒补丁一律视为禁用（挂了的也要卸）
-                bool shouldBeEnabled = Settings.UiPowerOn && registration.IsEnabled() && registration.LazyTrigger();
+                bool shouldBeEnabled = registration.IsEnabled() && registration.LazyTrigger();
                 if (shouldBeEnabled && !isApplied)
                 {
                     try

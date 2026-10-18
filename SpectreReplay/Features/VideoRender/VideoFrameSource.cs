@@ -78,12 +78,23 @@ internal sealed class VideoFrameSource
             Width = width;
             Height = height;
 
+            // 三台相机由同一套补丁保证非空，但这里是跨版本接缝：任一为 null 就抛，
+            // 而不是把 null 一起赋给 targetTexture（赋值本身不报错，之后渲染全黑）
+            if (cam.Bgcamstatic == null || cam.BGcam == null)
+                throw new InvalidOperationException("scrCamera sub-cameras not available");
             oldStatic = cam.Bgcamstatic.targetTexture;
             oldBackground = cam.BGcam.targetTexture;
             oldMain = cam.camobj.targetTexture;
 
             texture = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32);
-            texture.Create();
+            // Create() 返回 false 表示显存/驱动拒绝（分辨率超限、显存耗尽、后台无设备）。
+            // 原实现无视返回值，于是异步回读每帧都 hasError，成片是一路黑帧却"渲染成功"
+            if (!texture.Create())
+            {
+                Object.Destroy(texture);
+                throw new InvalidOperationException(
+                    "RenderTexture.Create failed (" + width + "x" + height + ", CleanCamera)");
+            }
             cam.Bgcamstatic.targetTexture = texture;
             cam.BGcam.targetTexture = texture;
             cam.camobj.targetTexture = texture;
@@ -94,7 +105,12 @@ internal sealed class VideoFrameSource
             Height = screenH = Screen.height;
             // 截屏接口要求目标纹理不带深度缓冲
             texture = new RenderTexture(Width, Height, 0, RenderTextureFormat.ARGB32);
-            texture.Create();
+            if (!texture.Create())
+            {
+                Object.Destroy(texture);
+                throw new InvalidOperationException(
+                    "RenderTexture.Create failed (" + Width + "x" + Height + ", WholeScreen)");
+            }
         }
         frameBytes = Width * Height * 4;
     }

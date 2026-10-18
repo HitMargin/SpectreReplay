@@ -24,7 +24,6 @@ namespace SpectreReplay
             {
                 mod = modEntry;
                 ConfigManager.LoadConfigs(Path.Combine(modEntry.Path, "Configs.json"));
-                UiConfigManager.Load(Path.Combine(modEntry.Path, "ConfigsUI.json"));
                 Settings.check(modEntry.Path);
                 WavLoader.reset();
 
@@ -117,7 +116,6 @@ namespace SpectreReplay
                     () => Settings.ReplayOn
                         && (Settings.AllowedKeyboardSpecialKeys.Count > 0
                             || Settings.AllowedAsyncSpecialKeys.Count > 0));
-                SpectrePatchHub.SetMasterToggle(() => Settings.UiPowerOn);
                 SpectrePatchHub.Refresh();
 
                 SpectreState.SetGetKeyAsyncEnabled(Settings.ReplayOn && Settings.GetDataFromAsyncInput);

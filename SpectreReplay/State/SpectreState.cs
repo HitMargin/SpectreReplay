@@ -476,16 +476,6 @@ public static class SpectreState
             message += LocalizationManager.GetLocalizedText("note.save_fail") + savePath + "\n";
             success = false;
         }
-        if (Settings.Backup)
-        {
-            // 备份结果原本被完全忽略：主回放已保存成功时，备份可能因权限受限/磁盘满/
-            // 目录不可写而失败，而用户毫无察觉 —— 直到真出事那天才发现"备份早就没了"。
-            // 备份失败不影响主回放的成功状态（success），但必须告知用户。
-            if (!ReplayManager.SaveReplay(data, Path.Combine(Main.mod.Path, "backup"), debug_no_encryption))
-            {
-                message += LocalizationManager.GetLocalizedText("note.save_fail") + "backup\n";
-            }
-        }
         if (!without_sound && data.strings.ContainsKey(KeybdSoundFileName))
         {
             string tmpPath = Path.Combine(Settings.SavePath, "tmp.wav");
@@ -518,6 +508,73 @@ public static class SpectreState
                 if (!File.Exists(wavPath))
                 {
                     message += LocalizationManager.GetLocalizedText("note.keybdsoundfile_save_fail") + wavPath + "\n";
+                }
+            }
+        }
+        // **备份放在 wav 处理之后**：回放的键盘音是按「与回放同目录的
+        // KeybdSoundFileName」找的（见 ReplayManager.TryLoadKeybdSound），
+        // 所以备份目录里也必须有一份同名 wav，否则备份出来的回放**静默没有键盘音**
+        // ——文件能开、能播，只是少了声音，玩家会以为原始录制就没录上。
+        if (Settings.Backup)
+        {
+            // 备份结果原本被完全忽略：主回放已保存成功时，备份可能因权限受限/磁盘满/
+            // 目录不可写而失败，而用户毫无察觉 —— 直到真出事那天才发现"备份早就没了"。
+            // 备份失败不影响主回放的成功状态（success），但必须告知用户。
+            //
+            // **必须传"目录 + 文件名"，不能只传目录。** SaveReplayNew 内部是
+            // `filePath += ext`——它把实参当成**含扩展名的完整文件路径**。
+            // 原先这里传的是 Path.Combine(mod.Path, "backup")，于是每局都写
+            // 同一个 `backup\backup.sprp`，而它还是个**目录名拼上扩展名**的
+            // 怪路径。README 承诺的是"为每份回放多留一份副本"——单文件覆盖
+            // 等于只有最后一局有备份，前面全丢，且用户看不出来（每局都提示成功）。
+            // ⇒ 备份文件名跟主回放同名，只是换个目录。
+            //
+            // **备份不再重跑整条保存管线，直接复制刚写好的主文件。**
+            // 原先这里再调一次 SaveReplay：编码、Brotli、PBKDF2、AES 全部重来一遍，
+            // 而每遍 PBKDF2 在 Mono 上要一两百毫秒——一局保存因此翻倍卡顿
+            // （2026-10-19 用户报「保存时游戏会卡」）。备份要的是**同一份字节**，
+            // 复制在语义上完全等价，且省掉一整套派生与压缩。
+            //
+            // 复制失败与原先"备份保存失败"同语义：只提示，不算整局保存失败。
+            // 扩展名必须跟着主文件走：调试开关会写 `.psprp`（不解密变体），
+            // 硬编码 `.sprp` 会让备份指向一个不存在的文件、每局都提示失败。
+            string mainExt = debug_no_encryption
+                ? ReplayConstants.ExtensionNoEncrypt : ReplayConstants.Extension;
+            string backupDir = Path.Combine(Main.mod.Path, "backup");
+            string backupPath = Path.Combine(backupDir, fileName) + mainExt;
+            bool backupOk = false;
+            try
+            {
+                Directory.CreateDirectory(backupDir);
+                File.Copy(savedPath + mainExt, backupPath, true);
+                backupOk = true;
+            }
+            catch (Exception ex)
+            {
+                Debug.Log("[SpectreReplay] 备份回放失败：" + ex.Message);
+            }
+            if (!backupOk)
+            {
+                message += LocalizationManager.GetLocalizedText("note.save_fail") + "backup\n";
+            }
+            else if (!without_sound
+                     && data.strings.TryGetValue(KeybdSoundFileName, out string backupWav)
+                     && !string.IsNullOrEmpty(backupWav))
+            {
+                // 同名 wav 复制过去。失败只提示、不算整局保存失败。
+                try
+                {
+                    string srcWav = Path.Combine(Settings.SavePath, backupWav);
+                    if (File.Exists(srcWav))
+                    {
+                        Directory.CreateDirectory(backupDir);
+                        string dstWav = Path.Combine(backupDir, backupWav);
+                        File.Copy(srcWav, dstWav, true);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.Log("[SpectreReplay] 备份键盘音失败：" + ex.Message);
                 }
             }
         }

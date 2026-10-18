@@ -283,9 +283,12 @@ switch ($Which) {
         # ⑪：把 SavePath 的真消费方改掉（SpectreState 不再按它写回放），
         #     于是保存目录变成"有字段、有界面、但写到哪里都不影响"。
         #     复现的是 ⑪ 判据里"有真消费方"那一半。
-        #    **必须把三处一起改掉**：判据是"符号在该文件里出现过"，只改一处的话
-        #    另外两处（tmp.wav 的写入与改名）还留着 Settings.SavePath，断言照样绿
-        #    ——那这条变异就证明不了判据。三处都在 SpectreState.cs 里。
+        #    **必须把全部消费点一起改掉**：判据是"符号在该文件里出现过"，只改一处
+        #    的话其余几处（tmp.wav 的写入与改名、备份 wav 的取源路径）还留着
+        #    Settings.SavePath，断言照样绿——那这条变异就证明不了判据。
+        #    计数随消费点增长：原为 3 处，加了"备份目录也要带同名 wav"后是 4 处。
+        #    **新增一处消费点就要把这里的期望数一起加**，否则变异会以"锚点命中
+        #    次数不符"自毁（exit=2），回归里表现为"变异自身失效"而不是"假绿"。
         Backup 'State\SpectreState.cs'
         $ls = Lines 'State\SpectreState.cs'
         $n = 0
@@ -297,7 +300,7 @@ switch ($Which) {
                 $n++
             }
         }
-        if ($n -ne 3) { throw "MUT-P13：代码行里 Settings.SavePath 命中 $n 次（应为 3）" }
+        if ($n -ne 4) { throw "MUT-P13：代码行里 Settings.SavePath 命中 $n 次（应为 4）" }
         SetLines 'State\SpectreState.cs' $ls
     }
     'MUT-U6' {
@@ -326,7 +329,7 @@ switch ($Which) {
         #     这一条能成立是因为该缺陷**在算术上可判**（Rec.709 亮度比较），
         #     所以判据 ⑤ 必须因此变红。
         Backup 'Ui\Gui.cs'
-        ReplaceExact 'Ui\Gui.cs' 'internal static readonly Color FieldBg     = new Color(0.21f, 0.24f, 0.30f, 1f);' 'internal static readonly Color FieldBg     = new Color(0.07f, 0.08f, 0.11f, 1f);'
+        ReplaceExact 'Ui\Gui.cs' 'internal static readonly Color FieldBg = new Color(0.21f, 0.24f, 0.30f, 1f);' 'internal static readonly Color FieldBg = new Color(0.07f, 0.08f, 0.11f, 1f);'
     }
     'MUT-U9' {
         # ⑥：把按钮的自定义样式**去掉**，退回吃内建皮肤（= 用户看到的"原生控件"）。
@@ -391,7 +394,7 @@ switch ($Which) {
         #     而是"没做完 hover"，两种形态要各有一条变异才分得清。
         Backup 'Ui\Gui.cs'
         ReplaceExact 'Ui\Gui.cs' `
-            '                bool hot = Hover(track) || GUIUtility.hotControl == id;' `
+            '                bool hot = !IsDim && (Hover(track) || GUIUtility.hotControl == id);' `
             '                bool hot = false;'
     }
     'MUT-U14' {
@@ -399,7 +402,7 @@ switch ($Which) {
         #      的另一半。
         Backup 'Ui\Gui.cs'
         ReplaceExact 'Ui\Gui.cs' `
-            '            bool hot = Hover(track);' `
+            '            bool hot = !IsDim && Hover(track);' `
             '            bool hot = false;'
     }
     'MUT-U24' {
@@ -654,7 +657,7 @@ switch ($Which) {
         #     （会让变异体"编译不过"而不是"被断言抓到"，证明力归零）。
         Backup 'Ui\TextField.cs'
         ReplaceExact 'Ui\TextField.cs' `
-            '            bool hot = Gui.Hover(box);' `
+            '            bool hot = !Gui.IsDim && Gui.Hover(box);' `
             '            bool hot = false;'
     }
     # ── 界面控制流 / 接线（UiLogicShapeCheck）─────────────────────
@@ -1025,6 +1028,16 @@ switch ($Which) {
         Backup 'State\AudioRecorder.cs'
         ReplaceExact 'State\AudioRecorder.cs' 'BitConverter.GetBytes((short)1).CopyTo(header, 20);' 'BitConverter.GetBytes((short)6).CopyTo(header, 20);'
     }
+    'MUT-W2' {
+        # ⑥（2026-10-19）：写侧退回"按 sampleCount 逐样本落盘"——即不下混。
+        # 头部仍声明 channels=1（① 那样才绿），而 GetData 拿到的是交错数据：
+        # 立体声设备下产出"头单声道、数据双声道"的文件，播放时长减半、音调升高。
+        # ①/② 都拦不住这条：头部本身完全合法，错的是**落盘字节数**。
+        # 只改帧数折算那一行（保留 channels 参数与均值，确保是"少了下混"
+        # 而不是"整个方法被删"）。
+        Backup 'State\AudioRecorder.cs'
+        ReplaceExact 'State\AudioRecorder.cs' 'int frames = sampleCount / channels;' 'int frames = sampleCount;'
+    }
     'MUT-K2' {
         # ⑨b：把键盘音的界面入口**整段**删掉 = 退回 round 49 之前的原样。
         # 那一态里三项设置有定义、有落盘、Patch_Playback 有四处消费，但玩家
@@ -1290,6 +1303,14 @@ switch ($Which) {
         Backup 'Features\Replay\ReplayCrypto.cs'
         ReplaceExact 'Features\Replay\ReplayCrypto.cs' 'if (!ConstantTimeEquals(expected, mac))' 'if (false)'
     }
+    'MUT-CR4' {
+        # ⑧ 格式升级回归：v2 回落迭代次数写错 = 2026-10-18~19 保存的存量回放
+        #      在升级当天集体打不开，而玩家只会看到「文件损坏」。
+        #      换成 1000 而不是随便一个数：它仍在合法区间内，能走到 MAC 校验，
+        #      失败原因就是"密钥不对"——正是这条断言要抓的形态。
+        Backup 'Features\Replay\ReplayCrypto.cs'
+        ReplaceExact 'Features\Replay\ReplayCrypto.cs' 'private const int IterationsV2 = 60000;' 'private const int IterationsV2 = 1000;'
+    }
     'MUT-CR3' {
         # ⑤ MAC 覆盖范围回归：不再把 IV 纳入 HMAC。
         Backup 'Features\Replay\ReplayCrypto.cs'
@@ -1325,6 +1346,40 @@ switch ($Which) {
         #      框子直接画出面板右缘被裁——2026-10-18 用户截图报的就是它）。
         Backup 'Ui\Gui.cs'
         ReplaceExact 'Ui\Gui.cs' 'Rect view = Viewport();' 'Rect view = new Rect(0f, 0f, Screen.width, Screen.height);'
+    }
+    'MUT-D15' {
+        # ⑬g 锚点回归：说明框退回锚控件矩形而不是鼠标（鼠标在一行里移动框不动；
+        #      UMM 的 ScrollView 让控件矩形与可视区不同系，滚动后框被夹到视口顶部
+        #      ——现象是「说明永远出现在模组名称那一行」，2026-10-18 用户报的第二次）。
+        Backup 'Ui\Gui.cs'
+        ReplaceExact 'Ui\Gui.cs' 'Vector2 mouse = Event.current.mousePosition;' 'Vector2 mouse = new Vector2(0f, 0f);'
+    }
+    'MUT-D16' {
+        # ㉕ 详情面板回归：删掉 Accuracy 那一行（只剩 X-Accuracy）。
+        #      2026-10-18 用户截图报「有X-ACC少了ACC」。
+        Backup 'Pages\ReplayInfoPanel.cs'
+        ReplaceExact 'Pages\ReplayInfoPanel.cs' 'Gui.KeyValueNarrow("playback.info.acc", AccText(info), Gui.TextCol);' ''
+    }
+    'MUT-D17' {
+        # ⑱g 镜头缩放回归：滑条退回只挂总开关 = 拖动永远不生效
+        #      （EffectRemover.RemoveCameras 一进来就判 EffectRemoverSetCameraZoom，
+        #      关着直接 return）。用户报的正是「滑条在但不生效」。
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' 'EffectRemoverOn && EffectRemoverCameras && EffectRemoverSetCameraZoom);' 'EffectRemoverOn);'
+    }
+    'MUT-D18' {
+        # ⑱f 全选按钮回归：行星组那个按钮不再挂总开关
+        #      （总开关关着时按下去毫无反应，玩家会以为功能坏了）。
+        #      只改第二处：第一处在轨道组，判据若只认"第一处命中"照样绿。
+        Backup 'Pages\Pages.cs'
+        $ls = Lines 'Pages\Pages.cs'
+        $hit = -1; $n = 0
+        for ($i = 0; $i -lt $ls.Count; $i++) {
+            if ($ls[$i].Trim() -eq '}, false, EffectRemoverOn));') { $n++; $hit = $i }
+        }
+        if ($n -ne 2) { throw ('MUT-D18 unexpected count=' + $n) }
+        $ls[$hit] = $ls[$hit].Replace('}, false, EffectRemoverOn));', '}, false));')
+        SetLines 'Pages\Pages.cs' $ls
     }
     'MUT-D14' {
         # ㉔ BPM 回归：官方关卡退回硬写 0（详情面板重新显示成问号）。

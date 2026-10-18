@@ -74,8 +74,10 @@ internal sealed class VideoEncoder : IDisposable
     // （虽然 pipe.HasExited 与队列 CompleteAdding 最终会兜住，但那已经是
     // 又等了一个 SubmitStallTimeoutMs=120s 之后的事）。
     private volatile Exception pumpFailure;
-
-    internal string EncoderName { get; private set; } = "unknown";
+    // ffmpeg 的真实失败原因只出现在 stderr（未知编码器/参数不支持/文件被占用）。
+    // 泵线程与主线程都可能读取，追加加锁、只保留尾部若干行。
+    private StringBuilder pipeStderr;
+    private readonly object stderrLock = new object();
 
     // 帧队列容量（Begin 时按 256 MiB 预算定）：调用方据此对齐回读缓冲池上限，
     // 否则编码满载时每帧回收的 30+ 个大数组只有 8 个进池、其余全丢 LOH
@@ -109,7 +111,10 @@ internal sealed class VideoEncoder : IDisposable
         try
         {
             string modDir = Main.mod.Path;
-            string gameRoot = Path.GetFullPath(Path.Combine(modDir, "..", "..", ".."));
+            // UMM 的布局是 <game>\Mods\<ModName>，向上**两级**才是游戏根目录。
+            // 原先写了三级，取到的是游戏目录的父目录，放在游戏根目录的 ffmpeg.exe
+            // 永远探测不到，静默回退到 PATH。
+            string gameRoot = Path.GetFullPath(Path.Combine(modDir, "..", ".."));
             string[] candidates =
             {
                 Path.Combine(modDir, "ffmpeg.exe"),
@@ -216,9 +221,10 @@ internal sealed class VideoEncoder : IDisposable
             if (canceled != null && canceled())
                 throw new OperationCanceledException("canceled");
             if (pipe == null || pipe.HasExited)
-                throw new InvalidOperationException("encoder process exited unexpectedly");
+                throw new InvalidOperationException("encoder process exited unexpectedly"
+                    + StderrSuffix());
             if (pumpFailure != null)
-                throw new InvalidOperationException("encoder pump failed", pumpFailure);
+                throw new InvalidOperationException("encoder pump failed" + StderrSuffix(), pumpFailure);
             if (queue.TryAdd(frame, SubmitRetryMs))
                 return;
             waitedMs += SubmitRetryMs;
@@ -243,7 +249,7 @@ internal sealed class VideoEncoder : IDisposable
             throw new InvalidOperationException("video encode stalled while draining (timeout)");
         }
         if (pumpFailure != null)
-            throw new InvalidOperationException("encoder pump failed", pumpFailure);
+            throw new InvalidOperationException("encoder pump failed" + StderrSuffix(), pumpFailure);
         pipe.StandardInput.Close();
         // 收尾只剩尾部 GOP flush + trailer，正常秒级完成；10 分钟兜底防 ffmpeg 卡死
         // （磁盘满/编码器挂起）把主线程永久挂死，超时 Kill 走既有失败上报链路
@@ -254,7 +260,8 @@ internal sealed class VideoEncoder : IDisposable
             throw new InvalidOperationException("video encode stalled at finalize (timeout)");
         }
         if (pipe.ExitCode != 0)
-            throw new InvalidOperationException("video encode failed, exit code " + pipe.ExitCode);
+            throw new InvalidOperationException("video encode failed, exit code " + pipe.ExitCode
+                + StderrSuffix());
         pipe.Dispose();
         pipe = null;
         queue.Dispose();
@@ -288,8 +295,11 @@ internal sealed class VideoEncoder : IDisposable
         string audio = webm ? "-c:a libopus -b:a 192k -ar 48000" : "-c:a aac -b:a 320k";
         string faststart = container == OutContainer.Mp4 || container == OutContainer.Mov
             ? " -movflags +faststart" : "";
+        // **-shortest**：视频与音频长度由两条独立采集链决定，正常只差几十毫秒，
+        // 但音频采集重启/丢帧后可能明显短于视频。没有它时 ffmpeg 会把短的一轨
+        // 补静音/黑帧到另一轨长度，成片尾部出现一段无声空转；有它则按短轨收尾。
         string args = "-y -i " + Quote(rawVideoPath) + " -i " + Quote(wavPath)
-            + " -map 0:v:0 -map 1:a:0 -c:v copy " + audio + " -ac 2" + faststart
+            + " -map 0:v:0 -map 1:a:0 -c:v copy " + audio + " -ac 2 -shortest" + faststart
             + " " + Quote(finalVideoPath);
         RunAndWait(exePath, args);
     }
@@ -388,7 +398,6 @@ internal sealed class VideoEncoder : IDisposable
             case Codec.Vp9:
                 {
                     string cpuUsed = quality == Quality.Fastest ? "5" : quality == Quality.Sharpest ? "2" : "4";
-                    EncoderName = "libvpx-vp9";
                     return "-c:v libvpx-vp9 -deadline good -cpu-used " + cpuUsed + " -row-mt 1 "
                         + RateControl(false) + " -g " + gop;
                 }
@@ -396,14 +405,12 @@ internal sealed class VideoEncoder : IDisposable
                 {
                     string nvPreset = quality == Quality.Fastest ? "p1" : quality == Quality.Sharpest ? "p6" : "p4";
                     string tune = quality == Quality.Fastest ? "ll" : "hq";
-                    EncoderName = "h264_nvenc " + nvPreset;
                     return "-c:v h264_nvenc -preset " + nvPreset + " -tune " + tune
                         + " " + RateControl(true) + " -g " + gop;
                 }
             default:
                 {
                     string x264Preset = quality == Quality.Fastest ? "ultrafast" : quality == Quality.Sharpest ? "fast" : "veryfast";
-                    EncoderName = "libx264 " + x264Preset;
                     return "-c:v libx264 -preset " + Quote(x264Preset) + " " + RateControl(false) + " -g " + gop;
                 }
         }
@@ -430,8 +437,6 @@ internal sealed class VideoEncoder : IDisposable
         }
         return "-b:v " + target + "M -maxrate " + ceiling + "M -bufsize " + bucket + "M";
     }
-
-    private bool NvencWorks() => NvencWorksFor(exePath);
 
     /// <summary>按 ffmpeg 路径探测 NVENC。静态版供 UI 侧 DescribeEncoder 复用同一份缓存，
     /// 避免为了显示一行提示就起第二个探测（探测本身要起进程、等最多 5 秒）。</summary>
@@ -527,12 +532,49 @@ internal sealed class VideoEncoder : IDisposable
             Arguments = "-hide_banner -loglevel warning " + arguments,
             UseShellExecute = false,
             CreateNoWindow = true,
-            RedirectStandardInput = redirectInput
+            RedirectStandardInput = redirectInput,
+            // **必须重定向 stderr。** 原实现只重定向 stdin，管道里 ffmpeg 因
+            // 未知编码器/参数不支持/文件被占用而立即退出时，用户只能看到
+            // "encoder process exited unexpectedly"，真实原因全被丢掉——
+            // 与 RunAndWait（mux/转换路径）捕获 stderr 的做法不一致。
+            RedirectStandardError = true
         };
         Process started = Process.Start(info);
         if (started == null)
             throw new InvalidOperationException("failed to start encoder");
+        pipeStderr = new StringBuilder();
+        started.ErrorDataReceived += (_, e) => AppendStderr(e.Data);
+        started.BeginErrorReadLine();
         return started;
+    }
+
+    // 只留尾部：ffmpeg 的失败原因通常在最后几行，而正常运行时 warning 也可能很多。
+    private const int StderrCapChars = 4096;
+
+    private void AppendStderr(string line)
+    {
+        if (string.IsNullOrEmpty(line)) return;
+        lock (stderrLock)
+        {
+            if (pipeStderr == null) return;
+            pipeStderr.AppendLine(line);
+            if (pipeStderr.Length > StderrCapChars)
+                pipeStderr.Remove(0, pipeStderr.Length - StderrCapChars);
+        }
+    }
+
+    // 供异常消息拼接：读当前累计的 stderr（可能为空）
+    private string StderrTail()
+    {
+        lock (stderrLock)
+            return pipeStderr == null ? "" : pipeStderr.ToString().Trim();
+    }
+
+    // 异常消息后缀：stderr 为空时不加任何东西，保持原消息干净
+    private string StderrSuffix()
+    {
+        string tail = StderrTail();
+        return tail.Length == 0 ? "" : "\nffmpeg: " + tail;
     }
 
     private static string Quote(string value)

@@ -75,3 +75,9 @@ $rows | Sort-Object Verdict, Kind | Format-Table -AutoSize | Out-String | Write-
 $bad = @($rows | Where-Object { $_.Verdict -notlike 'OK*' })
 Write-Output ("不合规: " + $bad.Count)
 $bad | ForEach-Object { "  $($_.File)  $($_.Kind) $($_.Method)  => $($_.Verdict)" }
+
+# **必须给退出码。** 原先到这里就结束了——verify.ps1 靠退出码判定，
+# 于是这份审计永远绿：上面刚印出"不合规: 40"，闸门却照样通过。
+# exit 3 留给「脚本自己没跑成」（目录缺失/扫不到文件），
+# exit 1 才是「代码有问题」。两者必须分开，否则又回到"假红没人理"。
+if ($bad.Count -gt 0) { exit 1 }

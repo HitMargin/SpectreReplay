@@ -46,6 +46,8 @@ internal sealed class ReplayFileInfo
     internal string HitMarginLimit;
     internal string ModVersionText;
     internal double PercentXacc;
+    /// <summary>普通 Accuracy（由判定分布按官方公式还原；无判定数据时为 -1）。</summary>
+    internal double Accuracy;
 
     internal int KeyCount;
     internal int HitCount;
@@ -136,6 +138,7 @@ internal sealed class ReplayFileInfo
         info.HitCount = data.HitContext_list != null ? data.HitContext_list.Count : 0;
         info.DurationSeconds = LastKeyPosition(data);
         info.JudgmentCounts = ParseJudgments(Str(data, K.JudgmentList));
+        info.Accuracy = SpectreReplay.Features.Compat.HitMarginCompat.Accuracy(info.JudgmentCounts);
         return info;
     }
 

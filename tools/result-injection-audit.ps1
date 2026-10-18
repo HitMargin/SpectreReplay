@@ -21,6 +21,8 @@ if ($files.Count -eq 0) {
 }
 
 Write-Output "=== 用了 __result 的补丁，其目标方法的返回类型 ==="
+
+$bad = @()
 foreach ($f in $files) {
     $t = [IO.File]::ReadAllText($f.FullName)
     if ($t -notmatch '__result') { continue }
@@ -63,5 +65,16 @@ foreach ($f in $files) {
         }
         Write-Output ("  {0}" -f $rel)
         Write-Output ("    目标 {0}.{1}   返回={2}" -f $tn, $m, $ret)
+        # 只有这两种才是真缺陷：__result 配 void 目标 = 永远拿默认值；
+        # 类型/方法反射不到同样是坏的（补丁根本没挂在存在的东西上）。
+        if ($ret -like 'VOID*' -or $ret -eq '类型未找到') {
+            $bad += ("{0}  {1}.{2}  => {3}" -f $rel, $tn, $m, $ret)
+        }
     }
 }
+
+Write-Output ("=== 问题数: " + $bad.Count + " ===")
+$bad | ForEach-Object { Write-Output ("  " + $_) }
+# **必须给退出码。** 原先这份脚本只打印不判定——verify.ps1 靠退出码判定，
+# 于是它永远绿。exit 3 留给「脚本自己没跑成」，1 才是「代码有问题」。
+if ($bad.Count -gt 0) { exit 1 }
