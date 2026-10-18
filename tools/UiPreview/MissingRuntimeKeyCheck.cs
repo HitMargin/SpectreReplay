@@ -22,8 +22,8 @@ namespace UiPreview
             Console.WriteLine("  ── 运行时文案键存在性 ──");
             var files = Directory.GetFiles(projectRoot, "*.cs", SearchOption.AllDirectories)
                 .Where(f => !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar)
-                         && !f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar)
-                         && !f.Contains(Path.DirectorySeparatorChar + "tools" + Path.DirectorySeparatorChar))
+                        && !f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar)
+                        && !f.Contains(Path.DirectorySeparatorChar + "tools" + Path.DirectorySeparatorChar))
                 .ToList();
 
             // ① 被引用的运行时键（剥注释，注释里举例提到的键不算引用）
@@ -31,9 +31,9 @@ namespace UiPreview
             foreach (string f in files)
             {
                 string code = SrcUtil.Clean(File.ReadAllText(f));
-                foreach (System.Text.RegularExpressions.Match m in
-                         System.Text.RegularExpressions.Regex.Matches(
-                             code, "GetLocalizedText\\(\"([a-z][a-z0-9_]*(?:\\.[a-z0-9_]+)+)\"\\)"))
+                var hits = System.Text.RegularExpressions.Regex.Matches(
+                    code, "GetLocalizedText\\(\"([a-z][a-z0-9_]*(?:\\.[a-z0-9_]+)+)\"\\)");
+                foreach (System.Text.RegularExpressions.Match m in hits)
                 {
                     used.Add(m.Groups[1].Value);
                 }
@@ -43,9 +43,9 @@ namespace UiPreview
             //    正则不锚定行首——这些行是缩进的，且 `[` 前有空格（锚定会一条都匹配不到）。
             string lm = File.ReadAllText(Path.Combine(projectRoot, "State", "LocalizationManager.cs"));
             var definedRuntime = new HashSet<string>(StringComparer.Ordinal);
-            foreach (System.Text.RegularExpressions.Match m in
-                     System.Text.RegularExpressions.Regex.Matches(
-                         lm, "\\[\"([a-z][a-z0-9_]*(?:\\.[a-z0-9_]+)+)\"\\]"))
+            var lmHits = System.Text.RegularExpressions.Regex.Matches(
+                lm, "\\[\"([a-z][a-z0-9_]*(?:\\.[a-z0-9_]+)+)\"\\]");
+            foreach (System.Text.RegularExpressions.Match m in lmHits)
             {
                 definedRuntime.Add(m.Groups[1].Value);
             }
@@ -53,9 +53,9 @@ namespace UiPreview
             // ③ Ui\Loc.cs 的页面键也一并算"有定义"（两个表服务不同调用方，互不取代）
             string ui = File.ReadAllText(Path.Combine(projectRoot, "Ui", "Loc.cs"));
             var definedUi = new HashSet<string>(StringComparer.Ordinal);
-            foreach (System.Text.RegularExpressions.Match m in
-                     System.Text.RegularExpressions.Regex.Matches(
-                         ui, "\\{\\s*\"([a-z][a-z0-9_]*(?:\\.[a-z0-9_]+)+)\"\\s*,"))
+            var uiHits = System.Text.RegularExpressions.Regex.Matches(
+                ui, "\\{\\s*\"([a-z][a-z0-9_]*(?:\\.[a-z0-9_]+)+)\"\\s*,");
+            foreach (System.Text.RegularExpressions.Match m in uiHits)
             {
                 definedUi.Add(m.Groups[1].Value);
             }

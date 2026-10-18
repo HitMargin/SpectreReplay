@@ -37,8 +37,9 @@ namespace UiPreview
                 // 剥不剥注释都要查——注释里写 `[Spectre]` 会误导读者，
                 // 但那是文档问题不是日志问题，所以这里用原始文本查字符串、
                 // 用剥注释文本查会不会其实是代码。简化：直接查原始文本的字符串形状。
-                foreach (System.Text.RegularExpressions.Match m in
-                         System.Text.RegularExpressions.Regex.Matches(text, "\"\\[Spectre\\] "))
+                var hits = System.Text.RegularExpressions.Regex.Matches(
+                    text, "\"\\[Spectre\\] ");
+                foreach (System.Text.RegularExpressions.Match m in hits)
                 {
                     bad.Add(Path.GetFileName(f));
                     break;

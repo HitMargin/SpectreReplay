@@ -36,7 +36,7 @@ namespace SpectreReplay.Pages
 
         internal static bool IsOpen(string path)
             => !string.IsNullOrEmpty(path)
-               && string.Equals(path, OpenPath, StringComparison.OrdinalIgnoreCase);
+            && string.Equals(path, OpenPath, StringComparison.OrdinalIgnoreCase);
 
         /// <summary>点一下切换：已展开的就收起，否则展开这一份。</summary>
         internal static void Toggle(string path)
@@ -237,7 +237,7 @@ namespace SpectreReplay.Pages
         {
             double x = info.PercentXacc;
             return x > 0.0 ? (x * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%"
-                           : Loc.T("playback.info.na");
+                        : Loc.T("playback.info.na");
         }
 
         internal static string SizeText(long bytes)

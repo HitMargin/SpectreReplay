@@ -154,16 +154,17 @@ namespace UiPreview
             // **必须写 foreach (Match m ...)，不能用 var**：Regex.Matches 返回
             // MatchCollection，其元素是 object，var 拿到 object 就没有 Groups
             // （CS1061。上一轮已记过这个坑，这次又踩）。
-            foreach (System.Text.RegularExpressions.Match m in
-                     System.Text.RegularExpressions.Regex.Matches(body, @"typeof\(\s*([\w\.]+)\s*\)"))
+            var hits = System.Text.RegularExpressions.Regex.Matches(
+                body, @"typeof\(\s*([\w\.]+)\s*\)");
+            foreach (System.Text.RegularExpressions.Match m in hits)
             {
                 string n = m.Groups[1].Value;
                 Type t = n == "float" ? typeof(float)
-                       : n == "bool" ? typeof(bool)
-                       : n == "int" ? typeof(int)
-                       : n == "double" ? typeof(double)
-                       : n == "string" ? typeof(string)
-                       : null;
+                    : n == "bool" ? typeof(bool)
+                    : n == "int" ? typeof(int)
+                    : n == "double" ? typeof(double)
+                    : n == "string" ? typeof(string)
+                    : null;
                 if (t != null) list.Add(t);
             }
             return list.Count == 0 ? null : list.ToArray();

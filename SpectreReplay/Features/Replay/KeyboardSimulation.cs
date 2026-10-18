@@ -99,7 +99,7 @@ internal static class KeyboardSimulation
             Debug.LogWarning($"[SpectreReplay] SendInput 部分失败：已处理 {result}/{inputs.Length} 个按键"
                 + $"（Win32 错误码 {err}"
                 + (err == 5 ? " = ERROR_ACCESS_DENIED：游戏与注入进程的权限级别不一致，"
-                              + "请用相同权限（通常都提权或都不提权）运行游戏" : "")
+                            + "请用相同权限（通常都提权或都不提权）运行游戏" : "")
                 + "）");
         }
     }

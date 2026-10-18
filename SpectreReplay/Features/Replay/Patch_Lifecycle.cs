@@ -123,7 +123,7 @@ internal class Patch_StartRewind
                 }
                 if (scrPlayerManager.instance.players.Count() != 1)
                 {
-                TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error8"), 3f, NotifType.Warning);
+                    TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error8"), 3f, NotifType.Warning);
                     return;
                 }
                 if (data.bools[IsOfficialLevel] != ADOBase.isOfficialLevel)
@@ -139,7 +139,7 @@ internal class Patch_StartRewind
                     //     return;
                     // }
                     if (!string.IsNullOrEmpty(data.strings[InternalLevelName])
-                         && data.strings[InternalLevelName] != GCS.internalLevelName)
+                        && data.strings[InternalLevelName] != GCS.internalLevelName)
                     {
                         TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error1") + data.strings[SongName], 3f, NotifType.Warning);
                         return;

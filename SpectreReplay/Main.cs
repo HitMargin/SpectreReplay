@@ -115,8 +115,8 @@ namespace SpectreReplay
                 // 没勾键的玩家不该为一个用不到的功能付每帧委托调用的代价。
                 SpectrePatchHub.SetFeatureToggle(FeatureKeys.SpecialKeys,
                     () => Settings.ReplayOn
-                          && (Settings.AllowedKeyboardSpecialKeys.Count > 0
-                              || Settings.AllowedAsyncSpecialKeys.Count > 0));
+                        && (Settings.AllowedKeyboardSpecialKeys.Count > 0
+                            || Settings.AllowedAsyncSpecialKeys.Count > 0));
                 SpectrePatchHub.SetMasterToggle(() => Settings.UiPowerOn);
                 SpectrePatchHub.Refresh();
 
@@ -140,28 +140,28 @@ namespace SpectreReplay
 
         public static System.Collections.Generic.List<ModEntry> GetLoadedMods()
         {
-        try
-        {
-            return UnityModManager.modEntries;
+            try
+            {
+                return UnityModManager.modEntries;
+            }
+            catch (Exception arg)
+            {
+                UnityEngine.Debug.LogError("[" + SpectrePatchHub.LogTag + "] 获取模组列表失败: " + arg);
+            }
+            return new System.Collections.Generic.List<ModEntry>();
         }
-        catch (Exception arg)
-        {
-            UnityEngine.Debug.LogError("[" + SpectrePatchHub.LogTag + "] 获取模组列表失败: " + arg);
-        }
-        return new System.Collections.Generic.List<ModEntry>();
-    }
 
-    public static string mod2string(ModEntry mod)
-    {
-        try
+        public static string mod2string(ModEntry mod)
         {
-            return "[" + mod.Info.Id + "] " + mod.Info.DisplayName + " v" + mod.Info.Version
-                + " by " + mod.Info.Author + " : " + (mod.Active ? "Enabled" : "Disabled");
-        }
-        catch (Exception)
-        {
-            return "[?] " + (mod != null ? mod.Info?.Id ?? "?" : "?");
+            try
+            {
+                return "[" + mod.Info.Id + "] " + mod.Info.DisplayName + " v" + mod.Info.Version
+                    + " by " + mod.Info.Author + " : " + (mod.Active ? "Enabled" : "Disabled");
+            }
+            catch (Exception)
+            {
+                return "[?] " + (mod != null ? mod.Info?.Id ?? "?" : "?");
+            }
         }
     }
-}
 }

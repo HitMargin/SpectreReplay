@@ -406,7 +406,7 @@ public static class ConfigManager
             return;
         // 旧版识别键：Surface / Fps / Encoder 三者是自研引擎独有的命名
         bool legacy = json["Surface"] != null || json["Fps"] != null
-                   || json["Encoder"] != null || json["RecordingOn"] != null;
+                || json["Encoder"] != null || json["RecordingOn"] != null;
         if (!legacy)
             return;
 

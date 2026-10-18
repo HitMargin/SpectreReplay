@@ -152,7 +152,7 @@ internal static class GameCompat
             {
                 hit = FindByArity(typeof(scrPlayer), "Hit", 2,
                         m => m.ReturnType == typeof(bool)
-                             && m.GetParameters()[0].ParameterType == typeof(long?)) != null;
+                            && m.GetParameters()[0].ParameterType == typeof(long?)) != null;
             }
             catch (Exception e)
             {

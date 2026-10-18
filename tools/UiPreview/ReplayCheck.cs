@@ -132,7 +132,7 @@ namespace UiPreview
         {
             using var output = new System.IO.MemoryStream();
             using (var gz = new System.IO.Compression.GZipStream(output,
-                       System.IO.Compression.CompressionLevel.Optimal))
+                    System.IO.Compression.CompressionLevel.Optimal))
                 gz.Write(data, 0, data.Length);
             return output.ToArray();
         }

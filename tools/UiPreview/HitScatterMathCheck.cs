@@ -33,8 +33,8 @@ namespace UiPreview
                 var b2 = HitScatterMath.Classify((tight + wide) * 0.5f, tight, wide);
                 var b3 = HitScatterMath.Classify(wide * 2f, tight, wide);
                 bool ok = b1 == HitScatterMath.Band.Best
-                          && b2 == HitScatterMath.Band.Middle
-                          && b3 == HitScatterMath.Band.Worst;
+                        && b2 == HitScatterMath.Band.Middle
+                        && b3 == HitScatterMath.Band.Worst;
                 if (!ok)
                 {
                     Console.WriteLine("    ✗ ① 三档不可达（中间那档是死代码）: " + b1 + "/" + b2 + "/" + b3);

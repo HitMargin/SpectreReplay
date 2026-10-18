@@ -654,9 +654,9 @@ namespace SpectreReplay.Ui
                         // 一排小格子时，"选中"必须与"悬停"能被一眼区分。两者若都只是
                         // 提亮 Accent，鼠标扫过去的那一格会看起来像已选中。
                         Fill(cell, on ? (hot ? Lighten(Accent, 0.12f) : Accent)
-                                      : (hot ? BtnHover : BtnFace));
+                                    : (hot ? BtnHover : BtnFace));
                         Frame(cell, on ? new Color(0.55f, 0.82f, 1f, 0.9f)
-                                       : new Color(1f, 1f, 1f, hot ? 0.34f : 0.22f));
+                                    : new Color(1f, 1f, 1f, hot ? 0.34f : 0.22f));
                         Text(cell, key, on ? Color.white : TextCol, _smallC);
 
                         // 说明按**格**登记（不是整组一条）：玩家悬停的是具体哪个键，
@@ -735,9 +735,9 @@ namespace SpectreReplay.Ui
             // 禁用态同样不提亮（理由见 Slider）。
             bool hot = !IsDim && Hover(track);
             Fill(track, value ? (hot ? Lighten(Accent, 0.10f) : Accent)
-                              : (hot ? PillOffHover : PillOff));
+                            : (hot ? PillOffHover : PillOff));
             Frame(track, value ? new Color(0.55f, 0.82f, 1f, 0.9f)
-                               : new Color(1f, 1f, 1f, hot ? 0.34f : 0.22f));
+                            : new Color(1f, 1f, 1f, hot ? 0.34f : 0.22f));
             float k = track.height - 6f;
             Rect knob = new Rect(
                 value ? track.x + track.width - k - 3f : track.x + 3f,
@@ -840,7 +840,7 @@ namespace SpectreReplay.Ui
                     // GUIClip 是 **internal** 类型（UnityEngine.dll 里 IsPublic=False），
                     // 所以只能按名字找类型 + 取非公开静态属性。
                     Type t = Type.GetType("UnityEngine.GUIClip, UnityEngine.IMGUIModule")
-                             ?? Type.GetType("UnityEngine.GUIClip, UnityEngine");
+                            ?? Type.GetType("UnityEngine.GUIClip, UnityEngine");
                     if (t != null)
                     {
                         _guiClipProp = t.GetProperty("visibleRect",

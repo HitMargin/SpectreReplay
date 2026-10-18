@@ -33,7 +33,7 @@ namespace UiPreview
                 // 合法使用同一个键（它就是取消保存热键），于是判据与代码无关地
                 // 常红。只有 GUILayout.Button(...) 里的 caption 才要求是 record.stop。
                 s => RegexButtonCaption(s, "record.cancelsavekey") == 0
-                     && RegexButtonCaption(s, "record.stop") == 1);
+                    && RegexButtonCaption(s, "record.stop") == 1);
             // ② 这条盯的是**皮肤来源**，不只是一个数字。2026-10-12 用户截图报
             //    「输出目录那一行是黑的」：内建 GUILayout.TextField 是本页唯一
             //    没被 UMM 重设皮肤的控件——UMM 的 PrepareGUI/ScaleGUI 只重设
@@ -49,17 +49,17 @@ namespace UiPreview
                 "② 文本框必须自绘（不许用内建输入框）且宽度走 Gui.CtrlW",
                 "Ui\\OnGui.cs",
                 s => !s.Contains("360", StringComparison.Ordinal)
-                     && s.Contains("GUILayout.Width(Gui.CtrlW)", StringComparison.Ordinal)
-                     // 注释已被 SrcUtil.Clean 剥掉，所以这里命中的一定是真代码。
-                     // 只查 OnGui.cs：自绘控件实现在 Ui\TextField.cs，那边合法地
-                     // 提到这两个名字（在注释里说明为什么不用它们）。
-                     && !s.Contains("GUILayout.TextField", StringComparison.Ordinal)
-                     && !s.Contains("GUI.TextField", StringComparison.Ordinal));
+                    && s.Contains("GUILayout.Width(Gui.CtrlW)", StringComparison.Ordinal)
+                    // 注释已被 SrcUtil.Clean 剥掉，所以这里命中的一定是真代码。
+                    // 只查 OnGui.cs：自绘控件实现在 Ui\TextField.cs，那边合法地
+                    // 提到这两个名字（在注释里说明为什么不用它们）。
+                    && !s.Contains("GUILayout.TextField", StringComparison.Ordinal)
+                    && !s.Contains("GUI.TextField", StringComparison.Ordinal));
             fail += Check(projectRoot,
                 "③ 分组边框不许用 GetLastRect（返回的是子控件而非组的矩形）",
                 "Ui\\Gui.cs",
                 s => !s.Contains("GetLastRect", StringComparison.Ordinal)
-                     && s.Contains("BeginVertical", StringComparison.Ordinal));
+                    && s.Contains("BeginVertical", StringComparison.Ordinal));
             // ④ 阻塞式原生目录选择框必须在 OnGUI 之外调用。
             //    `FileBrowser.PickFolder` 走的是原生模态对话框
             //    （UnityFileDialog.decompiled.cs:340 → file_dialog_pick_folder），
@@ -74,7 +74,7 @@ namespace UiPreview
                 "④ 阻塞式目录选择框不许画在控件方法体里（必须 Defer 到 OnGUI 之外）",
                 "Pages\\Pages.cs",
                 s => s.Contains("MainThread.Defer(PickSaveDirDeferred)", StringComparison.Ordinal)
-                     && PickFolderNotInDrawingMethod(s, "DrawSaveDirRow"));
+                    && PickFolderNotInDrawingMethod(s, "DrawSaveDirRow"));
             // ④b 同一形态的第二个调用点（渲染输出目录的选择框在 OnGui 里）。
             //    一条判据只查一个文件就会漏掉后加的那处——所以每加一个
             //    PickFolder 调用点，这里就要跟着加一条，或者改成本条那种
@@ -83,7 +83,7 @@ namespace UiPreview
                 "④b 输出目录的选择框同样必须 Defer（不许出现在 RowInput 里）",
                 "Ui\\OnGui.cs",
                 s => s.Contains("MainThread.Defer(PickOutDirDeferred)", StringComparison.Ordinal)
-                     && PickFolderNotInDrawingMethod(s, "RowInput"));
+                    && PickFolderNotInDrawingMethod(s, "RowInput"));
             // ⑤ 自绘输入框的底色必须**比承载它的卡片更亮**。
             //    2026-10-12 真事：我把 FieldBg 定成 (0.07,0.08,0.11)，而 CardBg 是
             //    (0.13,0.15,0.19)——输入框比卡片还暗，玩家看到的仍是一个黑洞，
@@ -131,15 +131,15 @@ namespace UiPreview
                 "⑥b 滑条必须自绘（不许用内建 HorizontalSlider）",
                 "Ui\\OnGui.cs",
                 s => !s.Contains("GUILayout.HorizontalSlider", StringComparison.Ordinal)
-                     && s.Contains("Gui.Slider(", StringComparison.Ordinal));
+                    && s.Contains("Gui.Slider(", StringComparison.Ordinal));
             // ⑥d 圆角贴图必须走缓存。每帧 new Texture2D 会持续泄漏显存
             //     （Unity 贴图不受 GC 管理），而控件每帧都重画。
             fail += Check(projectRoot,
                 "⑥d 圆角贴图必须有缓存（不许每帧 new Texture2D）",
                 "Ui\\RoundedTex.cs",
                 s => s.Contains("Dictionary<Key, Texture2D>", StringComparison.Ordinal)
-                     && s.Contains("Cache.TryGetValue", StringComparison.Ordinal)
-                     && s.Contains("HideFlags.HideAndDontSave", StringComparison.Ordinal));
+                    && s.Contains("Cache.TryGetValue", StringComparison.Ordinal)
+                    && s.Contains("HideFlags.HideAndDontSave", StringComparison.Ordinal));
             // ⑦ RenderClock transpiler 必须区分"已被别的 mod 接管"与"目标形状变了"。
             //
             //    2026-10-12 真事：Spectre 与 SpectreReplay 同时启用时，Spectre 的
@@ -211,11 +211,11 @@ namespace UiPreview
                 "⑨ 卡片不许用 GUI.backgroundColor 染色（乘算会抹平按钮 hover）",
                 "Ui\\Gui.cs",
                 s => !s.Contains("GUI.backgroundColor =", StringComparison.Ordinal)
-                     && !s.Contains("GUI.backgroundColor=", StringComparison.Ordinal)
-                     && s.Contains("_pad.normal.background = RoundedTex.Get(2, 2, 0, CardBg)", StringComparison.Ordinal)
-                     // 只钉 _pad 那一处：Fill() 里合法地用 whiteTexture 画纯色块
-                     // （它随后自己还原 GUI.color），整文件禁 whiteTexture 会假红。
-                     && !s.Contains("_pad.normal.background = Texture2D.whiteTexture", StringComparison.Ordinal));
+                    && !s.Contains("GUI.backgroundColor=", StringComparison.Ordinal)
+                    && s.Contains("_pad.normal.background = RoundedTex.Get(2, 2, 0, CardBg)", StringComparison.Ordinal)
+                    // 只钉 _pad 那一处：Fill() 里合法地用 whiteTexture 画纯色块
+                    // （它随后自己还原 GUI.color），整文件禁 whiteTexture 会假红。
+                    && !s.Contains("_pad.normal.background = Texture2D.whiteTexture", StringComparison.Ordinal));
             // ⑩ 滑条右侧的数值必须是**可编辑输入框**，不能退回只读显示。
             //
             //    2026-10-17 用户要求：「把滑动条右边的数字显示改为输入框」。
@@ -260,7 +260,7 @@ namespace UiPreview
                 "⑪c 输入框必须有 hover 反馈",
                 "Ui\\TextField.cs",
                 s => s.Contains("Gui.Hover(box)", StringComparison.Ordinal)
-                     && s.Contains("FieldBgHover", StringComparison.Ordinal));
+                    && s.Contains("FieldBgHover", StringComparison.Ordinal));
             // ⑫ 每个控件标签都必须有悬停说明(.<key>.tip 中英两套齐)。
             //
             //    2026-10-17 用户要求：「鼠标移到功能上 自动弹出功能的介绍」。
@@ -442,7 +442,7 @@ namespace UiPreview
                 "㉑c Escape 不得进入允许集(它是取消键，放开会打断进关流程)",
                 "Features\\Replay\\Patch_SpecialKeys.cs",
                 s => s.Contains("KeyCode.Escape", StringComparison.Ordinal)
-                     && s.Contains("\"Escape\"", StringComparison.Ordinal));
+                    && s.Contains("\"Escape\"", StringComparison.Ordinal));
             // ㉒ 「删除回放文件」必须是**两段式**（2026-10-18 用户要求新增该按钮）。
             //
             //    这条按钮的失败方式与别的不同：它不是「没反应」，而是**删错**。
@@ -460,8 +460,8 @@ namespace UiPreview
                 "㉒a 每行要有删除按钮且真的调 File.Delete",
                 "Pages\\Pages.cs",
                 s => s.Contains("DrawDeleteFileButton(captured)", StringComparison.Ordinal)
-                     && MethodBody(s, "DrawDeleteFileButton") is string db
-                     && db.Contains("File.Delete(path)", StringComparison.Ordinal));
+                    && MethodBody(s, "DrawDeleteFileButton") is string db
+                    && db.Contains("File.Delete(path)", StringComparison.Ordinal));
             fail += Check(projectRoot,
                 "㉒b 删除必须两段式：第一次点击不许删文件",
                 "Pages\\Pages.cs",
@@ -470,13 +470,13 @@ namespace UiPreview
                 "㉒c 删掉当前载入的回放要连带卸载(否则界面还显示已载入一个不存在的文件)",
                 "Pages\\Pages.cs",
                 s => MethodBody(s, "AfterReplayDeleted") is string ab
-                     && ab.Contains("_loadedPath = \"\"", StringComparison.Ordinal)
-                     && ab.Contains("UnloadReplay", StringComparison.Ordinal));
+                    && ab.Contains("_loadedPath = \"\"", StringComparison.Ordinal)
+                    && ab.Contains("UnloadReplay", StringComparison.Ordinal));
             fail += Check(projectRoot,
                 "㉒d 删完要刷列表缓存(1 秒缓存会让已删的行还在，再点就是删不存在的路径)",
                 "Pages\\Pages.cs",
                 s => MethodBody(s, "AfterReplayDeleted") is string ab2
-                     && ab2.Contains("_replayCache = null", StringComparison.Ordinal));
+                    && ab2.Contains("_replayCache = null", StringComparison.Ordinal));
             // ㉓ 回放详情面板（2026-10-18 用户要求「点击回放文件可以看信息」）。
             //
             //    这块最容易出的错不是「没画出来」，而是**为了拿数据把文件装载了**：
@@ -487,24 +487,24 @@ namespace UiPreview
                 "㉓a 点文件名要能展开详情(ClickableLabel + Toggle + Draw)",
                 "Pages\\Pages.cs",
                 s => s.Contains("Gui.ClickableLabel(", StringComparison.Ordinal)
-                     && s.Contains("ReplayInfoPanel.Toggle(captured)", StringComparison.Ordinal)
-                     && s.Contains("ReplayInfoPanel.Draw(captured)", StringComparison.Ordinal));
+                    && s.Contains("ReplayInfoPanel.Toggle(captured)", StringComparison.Ordinal)
+                    && s.Contains("ReplayInfoPanel.Draw(captured)", StringComparison.Ordinal));
             fail += Check(projectRoot,
                 "㉓b 读详情必须无副作用(走 ReadReplayData，不许 LoadReplay)",
                 "Features\\Replay\\ReplayFileInfo.cs",
                 s => s.Contains("ReplayManager.ReadReplayData(", StringComparison.Ordinal)
-                     && !s.Contains("ReplayManager.LoadReplay(", StringComparison.Ordinal)
-                     && !s.Contains("LoadReplayAuto(", StringComparison.Ordinal));
+                    && !s.Contains("ReplayManager.LoadReplay(", StringComparison.Ordinal)
+                    && !s.Contains("LoadReplayAuto(", StringComparison.Ordinal));
             fail += Check(projectRoot,
                 "㉓c 删掉文件后要收起展开位(否则下一帧去读不存在的路径)",
                 "Pages\\Pages.cs",
                 s => MethodBody(s, "AfterReplayDeleted") is string ab
-                     && ab.Contains("ReplayInfoPanel.Forget(", StringComparison.Ordinal));
+                    && ab.Contains("ReplayInfoPanel.Forget(", StringComparison.Ordinal));
             fail += Check(projectRoot,
                 "㉓d 判定分布文案键必须是字面量表(动态拼键会被判成死键)",
                 "Features\\Replay\\ReplayFileInfo.cs",
                 s => CountOccurrences(s, "\"playback.judge.") >= 16
-                     && s.Contains("JudgmentLocaleKeys", StringComparison.Ordinal));
+                    && s.Contains("JudgmentLocaleKeys", StringComparison.Ordinal));
             // ㉔ 官方关卡回放必须记录**真实 BPM**（2026-10-18 用户截图报「官方关卡
             //    的 BPM 怎么是个问号」）。
             //
@@ -684,11 +684,12 @@ namespace UiPreview
         /// <summary>去特效六个子分组是否都挂 <c>EffectRemoverOn</c>。</summary>
         private static bool EffectsSectionsDimWithMaster(string code)
         {
-            foreach (string title in new[]
-                     {
-                         "effects.visual", "effects.decor", "effects.track",
-                         "effects.planet", "effects.audio", "effects.gameplay",
-                     })
+            string[] titles =
+            {
+                "effects.visual", "effects.decor", "effects.track",
+                "effects.planet", "effects.audio", "effects.gameplay",
+            };
+            foreach (string title in titles)
             {
                 if (!SectionEndsWith(code, title, "EffectRemoverOn")) return false;
             }
@@ -1022,8 +1023,8 @@ namespace UiPreview
             // （无法识别的转义序列），而 [TF]\( 这类反斜杠会让转义更难读。
             const string Pattern = @"GUILayout\.Button\(\s*Loc\.[TF]\(""([^""]+)""";
             int n = 0;
-            foreach (System.Text.RegularExpressions.Match m in
-                     System.Text.RegularExpressions.Regex.Matches(code, Pattern))
+            var hits = System.Text.RegularExpressions.Regex.Matches(code, Pattern);
+            foreach (System.Text.RegularExpressions.Match m in hits)
             {
                 if (m.Groups[1].Value == key)
                     n++;
@@ -1131,9 +1132,10 @@ namespace UiPreview
             var keys = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
             // Row / RowSlider / RowDropdown / RowHotkey / RowInput / Button
             // 共用同一个形状：OnGui.<Method>("<key>", ...
-            foreach (System.Text.RegularExpressions.Match m in
-                     System.Text.RegularExpressions.Regex.Matches(pagesCode,
-                         @"OnGui\.(?:Row|RowSlider|RowDropdown|RowHotkey|RowInput|Button)\(\s*""([a-z][a-z0-9_.]+)"""))
+            var hits = System.Text.RegularExpressions.Regex.Matches(
+                pagesCode,
+                @"OnGui\.(?:Row|RowSlider|RowDropdown|RowHotkey|RowInput|Button)\(\s*""([a-z][a-z0-9_.]+)""");
+            foreach (System.Text.RegularExpressions.Match m in hits)
             {
                 keys.Add(m.Groups[1].Value);
             }
@@ -1211,8 +1213,11 @@ namespace UiPreview
         /// </summary>
         private static bool AllRowsHaveGap(string code)
         {
-            foreach (string m in new[]
-                     { "Row", "RowSlider", "RowDropdown", "RowHotkey", "RowInput", "Button" })
+            string[] rows =
+            {
+                "Row", "RowSlider", "RowDropdown", "RowHotkey", "RowInput", "Button",
+            };
+            foreach (string m in rows)
             {
                 string body = MethodBody(code, m);
                 if (body == null || !body.Contains("RowGap();", StringComparison.Ordinal)) return false;
@@ -1298,7 +1303,7 @@ namespace UiPreview
             if (body == null) return false;
             // 允许 newest > current 与 current < newest 两种等价写法，但**不许**反向。
             bool forward = body.Contains("newest > current", StringComparison.Ordinal)
-                           || body.Contains("current < newest", StringComparison.Ordinal);
+                        || body.Contains("current < newest", StringComparison.Ordinal);
             if (!forward) return false;
             // 排除「反差方向也写了一遍」这种破坏对称性的写法。
             if (body.Contains("newest < current", StringComparison.Ordinal)) return false;
@@ -1338,7 +1343,7 @@ namespace UiPreview
         private static bool InfoJsonHasUpdateFields(string code)
         {
             return HasNonEmptyJsonField(code, "Repository")
-                   && HasNonEmptyJsonField(code, "HomePage");
+                && HasNonEmptyJsonField(code, "HomePage");
         }
 
         /// <summary>JSON 里是否有 <c>"name": "非空"</c>。宽容空格与顺序。</summary>

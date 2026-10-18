@@ -538,8 +538,8 @@ internal static class SpectrePatchHub
             holder = candidates.FirstOrDefault(m => SignatureMatches(m, a.ParameterTypes));
         if (holder == null) return null;
         foreach (var sma in holder.GetCustomAttributes(
-                     typeof(System.Runtime.CompilerServices.StateMachineAttribute), false)
-                     .Cast<System.Runtime.CompilerServices.StateMachineAttribute>())
+                    typeof(System.Runtime.CompilerServices.StateMachineAttribute), false)
+                    .Cast<System.Runtime.CompilerServices.StateMachineAttribute>())
         {
             MethodBase moveNext = sma.StateMachineType?.GetMethod("MoveNext",
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);

@@ -48,7 +48,7 @@ namespace UiPreview
             // 取 { 与 try 之间的代码，剥空行后应只剩一句 Debug.Log
             string pre = code.Substring(brace + 1, tryAt - brace - 1).Trim();
             bool isLog = pre.Contains("Debug.Log", StringComparison.Ordinal)
-                         && pre.Contains("Load()", StringComparison.Ordinal);
+                        && pre.Contains("Load()", StringComparison.Ordinal);
             Console.WriteLine($"    {(isLog ? "✓" : "✗")} ① try 之前有 Debug.Log 启动行"
                 + (isLog ? "" : $"（实际是: {Short(pre)}）"));
             if (!isLog) fail++;

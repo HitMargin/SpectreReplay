@@ -80,7 +80,7 @@ namespace UiPreview
             var f = typeof(SpectreReplay.Ui.Loc).GetField(field,
                 BindingFlags.NonPublic | BindingFlags.Static);
             return f?.GetValue(null) as Dictionary<string, string>
-                   ?? new Dictionary<string, string>();
+                ?? new Dictionary<string, string>();
         }
     }
 }

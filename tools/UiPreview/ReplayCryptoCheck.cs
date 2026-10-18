@@ -152,7 +152,7 @@ namespace UiPreview
                     && plainGz[3] == 0x63 && plainGz[4] == 0x72 && plainGz[5] == 0x70;
                 Console.WriteLine($"    {(ok ? "✓" : "✗")} ⑥ 上游 Spectre 的旧格式文件仍可解开"
                     + (ok ? $"（{Path.GetFileName(sprp)}，AES {raw.Length}B → gzip {dec.Length}B → 明文 {plainGz.Length}B）"
-                          : "（读侧回落坏了）"));
+                        : "（读侧回落坏了）"));
                 if (!ok) fail++;
             }
             catch (Exception ex)
@@ -182,8 +182,8 @@ namespace UiPreview
             aes.Key = key; aes.IV = iv;
             using MemoryStream ms = new MemoryStream();
             using (var cs = new CryptoStream(ms,
-                       encrypt ? aes.CreateEncryptor() : aes.CreateDecryptor(),
-                       CryptoStreamMode.Write))
+                    encrypt ? aes.CreateEncryptor() : aes.CreateDecryptor(),
+                    CryptoStreamMode.Write))
                 cs.Write(data, 0, data.Length);
             return ms.ToArray();
         }

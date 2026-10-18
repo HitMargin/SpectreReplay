@@ -127,7 +127,7 @@ internal static class ReplayPlayer
         var inputs = _inputBuffer;
         inputs.Clear();
         while (KeyEventIndex < data.KeyEvent_list.Count
-               && songPosition >= data.KeyEvent_list[KeyEventIndex].SongPosition)
+            && songPosition >= data.KeyEvent_list[KeyEventIndex].SongPosition)
         {
             var ev = data.KeyEvent_list[KeyEventIndex];
             if (Settings.LegacyEngine && Application.isFocused)

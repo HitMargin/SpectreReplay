@@ -468,8 +468,8 @@ namespace SpectreReplay.Ui
             }
             s = s.Trim().Replace("－", "-").Replace("．", ".");
             return float.TryParse(s, System.Globalization.NumberStyles.Float,
-                       System.Globalization.CultureInfo.InvariantCulture, out v)
-                   && !float.IsNaN(v) && !float.IsInfinity(v);
+                    System.Globalization.CultureInfo.InvariantCulture, out v)
+                && !float.IsNaN(v) && !float.IsInfinity(v);
         }
 
         /// <summary>

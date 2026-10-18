@@ -186,7 +186,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // 游戏更新若改动该式需同步此处。起歌段 AudioSettings.dspTime 相对音频捕获有
         // 暖机滞后（~150ms 记账假象，实测不影响成片音画，判读见 renderClock 注释）
         double audioAnchor = (AudioSettings.dspTime - conductor.dspTimeSong - (double)scrConductor.calibration_i)
-                             * conductor.song.pitch - conductor.addoffset;
+                            * conductor.song.pitch - conductor.addoffset;
 
         // ── 双轨时钟：Transpiler 可用走确定性 RenderClock，否则走旧音频游标 ──
         // 新轨优势：时钟完全由帧号驱动（帧号÷fps），不受音频缓冲量化抖动影响；
@@ -327,13 +327,13 @@ internal sealed class VideoRenderJob : MonoBehaviour
                 bool live = conductor != null && conductor.song != null;
                 double unpinned = live
                     ? (AudioSettings.dspTime - conductor.dspTimeSong - (double)scrConductor.calibration_i)
-                      * conductor.song.pitch - conductor.addoffset
+                    * conductor.song.pitch - conductor.addoffset
                     : double.NaN;
                 Debug.Log($"[SpectreReplay] renderClock f={frameIndex} audio={clockSeconds:0.0000}s ideal={ideal:0.0000}s "
-                          + $"drift={(clockSeconds - ideal) * 1000.0:0.0}ms sr={mixdown.SampleRate} "
-                          + (live
-                              ? $"pitch={conductor.song.pitch:0.00} pin={VideoRender.PinnedSongPosition:0.000} dspPos={unpinned:0.000}"
-                              : $"pitch=- pin={VideoRender.PinnedSongPosition:0.000} dspPos=n/a (conductor gone)"));
+                        + $"drift={(clockSeconds - ideal) * 1000.0:0.0}ms sr={mixdown.SampleRate} "
+                        + (live
+                            ? $"pitch={conductor.song.pitch:0.00} pin={VideoRender.PinnedSongPosition:0.000} dspPos={unpinned:0.000}"
+                            : $"pitch=- pin={VideoRender.PinnedSongPosition:0.000} dspPos=n/a (conductor gone)"));
             }
 
             Flush();
@@ -696,7 +696,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // 顺带消掉 FindObjectsOfType 的过时警告。此处仍需覆盖未激活对象——视频背景
         // 可能在接管时刻尚未 SetActive(true)，漏掉就会在首次显示时失去调速控制。
         foreach (UnityEngine.Video.VideoPlayer vp in FindObjectsByType<UnityEngine.Video.VideoPlayer>(
-                     FindObjectsSortMode.None))
+                    FindObjectsSortMode.None))
         {
             if (vp == null) continue;
             pinnedVideosWerePlaying.Add(vp.isPlaying);
