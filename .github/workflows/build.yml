@@ -139,6 +139,11 @@ jobs:
       # 防 tag 与元数据漂移：info.json 才是 UMM 认的版本号。
       # 两者不一致时发布出去的是一个"版本号说谎"的包，安装端更新检查会失灵，
       # 而这在构建日志里看不出来。
+      #
+      # **预发布 tag 只核对基础版本。** v0.1.0-rc1 对应 info.json 的 0.1.0：
+      # UMM 用 System.Version 解析 info.json 的 Version，"0.1.0-rc1" 会直接
+      # 解析失败、模组根本加载不起来——所以预发布信息只能留在 tag 上，
+      # 不能写进 info.json。要求它与 tag 逐字相等等于禁止预发布。
       - name: Verify tag matches info.json
         shell: pwsh
         run: |
@@ -146,11 +151,17 @@ jobs:
           if (-not $info) { Write-Error "构建产物里没有 info.json"; exit 1 }
           $version = (Get-Content $info.FullName -Raw | ConvertFrom-Json).Version
           $tag = '${{ github.ref_name }}'.TrimStart('v')
-          if ($version -ne $tag) {
-            Write-Error "info.json Version ($version) 与 tag (${{ github.ref_name }}) 不一致"
+          # 去掉 -rc1 / -beta2 之类的预发布后缀再比
+          $base = ($tag -split '-')[0]
+          if ($version -ne $base) {
+            Write-Error "info.json Version ($version) 与 tag (${{ github.ref_name }}) 的基础版本 ($base) 不一致"
             exit 1
           }
-          Write-Host "[release] ✓ info.json Version = $version"
+          if ($version -ne $tag) {
+            Write-Host "[release] ✓ info.json Version = $version；tag ${{ github.ref_name }} 是预发布（基础版本一致）"
+          } else {
+            Write-Host "[release] ✓ info.json Version = $version"
+          }
 
       # mod 包：dll + info.json 平铺在 zip 根。loader 靠 info.json 发现模组，
       # 缺了它 DLL 根本不会被加载（README 的安装步骤同此口径）。
@@ -182,6 +193,10 @@ jobs:
           files: |
             SpectreReplay-${{ github.ref_name }}.zip
             ffmpeg.exe
+          # tag 里带 '-'（v0.1.0-rc1）即为预发布。**必须显式写**：
+          # 不写时 softprops 默认建成正式版，预发布 tag 会直接出现在
+          # 所有用户的"最新版本"里——而它按定义还不是发布候选。
+          prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
           body: |
             安装 / Install：
