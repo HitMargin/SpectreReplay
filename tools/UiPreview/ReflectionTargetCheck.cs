@@ -17,8 +17,8 @@ namespace UiPreview
         internal static int Run(string projectRoot)
         {
             Console.WriteLine("  ── 运行期反射目标 ──");
-            string game = Find(@"D:\Projects\adofai-libs\Assembly-CSharp.dll");
-            string core = Find(@"D:\Projects\adofai-libs\UnityEngine.CoreModule.dll");
+            string game = Find(SrcUtil.GameAssembly("Assembly-CSharp.dll"));
+            string core = Find(SrcUtil.GameAssembly("UnityEngine.CoreModule.dll"));
             if (game == null || core == null)
             {
                 Console.WriteLine("    · 找不到游戏/引擎程序集，跳过");
@@ -103,8 +103,10 @@ namespace UiPreview
             Type audio = asmCore.GetType("UnityEngine.AudioSettings");
             if (audio == null)
             {
-                // AudioSettings 在 UnityEngine.AudioModule，不在 CoreModule
-                string audioDll = Find(@"D:\Projects\adofai-libs\UnityEngine.AudioModule.dll");
+                // AudioSettings 在 UnityEngine.AudioModule，不在 CoreModule。
+                // 路径同样走 SrcUtil：写死绝对路径会让这条判据在 CI 里静默降级成
+                // 「找不到 AudioSettings，跳过」——而混音轨起录抛异常只在游戏里才看得见。
+                string audioDll = Find(SrcUtil.GameAssembly("UnityEngine.AudioModule.dll"));
                 audio = audioDll == null ? null : Assembly.LoadFrom(audioDll).GetType("UnityEngine.AudioSettings");
             }
             if (audio == null)

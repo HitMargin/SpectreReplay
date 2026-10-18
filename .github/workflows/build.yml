@@ -1,0 +1,172 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+# 同一分支上重复触发时取消旧的一轮。与本项目的闸门哲学一致：
+# 让最新的结果尽快出来，旧结果作废比排队更有意义。
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+# 工作区布局**必须**是：
+#   <ws>/SpectreReplay   本仓库（checkout 的 path）
+#   <ws>/adofai-libs     游戏托管程序集（私有仓）
+#   <ws>/Spectre         上游 Spectre（port-diff-audit 要比对源码）
+# 理由：csproj 里 31 个 HintPath 全写的是 `..\..\adofai-libs\<dll>`，
+# 没有一条绝对路径。checkout 到子目录、依赖放在同级，本地布局与 CI 完全一致。
+# 两个环境变量是给 tools/ 下的审计脚本和 UiPreview 用的——它们有
+# 「环境变量 → 仓库同级目录 → 历史绝对路径」三级回退，CI 里走第一级。
+env:
+  ADOFAI_LIBS: ${{ github.workspace }}\adofai-libs
+  SPECTRE_UPSTREAM: ${{ github.workspace }}\Spectre\Spectre
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: SpectreReplay
+          # 不持久化 GITHUB_TOKEN 的 extraheader —— 下面克隆私有依赖仓用的是
+          # URL 形式 token，extraheader 正是实测被拒的那种认证方式。
+          persist-credentials: false
+
+      # 私有依赖仓 2228293026/adofai-libs。用**显式 git clone + URL 形式 token**，
+      # 不用 actions/checkout 的 `token:` 输入：后者内部走 http.extraheader，
+      # 实测被 GitHub 拒成 "remote: invalid credentials"；URL 形式是唯一验过能用的。
+      # 克隆失败必须让这一步红——库缺失时主项目根本编译不过，而
+      # "先绿后报错"会把"依赖没拉下来"伪装成"代码有问题"。
+      - name: Clone adofai-libs
+        shell: bash
+        env:
+          LIBS_TOKEN: ${{ secrets.LIBS_ACCESS_TOKEN }}
+        run: |
+          if [ -z "$LIBS_TOKEN" ]; then
+            echo "::error::secrets.LIBS_ACCESS_TOKEN 未配置——私有依赖仓 clone 不了"
+            exit 1
+          fi
+          git clone --depth 1 \
+            "https://x-access-token:${LIBS_TOKEN}@github.com/2228293026/adofai-libs.git" \
+            adofai-libs
+          # 克隆完把 token 从 remote URL 里去掉：它会以明文留在 .git/config，
+          # 而后续步骤（审计脚本里会跑 git status）没必要带着它。
+          git -C adofai-libs remote set-url origin \
+            https://github.com/2228293026/adofai-libs.git
+
+      # 上游 Spectre 是公开仓，匿名可克隆。port-diff-audit 是真门禁：
+      # 找不到上游它会 exit 3，绝不静默跳过（否则"移植保真度"在 CI 里等于没跑）。
+      # 不取子模块：比对只用 Spectre/ 下的源码，SpectrePatch / QuartzUi 不参与。
+      #
+      # **钉到与本地工作区相同的 commit**（本地 D:\Projects\Spectre 就在这个 SHA）。
+      # 跟 master 走的话，上游任何一次重构都会让本仓的 CI 变红，而红的原因
+      # 与本次提交毫无关系——闸门一旦长期假红，真正的问题就被淹了
+      # （同 verify.ps1 -Ci 里那两条跳过的理由）。升级上游时这里和本地一起改。
+      - name: Clone upstream Spectre (port-diff reference)
+        shell: bash
+        env:
+          SPECTRE_REF: 1d84227a7bd378f9ee0b68552d20c83fcbbb03e8
+        run: |
+          git init Spectre
+          git -C Spectre remote add origin https://github.com/adofaiex/Spectre.git
+          git -C Spectre fetch --depth 1 origin "$SPECTRE_REF"
+          git -C Spectre checkout --detach FETCH_HEAD
+
+      # SpectreReplay.slnx 需要 SDK 10（本地 10.0.402）。
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      # 一个闸门跑完全部离线验证：主项目构建（netstandard2.1）+
+      # 离线预览套件（net10.0-windows）+ 7 个只读审计。
+      # -Ci 只跳过两项依赖本机安装的检查（Steam 部署一致性、上游工作区干净），
+      # 其余照常全跑——这与「绿着的闸门其实有几项没跑」的忌讳一致。
+      - name: Verify (offline gates)
+        shell: pwsh
+        working-directory: SpectreReplay
+        run: ./tools/verify.ps1 -Ci
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: SpectreReplay
+          path: |
+            SpectreReplay/bin/Release/SpectreReplay.dll
+            SpectreReplay/bin/Release/info.json
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: SpectreReplay
+          path: ./build
+
+      - name: List artifact structure
+        shell: pwsh
+        run: Get-ChildItem -Recurse -File build | ForEach-Object { $_.FullName }
+
+      # 防 tag 与元数据漂移：info.json 才是 UMM 认的版本号。
+      # 两者不一致时发布出去的是一个"版本号说谎"的包，安装端更新检查会失灵，
+      # 而这在构建日志里看不出来。
+      - name: Verify tag matches info.json
+        shell: pwsh
+        run: |
+          $info = Get-ChildItem -Recurse -File build -Filter info.json | Select-Object -First 1
+          if (-not $info) { Write-Error "构建产物里没有 info.json"; exit 1 }
+          $version = (Get-Content $info.FullName -Raw | ConvertFrom-Json).Version
+          $tag = '${{ github.ref_name }}'.TrimStart('v')
+          if ($version -ne $tag) {
+            Write-Error "info.json Version ($version) 与 tag (${{ github.ref_name }}) 不一致"
+            exit 1
+          }
+          Write-Host "[release] ✓ info.json Version = $version"
+
+      # mod 包：dll + info.json 平铺在 zip 根。loader 靠 info.json 发现模组，
+      # 缺了它 DLL 根本不会被加载（README 的安装步骤同此口径）。
+      - name: Package mod zip
+        shell: pwsh
+        run: |
+          $dll  = Get-ChildItem -Recurse -File build -Filter SpectreReplay.dll | Select-Object -First 1
+          $info = Get-ChildItem -Recurse -File build -Filter info.json          | Select-Object -First 1
+          if (-not $dll)  { Write-Error "构建产物里没有 SpectreReplay.dll"; exit 1 }
+          if (-not $info) { Write-Error "构建产物里没有 info.json"; exit 1 }
+          New-Item -ItemType Directory -Force stage | Out-Null
+          Copy-Item $dll.FullName  stage/
+          Copy-Item $info.FullName stage/
+          Compress-Archive -Path stage/* -DestinationPath "SpectreReplay-${{ github.ref_name }}.zip"
+
+      # 视频渲染需要 ffmpeg。与上游 Spectre 发布包同源（BtbN win64-gpl，
+      # 含 NVENC/x264），资产名保持 ffmpeg.exe 以便直接丢进 mod 目录。
+      - name: Download ffmpeg
+        shell: pwsh
+        run: |
+          curl.exe -L --fail -o ffmpeg.zip https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip
+          Expand-Archive -Path ffmpeg.zip -DestinationPath ffmpeg_extract
+          Get-ChildItem -Path ffmpeg_extract -Recurse -Filter ffmpeg.exe |
+            Select-Object -First 1 | Move-Item -Destination .
+
+      - name: Create release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            SpectreReplay-${{ github.ref_name }}.zip
+            ffmpeg.exe
+          generate_release_notes: true
+          body: |
+            安装 / Install：
+            1. 安装 [UnityModManager](https://www.nexusmods.com/site/mods/21)
+            2. 解压 `SpectreReplay-${{ github.ref_name }}.zip`，把 `SpectreReplay.dll` 与 `info.json`
+               放入 `UnityModManager/ADOfAI/Mods/SpectreReplay/`
+               （`info.json` 是 loader 发现模组的唯一依据，缺了它 DLL 不会被加载）
+            3. 视频渲染需要 ffmpeg：下载本页 `ffmpeg.exe`（Windows x64），
+               放入 mod 目录、游戏根目录或 PATH 任一位置

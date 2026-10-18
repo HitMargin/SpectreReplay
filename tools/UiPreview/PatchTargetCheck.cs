@@ -334,13 +334,9 @@ namespace UiPreview
 
         private static string FindGameAssembly()
         {
-            string[] candidates =
-            {
-                @"D:\Projects\adofai-libs\Assembly-CSharp.dll",
-            };
-            foreach (var c in candidates)
-                if (File.Exists(c)) return c;
-            return null;
+            // 路径解析统一收在 SrcUtil（环境变量 → 上级同级目录 → 历史路径）。
+            string c = SrcUtil.GameAssembly("Assembly-CSharp.dll");
+            return (c != null && File.Exists(c)) ? c : null;
         }
     }
 }

@@ -3,10 +3,23 @@
   只处理两边都有的同名文件（移植保真度核验）。
 #>
 $ErrorActionPreference = 'Stop'
-$ours   = 'D:\Projects\SpectreReplay\SpectreReplay'
-$theirs = 'D:\Projects\Spectre\Spectre'
+$repoRoot = Split-Path -Parent $PSScriptRoot
+$ours   = Join-Path $repoRoot 'SpectreReplay'
+
+# 上游 Spectre 源码位置：① 环境变量 SPECTRE_UPSTREAM（CI 用）
+# ② 仓库同级的 Spectre\Spectre ③ 历史绝对路径。
+# 这条审计是**真门禁**：找不到上游时不能静默跳过，否则"移植保真度"
+# 在 CI 里等于没跑，而闸门只会更绿。
+$theirs = if ($env:SPECTRE_UPSTREAM -and (Test-Path $env:SPECTRE_UPSTREAM)) { $env:SPECTRE_UPSTREAM }
+          elseif (Test-Path (Join-Path $repoRoot '..\Spectre\Spectre')) {
+              (Resolve-Path (Join-Path $repoRoot '..\Spectre\Spectre')).Path }
+          elseif (Test-Path 'D:\Projects\Spectre\Spectre') { 'D:\Projects\Spectre\Spectre' }
+          else { $null }
+if (-not $theirs) {
+    Write-Output "✗ 找不到上游 Spectre 源码：设 SPECTRE_UPSTREAM 指到 ...\Spectre\Spectre"
+    exit 3
+}
 if (-not (Test-Path $ours))   { Write-Output "✗ 源目录不存在：$ours";   exit 3 }
-if (-not (Test-Path $theirs)) { Write-Output "✗ 源目录不存在：$theirs"; exit 3 }
 
 $ourFiles = @(Get-ChildItem $ours -Recurse -File -Filter *.cs -ErrorAction Stop |
     Where-Object { $_.FullName -notmatch '\\(obj|bin)\\' })

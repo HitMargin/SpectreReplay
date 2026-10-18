@@ -15,12 +15,26 @@ param(
     [switch]$SkipBuild,
     [switch]$SkipPreview,
     [switch]$SkipDeploy,
-    [switch]$SkipAudits
+    [switch]$SkipAudits,
+    # CI 模式：跳过所有依赖本机安装的项（部署一致性比对 Steam 目录、
+    # 「Spectre 未被污染」检查本机那份上游工作区）。这两项在 CI 里
+    # 不是"没部署"就是"目录不存在"，会让每次构建都以失败收场，
+    # 而那与代码质量无关——闸门一旦长期假红，真正的问题就被淹了。
+    # 其余各项（构建 / 离线套件 / 只读审计）在 CI 里照常全跑。
+    [switch]$Ci
 )
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $fail = 0
+
+# **必须把控制台解码设成 UTF-8。** Windows PowerShell 5.1 读原生程序输出时用的是
+# 控制台 OEM 码页（中文系统 936、英文 CI 437），而 dotnet 输出的是 UTF-8。
+# 于是 `✓` / `✗` 全被解成乱码：2026-10-19 实测闸门印出「断言 0 条，失败 0」——
+# **零失败和零断言长得一模一样**，整套离线套件等于没跑，闸门却一直是绿的。
+# 这正是本文件开头警告的那种失效形态。
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
+$OutputEncoding = [Console]::OutputEncoding
 
 function Step($name, [scriptblock]$body) {
     Write-Host ''
@@ -138,6 +152,16 @@ if (-not $SkipPreview) {
         foreach ($b in $bad) { Write-Host ('  ' + $b.Trim()) -ForegroundColor Red }
         Write-Host ('  断言 ' + ($good.Count + $bad.Count) + ' 条，失败 ' + $bad.Count)
         if ($bad.Count -gt 0) { $script:fail++ }
+        # **0 条断言必须判红。** 这里踩过一次真的：控制台解码用了 OEM 码页，
+        # `✓`/`✗` 全变乱码，good/bad 两边都数到 0，闸门印着「失败 0」——
+        # 与「全部通过」肉眼无法区分。计数为 0 之前先证明自己真读到了输出，
+        # 与 tools\*audit.ps1 里那条判据同一个道理。
+        if (($good.Count + $bad.Count) -eq 0) {
+            Write-Host '  ✗ 一条断言都没解析到（输出编码或预览器崩溃？）' -ForegroundColor Red
+            Write-Host '    以下是原始输出的末尾，用于定位：' -ForegroundColor DarkGray
+            $out | Select-Object -Last 15 | ForEach-Object { Write-Host ('      ' + $_) -ForegroundColor DarkGray }
+            $script:fail++
+        }
     }
 }
 
@@ -146,6 +170,10 @@ if (-not $SkipAudits) {
 }
 
 Step '部署一致性' {
+    if ($Ci) {
+        Write-Host '  · CI 模式跳过：本机无 Steam 安装，比对没有意义'
+        return
+    }
     $built = Join-Path $root 'SpectreReplay\bin\Release\SpectreReplay.dll'
     $mod = 'D:\Program Files (x86)\Steam\steamapps\common\A Dance of Fire and Ice\Mods\SpectreReplay'
     $live = Join-Path $mod 'SpectreReplay.dll'
@@ -184,6 +212,10 @@ Step '部署一致性' {
 }
 
 Step 'Spectre 未被污染' {
+    if ($Ci) {
+        Write-Host '  · CI 模式跳过：检查的是本机那份上游工作区，CI 里不存在'
+        return
+    }
     Push-Location 'D:\Projects\Spectre'
     # 只看**已跟踪**文件的改动（git status 的第一列非 ??）。
     #

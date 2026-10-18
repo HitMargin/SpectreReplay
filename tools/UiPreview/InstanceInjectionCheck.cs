@@ -28,8 +28,8 @@ namespace UiPreview
         internal static int Run(string projectRoot)
         {
             Console.WriteLine("  ── 补丁形参注入（__instance 只对实例方法有效） ──");
-            string dll = @"D:\Projects\adofai-libs\Assembly-CSharp.dll";
-            if (!File.Exists(dll))
+            string dll = SrcUtil.GameAssembly("Assembly-CSharp.dll");
+            if (dll == null || !File.Exists(dll))
             {
                 Console.WriteLine("    · 找不到游戏程序集，跳过");
                 return 0;

@@ -7,7 +7,20 @@
 #>
 $ErrorActionPreference = 'Stop'
 $root = Join-Path (Split-Path -Parent $PSScriptRoot) 'SpectreReplay'
-$asm = [Reflection.Assembly]::LoadFrom('D:\Projects\adofai-libs\Assembly-CSharp.dll')
+
+# 游戏程序集位置：① 环境变量 ADOFAI_LIBS（CI 用）② 仓库同级的 adofai-libs
+# ③ 历史绝对路径。写死绝对路径时 CI 必挂，而这三个审计是闸门登记过的真门禁
+# ——挂掉的表现会被当成"CI 环境有问题"，与"代码真有问题"混在一起。
+$libs = if ($env:ADOFAI_LIBS -and (Test-Path $env:ADOFAI_LIBS)) { $env:ADOFAI_LIBS }
+        elseif (Test-Path (Join-Path (Split-Path -Parent $PSScriptRoot) '..\adofai-libs')) {
+            (Resolve-Path (Join-Path (Split-Path -Parent $PSScriptRoot) '..\adofai-libs')).Path }
+        else { 'D:\Projects\adofai-libs' }
+$asmPath = Join-Path $libs 'Assembly-CSharp.dll'
+if (-not (Test-Path $asmPath)) {
+    Write-Output "✗ 找不到游戏程序集：$asmPath（设 ADOFAI_LIBS 指到 adofai-libs 目录）"
+    exit 3
+}
+$asm = [Reflection.Assembly]::LoadFrom($asmPath)
 
 # **必须先证明源目录读到了东西。** 实测（round 38）：root 解析错时
 # Get-ChildItem 不会静默返回 0，而是**递归遍历父目录**并在无关路径上抛

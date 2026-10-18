@@ -6,7 +6,19 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $src = Join-Path $root 'SpectreReplay'
-$asm = [Reflection.Assembly]::LoadFrom('D:\Projects\adofai-libs\Assembly-CSharp.dll')
+
+# 游戏程序集位置：① 环境变量 ADOFAI_LIBS（CI 用）② 仓库同级的 adofai-libs
+# ③ 历史绝对路径。理由同 instance-injection-audit.ps1。
+$libs = if ($env:ADOFAI_LIBS -and (Test-Path $env:ADOFAI_LIBS)) { $env:ADOFAI_LIBS }
+        elseif (Test-Path (Join-Path $root '..\adofai-libs')) {
+            (Resolve-Path (Join-Path $root '..\adofai-libs')).Path }
+        else { 'D:\Projects\adofai-libs' }
+$asmPath = Join-Path $libs 'Assembly-CSharp.dll'
+if (-not (Test-Path $asmPath)) {
+    Write-Output "✗ 找不到游戏程序集：$asmPath（设 ADOFAI_LIBS 指到 adofai-libs 目录）"
+    exit 3
+}
+$asm = [Reflection.Assembly]::LoadFrom($asmPath)
 # 读不到源目录时 Get-ChildItem 会去递归遍历父目录、在无关路径抛 AccessDenied
 # （round 38 实测），报错指不到"路径指错了"这个根因。先在此处拦住。
 if (-not (Test-Path $src)) {

@@ -6,12 +6,21 @@
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify.ps1
 ```
 
-四个参数：`-SkipBuild` / `-SkipPreview` / `-SkipDeploy`（游戏在跑时 dll 会被锁，
-用 `-SkipDeploy` 跳过部署那一节）/ `-SkipAudits`（跳过只读审计那一节）。
+五个参数：`-SkipBuild` / `-SkipPreview` / `-SkipDeploy`（游戏在跑时 dll 会被锁，
+用 `-SkipDeploy` 跳过部署那一节）/ `-SkipAudits`（跳过只读审计那一节）/
+`-Ci`（跳过两项依赖本机安装的检查：Steam 部署一致性、上游工作区干净。
+CI 里这两项不是"没部署"就是"目录不存在"，长期假红会淹掉真问题；
+其余各项在 CI 里照常全跑）。
+
+> **控制台输出必须按 UTF-8 解码**，`verify.ps1` 开头已显式设置。
+> 2026-10-19 实测过一次：Windows PowerShell 5.1 用 OEM 码页（936/437）
+> 读 `dotnet` 的 UTF-8 输出，`✓`/`✗` 全成乱码，闸门印出
+> **「断言 0 条，失败 0」**——与全绿肉眼无法区分，整套离线套件等于没跑。
+> 现在「0 条断言」本身判红，并贴出原始输出末尾用于定位。
 
 五件事绑成一次判定，任何一项红就返回非零：主项目构建、离线验证套件、
 **只读审计**（7 个离线审计脚本）、线上 dll 与构建产物的 sha256 一致、
-`D:\Projects\Spectre` 工作区干净。
+`D:\Projects\Spectre` 工作区干净。（后两项只在本地跑，`-Ci` 跳过。）
 
 > **当前打印 67 条断言 0 失败**（2026-10-19 实测）。这个数字会随轮次变，
 > 引用前先跑一遍 `verify.ps1` 看真实条数。**注意它是「✓ 行数」而不是判据数**
