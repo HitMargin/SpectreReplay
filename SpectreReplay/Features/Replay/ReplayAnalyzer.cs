@@ -105,15 +105,25 @@ internal static class ReplayAnalyzer
                 if (double.IsNaN(ms) || double.IsInfinity(ms))
                     continue;
                 samples.Add((float)ms);
-                // 窗口角度走 MarginBoundary.Raw 的原版语义（不经过任何判定改写 Postfix）。
+                // 窗口宽度直接问游戏自己（r150 的 scrMisc.GetAdjustedAngleBoundaryInDeg）。
+                //
+                // **这里原先是一份本地复刻**（Features\Compat\MarginBoundary.Raw），
+                // 2026-10-18 用户问「不能改成完全用游戏自带的代码？」后删掉。删的理由：
+                // 那份复刻逐字抄的是这个函数，58 行里没有任何自研逻辑，而它当初存在的
+                // 唯一理由是"不许被别的 mod 改写过的原版窗口"——该理由描述的是**旧版**
+                // 上游做法（用 Postfix 改这个函数的返回值）。r150 该函数改成返回结构体，
+                // 结构体没法用 ref __result 注入，上游于是改挂判定入口
+                // （GetHitMarginInDeg / GetHitMarginInSec）——**没有任何 mod 会改它了**。
+                //
                 // 注意它返回的是【度】，须先转回弧度再用与误差相同的逆变换，
-                // 否则窗口会被放大 180/π ≈ 57 倍，散点图全部误绿
+                // 否则窗口会被放大 180/π ≈ 57 倍，散点图全部误绿。
+                // 它一次给全四条边（Counted/Perfect/Pure/XPerfect），我们只要两条。
                 double degToMs = (Math.PI / 180.0) * 60.0
                     / (Math.PI * pitch * bpmTimesSpeed) * 1000.0;
-                perfectWins.Add((float)(Features.Compat.MarginBoundary.Raw(
-                    HitMarginGeneral.Perfect, bpmTimesSpeed, pitch, 1.0) * degToMs));
-                pureWins.Add((float)(Features.Compat.MarginBoundary.Raw(
-                    HitMarginGeneral.Pure, bpmTimesSpeed, pitch, 1.0) * degToMs));
+                var win = scrMisc.GetAdjustedAngleBoundaryInDeg(
+                    GCS.difficulty, bpmTimesSpeed, pitch, 1.0);
+                perfectWins.Add((float)(win.Perfect * degToMs));
+                pureWins.Add((float)(win.Pure * degToMs));
             }
         }
         finally

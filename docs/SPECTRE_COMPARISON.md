@@ -786,8 +786,9 @@ ms = 角差(rad) × 60 / (π × pitch × bpm×speed) × 1000
 三处与 Spectre 的差异，都是有意为之：
 
 - **不算 Perfect/Pure 窗口宽度**。（**2026-10-17 更新**：现由
-  `Features/Compat/MarginBoundary.Raw` 提供——它就是从已删除的
-  `CustomJudge.BoundaryRaw` 摘出来的窗口数学，见下「CustomJudge 移除」一节。）
+  `CustomJudge.BoundaryRaw` 摘出来的窗口数学提供；**2026-10-18 再更新**：
+  那份本地复刻已删除，改成直接调游戏自带的
+  `scrMisc.GetAdjustedAngleBoundaryInDeg`——见下「CustomJudge 移除」一节。）
 - **`TimingReport()` 返回 null 表示"算不了"，不返回空报告**。
   画一个空分组会让人以为"分析结果是 0"，而真实原因只是"还没载入"。
 - **每次重算，不加缓存**。它只在 OnGUI 里调，而逐砖 speed 会随关卡推进变化，
@@ -1237,8 +1238,12 @@ MUT-AK 也一起挂掉**。定位靠 `git diff` 里 `-﻿<#` / `+﻿﻿<#` 那�
   `Spectre.dll` 与 `SpectreReplay.dll` 自己含 `SpectreAPI/GetTierDefinitions/
   GetLastHitTier` 字符串 ⇒ 删对外接口是安全的。
 
-处置：窗口数学摘为 `Features/Compat/MarginBoundary.Raw`（只留数学，
-不留任何判定改写能力），其余**整体删除**——`Features/CustomJudge/`
+处置：窗口数学最初摘为 `Features/Compat/MarginBoundary.Raw`（只留数学，
+不留任何判定改写能力），**2026-10-18 该复刻也删除了**——用户问「不能改成
+完全用游戏自带的代码？」，查实 `scrMisc.GetAdjustedAngleBoundaryInDeg`
+是 `public static`，而我们那份 58 行复刻里没有任何自研逻辑（逐字照抄），
+当初"不许被别的 mod 改写"的理由也随 r150 上游改挂判定入口而失效。
+其余**整体删除**——`Features/CustomJudge/`
 目录、`Settings` 的 CustomJudge/CustomTier* 字段、`ConfigManager` 的
 `CustomJudgeData` 与读写分支、`SpectreAPI` 的档位 API 面、
 `SpectreState` 的自定义 xacc 分支、`FeatureKeys` 三个常量、

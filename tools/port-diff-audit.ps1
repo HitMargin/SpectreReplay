@@ -143,11 +143,15 @@ $knownDeviations = @(
     # ── 2026-10-17 移除 CustomJudge 特性（用户裁决）────────────────────
     # 用户原话：「CustomJudge 并不属于replay和视频渲染的部分啊」。判定改写整套
     # （档位/状态/档案/改判定的补丁）都不是本项目的事，已整体删除。
-    # 但判定窗口**数学**是 replay 真需要的（散点图按原版窗口归一化着色、找不到
-    # 游戏函数时兜底），故摘出为 Features\Compat\MarginBoundary.Raw。
-    # 上游那边这个函数叫 CustomJudge.BoundaryRaw。
-    @{ Pat = 'MarginBoundary.Raw';                  Why = '2026-10-17 CustomJudge 移除：窗口数学摘到 Compat（replay 仍需要）' }
-    @{ Pat = 'Features.Compat.MarginBoundary.Raw';  Why = '同上：调用点改指新家' }
+    # 判定窗口**数学**是 replay 真需要的(散点图按原版窗口归一化着色)。
+    # 最初摘为 Features\Compat\MarginBoundary.Raw(上游那边叫 CustomJudge.BoundaryRaw)，
+    # 2026-10-18 用户问「不能改成完全用游戏自带的代码？」后**连那份复刻也删了**：
+    # scrMisc.GetAdjustedAngleBoundaryInDeg 是 public static，复刻里没有自研逻辑，
+    # 而「不许被别的 mod 改写」的理由随 r150 上游改挂判定入口而失效。
+    @{ Pat = 'scrMisc.GetAdjustedAngleBoundaryInDeg'; Why = '2026-10-18 改用游戏自带窗口边界(删掉本地复刻 MarginBoundary.Raw)' }
+    @{ Pat = 'win.Perfect';                         Why = '同上：一次取回四条边结构体，散点图取 Perfect/Pure 两条' }
+    @{ Pat = 'GCS.difficulty';                     Why = '同上：难度要作为实参传给游戏函数(复刻版读的是同一个全局，改成显式传参)' }
+    @{ Pat = 'win.Pure';                            Why = '同上：从结构体取 Pure 边(复刻版是按枚举分支算一条，现在一次取全四条)' }
     @{ Pat = 'Features.Compat';                    Why = '2026-10-17 CustomJudge 移除：窗口数学落到 Compat 命名空间（上游在 Features.CustomJudge）' }
     @{ Pat = 'perfectWins.Add';                     Why = '同上：散点图完美窗口（原调 CustomJudge.BoundaryRaw）' }
     # -- 2026-10-17 RenderClock 做成实验性开关（用户要求）------------------
