@@ -222,6 +222,12 @@ $knownDeviations = @(
     # [1B 算法号][4B 原文长度][压缩体]，算法 0=raw/1=gzip/2=Brotli(q6)，
     # 旧 gzip 流(解密后首字节 0x1F)仅解压侧回落。Encoder/Decoder 各改一行接线。
     @{ Pat = 'ReplayCompression.';                   Why = '2026-10-18 压缩层换 Brotli(q6)：包装层独立成 ReplayCompression.cs，编解码两端接线到它' }
+    # -- 2026-10-18 .psprp（不解密变体）原本永远打不开 ----------------------
+    # 列表会列出 .psprp，点「回放」却走解密分支（首字节不是 SRC2）⇒ 直接判损坏。
+    # 修法：按扩展名在 ReadReplayData 里自动判定是否需要解密——扩展名是这条信息
+    # 唯一的权威来源（保存时由 SaveReplayNew 决定写哪种），不该要求每个调用点记得传。
+    @{ Pat = 'filePath.EndsWith';                    Why = '2026-10-18 修 .psprp 打不开：按扩展名自动跳过解密（上游没有这个变体的载入路径）' }
+    @{ Pat = 'StringComparison.OrdinalIgnoreCase';    Why = '2026-10-18 同上：扩展名大小写不敏感' }
     @{ Pat = 'ReplayConstants.Compression';          Why = '2026-10-18 同上：算法号/头长常量(Raw=0/Gzip=1/Brotli=2/HeaderLen=5)' }
 )
 

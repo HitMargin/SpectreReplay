@@ -132,11 +132,42 @@ internal static class ReplayManager
     /// </summary>
     internal static bool LoadReplay(out LegacyReplayData replayData, string filePath, bool no_encryption = false)
     {
+        if (!ReadReplayData(out replayData, filePath, no_encryption))
+            return false;
+        // 只有真正「装载」时才碰键盘音。**这一句有副作用**：它会无条件改写
+        // SpectreState.HasKeybdSound 与 WavLoader.loaded_clip，把此前载入的
+        // 回放的键盘音顶掉。所以「只看文件信息」必须走 ReadReplayData，
+        // 不能图省事复用它。
+        TryLoadKeybdSound(filePath, replayData);
+        Debug.Log("replay load!");
+        return true;
+    }
+
+    /// <summary>
+    /// 只把回放数据读出来，**不产生任何全局副作用**（不碰键盘音、不改 SpectreState）。
+    ///
+    /// <para>给「点开文件看信息」用：那条路径要拿到元数据，但玩家并没有装载它，
+    /// 不该因此改变当前回放的播放状态。</para>
+    /// </summary>
+    internal static bool ReadReplayData(out LegacyReplayData replayData, string filePath,
+        bool no_encryption = false)
+    {
         replayData = new LegacyReplayData();
         if (!File.Exists(filePath))
         {
             Debug.LogError("[SpectreReplay] 回放文件不存在: \"" + filePath + "\"");
             return false;
+        }
+        // **按扩展名自动判定要不要解密。** 这里曾经只信调用方传的 no_encryption，
+        // 而界面那条路从来没传过它：`.psprp`（不解密变体）照样被列进回放列表、
+        // 也照样点了「回放」，然后走解密分支——首字节不是 SRC2，直接判「文件损坏」。
+        // 也就是说 .psprp 在界面上一直是**看得见、点得着、但永远打不开**。
+        // 扩展名是这条信息唯一的权威来源（保存时由 SaveReplayNew 决定写哪种），
+        // 所以在这里判，而不是要求每个调用点自己记得传。
+        if (!no_encryption
+            && filePath.EndsWith(ReplayConstants.ExtensionNoEncrypt, StringComparison.OrdinalIgnoreCase))
+        {
+            no_encryption = true;
         }
         byte[] raw = File.ReadAllBytes(filePath);
         if (raw.Length < 8)
@@ -180,8 +211,6 @@ internal static class ReplayManager
             return false;
         }
         replayData = ReplayDecoder.ConvertToOldFormat(replay);
-        TryLoadKeybdSound(filePath, replayData);
-        Debug.Log("replay load!");
         return true;
     }
 

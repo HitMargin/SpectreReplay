@@ -1295,7 +1295,54 @@ switch ($Which) {
         Backup 'Features\Replay\ReplayCrypto.cs'
         ReplaceExact 'Features\Replay\ReplayCrypto.cs' 'Buffer.BlockCopy(iv, 0, buf, p, IVLen); p += IVLen;' 'p += IVLen;'
     }
-    'MUT-D3' {
+    'MUT-D7' {
+        # ㉓a 入口回归：文件名退回普通 Label，点不开详情。
+        Backup 'Pages\Pages.cs'
+        $lines = Lines 'Pages\Pages.cs'
+        $hit = 0
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Contains('Gui.ClickableLabel(Path.GetFileNameWithoutExtension(path),')) {
+                $lines[$i] = $lines[$i].Replace('Gui.ClickableLabel(Path.GetFileNameWithoutExtension(path),', 'GUILayout.Label(Path.GetFileNameWithoutExtension(path),')
+                $hit++
+            }
+        }
+        if ($hit -ne 1) { throw "MUT-D7 命中 $hit 次" }
+        SetLines 'Pages\Pages.cs' $lines
+    }
+    'MUT-D8' {
+        # ㉓b 副作用回归：读详情改用会碰键盘音的 LoadReplay。
+        Backup 'Features\Replay\ReplayFileInfo.cs'
+        ReplaceExact 'Features\Replay\ReplayFileInfo.cs' 'if (!ReplayManager.ReadReplayData(out data, path))' 'if (!ReplayManager.LoadReplay(out data, path))'
+    }
+    'MUT-D9' {
+        # ㉓c 收起回归：删文件后不再收起展开位（下一帧去读不存在的路径）。
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' 'ReplayInfoPanel.Forget(path);' ''
+    }
+    'MUT-D10' {
+        # ㉓d 字面量回归：把判定文案键的**字面量数组整个拿掉**，只留动态拼接。
+        #      这正是该判据拦的形态——键不再是字面量，Loc 反向判据会把
+        #      那 16 个 key 判成死键（或者有人为了让判据过而把死键留在表里）。
+        #      注意不能只改取值那一行：数组还在，字面量计数照样达标（假阴性）。
+        Backup 'Features\Replay\ReplayFileInfo.cs'
+        $lines = Lines 'Features\Replay\ReplayFileInfo.cs'
+        $start = -1
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Contains('string[] JudgmentLocaleKeys')) { $start = $i; break }
+        }
+        if ($start -lt 0) { throw 'MUT-D10 锚点未找到' }
+        $end = -1
+        for ($i = $start + 1; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Trim() -eq '};') { $end = $i; break }
+        }
+        if ($end -lt 0) { throw 'MUT-D10 收尾未找到' }
+        $out = @()
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($i -gt $start -and $i -lt $end) { continue }
+            $out += $lines[$i]
+        }
+        SetLines 'Features\Replay\ReplayFileInfo.cs' $out
+    }    'MUT-D3' {
         # ㉒b 两段式回归：把「第一次点击只进入待确认」那道早退去掉，
         #      第一次点击就直接删 —— 手滑一次那局回放就没了。
         Backup 'Pages\Pages.cs'

@@ -272,8 +272,13 @@ namespace SpectreReplay.Pages
                             GUILayout.Width(46f), GUILayout.Height(20f)),
                             Loc.T("playback.loaded"), Gui.OkCol);
                     }
-                    GUILayout.Label(Path.GetFileNameWithoutExtension(path),
-                        loaded ? Gui.BoldStyle : Gui.LabelStyle, GUILayout.ExpandWidth(true));
+                    // 文件名本身就是展开详情的开关。**不另加一颗「详情」按钮**：
+                    // 这一行已经有两颗按钮（回放 / 删除），再加一颗会让「点名字」
+                    // 这个玩家的自然动作失效——点了没反应，还得再找那颗小按钮。
+                    Gui.ClickableLabel(Path.GetFileNameWithoutExtension(path),
+                        loaded || ReplayInfoPanel.IsOpen(captured),
+                        "playback.info.tip",
+                        () => ReplayInfoPanel.Toggle(captured));
                     if (GUILayout.Button(Loc.T("playback.replay"), Gui.ButtonStyle,
                             GUILayout.Width(110f), GUILayout.Height(22f)))
                     {
@@ -284,6 +289,12 @@ namespace SpectreReplay.Pages
                     // 视觉权重；用 QuietButtonStyle 与「卸载回放」同一档。
                     DrawDeleteFileButton(captured);
                     GUILayout.EndHorizontal();
+
+                    // 详情就地展开在这一行正下方（点文件名切换）。
+                    if (ReplayInfoPanel.IsOpen(captured))
+                    {
+                        ReplayInfoPanel.Draw(captured);
+                    }
                 }
             });
         }
@@ -385,6 +396,9 @@ namespace SpectreReplay.Pages
         /// </summary>
         private static void AfterReplayDeleted(string path)
         {
+            // 详情面板若正展开这一份，必须收起——它读的文件已经不在了，
+            // 留着会让下一帧去读一个不存在的路径（每次都失败、每次都记日志）。
+            ReplayInfoPanel.Forget(path);
             if (string.Equals(path, _loadedPath, StringComparison.OrdinalIgnoreCase))
             {
                 try

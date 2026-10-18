@@ -1,4 +1,4 @@
-// 界面层的控制流/接线断言。
+﻿// 界面层的控制流/接线断言。
 //
 // 为什么单独一组：上一轮（偏差 25）11 条界面缺陷在 116 条断言全绿的情况下
 // 全部漏网，原因是闸门没有界面层。补上的 UiLogicCheck 那 6 组盯着"控制流形状"，
@@ -461,8 +461,35 @@ namespace UiPreview
                 "Pages\\Pages.cs",
                 s => MethodBody(s, "AfterReplayDeleted") is string ab2
                      && ab2.Contains("_replayCache = null", StringComparison.Ordinal));
-            if (fail == 0)
-                Console.WriteLine("    ✓ 四十条界面形状判据都成立");
+            // ㉓ 回放详情面板（2026-10-18 用户要求「点击回放文件可以看信息」）。
+            //
+            //    这块最容易出的错不是「没画出来」，而是**为了拿数据把文件装载了**：
+            //    载入路径里那句 TryLoadKeybdSound 会无条件改写全局键盘音，
+            //    于是「看一眼信息」就把当前正放的回放的键盘音顶掉——没有报错、
+            //    现象是「播放到一半突然没键盘声了」，几乎追不到是点了详情。
+            fail += Check(projectRoot,
+                "㉓a 点文件名要能展开详情(ClickableLabel + Toggle + Draw)",
+                "Pages\\Pages.cs",
+                s => s.Contains("Gui.ClickableLabel(", StringComparison.Ordinal)
+                     && s.Contains("ReplayInfoPanel.Toggle(captured)", StringComparison.Ordinal)
+                     && s.Contains("ReplayInfoPanel.Draw(captured)", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㉓b 读详情必须无副作用(走 ReadReplayData，不许 LoadReplay)",
+                "Features\\Replay\\ReplayFileInfo.cs",
+                s => s.Contains("ReplayManager.ReadReplayData(", StringComparison.Ordinal)
+                     && !s.Contains("ReplayManager.LoadReplay(", StringComparison.Ordinal)
+                     && !s.Contains("LoadReplayAuto(", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㉓c 删掉文件后要收起展开位(否则下一帧去读不存在的路径)",
+                "Pages\\Pages.cs",
+                s => MethodBody(s, "AfterReplayDeleted") is string ab
+                     && ab.Contains("ReplayInfoPanel.Forget(", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㉓d 判定分布文案键必须是字面量表(动态拼键会被判成死键)",
+                "Features\\Replay\\ReplayFileInfo.cs",
+                s => CountOccurrences(s, "\"playback.judge.") >= 16
+                     && s.Contains("JudgmentLocaleKeys", StringComparison.Ordinal));            if (fail == 0)
+                Console.WriteLine("    ✓ 四十四条界面形状判据都成立");
             return fail;
         }
 

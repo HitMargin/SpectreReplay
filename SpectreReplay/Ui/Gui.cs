@@ -422,6 +422,56 @@ namespace SpectreReplay.Ui
             GUILayout.EndHorizontal();
         }
 
+        /// <summary>
+        /// 一行可以点的文字（回放列表里的文件名）。
+        ///
+        /// <para><b>为什么不用 <c>GUILayout.Button</c>。</b>这颗按钮的语义是
+        /// 「展开详情」，给它一块按钮底色会让它和同一行的「回放」「删除」抢
+        /// 视觉权重——那两颗才是行动。所以外观保持纯文字，只补两件事：
+        /// ① 悬停时变强调色（全页一致性：凡可点必须有 hover 反馈）；
+        /// ② 悬停说明（这一页每颗控件都要能自我解释）。</para>
+        ///
+        /// <para><b>为什么用 <c>GUI.Button</c> 而不是自己判 <c>Event.current</c>。</b>
+        /// 点击的判定要处理 Layout/Repaint 两趟、焦点、以及 UMM 那层 ScrollView
+        /// 的事件拦截。自己判等于重写一遍 IMGUI 的点击语义，且必然在某一趟里
+        /// 重复触发（一个点击删两份回放那种）。这里让 GUI.Button 负责命中，
+        /// 只是把它的外观换成文字。</para>
+        /// </summary>
+        internal static void ClickableLabel(string text, bool active, string tipKey, Action onClick)
+        {
+            Ensure();
+            Rect r = GUILayoutUtility.GetRect(1f, 20f, GUILayout.ExpandWidth(true));
+            bool hot = r.Contains(Event.current != null ? Event.current.mousePosition : new Vector2(-1f, -1f));
+            Tip(r, tipKey);
+            Color old = GUI.color;
+            if (hot) GUI.color = Accent;
+            // active = 这一条正在展开：用粗体标出，否则展开后看不出是哪一行。
+            GUIStyle st = active ? _bold : _label;
+            if (GUI.Button(r, text, st))
+            {
+                GUI.color = old;
+                if (onClick != null) onClick();
+                return;
+            }
+            GUI.color = old;
+        }
+
+        /// <summary>
+        /// 窄标签版「标签 + 值」，给**两列并排**的信息面板用（回放文件详情）。
+        ///
+        /// <para>为什么需要两个版本：<see cref="LabelW"/>=190 是按设置页那一列
+        /// 长标签（「允许覆盖关卡」这类）定的；信息面板里标签都很短（「命中」
+        /// 「时长」），用 190 会让一列吃掉三分之一宽度，两列就放不下。</para>
+        /// </summary>
+        internal const float LabelWNarrow = 104f;
+        internal static void KeyValueNarrow(string labelKey, string value, Color valueColor)
+        {
+            Ensure();
+            GUILayout.Label(Loc.T(labelKey), _small, GUILayout.Width(LabelWNarrow));
+            Text(GUILayoutUtility.GetRect(1f, 18f, GUILayout.ExpandWidth(true)),
+                value ?? "", valueColor, _label);
+        }
+
         /// <summary>一条进度条。total&lt;=0 时直接返回，避免 0/0 得到 NaN 宽度
         /// ——NaN 传给 GUI.DrawTexture 会抛 ArgumentException 打断整个 OnGUI，
         /// 而 UMM 对 OnGUI 异常的处理是"把整个设置面板收掉"。
