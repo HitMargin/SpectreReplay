@@ -1,4 +1,4 @@
-// 离线验证（移植 Spectre 后）：只验不碰引擎的纯逻辑层。
+﻿// 离线验证（移植 Spectre 后）：只验不碰引擎的纯逻辑层。
 //   · LocCheck      文案表完整性
 //   · HardTextCheck 用户可见中文有没有写死
 //   · ReplayCheck   回放文件格式往返（Encoder/Decoder 真实源码）
@@ -52,9 +52,9 @@ namespace UiPreview
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
             int logPrefixFail = LogPrefixCheck.Run(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
-            int orphanFail = PortedCompletenessCheck.NoOrphanChecks(
+            int scatterFail = HitScatterMathCheck.Run();            int orphanFail = PortedCompletenessCheck.NoOrphanChecks(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
-            int total = locFail + hardFail + replayFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + injectFail + logPrefixFail + orphanFail;
+            int total = locFail + hardFail + replayFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + injectFail + logPrefixFail + scatterFail + orphanFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
@@ -45,6 +45,7 @@
     
     <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayCrypto.cs" Link="Real\ReplayCrypto.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\LegacyReplayData.cs" Link="Real\LegacyReplayData.cs" />
+    <Compile Include="..\..\SpectreReplay\Ui\HitScatterMath.cs" Link="Real\HitScatterMath.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1295,7 +1295,18 @@ switch ($Which) {
         Backup 'Features\Replay\ReplayCrypto.cs'
         ReplaceExact 'Features\Replay\ReplayCrypto.cs' 'Buffer.BlockCopy(iv, 0, buf, p, IVLen); p += IVLen;' 'p += IVLen;'
     }
-    'MUT-D7' {
+    'MUT-D11' {
+        # ② 抽稀回归：退回「每格取第一个」——1499 击只画 500 根，
+        #      统计里的 -166.4ms 恰好不在所在格首位，图上就找不到它。
+        Backup 'Ui\HitScatterMath.cs'
+        ReplaceExact 'Ui\HitScatterMath.cs' '                float a = Math.Abs(samples[i]);' '                float a = -1f;'
+    }
+    'MUT-D12' {
+        # ① 着色回归：退回「Perfect 恒宽于 Pure」的错误假设——
+        #      用 original 的顺序比较，让中间那档永远不可达。
+        Backup 'Ui\HitScatterMath.cs'
+        ReplaceExact 'Ui\HitScatterMath.cs' '            if (absMs <= tightMs) return Band.Best;' '            if (absMs <= wideMs) return Band.Best;'
+    }    'MUT-D7' {
         # ㉓a 入口回归：文件名退回普通 Label，点不开详情。
         Backup 'Pages\Pages.cs'
         $lines = Lines 'Pages\Pages.cs'
