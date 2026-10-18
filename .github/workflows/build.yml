@@ -91,13 +91,34 @@ jobs:
         working-directory: SpectreReplay
         run: ./tools/verify.ps1 -Ci
 
+      # **构建产物必须真的存在，且这里判红。** upload-artifact 找不到文件时
+      # 只发一条 warning，**步骤本身仍然成功**——第一次 CI 就是这样：build 绿、
+      # artifact 空、直到 release 才发现没货。断言必须排在构建之后、上传之前。
+      - name: Assert build output exists
+        shell: pwsh
+        run: |
+          $dll  = 'SpectreReplay/SpectreReplay/bin/Release/SpectreReplay.dll'
+          $info = 'SpectreReplay/SpectreReplay/bin/Release/info.json'
+          foreach ($p in @($dll, $info)) {
+            if (-not (Test-Path $p)) {
+              Write-Error "构建产物不存在：$p（检查工作区布局与 OutputPath）"
+              exit 1
+            }
+            Write-Host ("[artifact] ✓ {0}  ({1} B)" -f $p, (Get-Item $p).Length)
+          }
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
           name: SpectreReplay
+          # **两层 SpectreReplay。** 本仓库被 checkout 到 <ws>/SpectreReplay
+          # （见文件头的工作区布局），工程目录本身也叫 SpectreReplay，
+          # 所以产物在 SpectreReplay/SpectreReplay/bin/Release/。
+          # 少写一层时 upload-artifact 只发一条 annotation、**步骤仍然成功**
+          # （第一次 CI 就是这样：build 绿了，artifact 为空，release 才发现没货）。
           path: |
-            SpectreReplay/bin/Release/SpectreReplay.dll
-            SpectreReplay/bin/Release/info.json
+            SpectreReplay/SpectreReplay/bin/Release/SpectreReplay.dll
+            SpectreReplay/SpectreReplay/bin/Release/info.json
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')

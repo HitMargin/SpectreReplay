@@ -38,6 +38,14 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $src  = Join-Path $root 'SpectreReplay'
 $utf8 = New-Object Text.UTF8Encoding($false)
+
+# **控制台解码必须设成 UTF-8**（同 verify.ps1）。5.1 读原生输出默认按 OEM 码页，
+# 而 dotnet 写的是 UTF-8：`✓`/`✗` 全成乱码，good/bad 都数到 0。
+# 后果比 verify.ps1 那边更隐蔽——变异执行器会把「一条都没解析到」判成
+# 「这条变异没让闸门变红 ⇒ 断言是假的」，于是**判据本身被冤枉**。
+# 2026-10-19 实测：MUT-CR4 明明修坏了旧格式回落，这里却报「断言 0 条」并判假。
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
+$OutputEncoding = [Console]::OutputEncoding
 $touched = New-Object System.Collections.ArrayList
 
 # 目标不在离屏套件里的变异：它们改的文件没链进 UiPreview（见 UiPreview.csproj 的
@@ -1544,6 +1552,16 @@ $bad = @($out | Where-Object { $_ -match '^\s+✗' })
 $good = @($out | Where-Object { $_ -match '^\s+✓' })
 foreach ($b2 in $bad) { Write-Host ('  ' + $b2.Trim()) -ForegroundColor Red }
 Write-Host ('  断言 ' + ($good.Count + $bad.Count) + ' 条，失败 ' + $bad.Count)
+
+# **0 条断言 = 无法判定，不能记成「断言是假的」。** 解析不到输出与
+# 「变异没被检出」是两件事：前者说明预览器崩了或编码不对，后者才是判据有问题。
+# 混为一谈会让执行器去追一个不存在的假断言。exit 2 与「脚本没跑成」同义。
+if (($good.Count + $bad.Count) -eq 0) {
+    Cleanup
+    Write-Host '✗ 一条断言都没解析到（预览器崩溃或输出编码不对）——无法判定本次变异' -ForegroundColor Red
+    $out | Select-Object -Last 15 | ForEach-Object { Write-Host ('  ' + $_) -ForegroundColor DarkGray }
+    exit 2
+}
 
 Cleanup
 Write-Host ("已还原 " + $Which) -ForegroundColor Yellow

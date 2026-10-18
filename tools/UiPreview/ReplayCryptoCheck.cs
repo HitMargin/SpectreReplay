@@ -152,35 +152,30 @@ namespace UiPreview
                 fail++;
             }
 
-            // ⑥ 跨模组互读：拿 Spectre 的真 .sprp 喂真实实现
-            string[] candidates =
-            {
-                @"D:\Program Files (x86)\Steam\steamapps\common\A Dance of Fire and Ice\Mods\Spectre",
-            };
-            string specDir = candidates.FirstOrDefault(Directory.Exists);
-            if (specDir == null)
-            {
-                Console.WriteLine("    · 找不到 Spectre 模组目录，跳过互读");
-                return fail;
-            }
-            var sprp = Directory.GetFiles(specDir, "*.sprp", SearchOption.AllDirectories)
-                .OrderByDescending(File.GetLastWriteTimeUtc).FirstOrDefault();
-            if (sprp == null)
-            {
-                Console.WriteLine("    · Spectre 目录里没有 .sprp，跳过互读");
-                return fail;
-            }
+            // ⑥ 跨模组互读：拿上游 Spectre 旧格式的 .sprp 喂真实实现。
+            //
+            // **夹具在仓库里，不读本机安装。** 原先这段扫
+            // `...\Mods\Spectre\*.sprp`，找不到就 `return fail`——于是：
+            //   ① CI 里这条永远不跑（第一次 CI 跑出来 66 条断言，本地 68 条，
+            //      差的就是它与下面那行汇总，而两边都是绿的）；
+            //   ② 早退连汇总行一起跳过，日志里看不出少了什么；
+            //   ③ 它依赖玩家自己的存档，那既不可复现也不该进公开仓库。
+            // 夹具由 tools/gen-legacy-sprp.ps1 按上游 ReplayCrypto.cs 的**原始格式**
+            // （AES-256-CBC，key=SHA256("qwerty")，固定 IV=SHA256("potato")，正文为
+            // gzip 流）生成，内容是合成的：只证明"读侧回落没坏"，不含任何玩家数据。
             try
             {
-                byte[] raw = File.ReadAllBytes(sprp);
-                byte[] dec = SpectreReplay.Features.Replay.ReplayCrypto.Decrypt(raw);
+                string fixture = Path.GetFullPath(Path.Combine(
+                    projectRoot, "..", "tools", "UiPreview", "fixtures", "legacy-sprp.bin"));
+                byte[] raw = File.Exists(fixture) ? File.ReadAllBytes(fixture) : null;
+                byte[] dec = raw == null ? null : SpectreReplay.Features.Replay.ReplayCrypto.Decrypt(raw);
                 byte[] plainGz = dec == null ? null : Gunzip(dec);
                 bool ok = plainGz != null && plainGz.Length >= 8
                     && plainGz[0] == 0x53 && plainGz[1] == 0x50 && plainGz[2] == 0x52
                     && plainGz[3] == 0x63 && plainGz[4] == 0x72 && plainGz[5] == 0x70;
                 Console.WriteLine($"    {(ok ? "✓" : "✗")} ⑥ 上游 Spectre 的旧格式文件仍可解开"
-                    + (ok ? $"（{Path.GetFileName(sprp)}，AES {raw.Length}B → gzip {dec.Length}B → 明文 {plainGz.Length}B）"
-                        : "（读侧回落坏了）"));
+                    + (ok ? $"（legacy-sprp.bin，AES {raw.Length}B → gzip {dec.Length}B → 明文 {plainGz.Length}B）"
+                        : "（夹具缺失或读侧回落坏了；上游存量回放会集体打不开）"));
                 if (!ok) fail++;
             }
             catch (Exception ex)
