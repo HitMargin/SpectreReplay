@@ -789,14 +789,27 @@ namespace SpectreReplay.Pages
             var s = Features.VideoRender.VideoRender.Current;
             if (!Features.VideoRender.VideoRender.Active)
             {
-                if (!string.IsNullOrEmpty(s.Error))
+                // **按记录的终态显示，不要靠 Output 是否非空去猜。**
+                // Output 在渲染一开始就赋值了，取消时它照样非空——
+                // 原先的判据把「我取消了」显示成「渲染完成：xxx.mp4」。
+                string last;
+                switch (s.Result)
                 {
-                    GUILayout.Label(s.Error, Gui.NoteStyle, GUILayout.ExpandWidth(true));
-                    return;
+                    case Features.VideoRender.VideoRender.Outcome.Completed:
+                        last = Loc.F("status.render_done", Path.GetFileName(s.Output));
+                        break;
+                    case Features.VideoRender.VideoRender.Outcome.Canceled:
+                        last = Loc.T("status.render_canceled");
+                        break;
+                    case Features.VideoRender.VideoRender.Outcome.Failed:
+                        last = string.IsNullOrEmpty(s.Error)
+                            ? Loc.T("status.render_failed")
+                            : s.Error;
+                        break;
+                    default:
+                        last = Loc.T("status.idle");
+                        break;
                 }
-                string last = string.IsNullOrEmpty(s.Output)
-                    ? Loc.T("status.idle")
-                    : Loc.F("status.render_done", Path.GetFileName(s.Output));
                 GUILayout.Label(last, Gui.NoteStyle, GUILayout.ExpandWidth(true));
                 return;
             }

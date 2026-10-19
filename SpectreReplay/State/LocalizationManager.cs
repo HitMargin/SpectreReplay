@@ -44,6 +44,7 @@ public static class LocalizationManager
             ["rendervideo.done"] = "渲染完成",
             ["rendervideo.failed"] = "渲染失败",
             ["rendervideo.canceled"] = "已取消渲染",
+            ["rendervideo.playback_restarted"] = "渲染中止：回放被重新开始（关卡已重置，时间轴失效）",
         },
         ["en"] = new()
         {
@@ -82,6 +83,7 @@ public static class LocalizationManager
             ["rendervideo.done"] = "Render complete",
             ["rendervideo.failed"] = "Render failed",
             ["rendervideo.canceled"] = "Render canceled",
+            ["rendervideo.playback_restarted"] = "Render aborted: playback was restarted (level reset, timeline invalidated)",
         },
         ["ko"] = new()
         {
@@ -120,6 +122,7 @@ public static class LocalizationManager
             ["rendervideo.done"] = "렌더링 완료",
             ["rendervideo.failed"] = "렌더링 실패",
             ["rendervideo.canceled"] = "렌더링 취소됨",
+            ["rendervideo.playback_restarted"] = "렌더링 중단: 재생이 다시 시작되었습니다 (레벨 재설정, 타임라인 무효화)",
         },
         ["zh-t"] = new()
         {
@@ -158,6 +161,7 @@ public static class LocalizationManager
             ["rendervideo.done"] = "渲染完成",
             ["rendervideo.failed"] = "渲染失敗",
             ["rendervideo.canceled"] = "已取消渲染",
+            ["rendervideo.playback_restarted"] = "渲染中止：回放被重新開始（關卡已重置，時間軸失效）",
         },
         ["es"] = new()
         {
@@ -196,6 +200,7 @@ public static class LocalizationManager
             ["rendervideo.done"] = "Render completado",
             ["rendervideo.failed"] = "Render fallido",
             ["rendervideo.canceled"] = "Render cancelado",
+            ["rendervideo.playback_restarted"] = "Render abortado: la reproducción se reinició (nivel reiniciado, línea de tiempo invalidada)",
         },
         ["pt"] = new()
         {
@@ -234,6 +239,7 @@ public static class LocalizationManager
             ["rendervideo.done"] = "Renderização concluída",
             ["rendervideo.failed"] = "Falha na renderização",
             ["rendervideo.canceled"] = "Renderização cancelada",
+            ["rendervideo.playback_restarted"] = "Renderização abortada: a reprodução foi reiniciada (nível redefinido, linha do tempo invalidada)",
         },
         ["ja"] = new()
         {
@@ -272,6 +278,7 @@ public static class LocalizationManager
             ["rendervideo.done"] = "レンダリング完了",
             ["rendervideo.failed"] = "レンダリング失敗",
             ["rendervideo.canceled"] = "レンダリングを中止しました",
+            ["rendervideo.playback_restarted"] = "レンダリング中断：再生が再開されました（レベルがリセットされ、タイムラインが無効になりました）",
         },
         ["pl"] = new()
         {
@@ -310,6 +317,7 @@ public static class LocalizationManager
             ["rendervideo.done"] = "Renderowanie ukończone",
             ["rendervideo.failed"] = "Renderowanie nieudane",
             ["rendervideo.canceled"] = "Renderowanie anulowane",
+            ["rendervideo.playback_restarted"] = "Renderowanie przerwane: odtwarzanie zostało zrestartowane (poziom zresetowany, os czasu unieważniona)",
         },
         ["ru"] = new()
         {
@@ -348,6 +356,7 @@ public static class LocalizationManager
             ["rendervideo.done"] = "Рендер завершён",
             ["rendervideo.failed"] = "Ошибка рендера",
             ["rendervideo.canceled"] = "Рендер отменён",
+            ["rendervideo.playback_restarted"] = "Рендер прерван: воспроизведение было перезапущено (уровень сброшен, временная шкала недействительна)",
         },
         ["ro"] = new()
         {
@@ -386,6 +395,7 @@ public static class LocalizationManager
             ["rendervideo.done"] = "Randare completă",
             ["rendervideo.failed"] = "Randare eșuată",
             ["rendervideo.canceled"] = "Randare anulată",
+            ["rendervideo.playback_restarted"] = "Randare întreruptă: redarea a fost repornită (nivel resetat, cronologia invalidată)",
         },
         ["vi"] = new()
         {
@@ -424,6 +434,7 @@ public static class LocalizationManager
             ["rendervideo.done"] = "Kết xuất hoàn tất",
             ["rendervideo.failed"] = "Kết xuất thất bại",
             ["rendervideo.canceled"] = "Đã hủy kết xuất",
+            ["rendervideo.playback_restarted"] = "Kết xuất bị hủy: quá trình phát đã được khởi động lại (màn chơi đã đặt lại, dòng thời gian không còn hiệu lực)",
         },
         ["fr"] = new()
         {
@@ -462,6 +473,7 @@ public static class LocalizationManager
             ["rendervideo.done"] = "Rendu terminé",
             ["rendervideo.failed"] = "Échec du rendu",
             ["rendervideo.canceled"] = "Rendu annulé",
+            ["rendervideo.playback_restarted"] = "Rendu interrompu : la lecture a été redémarrée (niveau réinitialisé, chronologie invalidée)",
         },
         ["cs"] = new()
         {
@@ -500,6 +512,7 @@ public static class LocalizationManager
             ["rendervideo.done"] = "Renderování dokončeno",
             ["rendervideo.failed"] = "Renderování selhalo",
             ["rendervideo.canceled"] = "Renderování zrušeno",
+            ["rendervideo.playback_restarted"] = "Vykreslování přerušeno: přehrávání bylo restartováno (úroveň resetována, časová osa neplatná)",
         },
         ["de"] = new()
         {
@@ -539,6 +552,7 @@ public static class LocalizationManager
             ["rendervideo.done"] = "Rendering abgeschlossen",
             ["rendervideo.failed"] = "Rendering fehlgeschlagen",
             ["rendervideo.canceled"] = "Rendering abgebrochen",
+            ["rendervideo.playback_restarted"] = "Rendering abgebrochen: Wiedergabe wurde neu gestartet (Level zurückgesetzt, Zeitleiste ungültig)",
         }
     };
 

@@ -53,6 +53,15 @@ internal static class ReplayPlayer
         if (controller != null)
             controller.noFail = CachedNoFail ?? false;
         CachedNoFail = null;
+        // 判定模式还原：回放期可能套用过录像的难度（见 Patch_Lifecycle 的自动对齐）。
+        // 玩家自己的默认难度存在 Persistence、从未被改过，所以这里还原的是
+        // 「本局开始前 GCS 里的值」——与 noFail 的 CachedNoFail 同一套语义。
+        if (CachedDifficulty.HasValue)
+        {
+            GCS.difficulty = CachedDifficulty.Value;
+            CachedDifficulty = null;
+            SyncEditorDifficultyLabel();
+        }
         IgnoreMarkFail = false;
         SyncEditorNoFailButton();
         try

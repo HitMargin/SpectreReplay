@@ -541,6 +541,69 @@ $knownDeviations = @(
     @{ Pat = 'File.Exists';             File = 'SpectreState.cs'; Why = '同上：复制前确认源文件在' }
     @{ Pat = 'Path.Combine';            File = 'SpectreState.cs'; Why = '同上：备份路径拼装' }
     @{ Pat = 'Settings.Backup';         File = 'SpectreState.cs'; Why = '2026-10-19 主保存失败时不走备份：谓词改成 Settings.Backup && savedPath != null（上游无条件）。savedPath 为 null 时它是字符串拼接得裸串 "sprp"，File.Copy 抛异常被吞后再多报一条备份失败，把真因盖住' }
+    # ══════════════════════════════════════════════════════════════════
+    # -- 2026-10-19 判定模式自动对齐（用户问「判定和录制时对不上能不能自动调整」）--
+    # 上游遇到 JudgeMode 与当前 GCS.difficulty 不符时**直接拒绝播放**。同一份按键
+    # 数据在「标准」下是 Perfect、在「严格」下会变成 Early/Late，于是「判定与录制
+    # 时对不上」。改为临时套用录像的难度、回放结束还原；玩家自己的默认难度存在
+    # Persistence，全程不动。回放文件是玩家可编辑的文本，所以解析要 IsDefined 兜底。
+    @{ Pat = 'CachedDifficulty.HasValue'; File = 'ReplayPlayer.cs'; Why = '2026-10-19 判定模式自动对齐：只有真接管过难度才还原（null = 本局没动过）' }
+    @{ Pat = 'CachedDifficulty.Value';  File = 'ReplayPlayer.cs'; Why = '同上：取回接管前的难度写回 GCS.difficulty' }
+    @{ Pat = 'SyncEditorDifficultyLabel'; File = 'SpectreState.cs'; Why = '2026-10-19 难度被改动后刷新编辑器标签（游戏侧 UpdateDifficultyDisplay 是 private，只抄它的两行显示赋值）' }
+    @{ Pat = 'RDConstants.data.bullseyeSprites'; File = 'SpectreState.cs'; Why = '同上：靶心图标按难度下标取，与游戏 UpdateDifficultyDisplay 同一来源' }
+    @{ Pat = 'RDString.Get';            File = 'SpectreState.cs'; Why = '同上：难度名走游戏的本地化键 enum.Difficulty.*' }
+    @{ Pat = 'scnEditor.instance';      File = 'SpectreState.cs'; Why = '同上：难度选择器挂在编辑器上（编辑器不在时为 null，内部判空）' }
+    @{ Pat = 'selector.bullseyeImage';  File = 'SpectreState.cs'; Why = '同上：靶心图片字段（游戏侧 public，可安全直写）' }
+    @{ Pat = 'selector.editorDifficultyText'; File = 'SpectreState.cs'; Why = '同上：难度文本字段（游戏侧 public，可安全直写）' }
+    @{ Pat = 'System.Exception';        File = 'SpectreState.cs'; Why = '同上：纯显示刷新失败不该影响回放本身，兜住并记一行' }
+    # -- 2026-10-19 取消渲染后界面误报「渲染完成」（用户截图指出）---------
+    # 上游靠 Snapshot.Output 非空来判「已完成」。但 Output 在 BuildOutputPath 之后
+    # 立刻赋值，取消时它照样非空 ⇒ 取消显示成「渲染完成：xxx.mp4」。
+    # 改为显式记录终态 Outcome，并在 ReportEnd（所有结束路径的唯一收口）里写入。
+    @{ Pat = 'Outcome.None';            File = 'VideoRender.cs'; Why = '2026-10-19 显式记录渲染终态：无结果（不再用 Output 非空推断完成）' }
+    @{ Pat = 'Current.Result';          File = 'VideoRender.cs'; Why = '同上：快照里的终态字段，界面据此分支显示；新一轮开始时复位' }
+    @{ Pat = 'RenderClockSource.ActiveClock'; File = 'VideoRender.cs'; Why = '2026-10-19 上一轮异常退出的残留钉扎要在启动前清掉（否则下一轮拿到混合时间源，回放不动）' }
+    @{ Pat = 'VideoRender.Outcome.Canceled'; File = 'VideoRenderJob.cs'; Why = '2026-10-19 终态分派：ReportEnd 把 Canceled 映射成界面可读的终态' }
+    @{ Pat = 'VideoRender.Current.Result'; File = 'VideoRenderJob.cs'; Why = '同上：终态在唯一收口处写回快照，避免四个取消点各写一遍漏掉' }
+    @{ Pat = 'SpectreAPI.RenderEndStatus'; File = 'VideoRenderJob.cs'; Why = '同上：按 Completed/Canceled/Failed 三态分派（成功保留 Output，其余清空以免显示未生成的路径）' }
+    @{ Pat = 'rendervideo.failed';      File = 'VideoRenderJob.cs'; Why = '同上：失败通知的文案键（成功/取消/失败三态各一条）' }
+    # -- 2026-10-19 渲染结束后退出试玩（用户报「渲染完了还在播放」）---------
+    # 上游渲染第一步把编辑器切进 playtest，但整条收尾链里没有任何一步退回去，
+    # 于是成功/失败/取消三种结局都停在 playtest 里继续跑。
+    @{ Pat = 'editor.playMode';         File = 'VideoRenderJob.cs'; Why = '2026-10-19 收尾退出试玩：玩家若已自己按过 Esc 就不再重复重置编辑器' }
+    @{ Pat = 'editor.SwitchToEditMode'; File = 'VideoRenderJob.cs'; Why = '同上：照抄游戏的官方退出入口，不自己拼还原动作' }
+    @{ Pat = 'VideoRender.CaptureInProgress'; File = 'VideoRenderJob.cs'; Why = '2026-10-19 捕获期时间轴被重置要中止：Start_Rewind 二次触发会让已算好的锚点失效' }
+    @{ Pat = 'VideoRender.Current.Output'; File = 'VideoRenderJob.cs'; Why = '2026-10-19 终态写入与 mux 失败抢救共用这一字段' }
+    @{ Pat = 'VideoRender.Current.Error'; File = 'VideoRenderJob.cs'; Why = '同上：失败原因写进快照供界面显示' }
+    @{ Pat = 'unpinnedNow.ToString';    File = 'VideoRenderJob.cs'; Why = '2026-10-19 锚点自愈日志要打出重锚前后的两个时间值' }
+    @{ Pat = 'Math.Abs';                File = 'VideoRenderJob.cs'; Why = '同上：偏差取绝对值与阈值比较' }
+    @{ Pat = 'rendervideo.playback_restarted'; File = 'VideoRenderJob.cs'; Why = '2026-10-19 捕获期回放被重置：终态要报「回放被重新开始」而不是「已取消」' }
+    @{ Pat = 'rendervideo.playback_restarted'; File = 'LocalizationManager.cs'; Why = '同上：该文案键在本地化表里的定义行（14 种语言）' }
+    # -- 2026-10-19 提前还相机（用户报收尾期「镜厅」）----------------------
+    # 上游只在 TearDown 的 frames.Dispose() 里还相机，那时后台收尾可能已跑了几十秒，
+    # 期间三台相机全钉在我们的 RT 上、屏幕无人清屏。改为 ReleaseGameControl 时立刻还，
+    # 且用构造时抓的引用（渲染中切过场景会让 scrCamera.instance 指向新相机）。
+    @{ Pat = 'camStatic.targetTexture'; File = 'VideoFrameSource.cs'; Why = '2026-10-19 提前还相机：照构造时抓的引用还原，不用 scrCamera.instance（切场景后会打偏）' }
+    @{ Pat = 'camBackground.targetTexture'; File = 'VideoFrameSource.cs'; Why = '同上：第二台相机' }
+    @{ Pat = 'camMain.targetTexture';   File = 'VideoFrameSource.cs'; Why = '同上：主相机' }
+    @{ Pat = 'cam.camobj';              File = 'VideoFrameSource.cs'; Why = '同上：构造时从 scrCamera 取三台相机的入口' }
+    # -- 2026-10-19 捕获期预览相机（镜厅不只发生在收尾，整个捕获期都缺清屏）----
+    # 三台相机被劫持到我们的 RT 之后，backbuffer 没有任何相机清屏：世界冻在最后一帧，
+    # 而 IMGUI 每帧照常往上叠 ⇒ 越叠越亮、文字重影。补一台只清屏 + 贴回当前帧的相机。
+    @{ Pat = 'CameraClearFlags.SolidColor'; File = 'VideoFrameSource.cs'; Why = '2026-10-19 捕获期预览相机：每帧擦净 backbuffer，否则上一帧 IMGUI 留残影（镜厅来源）' }
+    @{ Pat = 'Color.black';             File = 'VideoFrameSource.cs'; Why = '同上：擦屏底色' }
+    @{ Pat = 'Graphics.Blit';           File = 'VideoFrameSource.cs'; Why = '同上：把当前捕获纹理贴到已被本相机清黑的 backbuffer' }
+    @{ Pat = 'Object.DontDestroyOnLoad'; File = 'VideoFrameSource.cs'; Why = '同上：预览宿主跨场景存活，随 RestoreTargets 一起销毁' }
+    @{ Pat = 'previewCamera.';          File = 'VideoFrameSource.cs'; Why = '同上：预览相机的 clearFlags/cullingMask/depth/allowHDR/allowMSAA/backgroundColor 全套设置（各参数用意见代码注释）' }
+    @{ Pat = 'previewHost.AddComponent'; File = 'VideoFrameSource.cs'; Why = '同上：预览宿主上挂机相机与贴图组件（相机自身实现不了 OnPostRender，必须独立组件接收）' }
+    @{ Pat = 'Source.texture';          File = 'VideoFrameSource.cs'; Why = '同上：贴图组件从帧源取当前捕获纹理' }
+    @{ Pat = 'VideoRender.Outcome.Completed'; File = 'VideoRenderJob.cs'; Why = '2026-10-19 显式终态：成功分支（保留 Output 供界面显示文件名）' }
+    @{ Pat = 'VideoRender.Outcome.Failed'; File = 'VideoRenderJob.cs'; Why = '同上：失败分支（Output 清空，界面改显示错误原因）' }
+    @{ Pat = 'VideoRender.SuppressSceneExitCancel'; File = 'VideoRenderJob.cs'; Why = '2026-10-19 Esc 取消：我们主动调 SwitchToEditMode 时抑制回调，避免正常收尾被误判成取消' }
+    @{ Pat = 'wantPin.ToString';        File = 'VideoRenderJob.cs'; Why = '2026-10-19 锚点自愈日志：打出重锚前的钉扎值' }
+    @{ Pat = 'Enum.TryParse';           File = 'Patch_Lifecycle.cs'; Why = '2026-10-19 判定模式自动对齐：从回放数据解析目标难度（原处是直接比较后拒绝播放）' }
+    @{ Pat = 'Features.VideoRender.VideoRender.CancelForSceneExit'; File = 'Patch_Lifecycle.cs'; Why = '2026-10-19 Esc 退出试玩要同步取消渲染作业（否则相机仍钉在 RT 上 ⇒ 镜厅 + 卡死）' }
+    @{ Pat = 'VideoRender.VideoRender.NotifyPlaybackRestarted'; File = 'Patch_Lifecycle.cs'; Why = '2026-10-19 捕获期 Start_Rewind 二次触发 = 时间轴失效，通知作业中止' }
 )
 
 Write-Output ""

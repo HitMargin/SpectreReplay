@@ -361,6 +361,37 @@ public static class SpectreState
 
     internal static bool? CachedNoFail;
 
+    // 回放期临时套用的判定模式（Difficulty.Lenient/Normal/Strict）。
+    // null = 本局没有接管过难度，Stop 时无需还原。
+    // 玩家自己的默认难度存在 Persistence 里，这里只改本次会话的 GCS.difficulty。
+    internal static Difficulty? CachedDifficulty;
+
+    /// <summary>
+    /// 把编辑器里的难度标签刷新成当前 <see cref="GCS.difficulty"/>。
+    ///
+    /// 游戏自己的 <c>EditorDifficultySelector.UpdateDifficultyDisplay</c> 是 private，
+    /// 但它的两个显示字段（<c>editorDifficultyText</c> / <c>bullseyeImage</c>）是 public，
+    /// 照同样的写法刷一遍即可。不刷的话：难度已经被我们改了，界面上还显示旧值，
+    /// 玩家会以为「判定模式没对齐」。
+    /// </summary>
+    internal static void SyncEditorDifficultyLabel()
+    {
+        var selector = scnEditor.instance != null ? scnEditor.instance.editorDifficultySelector : null;
+        if (selector == null) return;
+        try
+        {
+            if (selector.editorDifficultyText != null)
+                selector.editorDifficultyText.text = RDString.Get("enum.Difficulty." + GCS.difficulty);
+            if (selector.bullseyeImage != null)
+                selector.bullseyeImage.sprite = RDConstants.data.bullseyeSprites[(int)GCS.difficulty];
+        }
+        catch (System.Exception ex)
+        {
+            // 纯显示：刷不上不该影响回放本身
+            Debug.Log("[SpectreReplay] 难度标签刷新失败: " + ex.Message);
+        }
+    }
+
     internal static void SyncEditorNoFailButton()
     {
         if (scnEditor.instance == null) return;

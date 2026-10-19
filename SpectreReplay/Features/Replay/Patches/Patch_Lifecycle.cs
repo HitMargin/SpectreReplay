@@ -26,7 +26,17 @@ internal class Patch_WipeToBlack
 internal class Patch_SwitchToEditMode
 {
     [SpectrePatch(typeof(scnEditor), "SwitchToEditMode", PatchType.Prefix)]
-    internal static void Prefix(scnEditor __instance) => StopAll();
+    internal static void Prefix(scnEditor __instance)
+    {
+        // **渲染作业必须在这里同步收场。** 玩家按 Esc 退出试玩时走的正是这个方法，
+        // 而原先这里只调 StopAll()（停回放/录制），渲染作业完全不知情：
+        // 三台相机还钉在我们的 RenderTexture 上、预览相机还在每帧把旧帧贴回屏幕、
+        // captureFramerate 与各项钉扎也还开着。紧接着 SwitchToEditMode 恢复相机，
+        // 两套动作叠在一起 ⇒ 「镜厅特效 + 卡死」。
+        // 放在 StopAll 之前：要先停掉渲染，再让回放引擎收摊。
+        Features.VideoRender.VideoRender.CancelForSceneExit();
+        StopAll();
+    }
 }
 
 // ——— scrController.Restart ——————————————————————————————————
@@ -62,6 +72,11 @@ internal class Patch_StartRewind
     [SpectrePatch(typeof(scrController), "Start_Rewind", PatchType.Prefix, Feature = FeatureKeys.Replay)]
     internal static void Prefix()
     {
+        // 捕获期间再来一次 Start_Rewind = 关卡被重置，时间轴锚点立即失效。
+        // 不中止的话渲染会一直钉在旧锚点上，表现为「回放不动、进度条也不动」。
+        // 内部自带 CaptureInProgress 守卫：启动阶段的多次 Start_Rewind 是正常的，
+        // 不会被误判（那时捕获循环还没开始）。
+        VideoRender.VideoRender.NotifyPlaybackRestarted();
         // 渲染期把倍速钉回回放记录值。scnEditor.Play() 在程序化调用时无条件
         // 写成 1x，而 Start_Rewind 是重开/换关的统一点——这里每轮补一次，
         // TryStartPlayback 的倍速校验才可能通过（详见 VideoRender 的说明）。
@@ -221,11 +236,35 @@ internal class Patch_StartRewind
                         + " 现=" + scnGame.instance.levelData.pitch + "/" + scnGame.instance.levelData.bpm);
                     return;
                 }
+                // **判定模式不一致时自动套用录像的设置，而不是拒绝播放。**
+                // 录制时是什么难度（严格/标准/宽松），回放就按什么难度判——
+                // 否则同一份按键数据在「标准」下是 Perfect、在「严格」下就变成
+                // Early/Late，判定与录制时对不上。
+                //
+                // 玩家自己的默认难度存在 Persistence 里**不动**：这里只改本次
+                // 会话的 GCS.difficulty，回放结束（ReplayPlayer.Stop）时还原。
+                //
+                // 用 Enum.TryParse + IsDefined 而不是直接赋值：回放文件是玩家
+                // 可编辑的文本，写个 "99" 进去会让判定窗口按不存在的档位走，
+                // 且不抛异常、回放照常开始。解析失败就保持当前难度（退回旧行为）。
                 if (GCS.difficulty.ToString() != data.strings[JudgeMode])
                 {
-                    Reject(LocalizationManager.GetLocalizedText("note.play_error3") + data.strings[JudgeMode]);
-                    Debug.Log("[SpectreReplay]   细节 当前难度=" + GCS.difficulty);
-                    return;
+                    if (Enum.TryParse(data.strings[JudgeMode], out Difficulty storedDifficulty)
+                        && Enum.IsDefined(typeof(Difficulty), storedDifficulty))
+                    {
+                        CachedDifficulty = GCS.difficulty;
+                        GCS.difficulty = storedDifficulty;
+                        Debug.Log("[SpectreReplay] 判定模式自动对齐: " + CachedDifficulty
+                            + " → " + storedDifficulty + "（回放结束后还原）");
+                        SyncEditorDifficultyLabel();
+                    }
+                    else
+                    {
+                        // 解析不出合法难度：保持当前难度继续播放。判定可能与该录像
+                        // 录制时不一致，但拒绝播放会让玩家什么都做不了。
+                        Debug.Log("[SpectreReplay] 判定模式无法解析: \"" + data.strings[JudgeMode]
+                            + "\"，保持当前难度 " + GCS.difficulty);
+                    }
                 }
                 if (!IsFullRun && data.ints.TryGetValue(EndTile, out var endTileVal))
                 {

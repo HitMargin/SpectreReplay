@@ -12,6 +12,15 @@ internal static class VideoRender
 {
     internal enum Phase { Idle, Restarting, WaitingPlayback, Capturing, Finalizing }
 
+    /// <summary>
+    /// 上一次渲染的终态。
+    ///
+    /// **不能靠 <see cref="Snapshot.Output"/> 非空来推断「完成」**：Output 在渲染
+    /// 一开始就写进去了（BuildOutputPath 之后立刻赋值），取消时它照样是非空的，
+    /// 于是界面把「我取消了」显示成「渲染完成：xxx.mp4」。终态必须显式记录。
+    /// </summary>
+    internal enum Outcome { None, Completed, Failed, Canceled }
+
     // 渲染状态快照（全部主线程读写，无锁）
     internal sealed class Snapshot
     {
@@ -19,6 +28,7 @@ internal static class VideoRender
         internal string Detail = "";
         internal string Output = "";
         internal string Error = "";
+        internal Outcome Result = Outcome.None;
         internal int FramesDone;
         internal int FramesTotal;
         internal float Progress => FramesTotal > 0
@@ -109,6 +119,10 @@ internal static class VideoRender
             TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.ffmpeg_missing"), 5f, NotifType.Warning);
             return;
         }
+        // 上一轮若是异常退出（Esc / 切场景 / 崩溃），静态钉扎可能还留着。
+        // 不清的话本轮会拿到混合时间源——这正是「取消后下一次渲染回放不播放」
+        // 的成因之一。放在 Launch 之前：作业启动时看到的必须是干净状态。
+        ResetLeakedPins();
         ResetSnapshot();
         CurrentPhase = Phase.Restarting;
         Job = VideoRenderJob.Launch(encoderPath);
@@ -120,10 +134,56 @@ internal static class VideoRender
         Job?.RequestCancel();
     }
 
+    /// <summary>
+    /// 玩家按 Esc 退出试玩 / 游戏把我们踢出 playtest 时调用（见 Patch_SwitchToEditMode）。
+    ///
+    /// **必须立刻、同步地把游戏交还回去**，而不是只给作业打个取消标记：
+    /// Esc 触发的 <c>SwitchToEditMode</c> 会紧接着恢复相机、停掉 conductor，
+    /// 而渲染作业每帧还在推进钉扎时钟、预览相机每帧还在往 backbuffer 贴旧帧。
+    /// 两者叠加就是「镜厅特效 + 卡死」。
+    /// </summary>
+    internal static void CancelForSceneExit()
+    {
+        if (SuppressSceneExitCancel) return;
+        Job?.CancelForSceneExit();
+    }
+
+    /// <summary>
+    /// 我们自己主动调用 <c>SwitchToEditMode</c> 时置位，避免把正常收尾误判成
+    /// 「玩家中途退出」而把一次成功的渲染改判成取消。
+    /// 只在主线程读写。
+    /// </summary>
+    internal static bool SuppressSceneExitCancel;
+
+    /// <summary>捕获循环是否正在跑。Start_Rewind 在捕获期间再次触发 = 时间轴被重置。</summary>
+    internal static bool CaptureInProgress;
+
+    /// <summary>捕获期间回放被重新开始（Start_Rewind 二次触发）：通知作业中止。</summary>
+    internal static void NotifyPlaybackRestarted()
+    {
+        if (CaptureInProgress)
+            Job?.AbortOnPlaybackRestart();
+    }
+
+    /// <summary>
+    /// 启动前的残留清理：上一轮若是异常退出（Esc、切场景、崩溃），
+    /// 这些静态钉扎可能还留着。不清的话下一轮会拿到混合时间源，
+    /// 表现就是「下一次渲染回放不播放」。
+    /// </summary>
+    internal static void ResetLeakedPins()
+    {
+        UnpinTimeline();
+        RenderClockSource.ActiveClock = null;
+        SpeedOverrideArmed = false;
+    }
+
     // 作业结束时的收尾（无论成败），由 VideoRenderJob 调用
     internal static void CloseJob()
     {
         UnpinTimeline();
+        // 不复位的话，下一轮启动阶段的 Start_Rewind 会被 NotifyPlaybackRestarted
+        // 误判成「捕获期重启」，作业刚起步就被自己掐掉。
+        CaptureInProgress = false;
         Job = null;
         CurrentPhase = Phase.Idle;
     }
@@ -134,6 +194,10 @@ internal static class VideoRender
         Current.Detail = "";
         Current.Output = "";
         Current.Error = "";
+        // 新一轮开始：上一轮的终态必须清掉，否则渲染进行中界面还会
+        // 带着「上次已完成/已取消」的判断（Active 期间走的是进度分支，
+        // 但这个字段一旦残留，收尾瞬间会闪一下旧结果）。
+        Current.Result = Outcome.None;
         Current.FramesDone = 0;
         Current.FramesTotal = 0;
         Current.EtaSeconds = -1;

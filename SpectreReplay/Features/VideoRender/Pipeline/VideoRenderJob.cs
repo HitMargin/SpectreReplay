@@ -86,6 +86,44 @@ internal sealed class VideoRenderJob : MonoBehaviour
         cancelRequested = true;
     }
 
+    /// <summary>
+    /// 玩家按 Esc / 游戏把我们踢出试玩时，**同步**把游戏交还回去。
+    ///
+    /// 只打一个取消标记是不够的：<c>SwitchToEditMode</c> 会立刻恢复相机、停掉
+    /// conductor，而我们的捕获循环还在推进钉扎时钟、预览相机还在往屏幕贴旧帧。
+    /// 两者叠加就是「镜厅特效 + 卡死」。所以这里立刻走完整的释放链，
+    /// 并抑制 <see cref="ExitPlaytest"/>——调用方本身就是 <c>SwitchToEditMode</c>，
+    /// 再调一次会把编辑器状态重复重置。
+    /// </summary>
+    internal void CancelForSceneExit()
+    {
+        if (cancelRequested) return;
+        cancelRequested = true;
+        suppressExitPlaytest = true;
+        ReleaseGameControl();
+        Debug.Log("[SpectreReplay] render canceled by leaving playtest");
+    }
+
+    /// <summary>
+    /// 捕获期间回放被重新开始（<c>Start_Rewind</c> 二次触发）= 时间轴被重置，
+    /// 之前算好的锚点立即失效。不中止的话会一直钉在错误位置，表现为「回放不动」。
+    /// </summary>
+    internal void AbortOnPlaybackRestart()
+    {
+        if (cancelRequested) return;
+        cancelRequested = true;
+        playbackRestarted = true;
+        Debug.LogWarning("[SpectreReplay] render aborted: playback restarted during capture "
+            + "(timeline anchor invalidated)");
+    }
+
+    private bool suppressExitPlaytest;
+    private bool playbackRestarted;
+    // 锚点自愈的已重锚次数（见捕获循环里的锚点自愈段）
+    private int reAnchors;
+    // AwaitReplayAlive 用：上一帧是否已看到正的 songposition（连续两帧才算稳）
+    private bool sawPositivePosition;
+
     private void Start()
     {
         StartCoroutine(Drive());
@@ -220,15 +258,15 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // 缓冲池对齐满载深度（队列容量 + 在途回读），消除编码满载期的 LOH 重复分配
         frames.SetSparePoolLimit(encoder.QueueCapacity + frames.MaxInFlight);
 
-        // 播放 schedule 完成后锚定时间线，之后时钟跟随混音游标推进（音画同源）。
-        // 锚点从音频时钟直算（与捕获的 WAV 同域），不用 conductor.songposition_minusi——
-        // 那是 DesyncFix 平滑过的内部时钟，锚点若落在其收敛途中会带进临时偏差；
-        // 实测两源在锚点时刻相差 ≤10ms，此式更稳。
-        // 注意：此式复刻自游戏 conductor 的换算（内部 dspTime 换成 AudioSettings.dspTime），
-        // 游戏更新若改动该式需同步此处。起歌段 AudioSettings.dspTime 相对音频捕获有
-        // 暖机滞后（~150ms 记账假象，实测不影响成片音画，判读见 renderClock 注释）
-        double audioAnchor = (AudioSettings.dspTime - conductor.dspTimeSong - (double)scrConductor.calibration_i)
-                            * conductor.song.pitch - conductor.addoffset;
+        // **锚点直接取游戏自己的 songposition_minusi。**
+        // 原来从 dspTime 反推：`(dspTime - dspTimeSong - calibration) * pitch - addoffset`。
+        // 那个式子在「歌已经开始」的时刻是恒等的，但它引入了两个我们控制不了的量：
+        // dspTimeSong 的检查点平移、以及 dspTime 的缓冲记账滞后。一旦推算时刻落
+        // 在歌曲调度尚未定型的位置，锚点就会整体偏掉——实测偏出 44 秒，
+        // 回放引擎于是一直等迟迟不来的命中，表现成「回放不播放」。
+        // songposition_minusi 是游戏自己维护的权威值，跨检查点、跨 pitch 都已算好，
+        // 直接拿来当锚点，两边永远同源。
+        double audioAnchor = conductor.songposition_minusi;
 
         // ── 双轨时钟：Transpiler 可用走确定性 RenderClock，否则走旧音频游标 ──
         // 新轨优势：时钟完全由帧号驱动（帧号÷fps），不受音频缓冲量化抖动影响；
@@ -272,6 +310,9 @@ internal sealed class VideoRenderJob : MonoBehaviour
         VideoRender.Current.Detail = Path.GetFileName(outputPath);
         SetPhase(VideoRender.Phase.Capturing, "rendervideo.stage.rendering", VideoRender.Current.Detail);
 
+        // 捕获真正开始：之后的 Start_Rewind 二次触发都视为时间轴被重置
+        // （见 Patch_StartRewind → NotifyPlaybackRestarted）。
+        VideoRender.CaptureInProgress = true;
         int frameIndex = 0;
         int hardStop = VideoRender.Current.FramesTotal + 60 * fps;
         int tailFrames = Mathf.CeilToInt(tailSeconds * fps);
@@ -313,21 +354,52 @@ internal sealed class VideoRenderJob : MonoBehaviour
             if (conductor != null && conductor.song != null)
             {
                 if (useRenderClock)
-                {
-                    // 确定性路径：帧号驱动一切，时钟严格 = N/fps（零抖动）
                     clock.Advance();
-                    // Pin 用确定性时钟（安全网——任何未被 Transpiler 覆盖的 songposition
-                    // 读取仍被钉住）；音频游标只用于下面的诊断记账
-                    VideoRender.PinnedSongPosition = anchorSongPosition + clock.Time * conductor.song.pitch;
-                    // 视频背景确定性化：按渲染时钟/真实耗时比值连续调速（VideoPlayer
-                    // 原生走实时时钟，渲染慢于实时时背景视频会跑 ahead）
-                    StepPinnedVideos(clock.Time);
-                }
-                else
+                double elapsed = useRenderClock ? clock.Time : clockSeconds;
+                double pitch = conductor.song.pitch;
+
+                // ── 锚点自愈 ───────────────────────────────────────────
+                // **检查点开局时，游戏会在捕获开始之后才把时间轴 seek 到检查点位置。**
+                // 那一刻之前抓的锚点会整体偏掉，且偏多少恒定（= 检查点的歌曲时间）。
+                // 2026-10-19 实测：pin=4.336 而游戏真实位置已到 49.112，差 44.8s ——
+                // 回放的命中全排在几十秒之后，表现就是「画面在动、回放不播放」。
+                //
+                // 抓锚点时无法预知 seek 何时发生（它由游戏内部的 Play/StartMusic 异步
+                // 完成），所以这里不猜时机，而是每帧对照游戏的真实位置：
+                // 一旦偏差超过阈值就重算锚点，让钉扎值立刻贴回游戏的实际位置。
+                //
+                // **下面这条 dsp 公式只当「跳变量探针」，不是可靠时钟源。**
+                // 它正是我们当初弃用的那个式子（引入了 dspTimeSong 的检查点平移与
+                // dspTime 的缓冲记账滞后，正是它导致锚点抓偏）。这里只用它回答一个
+                // 粗粒度问题——「游戏的位置是不是突然跳了一个检查点那么远」——
+                // 0.75s 的阈值远大于它的全部误差（缓冲量化 ±3ms + 暖机滞后 ~150ms），
+                // 所以它当判跳探针够用；**绝不能拿它去算锚点本身**（那会把误差固化）。
+                // 锚点一旦重设，用的也是它——但这只在"已经确认跳变"时才发生，
+                // 且随后每帧都会继续对照，误差不会被放大累积。
+                //
+                // 三个约束保证它不会乱跳：
+                //   · 只在捕获前 10 秒内生效（seek 只发生在开局）；
+                //   · 最多重锚 4 次；
+                //   · 阈值 0.75s 远大于探针自身的误差量级。
+                if (frameIndex < fps * 10 && reAnchors < 4)
                 {
-                    // 旧路径：时钟跟随混音游标（±2.7ms 为 dsp 缓冲量化抖动）
-                    VideoRender.PinnedSongPosition = anchorSongPosition + clockSeconds * conductor.song.pitch;
+                    double unpinnedNow = (AudioSettings.dspTime - conductor.dspTimeSong
+                        - (double)scrConductor.calibration_i) * pitch - conductor.addoffset;
+                    double wantPin = anchorSongPosition + elapsed * pitch;
+                    if (Math.Abs(wantPin - unpinnedNow) > 0.75)
+                    {
+                        anchorSongPosition = unpinnedNow - elapsed * pitch;
+                        reAnchors++;
+                        Debug.Log("[SpectreReplay] timeline re-anchored: was " + wantPin.ToString("0.000")
+                            + "s, game at " + unpinnedNow.ToString("0.000") + "s (attempt " + reAnchors + ")");
+                    }
                 }
+
+                VideoRender.PinnedSongPosition = anchorSongPosition + elapsed * pitch;
+                // 视频背景确定性化：按渲染时钟/真实耗时比值连续调速（VideoPlayer
+                // 原生走实时时钟，渲染慢于实时时背景视频会跑 ahead）
+                if (useRenderClock)
+                    StepPinnedVideos(clock.Time);
             }
             else
             {
@@ -398,6 +470,9 @@ internal sealed class VideoRenderJob : MonoBehaviour
                 yield break;
             }
         }
+
+        // 捕获循环已结束：之后再有 Start_Rewind 属于正常收尾/重开，不该再中止作业
+        VideoRender.CaptureInProgress = false;
 
         // 排空残余在途回读
         int drainGuard = fps * 5;
@@ -609,16 +684,39 @@ internal sealed class VideoRenderJob : MonoBehaviour
                 yield return null;
                 continue;
             }
-            if (conductor != null && conductor.hasSongStarted)
+            // ── 什么叫「回放真的接管了」─────────────────────────────
+            //
+            // **单看 hasSongStarted 不够，别被它骗了。** 它只在
+            // ToggleHasSongStarted 里置 true，而 StartMusicCo 在同一 conductor 内
+            // 重启歌曲时只 StopCoroutine 旧协程、**不把它清回 false**
+            // （hasSongStarted=false 只发生在整段 Rewind 里）。渲染流程
+            // SwitchToPlayMode → editor.Play → Start_Rewind 会连发多次 StartMusicCo：
+            // 第一次置 true 之后，后面那次「按检查点 seek」还在倒计时阶段就已满足
+            // 这个条件，于是我们提前读 songposition_minusi，拿到的是倒计时期的
+            // −2.1s（×pitch 1.5 后 −3.16s），真正的 49s 要等 seek 才写进去。
+            //
+            // 2026-10-19 的日志正是这样：pin=4.336、dspPos=49.112。**而且那一版
+            // 已经包含了「只认 hasSongStarted」这条改动**——说明它单独并不能修好，
+            // 真正把锚点拉回来的是捕获循环里的锚点自愈（见 timeline re-anchored）。
+            // 所以这里再加两道闸，与自愈形成双保险：
+            //   · 状态必须已进入 PlayerControl（倒计时/seek 窗口都还没到）；
+            //   · songposition_minusi 连续两帧为正（挡住"刚被写回 0"的瞬间）。
+            bool inPlay = controller != null && controller.state == States.PlayerControl;
+            bool positiveNow = conductor != null && conductor.songposition_minusi > 0.0;
+            if (inPlay && positiveNow)
             {
-                playbackLive = true;
-                yield break;
+                if (sawPositivePosition)
+                {
+                    playbackLive = true;
+                    yield break;
+                }
+                sawPositivePosition = true;
             }
-            if (controller != null
-                && (controller.state == States.Countdown || controller.state == States.PlayerControl))
+            else
             {
-                playbackLive = true;
-                yield break;
+                // 允许一次抖动：只在"回到非正/非播放态"时清零，避免被单帧
+                // State 切换（PlayerControl 与 Countdown 都可能闪一下）骗过去
+                sawPositivePosition = false;
             }
             yield return null;
         }
@@ -808,6 +906,18 @@ internal sealed class VideoRenderJob : MonoBehaviour
 
     private void NotifyCanceled()
     {
+        // **捕获中途回放被重置（关卡重开）不是「取消」。** 这一条必须在唯一的
+        // 收口处判，而不是散在四个调用点：所有取消路径最终都走到这里。
+        // 报成「已取消」会让用户以为是自己点了什么，日志里也对不上现场。
+        if (playbackRestarted)
+        {
+            string reason = LocalizationManager.GetLocalizedText("rendervideo.playback_restarted");
+            VideoRender.Current.Error = reason;
+            TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.failed") + "\n" + reason,
+                5f, NotifType.Warning);
+            ReportEnd(SpectreAPI.RenderEndStatus.Failed, null, reason);
+            return;
+        }
         TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.canceled"), 3f, NotifType.Warning);
         ReportEnd(SpectreAPI.RenderEndStatus.Canceled, null, null);
     }
@@ -820,6 +930,22 @@ internal sealed class VideoRenderJob : MonoBehaviour
         endStatus = status;
         endOutput = output;
         endError = error;
+        // 把终态同步进快照，界面据此显示「完成 / 失败 / 已取消」。
+        // **必须在唯一的收口处写**：四个取消点 + 多个失败点，散着写必漏。
+        // 成功时 Output 才有意义；取消/失败一律清空，否则界面会拿一个
+        // 根本没生成的路径显示「渲染完成」。
+        VideoRender.Current.Result = status switch
+        {
+            SpectreAPI.RenderEndStatus.Completed => VideoRender.Outcome.Completed,
+            SpectreAPI.RenderEndStatus.Canceled => VideoRender.Outcome.Canceled,
+            _ => VideoRender.Outcome.Failed,
+        };
+        if (status != SpectreAPI.RenderEndStatus.Completed)
+            VideoRender.Current.Output = "";
+        else
+            VideoRender.Current.Output = output ?? "";
+        if (!string.IsNullOrEmpty(error))
+            VideoRender.Current.Error = error;
     }
 
     // ReleaseGameControl 是否已执行（幂等）
@@ -855,6 +981,12 @@ internal sealed class VideoRenderJob : MonoBehaviour
         if (controlReleased) return;
         controlReleased = true;
         // 依次兜底：任一 API 抛异常都不能带走后面的项（渲染作业常在场景切换途中收尾）
+        // **相机也要一起还。** 捕获期间三台相机的 targetTexture 被指到我们的
+        // RenderTexture 上，屏幕上没有相机清屏：世界冻在最后一帧，IMGUI 每帧照常
+        // 往上叠，半透明菜单一层层累加 ⇒ 越叠越亮、文字重影（"镜厅"）。
+        // 这段窗口是后台收尾（ffmpeg 排空 + mux），几十秒到几分钟。
+        // 原先只在 frames.Dispose()（TearDown 里）还原，太晚了。
+        try { frames?.RestoreTargets(); } catch (Exception ex) { Debug.LogException(ex); }
         try { RenderClockSource.ActiveClock = null; } catch (Exception ex) { Debug.LogException(ex); }
         try { UnpinVideoPlayers(); } catch (Exception ex) { Debug.LogException(ex); }
         try { VideoRender.UnpinTimeline(); } catch (Exception ex) { Debug.LogException(ex); }
@@ -862,6 +994,54 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // UnscaledDeltaPin.Uninstall 与 captureFramerate / vSync / targetFrameRate /
         // runInBackground / audioPause / checkpointNum 的恢复都在这里，它自带逐项兜底。
         RestoreGlobalState();
+        // **最后退出 playtest。** 渲染的第一步是把编辑器切到 playtest
+        // （SwitchToPlayMode + editor.Play），但整条链原先没有任何一步退回去：
+        // 渲染结束后游戏仍停在 playtest 里继续跑，表现就是「渲染完了还在播放」。
+        // 放在时间源与相机都还原之后：SwitchToEditMode 内部会读 conductor/song，
+        // 此时它们已恢复成真实值，不会拿到冻结的钉扎时钟。
+        ExitPlaytest();
+    }
+
+    /// <summary>
+    /// 退出试玩，回到编辑器。
+    ///
+    /// **为什么需要它。** 渲染的第一步是把编辑器切进 playtest（<see cref="Phases"/>
+    /// 开头的 <c>SwitchToPlayMode</c> + <c>editor.Play()</c>），而收尾链里原本
+    /// 没有任何一步把它退回来。于是无论渲染成功、失败还是取消，游戏都留在
+    /// playtest 里继续跑——玩家看到的正是「渲染结束了，还在播放」。
+    ///
+    /// 走的是游戏自己的官方入口：<c>scnEditor.Update</c> 里玩家按 Esc 时调用的
+    /// 就是 <c>SwitchToEditMode()</c>。照抄同一条路径，而不是自己拼还原动作
+    /// （编辑器要恢复的状态远不止播放标志：UI、音频、控制台、自动播放等）。
+    ///
+    /// **只在该退的时候退：**
+    ///   · <c>playMode</c> 为假 = 玩家已经在渲染期间自己按过 Esc，此时再调一次
+    ///     会把编辑器状态重置一遍；
+    ///   · <c>ADOBase.editor</c> 为空 = 本次渲染不是在编辑器里发起的（关卡内渲染），
+    ///     没有可供退回的编辑器。
+    /// </summary>
+    private void ExitPlaytest()
+    {
+        // 玩家已经自己按 Esc 退出（CancelForSceneExit 会置这个标志）：
+        // 再调一次 SwitchToEditMode 会把编辑器状态重复重置，而且那次调用
+        // 又会反过来触发我们的 Patch_SwitchToEditMode.Prefix ⇒ 递归。
+        if (suppressExitPlaytest) return;
+        VideoRender.SuppressSceneExitCancel = true;
+        try
+        {
+            scnEditor editor = ADOBase.editor;
+            if (editor != null && editor.playMode)
+                editor.SwitchToEditMode();
+        }
+        catch (Exception ex)
+        {
+            // 退回编辑器失败不该影响渲染终态上报：成片已经合成完了
+            Debug.LogException(ex);
+        }
+        finally
+        {
+            VideoRender.SuppressSceneExitCancel = false;
+        }
     }
 
     private void TearDown()
