@@ -585,8 +585,34 @@ namespace UiPreview
             fail += Check(projectRoot,
                 "㉖c 渲染收尾必须撤销倍速钉扎(否则泄漏到之后的手动重开关卡)",
                 "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
-                s => MethodBody(s, "TearDown") is string tb
-                    && tb.Contains("SpeedOverrideArmed = false", StringComparison.Ordinal));
+                // 2026-10-19 收尾后台化后，这行随其余的"交还游戏"动作一起搬进了
+                // ReleaseGameControl（原先直接写在 TearDown 体里）。
+                // **判据跟着改，但原意不变**：撤销动作必须真实存在于收尾路径上——
+                // 所以既要求 ReleaseGameControl 体里有它，又要求 TearDown 真的调用它。
+                // 只查"文件里出现过 SpeedOverrideArmed = false"会把一处死代码也算通过。
+                s => MethodBody(s, "ReleaseGameControl") is string rb
+                    && rb.Contains("SpeedOverrideArmed = false", StringComparison.Ordinal)
+                    && MethodBody(s, "TearDown") is string tb
+                    && tb.Contains("ReleaseGameControl", StringComparison.Ordinal));
+            // ㉖d 收尾后台化**之前**必须先交还游戏控制。
+            //
+            //    **这条守的是 2026-10-19 真实踩到的回归**：渲染期有三个虚拟时钟
+            //    （PinnedSongPosition / UnscaledDeltaPin / RenderClockSource），
+            //    它们的推进全在捕获循环里。原先收尾同步阻塞主线程，游戏没机会跑；
+            //    把收尾搬到后台后，主线程空出来带着**冻结的时钟**继续跑游戏循环，
+            //    现象就是「渲染结束后星球直接停住」——进度条已走完，星球不动。
+            //
+            //    判据钉的是**顺序**：Phases 里 ReleaseGameControl 必须出现在
+            //    StartFinalizeOnWorker 之前。只查"两个名字都出现过"是假判据——
+            //    顺序反了照样命中，而顺序反了正是这个 bug 的形态。
+            fail += Check(projectRoot,
+                "㉖d 后台收尾启动前必须已交还游戏控制(否则冻结时钟让星球停住)",
+                "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
+                s => MethodBody(s, "Phases") is string pb
+                    && pb.IndexOf("ReleaseGameControl", StringComparison.Ordinal) >= 0
+                    && pb.IndexOf("StartFinalizeOnWorker", StringComparison.Ordinal) >= 0
+                    && pb.IndexOf("ReleaseGameControl", StringComparison.Ordinal)
+                       < pb.IndexOf("StartFinalizeOnWorker", StringComparison.Ordinal));
             // ㉗ 「等待回放开始超时」必须**带出真正原因**（同一次用户报障）。
             //
             //    原先失败路径只有一句 wait_timeout；而日志里其实早有

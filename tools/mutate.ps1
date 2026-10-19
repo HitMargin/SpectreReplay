@@ -941,6 +941,38 @@ switch ($Which) {
         #    锚点单行且全仓唯一（整个 Gui.cs 里只有这一处把 CardBg 赋给 backgroundColor）。
         Backup 'Ui\Gui.cs'
         ReplaceExact 'Ui\Gui.cs' '            float top = GUILayoutUtility.GetRect(1f, 1f, GUILayout.ExpandWidth(true)).y;' '            GUI.backgroundColor = CardBg; float top = GUILayoutUtility.GetRect(1f, 1f, GUILayout.ExpandWidth(true)).y;'
+    }
+    'MUT-V14' {
+        # ㉖d：把「交还游戏控制」挪到「启动后台收尾」**之后**。
+        #
+        #    **这条复现的是 2026-10-19 真机踩到的回归**（用户报「渲染结束后
+        #    星球直接停住」）：渲染期三个虚拟时钟的推进全在捕获循环里，捕获一停
+        #    它们就冻住。原先收尾同步阻塞主线程，游戏没机会跑；收尾搬到后台后，
+        #    主线程空出来带着冻结时钟继续跑游戏循环 ⇒ 星球不动。
+        #
+        #    **必须用「换序」而不是「删掉调用」来表达**：删掉会让 ㉖c（TearDown
+        #    必须调用它）一起变红，那就证明不了 ㉖d 抓的是顺序。换序之后 ㉖c
+        #    照样满足，只有 ㉖d 会红——这才是这条判据存在的意义。
+        Backup 'Features\VideoRender\Pipeline\VideoRenderJob.cs'
+        $ls = Lines 'Features\VideoRender\Pipeline\VideoRenderJob.cs'
+        $call = -1
+        for ($i = 0; $i -lt $ls.Count; $i++) {
+            if ($ls[$i].Trim() -eq 'ReleaseGameControl();') { $call = $i; break }
+        }
+        if ($call -lt 0) { throw 'MUT-V14 找不到 ReleaseGameControl(); 调用行' }
+        $start = -1
+        for ($i = $call; $i -lt $ls.Count; $i++) {
+            if ($ls[$i].Trim() -eq 'StartFinalizeOnWorker();') { $start = $i; break }
+        }
+        if ($start -lt 0) { throw 'MUT-V14 找不到 StartFinalizeOnWorker(); 调用行' }
+        # 把调用行从原位删掉，插到 StartFinalizeOnWorker 之后
+        $lines = New-Object System.Collections.ArrayList
+        for ($i = 0; $i -lt $ls.Count; $i++) {
+            if ($i -eq $call) { continue }
+            [void]$lines.Add($ls[$i])
+            if ($i -eq $start) { [void]$lines.Add('        ReleaseGameControl();') }
+        }
+        SetLines 'Features\VideoRender\Pipeline\VideoRenderJob.cs' $lines.ToArray()
     }    'MUT-X1' {
         # 跨线程可见性：把泵线程写、主线程读的 pumpFailure 退回普通字段。
         # 这类缺陷编译通过、跑起来也基本正常（x86 弱内存模型下常常碰巧看到新值），

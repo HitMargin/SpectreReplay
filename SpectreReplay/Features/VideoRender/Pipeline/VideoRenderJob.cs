@@ -450,6 +450,17 @@ internal sealed class VideoRenderJob : MonoBehaviour
             yield break;
         }
 
+        // **必须在启动后台收尾之前把游戏交还回去。**
+        //
+        // 这是「收尾搬到后台」引入的一处回归：渲染期有三个虚拟时钟，全都只由上面的
+        // 捕获循环推进（PinnedSongPosition / UnscaledDeltaPin / RenderClockSource）。
+        // 原先收尾同步阻塞主线程，游戏根本没机会跑，解开钉扎时一切同时恢复；收尾搬到
+        // 后台之后，主线程空出来带着三个**再也没人推进的冻结时钟**继续跑游戏循环
+        // ⇒ 星球停住、unscaled 动画不动，而进度条已经走完。
+        //
+        // 收尾本身（ffmpeg 排空 + copy 合成）不读任何 Unity 状态，所以放手是安全的。
+        ReleaseGameControl();
+
         StartFinalizeOnWorker();
 
         // 等后台收尾。**必须继续驱动协程而不是阻塞等待**：主线程若在这里 Join，
@@ -811,12 +822,58 @@ internal sealed class VideoRenderJob : MonoBehaviour
         endError = error;
     }
 
+    // ReleaseGameControl 是否已执行（幂等）
+    private bool controlReleased;
+
+    /// <summary>
+    /// 解除渲染期对游戏的全部干预，把游戏完整交还给它自己。
+    ///
+    /// **为什么必须是「全部」而不是「一部分」：** 渲染期同时钉住了几套时间源，
+    /// 而它们的推进**全都在捕获循环里**（TickFrame / clock.Advance / 给
+    /// PinnedSongPosition 赋值）。捕获一停，它们就全冻住：
+    ///   1. <c>VideoRender.PinnedSongPosition</c> —— songposition_minusi 的读写补丁
+    ///      覆盖（Patch_VideoPinSet / Patch_VideoPinGet）。**星球位置是这个值的
+    ///      函数，所以它冻结的直接表现就是星球停住。**
+    ///   2. <c>UnscaledDeltaPin</c> —— 五个 Time.* getter 的原生 detour。
+    ///   3. <c>RenderClockSource.ActiveClock</c> —— transpiler 改写的 dspTime 读取。
+    ///   4. <c>Time.captureFramerate</c> / vSync / targetFrameRate / audioPause 等
+    ///      全局状态（RestoreGlobalState 负责逐项兜底恢复）。
+    ///   5. 倍速钉扎 —— 不清会泄漏到玩家之后的正常游玩里。
+    ///
+    /// **半解比没解更糟**：只断时钟却留着 detour，游戏就拿到
+    /// 「真实 dspTime + 冻结 unscaled + 冻结 songposition」的混合时间源，
+    /// 表现比单纯卡住更难定位。所以这几步必须在同一次调用里走完。
+    ///
+    /// **调用时机（这是修复的核心）**：捕获循环一结束就调，**早于**后台收尾启动。
+    /// 原先一切正常只是因为收尾同步阻塞了主线程、游戏没机会跑；收尾搬到后台后，
+    /// 主线程空出来带着冻结时钟继续跑，就出现了「渲染结束后星球停住」。
+    ///
+    /// 幂等：正常路径（Phases 里调用）与 TearDown 兜底各会调一次。
+    /// </summary>
+    private void ReleaseGameControl()
+    {
+        if (controlReleased) return;
+        controlReleased = true;
+        // 依次兜底：任一 API 抛异常都不能带走后面的项（渲染作业常在场景切换途中收尾）
+        try { RenderClockSource.ActiveClock = null; } catch (Exception ex) { Debug.LogException(ex); }
+        try { UnpinVideoPlayers(); } catch (Exception ex) { Debug.LogException(ex); }
+        try { VideoRender.UnpinTimeline(); } catch (Exception ex) { Debug.LogException(ex); }
+        try { VideoRender.SpeedOverrideArmed = false; } catch (Exception ex) { Debug.LogException(ex); }
+        // UnscaledDeltaPin.Uninstall 与 captureFramerate / vSync / targetFrameRate /
+        // runInBackground / audioPause / checkpointNum 的恢复都在这里，它自带逐项兜底。
+        RestoreGlobalState();
+    }
+
     private void TearDown()
     {
         // 幂等：OnDestroy 兜底与协程正常收尾都会走到这里，重复执行会二次
         // Delete 临时目录、二次 Destroy(gameObject)
         if (tornDown) return;
         tornDown = true;
+        // **先把游戏交还回去再看收尾。** 正常路径下协程走到这里时已经释放过（幂等），
+        // 但 OnDestroy 兜底路径是从半途掐断的——此时游戏可能正带着冻结的钉扎时钟跑，
+        // 早一帧释放就少一帧"星球不动"。
+        ReleaseGameControl();
         // **先等工作线程收场。** 收尾现在跑在后台线程上（见 StartFinalizeOnWorker）：
         // 它会读 tempDir 里的中间文件、写最终成片。TearDown 若在它还在跑时删临时目录
         // 或 Dispose 编码器，结果是成片写到一半被打断、或者干脆删掉了正在被读的文件。
@@ -845,14 +902,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
         {
             Debug.Log("[SpectreReplay] teardown: 等待收尾线程失败: " + ex.Message);
         }
-        // 倍速钉扎随作业结束撤销：之后玩家自己重开关卡必须回到游戏自己的行为，
-        // 否则上一份回放的倍速会泄漏到正常游玩里。
-        VideoRender.SpeedOverrideArmed = false;
-        // 新时钟路径：先断开 ActiveClock（Transpiler 的替换函数即刻回落原始值），
-        // 再走常规清理——顺序错了收尾期间游戏会多跑一帧确定性时间
-        RenderClockSource.ActiveClock = null;
-        UnpinVideoPlayers();
-        VideoRender.UnpinTimeline();
+        ReleaseGameControl();
         try { frames?.Dispose(); } catch (Exception ex) { Debug.LogException(ex); }
         try { mixdown?.Dispose(); } catch (Exception ex) { Debug.LogException(ex); }
         // **编码器不能在工作线程还在用它时 Dispose。** Dispose 会 Kill ffmpeg 进程，
@@ -875,20 +925,9 @@ internal sealed class VideoRenderJob : MonoBehaviour
         frames = null;
         mixdown = null;
         encoder = null;
-        // **必须兜住异常。** RestoreGlobalState 读写的全是 Unity 全局状态（Time /
-        // Application / QualitySettings / AudioListener）。渲染作业常在场景切换途中收尾，
-        // 此时这些 API 可能抛；一旦抛在这里，下面三件收尾全部跳过：
-        //   临时目录不清（几百 MB 留盘）、VideoRender.CloseJob 不调（Job 永远非 null，
-        //   此后再也起不了任何渲染）、RaiseRenderFinished 不发（调用方永远等不到终态）。
-        // 全局状态恢复失败只是"可能残留一个 vSync/帧率设置"，远轻于上面三样。
-        try
-        {
-            RestoreGlobalState();
-        }
-        catch (Exception ex)
-        {
-            Debug.Log("[SpectreReplay] render global state restore failed: " + ex.Message);
-        }
+        // 全局状态（Time.captureFramerate / vSync / targetFrameRate / audioPause /
+        // checkpointNum）已在上面 ReleaseGameControl 里随 UnscaledDeltaPin 一并恢复，
+        // 且那一步是逐项兜底的——这里不再重复，重复只会让"同一状态恢复两次"。
         // 临时目录同理：里面正是工作线程还在读的 raw 视频与 wav。它对 tempDir 的
         // 使用一直持续到 RunAndWait 返回，提前 Delete 会让合成中途失败。
         // 留一个 RenderTemp 目录（几百 MB）远好过毁掉用户等了很久的成片。
