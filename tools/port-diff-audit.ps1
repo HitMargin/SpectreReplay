@@ -381,6 +381,37 @@ $knownDeviations = @(
     @{ Pat = 'PatchType.Prefix';                     Why = '同上：钩子类型' }
     @{ Pat = 'scnEditor.RemakePath';                 Why = '同上：nameof 形式的注入点' }
     @{ Pat = '__instance';                          Why = '同上：注入钩子的目标实例形参（本仓补丁层约定，上游没有这条补丁）' }
+    # -- 2026-10-19 收尾后台化：合成阶段不再压在主线程 ---------------------
+    # 上游把 FinishVideo（等泵线程排空积压帧）与 MuxWith（第二个 ffmpeg 合成音轨）
+    # 直接跑在协程里，也就是主线程上。两者都是「等别人干完活」：排空要等队列写进
+    # 管道，合成要把整个成片读一遍写一遍。卡顿时长与成片大小成正比，而它偏偏发生在
+    # 用户最想看到结果的那一刻。
+    # 搬走的依据是它们只碰 Process / File / BlockingCollection，不读任何 Unity 状态。
+    # 泛名字（Thread / TimeSpan / ExceptionDispatchInfo）一律用 File 限定到本文件。
+    @{ Pat = 'finalizeWorker';          File = 'VideoRenderJob.cs'; Why = '2026-10-19 收尾后台化：工作线程句柄（volatile 结果标志同批）' }
+    @{ Pat = 'finalizeDone';            File = 'VideoRenderJob.cs'; Why = '同上：工作线程写、主线程读的完成标志' }
+    @{ Pat = 'finalizeError';           File = 'VideoRenderJob.cs'; Why = '同上：把工作线程的异常带回主线程统一上报' }
+    @{ Pat = 'finalizeErrorFromMux';    File = 'VideoRenderJob.cs'; Why = '同上：区分 mux 失败（视频流已完整，值得抢救）与排空失败' }
+    @{ Pat = 'StartFinalizeOnWorker';   File = 'VideoRenderJob.cs'; Why = '同上：收尾线程的启动入口' }
+    @{ Pat = 'enc.FinishVideo';         File = 'VideoRenderJob.cs'; Why = '同上：把排空调用移进闭包（先在主线程抓编码器引用）' }
+    @{ Pat = 'enc.MuxWith';             File = 'VideoRenderJob.cs'; Why = '同上：把合成调用移进闭包' }
+    @{ Pat = 'finalizeWorker.IsAlive';  File = 'VideoRenderJob.cs'; Why = '同上：TearDown 判断线程是否还在跑（在跑就跳过会冲突的清理）' }
+    @{ Pat = 'finalizeWorker.Join';     File = 'VideoRenderJob.cs'; Why = '同上：TearDown 的**有界**等待（5 秒，不是 12 分钟——12 分钟等于把卡顿换成假死）' }
+    @{ Pat = 'finalizeWorker.Start';    File = 'VideoRenderJob.cs'; Why = '同上：启动线程' }
+    @{ Pat = 'System.Threading.Thread'; File = 'VideoRenderJob.cs'; Why = '同上：裸 Thread 而非 Task.Run——主项目是 netstandard2.1 + Mono，Thread 是确定可用的原语' }
+    @{ Pat = 'TimeSpan.FromSeconds';    File = 'VideoRenderJob.cs'; Why = '同上：TearDown 的有界等待时长' }
+    @{ Pat = 'System.Runtime.ExceptionServices.ExceptionDispatchInfo'; File = 'VideoRenderJob.cs'; Why = '同上：保留工作线程异常的原始堆栈（直接 throw 会把堆栈重置到重抛那一行）' }
+    @{ Pat = 'movflags';                File = 'VideoEncoder.cs'; Why = '2026-10-19 去掉 +faststart：它要求 moov 前置，ffmpeg 只能把整个成片重写一遍搬过去；本地文件播放不需要它' }
+    # 主线程等不及收尾线程时的延迟清理（见 DeferCleanupAfterWorker）。清理不能就地做
+    # （会 Kill 掉工作线程正等的 ffmpeg、删掉它正读的 raw 视频），也不能不做
+    # （编码器持有进程与帧队列，临时目录几百 MB）。所以挂到工作线程之后，在另一个
+    # 后台线程里 Join 它、再回收。
+    @{ Pat = 'DeferCleanupAfterWorker'; File = 'VideoRenderJob.cs'; Why = '2026-10-19 收尾后台化：主线程等不及收尾线程时的延迟清理入口' }
+    @{ Pat = 'target.Join';             File = 'VideoRenderJob.cs'; Why = '同上：等的是**收尾线程**，不是清理线程自己（写成 waiter.Join 会 Join 自己而死锁）' }
+    @{ Pat = 'waiter.Start';            File = 'VideoRenderJob.cs'; Why = '同上：启动清理线程' }
+    @{ Pat = 'TimeSpan.FromMinutes';    File = 'VideoRenderJob.cs'; Why = '同上：延迟清理的等待上限（覆盖 FinishVideo 10 分钟 + MuxWith 30 分钟）' }
+    @{ Pat = 'Directory.Delete';        File = 'VideoRenderJob.cs'; Why = '同上：延迟清理里删临时目录（与 TearDown 里同一操作，只是时机推到收尾之后）' }
+    @{ Pat = 'Directory.Exists';        File = 'VideoRenderJob.cs'; Why = '同上：删之前先确认存在' }
     # ══════════════════════════════════════════════════════════════════
     # -- 2026-10-19 补登记：被"相对路径匹配"长期漏掉的历史漂移 -----------
     #

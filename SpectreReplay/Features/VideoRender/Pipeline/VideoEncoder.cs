@@ -285,21 +285,23 @@ internal sealed class VideoEncoder : IDisposable
         return true;
     }
 
-    // 视频轨与混音轨合成最终文件。webm 只能 Opus/Vorbis 音频（强制 48k，Opus 不收其他采样率）；
-    // faststart 是 movenc 系（mp4/mov）专属旗标，mkv/webm 不带
+    // 视频轨与混音轨合成最终文件。webm 只能 Opus/Vorbis 音频（强制 48k，Opus 不收其他采样率）。
+    //
+    // **不再带 -movflags +faststart。** 那个旗标要求 moov atom 前置，而编码时它被写在
+    // 文件末尾——ffmpeg 只能把整个成片重写一遍搬过去。对本地文件它毫无收益：
+    // faststart 是为「边下边播」的 HTTP 场景服务的，播放器从本地磁盘读不需要它。
+    // 代价却是实打实的：几百 MB 的成片多一趟全量读写，而合成本身已经要读一遍写一遍了。
     internal void MuxWith(string wavPath)
     {
         if (!File.Exists(wavPath))
             throw new InvalidOperationException("mixdown file missing: " + wavPath);
         bool webm = container == OutContainer.WebM;
         string audio = webm ? "-c:a libopus -b:a 192k -ar 48000" : "-c:a aac -b:a 320k";
-        string faststart = container == OutContainer.Mp4 || container == OutContainer.Mov
-            ? " -movflags +faststart" : "";
         // **-shortest**：视频与音频长度由两条独立采集链决定，正常只差几十毫秒，
         // 但音频采集重启/丢帧后可能明显短于视频。没有它时 ffmpeg 会把短的一轨
         // 补静音/黑帧到另一轨长度，成片尾部出现一段无声空转；有它则按短轨收尾。
         string args = "-y -i " + Quote(rawVideoPath) + " -i " + Quote(wavPath)
-            + " -map 0:v:0 -map 1:a:0 -c:v copy " + audio + " -ac 2 -shortest" + faststart
+            + " -map 0:v:0 -map 1:a:0 -c:v copy " + audio + " -ac 2 -shortest"
             + " " + Quote(finalVideoPath);
         RunAndWait(exePath, args);
     }

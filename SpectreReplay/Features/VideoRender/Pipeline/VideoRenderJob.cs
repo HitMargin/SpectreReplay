@@ -50,6 +50,18 @@ internal sealed class VideoRenderJob : MonoBehaviour
     // TearDown 是否已执行。OnDestroy 兜底与协程正常收尾共用，故需幂等
     private bool tornDown;
 
+    // ── 收尾后台化 ───────────────────────────────────────────────────
+    // 收尾（排空编码器 + 合成音轨）是整场渲染里最长的一段同步等待，原先直接压在
+    // 主线程上，而它偏偏发生在用户最想看到结果的那一刻：画面完全冻死。
+    // 见 StartFinalizeOnWorker 的注释。
+    private System.Threading.Thread finalizeWorker;
+    // volatile：工作线程写、主线程读
+    private volatile bool finalizeDone;
+    private volatile Exception finalizeError;
+    // 失败发生在 mux 阶段还是排空阶段：两者的补救方式不同（mux 失败时视频流已完整，
+    // 值得把 raw 流抢救出来；排空失败则没有可救的成品）
+    private volatile bool finalizeErrorFromMux;
+
     // 保存并恢复的全局状态
     private int savedCaptureFramerate;
     private int savedTargetFrameRate;
@@ -409,7 +421,24 @@ internal sealed class VideoRenderJob : MonoBehaviour
             yield break;
         }
 
-        // 合成（编码器收尾会阻塞主线程，此时画面已不再变化）
+        // ── 合成收尾：**搬到后台线程** ────────────────────────────────────
+        //
+        // 这一段是整个渲染里最长的同步等待，而它偏偏发生在用户最想看到结果
+        // 的那一刻。两处耗时：
+        //
+        //   ○ FinishVideo 排空：queue.CompleteAdding() 之后要等泵线程把**积压在
+        //     队列里的所有帧**全写进 ffmpeg 管道。队列上限约 256 MiB，主线程此时
+        //     已停止送帧、无事可做，纯等 —— 编码器跟不上时就是数秒冻结。
+        //   ○ MuxWith：起第二个 ffmpeg 把视频与音频合成。即便 -c:v copy 不重编码，
+        //     也要把整个成片读一遍、写一遍，几百 MB 就是几秒。
+        //
+        // 两者都不碰 Unity API（纯 Process / File），所以技术上可以离开主线程。
+        // 主线程只保留三件必须在主线程做的事：mixdown.Seal()（写 WAV 头，很快）、
+        // 阶段显示、以及结束上报（要调 Notification / 本地化）。
+        //
+        // **为什么不在这里 yield 分帧而是整段交给工作线程**：排空是「等别人干完活」，
+        // 不是「我们自己有活要分摊」。分帧让出只是把冻结切成许多 16ms 的小卡顿，
+        // 用户看到的仍是界面不响应；而工作线程能真正做到并行。
         captureClock = null;
         VideoRender.Current.EtaSeconds = -1;
         SetPhase(VideoRender.Phase.Finalizing, "rendervideo.stage.finalizing", Path.GetFileName(outputPath));
@@ -420,21 +449,86 @@ internal sealed class VideoRenderJob : MonoBehaviour
                 + " (" + mixdown.DeathReason + ")");
             yield break;
         }
-        encoder.FinishVideo();
-        try
-        {
-            encoder.MuxWith(wavPath);
-        }
-        catch (Exception muxEx)
+
+        StartFinalizeOnWorker();
+
+        // 等后台收尾。**必须继续驱动协程而不是阻塞等待**：主线程若在这里 Join，
+        // 卡顿原样回来了，只是从 ffmpeg 的等待换成了我们自己的等待。
+        //
+        // 取消**不中断**已在跑的收尾：此时帧已全部写入，杀掉 ffmpeg 会留下一个
+        // 损坏的成片，比多等几秒更糟。编码器自身的 10 分钟超时会兜住真的卡死。
+        // 所以这里对 cancelRequested 不做任何事——等它自然结束后再按取消上报。
+        while (!finalizeDone)
+            yield return null;
+
+        if (finalizeError != null)
         {
             // mux 失败 ≠ 全损：视频流此刻已完整编码（捕获耗时的部分已经花完了）。
-            // 把 raw 视频 + wav 抢救到输出目录并附手动合成命令，再让异常走正常失败上报
-            RescueMuxFailure(muxEx);
-            throw;
+            // 把 raw 视频 + wav 抢救到输出目录并附手动合成命令，再让异常走正常失败上报。
+            // **必须在主线程做**：RescueMuxFailure 读 VideoRender.Current.Output 并写
+            // Debug.Log，两者都不是线程安全的。
+            if (finalizeErrorFromMux)
+                RescueMuxFailure(finalizeError);
+            // **不能 `throw finalizeError;`**——那样会把堆栈重置成这一行，
+            // 真正出错的位置（在 ffmpeg 排空还是合成里）就丢了。
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo
+                .Capture(finalizeError).Throw();
         }
+
+        if (cancelRequested) { NotifyCanceled(); yield break; }
+
         TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.done") + "\n" + outputPath, 5f);
         Debug.Log("[SpectreReplay] replay video complete: " + outputPath);
         ReportEnd(SpectreAPI.RenderEndStatus.Completed, outputPath, null);
+    }
+
+    /// <summary>
+    /// 把「排空编码器 + 合成音轨」交给工作线程。
+    ///
+    /// **为什么可以离开主线程**：FinishVideo 与 MuxWith 只碰 Process / File / 队列，
+    /// 不读 Unity 的任何状态（相机、时间、音频都已不再需要）。这是把它搬走的
+    /// 前提，也是唯一的依据——不是「看起来可以」。
+    ///
+    /// **为什么用裸 Thread 而不是 Task.Run**：主项目的目标框架是 netstandard2.1，
+    /// 而游戏跑在 Mono 上；Thread 是这里唯一确定可用的原语，且我们不需要 Task
+    /// 的延续调度。线程是后台线程，游戏退出时不会拖住进程。
+    /// </summary>
+    private void StartFinalizeOnWorker()
+    {
+        finalizeDone = false;
+        finalizeError = null;
+        finalizeErrorFromMux = false;
+        VideoEncoder enc = encoder;
+        string wav = wavPath;
+        finalizeWorker = new System.Threading.Thread(() =>
+        {
+            try
+            {
+                enc.FinishVideo();
+                try
+                {
+                    enc.MuxWith(wav);
+                }
+                catch (Exception muxEx)
+                {
+                    finalizeErrorFromMux = true;
+                    throw muxEx;
+                }
+            }
+            catch (Exception ex)
+            {
+                finalizeError = ex;
+            }
+            finally
+            {
+                finalizeDone = true;
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "SpectreReplay.VideoFinalize"
+        };
+        finalizeWorker.Start();
     }
 
     // mux 失败的止损：TearDown 会无条件清掉临时目录，不抢救就把已编码成品陪葬
@@ -723,6 +817,34 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // Delete 临时目录、二次 Destroy(gameObject)
         if (tornDown) return;
         tornDown = true;
+        // **先等工作线程收场。** 收尾现在跑在后台线程上（见 StartFinalizeOnWorker）：
+        // 它会读 tempDir 里的中间文件、写最终成片。TearDown 若在它还在跑时删临时目录
+        // 或 Dispose 编码器，结果是成片写到一半被打断、或者干脆删掉了正在被读的文件。
+        //
+        // 正常路径走到这里时 finalizeDone 已经是 true（协程的等待循环保证了这点），
+        // 这个 Join 立即返回。它兜的是异常路径：用户在 Finalizing 阶段切场景/退关卡，
+        // OnDestroy 把协程掐断、而工作线程还在跑。
+        //
+        // **限时 5 秒，不是 12 分钟。** 这里在主线程上，等 12 分钟等于把
+        // 「收尾卡顿」换成「整个游戏假死」——比原问题更糟。正常的收尾（排空 + copy 合成）
+        // 是秒级到十几秒；若 5 秒还没完，说明它撞上了慢盘或 ffmpeg 真卡住，
+        // 这时正确做法是**放手**：跳过与它冲突的清理，让它自己在后台跑完。
+        bool workerStillRunning = false;
+        try
+        {
+            if (finalizeWorker != null && finalizeWorker.IsAlive)
+            {
+                Debug.Log("[SpectreReplay] teardown: 后台收尾仍在进行，等待最多 5 秒");
+                workerStillRunning = !finalizeWorker.Join(TimeSpan.FromSeconds(5));
+                if (workerStillRunning)
+                    Debug.LogWarning("[SpectreReplay] teardown: 收尾线程未在 5 秒内结束——"
+                        + "跳过临时目录清理与编码器释放，交给该线程自己收场");
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.Log("[SpectreReplay] teardown: 等待收尾线程失败: " + ex.Message);
+        }
         // 倍速钉扎随作业结束撤销：之后玩家自己重开关卡必须回到游戏自己的行为，
         // 否则上一份回放的倍速会泄漏到正常游玩里。
         VideoRender.SpeedOverrideArmed = false;
@@ -733,7 +855,23 @@ internal sealed class VideoRenderJob : MonoBehaviour
         VideoRender.UnpinTimeline();
         try { frames?.Dispose(); } catch (Exception ex) { Debug.LogException(ex); }
         try { mixdown?.Dispose(); } catch (Exception ex) { Debug.LogException(ex); }
-        try { encoder?.Dispose(); } catch (Exception ex) { Debug.LogException(ex); }
+        // **编码器不能在工作线程还在用它时 Dispose。** Dispose 会 Kill ffmpeg 进程，
+        // 而那个线程正卡在 FinishVideo/MuxWith 里等同一个进程——提前杀等于把成片毁掉。
+        // 工作线程还在跑时把引用交给延迟清理，否则就地释放。
+        VideoEncoder deferredEncoder = null;
+        string deferredTempDir = null;
+        if (!workerStillRunning)
+        {
+            try { encoder?.Dispose(); } catch (Exception ex) { Debug.LogException(ex); }
+        }
+        else
+        {
+            // **必须在这里抓引用。** 下面几行会把字段置 null，而延迟清理是在
+            // 工作线程结束之后才跑的——它读字段只会读到 null，于是编码器永远不释放，
+            // ffmpeg 进程与帧队列一起泄漏。
+            deferredEncoder = encoder;
+            deferredTempDir = tempDir;
+        }
         frames = null;
         mixdown = null;
         encoder = null;
@@ -751,23 +889,41 @@ internal sealed class VideoRenderJob : MonoBehaviour
         {
             Debug.Log("[SpectreReplay] render global state restore failed: " + ex.Message);
         }
-        try
-        {
-            if (Directory.Exists(tempDir))
-                Directory.Delete(tempDir, true);
-        }
-        catch
+        // 临时目录同理：里面正是工作线程还在读的 raw 视频与 wav。它对 tempDir 的
+        // 使用一直持续到 RunAndWait 返回，提前 Delete 会让合成中途失败。
+        // 留一个 RenderTemp 目录（几百 MB）远好过毁掉用户等了很久的成片。
+        if (!workerStillRunning)
         {
             try
             {
-                // 文件句柄释放可能有延迟，隔半秒重试一次
-                System.Threading.Thread.Sleep(500);
-                Directory.Delete(tempDir, true);
+                if (Directory.Exists(tempDir))
+                    Directory.Delete(tempDir, true);
             }
-            catch (Exception ex)
+            catch
             {
-                Debug.Log("[SpectreReplay] render temp cleanup failed: " + ex.Message);
+                try
+                {
+                    // 文件句柄释放可能有延迟，隔半秒重试一次
+                    System.Threading.Thread.Sleep(500);
+                    Directory.Delete(tempDir, true);
+                }
+                catch (Exception ex)
+                {
+                    Debug.Log("[SpectreReplay] render temp cleanup failed: " + ex.Message);
+                }
             }
+        }
+        else
+        {
+            // **跳出前面那条“放手”路径后，清理不能就这么算了。** 编码器持有 ffmpeg
+            // 进程与帧队列，临时目录里是它正在读的 raw 视频——这些迟早要释放，
+            // 只是不能在它还在跑的时候释放。
+            //
+            // 做法：把清理**挂到工作线程结束之后**，在另一个后台线程里做。
+            // 这样既不阻塞主线程，也不泄漏进程/磁盘。
+            // （不在这里直接 Kill：工作线程可能正等着这个进程写出成片，
+            //   杀掉就是毁掉用户等了很久的结果。）
+            DeferCleanupAfterWorker(deferredEncoder, deferredTempDir);
         }
         VideoRender.CloseJob();
         // 兜底：未报过终态的按失败；事件在 Job 清空之后触发，订阅者可安全启动下一个渲染
@@ -791,6 +947,68 @@ internal sealed class VideoRenderJob : MonoBehaviour
     private void OnDestroy()
     {
         TearDown();
+    }
+
+    /// <summary>
+    /// 主线程等不及收尾线程时的善后：等工作线程结束，再释放编码器、删临时目录。
+    ///
+    /// **为什么不能就地做**：调用方已经判定工作线程还活着，此刻 Dispose 编码器会
+    /// Kill 掉它正在等的那条 ffmpeg 管道，删临时目录会让它正在读的 raw 视频消失
+    /// ——两条都是把快做好的成片毁掉。而**为什么不能不做**：编码器持有进程与帧队列，
+    /// 临时目录里是几百 MB 数据，留给 GC 是泄漏，不是清理。
+    ///
+    /// 所以挂到工作线程后面：主线程立刻返回，回收在它结束后于后台完成。
+    /// </summary>
+    private void DeferCleanupAfterWorker(VideoEncoder deferredEncoder, string deferredTempDir)
+    {
+        // **必须抓住收尾线程的引用。** 要等的是它，不是这个清理线程自己——
+        // 写成 waiter.Join(...) 是让线程 Join 自己，直接死锁（或抛 ThreadStateException），
+        // 回收永远不会发生，而这一整条路径正是「主线程等不及」时才走的。
+        System.Threading.Thread target = finalizeWorker;
+        if (target == null)
+        {
+            // 理论上不可达（workerStillRunning 为真时它必然存在），但清理路径
+            // 不能假设，否则一个空引用就让编码器与临时目录双双泄漏。
+            try { deferredEncoder?.Dispose(); } catch (Exception ex) { Debug.LogException(ex); }
+            return;
+        }
+        var waiter = new System.Threading.Thread(() =>
+        {
+            try
+            {
+                // 上限与编码器自身的超时对齐：FinishVideo 的 WaitForExit 是 10 分钟，
+                // MuxWith 走 RunAndWait 的 30 分钟上限，最坏组合留 40 分钟余量。
+                if (!target.Join(TimeSpan.FromMinutes(40)))
+                {
+                    Debug.LogWarning("[SpectreReplay] 延迟清理：收尾线程超时未结束，放弃回收");
+                    return;
+                }
+                try { deferredEncoder?.Dispose(); } catch (Exception ex) { Debug.LogException(ex); }
+                if (!string.IsNullOrEmpty(deferredTempDir))
+                {
+                    try
+                    {
+                        if (Directory.Exists(deferredTempDir))
+                            Directory.Delete(deferredTempDir, true);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.Log("[SpectreReplay] 延迟清理临时目录失败: " + ex.Message);
+                    }
+                }
+                Debug.Log("[SpectreReplay] 延迟清理完成（收尾线程已结束）");
+            }
+            catch (Exception ex)
+            {
+                // 这个线程不再有任何观察者，异常绝不能逃出去
+                Debug.Log("[SpectreReplay] 延迟清理异常: " + ex.Message);
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "SpectreReplay.RenderCleanup"
+        };
+        waiter.Start();
     }
 
     // ── VideoPlayer 接管（视频背景确定性化）────────────────────────────────
