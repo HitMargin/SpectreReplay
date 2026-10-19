@@ -1624,6 +1624,15 @@ switch ($Which) {
         ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'System.Diagnostics.Stopwatch waitClock = System.Diagnostics.Stopwatch.StartNew();' 'int limit = Math.Max(30, Settings.RenderFps * 10); int loop = 0;'
         ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'while (waitClock.Elapsed.TotalSeconds < WaitBudgetSeconds)' 'while (loop++ < limit)'
     }
+    'MUT-D23' {
+        # ㉙ 倒计时放行回归：把「state==Countdown 就放行」改成「state==Checkpoint」。
+        #      行为上等于回到「倒计时不放行」，成片会整段缺 GET READY / 3 2 1 / GO
+        #      与那 4 声提示音（2026-10-20 现场）。判据㉙ 认的就是这个状态字面量，
+        #      改成任何一个别的 States 值都必须让它变红。
+        #      只改这一行：保留 PlayerControl 那道闸，才证明判据不是「见到 Countdown 就行」。
+        Backup 'Features\VideoRender\Pipeline\VideoRenderJob.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'bool counting = controller != null && controller.state == States.Countdown;' 'bool counting = controller != null && controller.state == States.Checkpoint;'
+    }
     'MUT-D14' {
         # ㉔ BPM 回归：官方关卡退回硬写 0（详情面板重新显示成问号）。
         Backup 'Features\Replay\Patches\Patch_Lifecycle.cs'

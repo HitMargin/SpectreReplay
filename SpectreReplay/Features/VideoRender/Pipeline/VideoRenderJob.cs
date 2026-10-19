@@ -676,6 +676,12 @@ internal sealed class VideoRenderJob : MonoBehaviour
     {
         // 10 秒真实预算：正常倒计时约 2.1 s，余量留给场景加载慢 / 外部 mod 抢时序
         const double WaitBudgetSeconds = 10.0;
+        // 倒计时窗口（songposition_minusi 单位，秒）：
+        // Countdown 状态刚进入时 songposition ≈ -buffer(0.5)，随后 GET READY 一直到
+        // 0 s 才换成 3/2/1。窗口下界取 -2 秒是为了「只要还能看到倒计时就录」，
+        // 上界取 1 秒是兜底：万一某帧卡顿错过了整个窗口，也宁可只丢一部分倒计时。
+        const double CountdownWindowFrom = -2.0;
+        const double CountdownWindowTo = 1.0;
         System.Diagnostics.Stopwatch waitClock = System.Diagnostics.Stopwatch.StartNew();
         while (waitClock.Elapsed.TotalSeconds < WaitBudgetSeconds)
         {
@@ -686,6 +692,12 @@ internal sealed class VideoRenderJob : MonoBehaviour
             // 等待期就把这条按住（捕获循环里同样每帧这么做）
             AudioListener.pause = false;
 
+            scrConductor conductor = ADOBase.conductor;
+            scrController controller = scrController.instance;
+            bool counting = controller != null && controller.state == States.Countdown;
+            bool inPlay = controller != null && controller.state == States.PlayerControl;
+            double songNow = conductor != null ? conductor.songposition_minusi : 0.0;
+
             // 关卡已经在跑（歌已开始 / 已进 PlayerControl）而回放仍未接管：
             // 这是**确定的失败**，不是「还没就绪」。继续空转到 10 秒只会把
             // 真正的现场拖丢，还让用户以为渲染卡住。立即停下并报明原因。
@@ -694,11 +706,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
             // 且确实有一条校验拒绝记录。少任何一条都保持原语义继续等：
             // Start_Rewind 会连发多次（前一发被拒、后一发成功是常态），
             // 只看其中一条会误杀本来能成功的那些轮次。
-            scrConductor conductor = ADOBase.conductor;
-            scrController controller = scrController.instance;
-            bool levelRunning = (conductor != null && conductor.hasSongStarted)
-                || (controller != null
-                    && (controller.state == States.Countdown || controller.state == States.PlayerControl));
+            bool levelRunning = (conductor != null && conductor.hasSongStarted) || counting || inPlay;
             if (!SpectreState.is_playing)
             {
                 if (levelRunning && !string.IsNullOrEmpty(Patch_StartRewind.LastReject))
@@ -711,23 +719,47 @@ internal sealed class VideoRenderJob : MonoBehaviour
             }
             // ── 什么叫「回放真的接管了」─────────────────────────────
             //
-            // **单看 hasSongStarted 不够，别被它骗了。** 它只在
-            // ToggleHasSongStarted 里置 true，而 StartMusicCo 在同一 conductor 内
-            // 重启歌曲时只 StopCoroutine 旧协程、**不把它清回 false**
-            // （hasSongStarted=false 只发生在整段 Rewind 里）。渲染流程
-            // SwitchToPlayMode → editor.Play → Start_Rewind 会连发多次 StartMusicCo：
-            // 第一次置 true 之后，后面那次「按检查点 seek」还在倒计时阶段就已满足
-            // 这个条件，于是我们提前读 songposition_minusi，拿到的是倒计时期的
-            // −2.1s（×pitch 1.5 后 −3.16s），真正的 49s 要等 seek 才写进去。
+            // **不能把成功闸定在 PlayerControl —— 倒计时整段都在它之前。**
+            // scrController.Countdown_Update 要 conductor.beatNumber 追上
+            // adjustedCountdownTicks（本谱 4 拍 / 145 BPM）才切 PlayerControl；
+            // beatNumber 又是靠 songposition 越过 0、1 拍、2 拍、3 拍逐帧 +1
+            // （scrConductor.Update:860-865，每帧最多一拍），所以切状态时
+            // songposition 已经 ≈ 1.24 s —— 倒计时画面（GET READY / 3 2 1 / GO）
+            // 和那 4 声提示音全在它前面。
             //
-            // 2026-10-19 的日志正是这样：pin=4.336、dspPos=49.112。**而且那一版
-            // 已经包含了「只认 hasSongStarted」这条改动**——说明它单独并不能修好，
-            // 真正把锚点拉回来的是捕获循环里的锚点自愈（见 timeline re-anchored）。
-            // 所以这里再加两道闸，与自愈形成双保险：
-            //   · 状态必须已进入 PlayerControl（倒计时/seek 窗口都还没到）；
-            //   · songposition_minusi 连续两帧为正（挡住"刚被写回 0"的瞬间）。
-            bool inPlay = controller != null && controller.state == States.PlayerControl;
-            bool positiveNow = conductor != null && conductor.songposition_minusi > 0.0;
+            // 2026-10-20 的成片 Render_20261020_023143_再生.mp4 开头没有倒计时，
+            // 原因就是旧闸把捕获起点卡在 PlayerControl：日志 f=300 时
+            // pin=6.236、已录 5.000 s ⇒ audioAnchor = 1.236 s，第一帧已经在
+            // 倒计时结束之后。
+            //
+            // 现在分两条路放行：
+            //   · 倒计时（state==Countdown 且 songposition 落在下面那个窗口内）：
+            //     **提前放行**，锚点取当时的 songposition（这段时间它是负数，
+            //     pin = 负锚点 + 已录秒数，正好在歌曲 0 s 处过零），倒计时整段
+            //     进片，提示音也一起进音轨。
+            //   · 本来就没有倒计时（forceNoCountdown，或检查点开局走 Checkpoint
+            //     再进 PlayerControl）：保持原来的两道闸（PlayerControl + 连续两帧
+            //     正位置），它挡的是「按检查点 seek 还没把位置写回」的瞬间。
+            //
+            // **这里故意不要求 hasSongStarted。** 它是粘的（只在
+            // ToggleHasSongStarted 里置 true，同一条 conductor 内重启歌曲不会清回
+            // false，要清得整段 Rewind），而它置 true 的时刻正是 songposition
+            // ≈ -buffer，比 Countdown 入口还晚——等它就等于把 GET READY 让掉。
+            // 真正防「上一轮残留」的是下面那个窗口：倒计时刚进来时 songposition
+            // 必然在 -buffer 附近，而不是 2026-10-19 那次残留的 49 秒。
+            if (conductor != null && counting
+                && songNow >= CountdownWindowFrom
+                && songNow <= CountdownWindowTo)
+            {
+                // 这行日志是复测时的判据：出现它就说明这次是从倒计时开始录的，
+                // 成片开头应当能看到 GET READY / 3 / 2 / 1 / GO 与那 4 声提示音。
+                Debug.Log("[SpectreReplay] render starts during countdown: songposition="
+                    + songNow.ToString("0.000") + "s (state=Countdown)");
+                playbackLive = true;
+                yield break;
+            }
+
+            bool positiveNow = conductor != null && songNow > 0.0;
             if (inPlay && positiveNow)
             {
                 if (sawPositivePosition)

@@ -660,6 +660,24 @@ namespace UiPreview
                 s => MethodBody(s, "AwaitReplayAlive") is string ab
                     && !ab.Contains("fps * 10", StringComparison.Ordinal)
                     && ab.Contains("System.Diagnostics.Stopwatch", StringComparison.Ordinal));
+            // ㉙ 等待放行必须承认「倒计时也算回放已接管」。
+            //
+            //    2026-10-20 成片 Render_20261020_023143_再生.mp4 整段没有倒计时：
+            //    旧闸要求 state==PlayerControl，而 scrController.Countdown_Update
+            //    是「beatNumber 追上 adjustedCountdownTicks」才切 PlayerControl，
+            //    beatNumber 又靠 songposition 逐拍 +1（每帧最多一拍），切状态时
+            //    songposition 已经 ≈1.24 s ⇒ 捕获起点永远在倒计时之后。
+            //
+            //    判据拆成两半，缺一条都能被「看起来改了」骗过：
+            //    ① 计数阶段的门必须真的是 States.Countdown（改成别的状态就红，
+            //       这正是 MUT-D23 的手法）；
+            //    ② 原来那两道 PlayerControl + 连续两帧正位置的闸必须保留——
+            //       检查点开局 / forceNoCountdown 的谱面没有倒计时，全靠它挡
+            //       「seek 还没把位置写回」的瞬间。
+            fail += Check(projectRoot,
+                "㉙ 等待放行必须允许倒计时阶段(否则倒计时整段录不到)且保留 PlayerControl 那道闸",
+                "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
+                s => CountdownReleaseKeepsPlayGate(s));
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");
             return fail;
@@ -732,6 +750,28 @@ namespace UiPreview
             if (close < 0) return false;
             string cond = body.Substring(guard, close - guard);
             return cond.Contains("LastReject", StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// 等待放行里必须有一条「倒计时就放行」的路，且不许顺手砍掉
+        /// PlayerControl + 连续两帧正位置那道闸。
+        ///
+        /// 判法用**具体 token**，不判「有没有 States.Countdown 这个词」——
+        /// 方法体里注释也会出现它，而注释在判据跑之前已被 SrcUtil.Clean 剥掉，
+        /// 所以这里比对的是活代码：`controller.state == States.Countdown`
+        /// 只出现在计数阶段的定义里，把它换成别的状态（MUT-D23）就红。
+        /// </summary>
+        private static bool CountdownReleaseKeepsPlayGate(string code)
+        {
+            string body = MethodBody(code, "AwaitReplayAlive");
+            if (body == null) return false;
+            bool hasCountdown = body.Contains("controller.state == States.Countdown", StringComparison.Ordinal);
+            bool hasWindow = body.Contains("CountdownWindowFrom", StringComparison.Ordinal)
+                && body.Contains("CountdownWindowTo", StringComparison.Ordinal);
+            bool hasRelease = body.Contains("render starts during countdown", StringComparison.Ordinal);
+            bool hasPlayGate = body.Contains("controller.state == States.PlayerControl", StringComparison.Ordinal)
+                && body.Contains("sawPositivePosition", StringComparison.Ordinal);
+            return hasCountdown && hasWindow && hasRelease && hasPlayGate;
         }
 
         private static bool DeleteIsTwoStep(string body)

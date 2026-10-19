@@ -199,10 +199,14 @@ public static int RenderCaptureMode = 1;  // 0 纯净相机 1 游戏画面(含UI
 核心机制（`VideoRenderJob.cs`）：
 
 1. `PlayActions.SwitchToPlayMode()`（`:181`）+ 重开关卡，走既有回放启动链；
-2. `AwaitReplayAlive`（`:675`）等回放真正接管（`is_playing` 且 conductor 已开唱）。
+2. `AwaitReplayAlive`（`:675`）等回放真正接管（`is_playing`）。
    等待预算是**真实秒数**（`Stopwatch`，10 s 上限）：等待期 `Time.captureFramerate` 早已设成 fps
    且不限帧，按帧计数会在倒计时（走真实 `AudioSettings.dspTime`，约 2.1 s）走完之前就误报超时；
    也不能改用 `Time.realtimeSinceStartup`/`unscaledTime`——它们已被下面的 `UnscaledDeltaPin` 换成虚拟时钟；
+   **放行条件必须包含 `States.Countdown`**（且 `songposition_minusi` 落在倒计时窗口内），
+   否则捕获起点被卡在 `PlayerControl`——而它恰恰是倒计时刚结束那一刻（`beatNumber` 逐拍
+   +1，切状态时 songposition 已 ≈1.24 s），成片会整段缺 GET READY / 3 2 1 / GO 与 4 声提示音。
+   锚点因此可以为负：`pin = 负锚点 + 已录秒数`，正好在歌曲 0 s 处过零；
 3. **时间钉扎**：`VideoRender.PinTimeline(audioAnchor)`（`:300`），此后每帧
    `PinnedSongPosition = anchor + clock * pitch`（`:398`）；
    `scrConductor.songposition_minusi` 的读与写都被替换（`VideoRenderPatches.cs:22-38`）；
