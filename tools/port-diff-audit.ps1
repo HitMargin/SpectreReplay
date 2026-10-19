@@ -239,8 +239,10 @@ $knownDeviations = @(
     # 两个都是源码里的短字符串 ⇒ 同一份明文每次加密得到相同密文(确定性)，
     # 且密文可被任意篡改而无从察觉。新实现：PBKDF2(HMAC-SHA256, 6万次迭代,
     # 每文件随机 salt) 派生加密密钥与 MAC 密钥两把 + 随机 IV + encrypt-then-MAC。
-    # 旧格式仅保留在解密侧作回落(存量文件与上游 Spectre 的 .sprp 都得读得开)，
-    # 写侧只产出新格式。下面这批是 BCL 密码学 API 的名字，不是游戏 API，
+    # 写侧只产出新格式。**旧上游格式的读侧回落已于 2026-10-19 按用户裁定整体移除**
+    # （两个短字串常量 / LegacyKey / LegacyIV / LegacyDerive / DecryptLegacy 全删，
+    #  非本模组容器一律拒绝、不做试探性解密），因此下面不再有那几条登记。
+    # 这批是 BCL 密码学 API 的名字，不是游戏 API，
     # 不会随游戏版本漂移;逐条登记而不是用一条宽泛串盖住整个文件。
     @{ Pat = 'HashAlgorithmName.SHA256';             Why = '2026-10-18 加密重写：PBKDF2 显式指定 HMAC-SHA256(与默认 SHA1 不同)' }
     @{ Pat = 'RandomNumberGenerator';                Why = '2026-10-18 加密重写：salt 与 IV 每文件随机取(确定性缺陷的根治点)' }
@@ -249,10 +251,6 @@ $knownDeviations = @(
     @{ Pat = 'ComputeMac';                           Why = '2026-10-18 加密重写：MAC 计算入口(覆盖魔数+版本+salt+IV+正文)' }
     @{ Pat = 'ConstantTimeEquals';                   Why = '2026-10-18 加密重写：定长时间比较(避免提前返回泄漏前缀匹配)' }
     @{ Pat = 'DecryptV2';                            Why = '2026-10-18 加密重写：新容器版本的解密分支' }
-    @{ Pat = 'DecryptLegacy';                        Why = '2026-10-18 加密重写：旧格式仅解密回落(写侧不再产出)' }
-    @{ Pat = 'LegacyKeyStorageKey';                  Why = '2026-10-18 加密重写：上游那两个常量改名后仅服务回落解密' }
-    @{ Pat = 'LegacyIVStorageKey';                   Why = '2026-10-18 加密重写：同上' }
-    @{ Pat = 'LegacyDerive';                         Why = '2026-10-18 加密重写：旧派生的独立函数(无盐无迭代，只读路径用)' }
     @{ Pat = 'Pbkdf2Iterations';                     Why = '2026-10-18 加密重写：迭代次数常量化' }
     @{ Pat = 'SaltLen';                              Why = '2026-10-18 加密重写：容器头字段长度常量' }
     @{ Pat = 'MacLen';                               Why = '2026-10-18 加密重写：同上' }

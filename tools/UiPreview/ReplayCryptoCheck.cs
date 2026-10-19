@@ -3,7 +3,12 @@
 // 2026-10-18 改造前的版本是**复刻**旧算法（自己 Derive("qwerty") 再 Crypt），
 // 于是"验的东西"和"跑的东西"是两份代码：ReplayCrypto 改成什么样它都照样绿。
 // 这正是本项目反复踩过的形态（复刻算法与被测算法会一起错），所以现在全部
-// 改调真实实现，只在需要旧格式对照时按旧常量本地算。
+// 改调真实实现。
+//
+// **旧上游格式（固定密钥 qwerty/potato）的读侧回落已于 2026-10-19 整体移除**
+// （用户裁定）。原先这里的 ⑥「上游 Spectre 的 .sprp 仍可解开」与 ⑦「旧路径确定性
+// 对照组」随之删除——它们守护的东西已经不存在了，留着只会把已删除的算法
+// 重新钉进测试里。现在只剩：
 //
 // 验七件事：
 //   ① 往返：Encrypt → Decrypt 一致
@@ -12,15 +17,13 @@
 //      旧格式 IV 固定 ⇒ 确定性；随机 salt+IV 之后这条才成立。
 //   ④ 篡改任意一个字节必须被拒（encrypt-then-MAC）。旧格式做不到：
 //      CBC 下改一个字节只会让明文跟着烂，不会被"证明被改过"。
-//   ⑤ 换 salt 也必须被拒——salt 参与 MAC，防"改 IV 看首个明文块"的预言机
-//   ⑥ 旧格式（上游 Spectre 的真 .sprp）仍能解开：读侧回落没坏
-//   ⑦ 旧格式的确定性仍在（对照组）：同一明文用旧路径加密两次必须相同，
-//      用来证明 ③ 的差异确实来自新格式而不是测试写错
+//   ⑤ 篡改 IV 也必须被拒——IV 不参与派生，改它密钥不变、CBC 仍能解，
+//      只有 MAC 覆盖 IV 才拦得下（改 salt 拦得住是因为密钥变了，表达不了缺陷）
+//   ⑥ 非本模组容器一律被拒——旧上游格式回落删掉之后的护栏
+//   ⑧ v2 容器仍可解开（2026-10-19 升级到 v3 的格式保险）
 using System;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace UiPreview
 {
@@ -35,17 +38,9 @@ namespace UiPreview
         // v2 的头部（无迭代次数字段）与 IV 偏移，只用于读夹具的越界断言。
         private const int HeaderLenV2 = 4 + 1 + 16 + 16 + 32;
 
-        // 旧格式常量：只用于"上游文件能不能解开"这一组的本地复算。
-        private static byte[] LegacyDerive(string s, int len)
-        {
-            using SHA256 sha = SHA256.Create();
-            byte[] h = sha.ComputeHash(Encoding.UTF8.GetBytes(s));
-            return h.Take(len).ToArray();
-        }
-
         internal static int Run(string projectRoot)
         {
-            Console.WriteLine("  ── 回放加密往返与跨模组互读 ──");
+            Console.WriteLine("  ── 回放加密往返与容器格式 ──");
             int fail = 0;
 
             byte[] plain = Enumerable.Range(0, 5000).Select(i => (byte)(i % 251)).ToArray();
@@ -103,6 +98,17 @@ namespace UiPreview
                 bool rejected2 = bad2 == null;
                 Console.WriteLine($"    {(rejected2 ? "✓" : "✗")} ⑤ 篡改 IV 被拒（IV 参与 MAC，不是仅参与解密）");
                 if (!rejected2) fail++;
+
+                // ⑥ 旧格式（上游固定密钥的裸 AES 流）现在必须被**拒绝**。
+                //
+                //    这条是删除旧格式的护栏：读侧回落一旦被人错误地加回来，
+                //    任意非本模组容器的字节都会被当成"可解密"试探，而删除的
+                //    意义（固定密钥不再存在于本模组）也就没了。用一段确定性
+                //    的伪随机字节模拟"别家的二进制"。
+                byte[] foreign = Enumerable.Range(0, 64).Select(i => (byte)(i * 37 + 11)).ToArray();
+                bool foreignRejected = SpectreReplay.Features.Replay.ReplayCrypto.Decrypt(foreign) == null;
+                Console.WriteLine($"    {(foreignRejected ? "✓" : "✗")} ⑥ 非本模组容器被拒（旧格式回落已移除，不做试探性解密）");
+                if (!foreignRejected) fail++;
             }
             catch (Exception ex)
             {
@@ -134,81 +140,9 @@ namespace UiPreview
                 fail++;
             }
 
-            // ⑦ 对照组：旧路径确实是确定性的
-            //   这条不测产品代码，测的是"③ 的差异来自新格式"这个归因。
-            try
-            {
-                byte[] k = LegacyDerive("qwerty", 32);
-                byte[] v = LegacyDerive("potato", 16);
-                byte[] a = Crypt(plain, k, v, true);
-                byte[] b = Crypt(plain, k, v, true);
-                bool deterministic = a.SequenceEqual(b);
-                Console.WriteLine($"    {(deterministic ? "✓" : "✗")} ⑦ 对照组：旧格式（固定 IV）确实确定");
-                if (!deterministic) fail++;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("    ✗ 对照组抛异常：" + ex.Message);
-                fail++;
-            }
-
-            // ⑥ 跨模组互读：拿上游 Spectre 旧格式的 .sprp 喂真实实现。
-            //
-            // **夹具在仓库里，不读本机安装。** 原先这段扫
-            // `...\Mods\Spectre\*.sprp`，找不到就 `return fail`——于是：
-            //   ① CI 里这条永远不跑（第一次 CI 跑出来 66 条断言，本地 68 条，
-            //      差的就是它与下面那行汇总，而两边都是绿的）；
-            //   ② 早退连汇总行一起跳过，日志里看不出少了什么；
-            //   ③ 它依赖玩家自己的存档，那既不可复现也不该进公开仓库。
-            // 夹具由 tools/gen-legacy-sprp.ps1 按上游 ReplayCrypto.cs 的**原始格式**
-            // （AES-256-CBC，key=SHA256("qwerty")，固定 IV=SHA256("potato")，正文为
-            // gzip 流）生成，内容是合成的：只证明"读侧回落没坏"，不含任何玩家数据。
-            try
-            {
-                string fixture = Path.GetFullPath(Path.Combine(
-                    projectRoot, "..", "tools", "UiPreview", "fixtures", "legacy-sprp.bin"));
-                byte[] raw = File.Exists(fixture) ? File.ReadAllBytes(fixture) : null;
-                byte[] dec = raw == null ? null : SpectreReplay.Features.Replay.ReplayCrypto.Decrypt(raw);
-                byte[] plainGz = dec == null ? null : Gunzip(dec);
-                bool ok = plainGz != null && plainGz.Length >= 8
-                    && plainGz[0] == 0x53 && plainGz[1] == 0x50 && plainGz[2] == 0x52
-                    && plainGz[3] == 0x63 && plainGz[4] == 0x72 && plainGz[5] == 0x70;
-                Console.WriteLine($"    {(ok ? "✓" : "✗")} ⑥ 上游 Spectre 的旧格式文件仍可解开"
-                    + (ok ? $"（legacy-sprp.bin，AES {raw.Length}B → gzip {dec.Length}B → 明文 {plainGz.Length}B）"
-                        : "（夹具缺失或读侧回落坏了；上游存量回放会集体打不开）"));
-                if (!ok) fail++;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("    ✗ ⑥ 解开 Spectre 文件抛异常：" + ex.GetType().Name + ": " + ex.Message);
-                fail++;
-            }
-
             if (fail == 0)
-                Console.WriteLine("    ✓ 新格式三条性质成立（随机化 / 完整性 / 旧文件仍可读）");
+                Console.WriteLine("    ✓ 新格式三条性质成立（随机化 / 完整性 / 非本容器被拒）");
             return fail;
-        }
-
-        private static byte[] Gunzip(byte[] data)
-        {
-            using var input = new MemoryStream(data);
-            using var gz = new System.IO.Compression.GZipStream(input,
-                System.IO.Compression.CompressionMode.Decompress);
-            using var output = new MemoryStream();
-            gz.CopyTo(output);
-            return output.ToArray();
-        }
-
-        private static byte[] Crypt(byte[] data, byte[] key, byte[] iv, bool encrypt)
-        {
-            using Aes aes = Aes.Create();
-            aes.Key = key; aes.IV = iv;
-            using MemoryStream ms = new MemoryStream();
-            using (var cs = new CryptoStream(ms,
-                    encrypt ? aes.CreateEncryptor() : aes.CreateDecryptor(),
-                    CryptoStreamMode.Write))
-                cs.Write(data, 0, data.Length);
-            return ms.ToArray();
         }
 
         private static int IndexOf(byte[] hay, byte[] needle)

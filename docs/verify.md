@@ -49,14 +49,14 @@ CI 里这两项不是"没部署"就是"目录不存在"，长期假红会淹掉�
 | ReflectionTargetCheck | 按名字取的游戏成员存在：`Notification.SetupNotification` 形参、`Time` 5 属性 getter、`AudioSettings` 3 属性 |
 | LevelProbeCheck | 关卡探测判据：现判据认得出 scnGame/scnEditor；三个历史错判据仍然错；认得出 4 个非游玩场景；移植后仍用场景名不许退回 `gameworld` |
 | CrossThreadFieldCheck | 9 个跨线程字段都带 `volatile`（UI 线程读、编码线程写） |
-| ReplayCryptoCheck | 加密往返、密文无明文 magic、错密钥被拒、**与真实 Spectre 模组的 .sprp 文件实测互通** |
+| ReplayCryptoCheck | 加密往返、密文无明文 magic、同一明文两次加密结果必须不同、篡改正文首字节/IV 被 MAC 拒、**非本模组容器一律拒绝（上游旧格式回落已整体移除，不再做试探性解密）**、v2 容器仍可解 |
 | EnumParseGuardCheck | 持久化枚举带 `Enum.IsDefined` 护栏（`Enum.TryParse("99")` 会成功并给出越界值） |
 | LoadMarkerCheck | `Load()` 第一句是 Debug.Log 启动行且**在 try 之前**（异常路径也带得到） |
 | LocFallbackCheck | 文案回退链每一级都活着：两张表对称、缺键时静默降级到另一种语言、双缺才露键名 |
 | InstanceInjectionCheck | 16 处 `__instance` 全部作用于**实例方法**（Harmony 只对非静态目标注入） |
 | LogPrefixCheck | 全部日志用 `[SpectreReplay]` 前缀（真实 Spectre 模组也装着会跑，前缀是区分来源的唯一依据） |
 
-**总数 69 个 ✓ 行**（2026-10-19 实测 69 ✓ / 0 ✗）。这个数字会随轮次变，
+**总数 67 个 ✓ 行**（2026-10-19 实测；删掉旧上游格式回落的 ⑥/⑦ 两条后从 69 降到 67）。这个数字会随轮次变，
 引用前先跑一遍 `verify.ps1` 看真实条数。
 
 > **口径修正（2026-10-12）：`✓ 行数 ≠ 断言单元数`，早先"两者相等"的说法是错的。**
