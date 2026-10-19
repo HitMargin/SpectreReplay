@@ -604,6 +604,10 @@ $knownDeviations = @(
     @{ Pat = 'Enum.TryParse';           File = 'Patch_Lifecycle.cs'; Why = '2026-10-19 判定模式自动对齐：从回放数据解析目标难度（原处是直接比较后拒绝播放）' }
     @{ Pat = 'Features.VideoRender.VideoRender.CancelForSceneExit'; File = 'Patch_Lifecycle.cs'; Why = '2026-10-19 Esc 退出试玩要同步取消渲染作业（否则相机仍钉在 RT 上 ⇒ 镜厅 + 卡死）' }
     @{ Pat = 'VideoRender.VideoRender.NotifyPlaybackRestarted'; File = 'Patch_Lifecycle.cs'; Why = '2026-10-19 捕获期 Start_Rewind 二次触发 = 时间轴失效，通知作业中止' }
+    @{ Pat = 'System.Diagnostics.Stopwatch'; File = 'VideoRenderJob.cs'; Why = '2026-10-20 等待预算改真实秒数：必须用 Stopwatch，Time.realtimeSinceStartup / unscaledTime 已被 UnscaledDeltaPin 换成虚拟时钟（等待期 TickFrame 一次不调 ⇒ 读出来冻住）' }
+    @{ Pat = 'waitClock'; File = 'VideoRenderJob.cs'; Why = '同上：真实时钟句柄' }
+    @{ Pat = 'Elapsed.TotalSeconds'; File = 'VideoRenderJob.cs'; Why = '同上：Stopwatch 的计时读数（超时日志里打真实等了多久，方便下次看到底是慢还是真死）' }
+    @{ Pat = 'AudioListener.pause'; File = 'VideoRenderJob.cs'; Why = '2026-10-20 等待期每帧解除全局音频暂停：倒计时与歌曲调度全靠 AudioSettings.dspTime，暂停 ⇒ 停在 Countdown 不动' }
 )
 
 Write-Output ""

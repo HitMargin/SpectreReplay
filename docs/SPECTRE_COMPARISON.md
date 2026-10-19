@@ -198,12 +198,15 @@ public static int RenderCaptureMode = 1;  // 0 纯净相机 1 游戏画面(含UI
 
 核心机制（`VideoRenderJob.cs`）：
 
-1. `PlayActions.SwitchToPlayMode()`（`:126`）+ 重开关卡，走既有回放启动链；
-2. `AwaitReplayAlive`（`:402-429`）等回放真正接管（`is_playing` 且 conductor 已开唱）；
-3. **时间钉扎**：`VideoRender.PinTimeline(audioAnchor)`（`:209`），此后每帧
-   `PinnedSongPosition = anchor + clock * pitch`（`:268`）；
-   `scrConductor.songposition_minusi` 的读与写都被替换（`VideoRenderPatches.cs:20-38`）；
-4. `Time.captureFramerate = fps`（`:546`）+ 5 个 `Time.*` 原生 detour（`unscaled` 族）
+1. `PlayActions.SwitchToPlayMode()`（`:181`）+ 重开关卡，走既有回放启动链；
+2. `AwaitReplayAlive`（`:675`）等回放真正接管（`is_playing` 且 conductor 已开唱）。
+   等待预算是**真实秒数**（`Stopwatch`，10 s 上限）：等待期 `Time.captureFramerate` 早已设成 fps
+   且不限帧，按帧计数会在倒计时（走真实 `AudioSettings.dspTime`，约 2.1 s）走完之前就误报超时；
+   也不能改用 `Time.realtimeSinceStartup`/`unscaledTime`——它们已被下面的 `UnscaledDeltaPin` 换成虚拟时钟；
+3. **时间钉扎**：`VideoRender.PinTimeline(audioAnchor)`（`:300`），此后每帧
+   `PinnedSongPosition = anchor + clock * pitch`（`:398`）；
+   `scrConductor.songposition_minusi` 的读与写都被替换（`VideoRenderPatches.cs:22-38`）；
+4. `Time.captureFramerate = fps`（`:885`）+ 5 个 `Time.*` 原生 detour（`unscaled` 族）
    + 1 个 `scrConductor.Update` 的 Transpiler（把 `AudioSettings.dspTime` 等换成确定性值）
    —— 三路覆盖游戏能读到的**全部时间源**；
 5. 每帧固定十步：反压排空 → `WaitForEndOfFrame` → 推进时钟 → `mixdown.CaptureFrame()`

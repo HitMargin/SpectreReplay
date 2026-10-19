@@ -1612,6 +1612,18 @@ switch ($Which) {
         ReplaceExact 'Pages\Pages.cs' 'EffectRemoverOn && EffectRemoverDecorations);' 'EffectRemoverOn);'
     }
 
+    'MUT-D22' {
+        # ㉘ 等待预算回归：把「按真实秒数等」改回「按帧数等」。
+        #      等待期 Time.captureFramerate / vSyncCount / targetFrameRate 早已设好，
+        #      帧循环每帧只花亚毫秒级，600 帧不到一秒就跑完；而进 PlayerControl 的
+        #      判决走真实 AudioSettings.dspTime（buffer 0.5s + 4 拍 ≈ 2.1s）
+        #      ⇒ 倒计时没走完就误报「等待回放开始超时」（2026-10-20 现场）。
+        #      两处一起改回帧计数：只删 Stopwatch 会编译不过，只改循环条件
+        #      则 waitClock 空转、行为不变。
+        Backup 'Features\VideoRender\Pipeline\VideoRenderJob.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'System.Diagnostics.Stopwatch waitClock = System.Diagnostics.Stopwatch.StartNew();' 'int limit = Math.Max(30, Settings.RenderFps * 10); int loop = 0;'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'while (waitClock.Elapsed.TotalSeconds < WaitBudgetSeconds)' 'while (loop++ < limit)'
+    }
     'MUT-D14' {
         # ㉔ BPM 回归：官方关卡退回硬写 0（详情面板重新显示成问号）。
         Backup 'Features\Replay\Patches\Patch_Lifecycle.cs'

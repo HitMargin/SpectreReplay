@@ -638,6 +638,28 @@ namespace UiPreview
                 "㉗b 早退必须同时要求「关卡已在跑」+「有拒绝记录」(只看其一会误杀)",
                 "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
                 s => AwaitReplayAliveRequiresBoth(s));
+            // ㉘ 等待回放开始的那段预算必须是**真实秒数**，不能是帧数。
+            //
+            //    2026-10-20 现场：scnGame 视频渲染报「等待回放开始超时」，日志里
+            //    is_playing=True / songLive=True / state=Countdown。倒计时本身没坏，
+            //    是预算算错了：SaveGlobalState 在等待之前就设好了
+            //    Time.captureFramerate=fps / vSyncCount=0 / targetFrameRate≥1000，
+            //    等待循环每帧只花亚毫秒级，旧版 600 帧不到一秒就跑完；而进
+            //    PlayerControl 的判决（beatNumber 追上 adjustedCountdownTicks）走的是
+            //    真实 AudioSettings.dspTime：buffer 0.5s + 4 拍 ≈ 2.1s，必然误报。
+            //
+            //    两条一起判，缺一条都能被「看起来改了」骗过：
+            //    ① 方法体里不许再有按帧的循环预算（旧形态是 fps*10）；
+            //    ② 必须真的用 System.Diagnostics.Stopwatch 计时。
+            //    也不许改用 Time.realtimeSinceStartup / Time.unscaledTime——它们已被
+            //    UnscaledDeltaPin 换成虚拟时钟，推进它的 TickFrame() 只在捕获循环里，
+            //    等待期读到的值是冻住的，那等于把「太快误报」改成「永不超时」。
+            fail += Check(projectRoot,
+                "㉘ 等待回放的预算必须按真实秒数记(按帧算会在倒计时没走完时误报超时)",
+                "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
+                s => MethodBody(s, "AwaitReplayAlive") is string ab
+                    && !ab.Contains("fps * 10", StringComparison.Ordinal)
+                    && ab.Contains("System.Diagnostics.Stopwatch", StringComparison.Ordinal));
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");
             return fail;

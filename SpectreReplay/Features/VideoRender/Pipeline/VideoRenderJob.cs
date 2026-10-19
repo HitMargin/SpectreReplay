@@ -215,7 +215,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
 
         SetPhase(VideoRender.Phase.WaitingPlayback, "rendervideo.stage.waiting", "");
         playbackLive = false;
-        yield return AwaitReplayAlive(fps);
+        yield return AwaitReplayAlive();
         // 顺序有意义：AwaitReplayAlive 在取消时是直接 return 的，playbackLive 会停在 false。
         // 若先判 !playbackLive，用户点了取消却收到"等待回放开始超时"的失败通知
         if (cancelRequested) { NotifyCanceled(); yield break; }
@@ -653,13 +653,38 @@ internal sealed class VideoRenderJob : MonoBehaviour
     // `PlayActions.StopPlaying()` 把它清回 false，而编辑器重开关卡时
     // Start_Rewind 会连发多次。所以这里判的是「某一刻已经接管」，不做持续性
     // 假设——真要看它是否稳定，靠下面超时那条现场日志，不靠猜。
-    private IEnumerator AwaitReplayAlive(int fps)
+    //
+    // ── 等待预算按「真实秒数」算，不按帧数 ──────────────────────────
+    // 2026-10-20 实测（scnGame 重载 + 谱面自带间隔倒计时）：倒计时还没走完就报了
+    // 「等待回放开始超时」，现场是 is_playing=True / songLive=True /
+    // state=Countdown。倒计时本身没坏，是**预算算错了**：
+    //   · SaveGlobalState 在等待之前就把 Time.captureFramerate=fps、
+    //     vSyncCount=0、targetFrameRate≥1000 全设好，等待循环每帧只花亚毫秒级，
+    //     旧版 `fps * 10` = 600 帧不到一秒就跑完了；
+    //   · 而进 PlayerControl 的判决（scrController.Countdown_Update 要求
+    //     conductor.beatNumber 追上 adjustedCountdownTicks）走的是**真实
+    //     AudioSettings.dspTime**：dspTimeSong = dspTime + buffer(0.5s)，之后
+    //     还要 4 拍（60/145 BPM ≈ 1.66 s），合计 2.1 s 以上。
+    // 「按帧等」和「按秒走」对不上，必然误报。同一动作第二次触发（场景已加载、
+    // Start_Rewind 更早）又能成功——典型的竞态，不是死锁。
+    //
+    // **计时器只能用 System.Diagnostics.Stopwatch。** Time.realtimeSinceStartup /
+    // Time.unscaledTime(AsDouble) 已被 UnscaledDeltaPin 换成虚拟时钟，而推进它的
+    // TickFrame() 只存在于捕获循环里——等待期读这几个值是冻住的，换成它们等于把
+    // 「太快误报」改成「永不超时」。
+    private IEnumerator AwaitReplayAlive()
     {
-        int limit = Math.Max(30, fps * 10);
-        for (int i = 0; i < limit; i++)
+        // 10 秒真实预算：正常倒计时约 2.1 s，余量留给场景加载慢 / 外部 mod 抢时序
+        const double WaitBudgetSeconds = 10.0;
+        System.Diagnostics.Stopwatch waitClock = System.Diagnostics.Stopwatch.StartNew();
+        while (waitClock.Elapsed.TotalSeconds < WaitBudgetSeconds)
         {
             if (cancelRequested)
                 yield break;
+
+            // 编辑器/后台聚焦策略可能暂停全局音频。倒计时与歌曲调度全靠音频时钟，
+            // 等待期就把这条按住（捕获循环里同样每帧这么做）
+            AudioListener.pause = false;
 
             // 关卡已经在跑（歌已开始 / 已进 PlayerControl）而回放仍未接管：
             // 这是**确定的失败**，不是「还没就绪」。继续空转到 10 秒只会把
@@ -734,6 +759,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
             blockText.Append(kv.Key).Append(':').Append(kv.Value);
         }
         Debug.Log("[SpectreReplay] 等待回放开始超时，现场状态："
+            + " waited=" + waitClock.Elapsed.TotalSeconds.ToString("F1") + "s"
             + " PlayMode=" + SpectreState.PlayMode
             + " RecordMode=" + SpectreState.RecordMode
             + " is_playing=" + SpectreState.is_playing
