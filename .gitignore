@@ -9,3 +9,7 @@ obj/
 verify-last.log
 mutate-regression-last.log
 .tmp_*
+
+# 临时提交信息文件
+_msg*.txt
+_commitmsg*.txt
