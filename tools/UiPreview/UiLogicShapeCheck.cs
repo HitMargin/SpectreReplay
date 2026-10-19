@@ -441,7 +441,7 @@ namespace UiPreview
             fail += Check(projectRoot,
                 "㉑a 特殊按键两条输入路径都要挂 Feature(轮询 + 异步，缺一是静默半残)",
                 "Features\\Replay\\Patches\\Patch_SpecialKeys.cs",
-                s => CountClosedArgs(s, "Feature = FeatureKeys.SpecialKeys") == 2);
+                s => BothInputPathsHaveFeature(s));
             fail += Check(projectRoot,
                 "㉑b Main 必须注册 SpecialKeys 的谓词(未注册 = 按关闭处理)",
                 "Main.cs",
@@ -805,6 +805,29 @@ namespace UiPreview
         /// 计数照样是 2 ⇒ 变异改了代码而判据仍绿（MUT-U42 实测踩到，
         /// 与本项目早前「playback.openlevel 前缀假判据」同一形态）。
         /// </summary>
+        /// <summary>
+        /// ㉑a 的判据：**按两个补丁类切段**，每段都必须出现 Feature 绑定。
+        ///
+        /// **不能用「全文出现 N 次」。** 异步侧因 r150 把 <c>GetSpecialInput</c> 从
+        /// <c>List&lt;AsyncKeyCode&gt; GetSpecialInput()</c> 改成
+        /// <c>void GetSpecialInput(List&lt;AsyncKeyCode&gt; keys)</c>，拆成
+        /// <c>PostfixOld</c>/<c>PostfixNew</c> 两条版本分叉补丁 ⇒ 同一个接入点上
+        /// 有 2 次绑定，全文共 3 次。写死 2 会把正确的分叉判红（实测就这条挂）；
+        /// 放宽成「&gt;= 2」又会让「键盘侧挂了、异步侧整段没挂」照样绿——而那正是
+        /// 这条判据要抓的静默半残。分段计数对两种情况都对：一段里分叉成几条都行，
+        /// 但**每段至少要有一条**。
+        /// </summary>
+        private static bool BothInputPathsHaveFeature(string s)
+        {
+            const string needle = "Feature = FeatureKeys.SpecialKeys";
+            int kb = s.IndexOf("class Patch_KeyboardSpecialKeys", StringComparison.Ordinal);
+            int ac = s.IndexOf("class Patch_AsyncSpecialKeys", StringComparison.Ordinal);
+            if (kb < 0 || ac < 0 || ac < kb)
+                return false;   // 两个补丁类缺一 / 顺序变了 ⇒ 判红，不静默通过
+            return CountClosedArgs(s.Substring(kb, ac - kb), needle) >= 1
+                && CountClosedArgs(s.Substring(ac), needle) >= 1;
+        }
+
         private static int CountClosedArgs(string s, string needle)
         {
             int n = 0, i = 0;

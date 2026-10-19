@@ -19,6 +19,18 @@ if (-not (Test-Path $asmPath)) {
     exit 3
 }
 $asm = [Reflection.Assembly]::LoadFrom($asmPath)
+
+# **当前 build 号：版本门控的判据。** 补丁可带 MinVersion/MaxVersion，只在特定
+# build 段挂载。本脚本必须知道当前是哪一段，否则分叉对里"属于别的段"的那条会被
+# 拿当前 DLL 反射、当成缺陷报出来（本轮实测：r149 的 List 返回值补丁对着 r150 的
+# void 目标）。反射 Releases.releaseNumber；拿不到就保持 -1 = 不启用门控跳过，
+# 宁可多报也不静默漏判。
+$release = -1
+$relType = $asm.GetType('Releases')
+if ($relType) {
+    $relField = $relType.GetField('releaseNumber', [Reflection.BindingFlags]::Public -bor [Reflection.BindingFlags]::Static)
+    if ($relField) { $release = [int]$relField.GetValue($null) }
+}
 # 读不到源目录时 Get-ChildItem 会去递归遍历父目录、在无关路径抛 AccessDenied
 # （round 38 实测），报错指不到"路径指错了"这个根因。先在此处拦住。
 if (-not (Test-Path $src)) {
@@ -35,6 +47,7 @@ if ($files.Count -eq 0) {
 Write-Output "=== 用了 __result 的补丁，其目标方法的返回类型 ==="
 
 $bad = @()
+$gated = 0   # 因版本门控跳过判定的补丁数（正常现象，仅作可见性）
 foreach ($f in $files) {
     $t = [IO.File]::ReadAllText($f.FullName)
     if ($t -notmatch '__result') { continue }
@@ -65,6 +78,20 @@ foreach ($f in $files) {
         }
         if ($sig -notmatch '__result') { continue }
 
+        # **版本门控**：这条补丁只在其声明的 build 区间内挂载。区间不含当前 build 时，
+        # 它针对的是另一版方法签名——用当前 DLL 反射它没有意义（典型：r149- 的
+        # List 返回值补丁 vs r150+ 的 void 目标）。跳过并显式打印，不计入问题数。
+        $minV = 0; $maxV = 0
+        $g = [regex]::Match($attr, 'MinVersion\s*=\s*(\d+)')
+        if ($g.Success) { $minV = [int]$g.Groups[1].Value }
+        $g = [regex]::Match($attr, 'MaxVersion\s*=\s*(\d+)')
+        if ($g.Success) { $maxV = [int]$g.Groups[1].Value }
+        if ($release -gt 0 -and (($minV -gt 0 -and $release -lt $minV) -or ($maxV -gt 0 -and $release -gt $maxV))) {
+            Write-Output ("  [门控跳过 r{0}] {1}  {2}.{3}  生效区间 r{4}-r{5}" -f $release, $rel, $tn, $m, $minV, $maxV)
+            $gated++
+            continue
+        }
+
         $type = $asm.GetType($tn)
         $ret = '类型未找到'
         if ($type) {
@@ -85,6 +112,11 @@ foreach ($f in $files) {
     }
 }
 
+if ($release -gt 0) {
+    Write-Output ("（当前 build r{0}；版本门控跳过 {1} 条，未参与判定）" -f $release, $gated)
+} else {
+    Write-Output "（releaseNumber 反射失败，版本门控未启用——带 MinVersion/MaxVersion 的补丁也按当前 DLL 判定）"
+}
 Write-Output ("=== 问题数: " + $bad.Count + " ===")
 $bad | ForEach-Object { Write-Output ("  " + $_) }
 # **必须给退出码。** 原先这份脚本只打印不判定——verify.ps1 靠退出码判定，

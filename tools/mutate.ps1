@@ -1375,34 +1375,41 @@ switch ($Which) {
         SetLines 'Pages\Pages.cs' $out2.ToArray()
     }
     'MUT-U42' {
-        # ㉑a：把异步那条补丁的 Feature 摘掉 = 只挂轮询一条(静默半残)。
+        # ㉑a：把**异步侧整段**的 Feature 摘掉 = 只挂轮询一条(静默半残)。
         #      这正是这条判据要抓的形态：只数「出现过 FeatureKeys.SpecialKeys」
-        #      的假判据会绿(还有一处)。
+        #      的假判据会绿(键盘侧还有一处)。
+        #
+        #      **锚点按补丁类切段，不按「第 N 处」。** 异步侧因 r150 把
+        #      GetSpecialInput 改成 void + 形参，拆成 PostfixOld/PostfixNew 两条
+        #      版本分叉补丁，共 2 处绑定。还按序号删第 2 处的话只剩 PostfixNew
+        #      挂着 ⇒ 异步这条路径仍算「挂上了」，判据照绿、变异存活（实测）。
+        #      要模拟的失败是「异步这条输入路径整个没接」，所以删该段内**全部**绑定。
         Backup 'Features\Replay\Patches\Patch_SpecialKeys.cs'
         $ls = Lines 'Features\Replay\Patches\Patch_SpecialKeys.cs'
+        $inAsync = $false
         $n = 0
         $removed = 0
         for ($i = 0; $i -lt $ls.Count; $i++) {
-            if ($ls[$i].Contains('Feature = FeatureKeys.SpecialKeys')) {
+            if ($ls[$i].Contains('class Patch_AsyncSpecialKeys')) { $inAsync = $true }
+            if ($inAsync -and $ls[$i].Contains('Feature = FeatureKeys.SpecialKeys')) {
                 $n++
-                if ($n -eq 2) {
-                    # **锚点必须与判据同源。** 第一版写的是 -replace ', Feature = ...'，
-                    # 而实际代码里 Feature 前面是换行不是逗号 ⇒ 一次都没替换到；
-                    # 计数却用 Contains(另一个条件) ⇒ 不 throw、变异静默没改文件，
-                    # 闸门全绿被误判成"判据是假的"(实测)。现在按同一子串替换并
-                    # 用替换后的差异做自检。
-                    $before = $ls[$i]
-                    # **必须整段删掉，不能加后缀。** 加 _DISABLED 的话原串仍是
-                    # 前缀，任何子串计数判据都会照样命中（实测 MUT-U42 第一次
-                    # 就是这么假绿的）。这里保留行尾的逗号/右括号，语法仍然完整。
-                    $ls[$i] = $ls[$i].Replace('Feature = FeatureKeys.SpecialKeys, ', '')
-                    $ls[$i] = $ls[$i].Replace('Feature = FeatureKeys.SpecialKeys)', ')')
-                    if ($ls[$i] -ne $before) { $removed++ }
-                }
+                # **锚点必须与判据同源。** 第一版写的是 -replace ', Feature = ...'，
+                # 而实际代码里 Feature 前面是换行不是逗号 ⇒ 一次都没替换到；
+                # 计数却用 Contains(另一个条件) ⇒ 不 throw、变异静默没改文件，
+                # 闸门全绿被误判成"判据是假的"(实测)。现在按同一子串替换并
+                # 用替换后的差异做自检。
+                $before = $ls[$i]
+                # **必须整段删掉，不能加后缀。** 加 _DISABLED 的话原串仍是
+                # 前缀，任何子串计数判据都会照样命中（实测 MUT-U42 第一次
+                # 就是这么假绿的）。这里保留行尾的逗号/右括号，语法仍然完整。
+                $ls[$i] = $ls[$i].Replace('Feature = FeatureKeys.SpecialKeys, ', '')
+                $ls[$i] = $ls[$i].Replace('Feature = FeatureKeys.SpecialKeys)', ')')
+                if ($ls[$i] -ne $before) { $removed++ }
             }
         }
+        # 异步侧当前是 PostfixOld + PostfixNew 两条（版本分叉），两条都要摘。
         if ($n -ne 2) { throw ('MUT-U42 unexpected count=' + $n) }
-        if ($removed -ne 1) { throw ('MUT-U42 锚点没改动任何字节(removed=' + $removed + ')') }
+        if ($removed -ne $n) { throw ('MUT-U42 有条绑定没改动任何字节(n=' + $n + ' removed=' + $removed + ')') }
         SetLines 'Features\Replay\Patches\Patch_SpecialKeys.cs' $ls
     }
     'MUT-U43' {

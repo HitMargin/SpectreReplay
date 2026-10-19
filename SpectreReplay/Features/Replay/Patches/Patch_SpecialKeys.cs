@@ -16,10 +16,16 @@
 // 与"根本没实现"完全一样。
 //
 // ── 改动的是"谁算特殊键"的判定，不是按键状态本身 ──────────────
-// 两个目标方法返回的是**这次哪些特殊键被按下了**的列表；调用方
+// 两个目标方法给出的都是**这次哪些特殊键被按下了**；调用方
 // （`RDInputType_Keyboard.MainIgnoreActive` / `RDInputType_AsyncKeyboard` 的同类
-// 逻辑）拿到后逐条把该键从本帧按键集里移除。所以从返回列表里删掉一条 = 该键
+// 逻辑）拿到后逐条把该键从本帧按键集里移除。所以从这个结果里删掉一条 = 该键
 // 不再被剔除，会正常计入按键数并随后被我们的录制路径采到。
+//
+// 两个接入点分别有两个版本形状（r150 异步输入重构改了 GetSpecialInput 的签名）：
+//   · Keyboard.CountSpecialInput    返回 List<KeyCode>          —— 两版一致
+//   · AsyncKeyboard.GetSpecialInput r149- 返回 List<AsyncKeyCode>
+//                                   r150+ void + 调用方传入 keys 缓冲
+// 异步侧因此拆成 PostfixOld(MaxVersion=149)/PostfixNew(MinVersion=150) 两条；
 //
 // **绝不能反过来往列表里加**：调用方是在 `keys` 上做 Remove，加进去只是被删掉，
 // 看起来一样；但同一个列表还有 `Cancel()` 那条路径（Escape），一旦允许加入，
@@ -181,14 +187,39 @@ internal static class Patch_AsyncSpecialKeys
         return name;
     }
 
+    // ── 版本分叉：r150 把 GetSpecialInput 的签名换了 ──────────────
+    // r141–r149：private List<AsyncKeyCode> GetSpecialInput()  —— 由返回值给出这次按下的特殊键
+    // r150+    ：private void GetSpecialInput(List<AsyncKeyCode> keys) —— 调用方传缓冲进来，方法内
+    //            `keys.Clear()` 后原地填充（异步输入重构，unity 6000.3 升级同步带来的）
+    //
+    // **为什么必须拆两条**：`__result` 在 void 目标上注不进值（Harmony 静默给默认值），
+    // 而 r150+ 的 `keys` 形参在旧版根本不存在（DisambiguateByPatchParams 按名匹配不上）。
+    // 与 Patch_Hit 同一模式：MinVersion/MaxVersion 各钉一半，门控跳过的那条不算失败。
+    //
+    // 版本号本身不可靠（两次解包 releaseNumber 都是 150），分叉点是靠 adofai-libs 的
+    // 反编译历史定的：0e766efa/7c67e66e 仍返回 List，1250bb55 起为 void。
+
+    // r141–r149：返回列表 —— 与键盘侧同款 `__result` 写法
     [SpectrePatch(typeof(RDInputType_AsyncKeyboard), "GetSpecialInput", PatchType.Postfix,
-        Feature = FeatureKeys.SpecialKeys)]
-    internal static void Postfix(List<AsyncKeyCode> __result)
+        Feature = FeatureKeys.SpecialKeys, MaxVersion = 149)]
+    internal static void PostfixOld(List<AsyncKeyCode> __result)
     {
         EnsureLabels();
         if (_allowedNames.Count == 0 || __result == null || __result.Count == 0)
             return;
         // 名字只在首次遇到该 label 时算一次；之后是纯字典/哈希查找，零分配
         __result.RemoveAll(k => _allowedNames.Contains(LabelName(in k)));
+    }
+
+    // r150+：void + `keys` 形参 —— 直接过滤调用方传进来的缓冲（方法内先 Clear 再填充，
+    // Postfix 跑完时里面就是这次按下的特殊键全集）。原地 RemoveAll，语义与旧版等价。
+    [SpectrePatch(typeof(RDInputType_AsyncKeyboard), "GetSpecialInput", PatchType.Postfix,
+        Feature = FeatureKeys.SpecialKeys, MinVersion = 150)]
+    internal static void PostfixNew(List<AsyncKeyCode> keys)
+    {
+        EnsureLabels();
+        if (_allowedNames.Count == 0 || keys == null || keys.Count == 0)
+            return;
+        keys.RemoveAll(k => _allowedNames.Contains(LabelName(in k)));
     }
 }
