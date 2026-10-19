@@ -15,13 +15,13 @@ SpectreReplay is a UnityModManager mod (mod id `com.spectre.replay`). It records
 - **Manual save.** A hotkey saves the current run mid-level, including the runs you abandon on purpose.
 - **Cancel save.** Another hotkey drops the run being recorded — for warm-ups and retries you do not want in the folder.
 - **Protection against junk and lost runs.** Runs can be skipped when the game played itself (auto) or when the run contains misses, and a run can still be saved when you fail a level instead of finishing it.
-- **Backups.** Optionally keep a second copy of every saved replay, so a bad file never costs you the recording.
+- **Backups.** Optionally keep a second copy of every saved replay, so a bad file never costs you the recording. The copy is taken from the finished file rather than saved a second time, and it is skipped when the main save itself failed.
 - **Keyboard sound (optional).** Microphone input can be recorded alongside the run and attached to the replay.
 
 ### Playback
 
 - **Replays play in-game.** The recording drives the real game: hit timings, floors and lifecycle are all restored frame by frame.
-- **Load from file.** A file list shows every replay in the save directory, in all replay formats this mod can read; pick one and it is armed.
+- **Load from file.** A file list shows every replay in the save directory; pick one and it is armed. Two container variants are produced: `.sprp` (encrypted, the default) and `.psprp` (unencrypted, for debugging).
 - **Open the level directly.** A loaded replay knows which chart it came from, so the mod can open that level for you — editor charts and official levels alike — and land on the right floor once it is ready.
 - **Unload.** Drop the armed replay without leaving the level.
 - **Key injection.** Keys are injected into the game's input layer, so the game reacts to them exactly as it reacts to your keyboard. Both the synchronous input path and the asynchronous input path are supported; with async input enabled, timestamps come from the game's own input stamps instead of frame boundaries and are noticeably more accurate.
@@ -69,13 +69,29 @@ Version gating is part of the same mechanism. A patch that targets an API that o
 
 ### Recording
 
-While you play, the recorder samples once per frame and encodes the run into a compact binary stream: for each frame, the key state and the judgement results — hit error, floor index, timestamps — plus the run metadata needed to reproduce the context (chart identity, difficulty, speed, and the per-hit context needed to recompute margins). The stream is then gzipped and encrypted with AES before it is written to disk. The file begins with a magic value and a format version, so a replay from a newer build is rejected as "version too new" instead of being half-parsed into something misleading.
+While you play, the recorder samples once per frame and encodes the run into a compact binary stream: for each frame, the key state and the judgement results — hit error, floor index, timestamps — plus the run metadata needed to reproduce the context (chart identity, difficulty, speed, and the per-hit context needed to recompute margins). The stream is then compressed (Brotli quality 6, in a small wrapper that records the algorithm and the original length) and encrypted before it is written to disk. Payloads under 512 bytes are stored raw, and so is anything that fails to compress smaller — the wrapper makes the choice per file, so the reader never has to guess.
+
+The container begins with a magic value, a format version, and — from version 3 on — the key-derivation iteration count. A replay from a newer build is rejected cleanly instead of being half-parsed into something misleading.
+
+#### Design note: the container format
+
+Encryption here exists to keep casual edits out of the file, not to defend against someone determined to read it — the passphrase ships inside the DLL, and no amount of iteration count changes that. So the design targets the three things that *are* fixable:
+
+- **Key derivation is salted and iterated** (PBKDF2-HMAC-SHA256, per-file random salt), which raises the cost of recovering the key from the assembly and defeats precomputed tables.
+- **A fresh random IV per file.** The upstream design used a fixed IV derived from a constant string, which made encryption deterministic: two identical runs produced byte-identical files. That is a worse leak than a weak key, because it turns "I have two identical results" into an observable fact.
+- **Encrypt-then-MAC.** HMAC-SHA256 covers magic, version, iteration count, salt, IV and ciphertext, and the MAC is verified *before* decryption — so a tampered file is rejected at the first step instead of being fed to CBC to produce garbage (or, one time in ~256, garbage that passes the padding check).
+
+Version 3 writes the iteration count into the header so it can be tuned later without another format break; version 2 files pin the old 60 000 iterations, because that value is not stored in their header.
+
+The compressor is versioned independently of the container: the wrapper's first byte names the algorithm (raw / gzip / Brotli), and a payload whose first byte is `0x1F` is treated as a bare gzip stream from the pre-wrapper layout. That older layout is still read, because replays written before Brotli was introduced carry it.
+
+The read path accepts only this container. Replays recorded by upstream Spectre with its own fixed-key format, and replays saved by this mod before the 2026-10-18 rewrite, are **not readable** — that compatibility fallback was removed deliberately, since a decryption routine compiled into the DLL keeps the key right next to the lock.
 
 Keeping the payload compact matters beyond file size: the recorder runs on the main thread during gameplay, so the per-frame cost is bounded and the file stays small enough to keep hundreds of runs.
 
 ### Playback
 
-On load, the file is decrypted, decompressed and decoded into a timeline of key events and hit contexts. During playback the mod replays that timeline against the game's own frame update: the recorded state overrides the live state each frame (planet angle, floor, auto flag, judgement state), and keys are injected into the input layer at the timestamps the recording says they happened. This is why a replay looks identical to the run rather than merely similar: the game's real hit detection runs on the injected input, so the visuals are produced by the same code that produced them the first time.
+On load, the file is decrypted (MAC verified first), decompressed and decoded into a timeline of key events and hit contexts. During playback the mod replays that timeline against the game's own frame update: the recorded state overrides the live state each frame (planet angle, floor, auto flag, judgement state), and keys are injected into the input layer at the timestamps the recording says they happened. This is why a replay looks identical to the run rather than merely similar: the game's real hit detection runs on the injected input, so the visuals are produced by the same code that produced them the first time.
 
 Two input paths are supported. The legacy path injects key events into the game's keyboard state; the asynchronous path feeds the game's async input queue, which is what the game uses for accurate hit timing when that option is on. Injecting through the queue rather than synthesising key state directly is what makes the timing match a human run instead of the frame boundary.
 
