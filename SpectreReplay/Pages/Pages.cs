@@ -83,7 +83,12 @@ namespace SpectreReplay.Pages
                 OnGui.Row("record.latesave", LateSave, v => { LateSave = v; Commit(); }, ReplayOn);
                 OnGui.Row("record.failsave", FailSave, v => { FailSave = v; Commit(); }, ReplayOn);
                 OnGui.Row("record.backup", Backup, v => { Backup = v; Commit(); }, ReplayOn);
-                OnGui.Row("record.limitkey", LimitKey, v => { LimitKey = v; Commit(); }, ReplayOn);
+                // （原「限制按键数」一行 2026-10-19 按用户要求删除。它不是"多余"而是
+                //   **假开关**：文案说限制单局记录的按键数，而全仓没有任何收按键盘数的
+                //   代码；Settings.LimitKey 唯一的消费点是 key_convert_list2array 的
+                //   `!LimitKey ||` 前置条件，而那个函数的末态由末尾兜底循环决定，
+                //   开关真假只改中间态、末态逐字节相同。留着一个拨了没反应、说明还
+                //   在编功能的开关，比没有这个开关更糟——玩家会以为回放文件被它撑大。）
                 // 这两项都是**真的行为开关**（不是摆设）：ManualSave 管 F9 手动保存
                 // 那条补丁挂不挂（Main.cs + Patch_Misc.cs）、GetDataFromAsyncInput
                 // 管按键从异步输入还是轮询取（Main.cs + AsyncKeyRecorder.cs）。

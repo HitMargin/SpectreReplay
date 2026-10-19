@@ -851,7 +851,7 @@ namespace UiPreview
             {
                 "record.autosave", "record.completesave", "record.dontsavewhenauto",
                 "record.dontsavewhenmiss", "record.latesave", "record.failsave",
-                "record.backup", "record.limitkey", "record.manualsave",
+                "record.backup", "record.manualsave",
             };
             foreach (string k in keys)
             {

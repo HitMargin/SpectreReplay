@@ -37,7 +37,6 @@ public static class ConfigManager
         public bool LegacyEngine { get; set; }
         public bool KeybdSoundRecordActive { get; set; }
         public bool KeyConvertEnabled { get; set; }
-        public bool LimitKey { get; set; }
         public bool GetDataFromAsyncInput { get; set; }
 
         public bool EffectRemoverOn { get; set; }
@@ -214,7 +213,6 @@ public static class ConfigManager
                 LegacyEngine = Settings.LegacyEngine,
                 KeybdSoundRecordActive = Settings.KeybdSoundRecordActive,
                 KeyConvertEnabled = Settings.KeyConvertEnabled,
-                LimitKey = Settings.LimitKey,
                 GetDataFromAsyncInput = Settings.GetDataFromAsyncInput,
 
                 EffectRemoverOn = Settings.EffectRemoverOn,
@@ -557,7 +555,6 @@ public static class ConfigManager
                     Settings.LegacyEngine = sets.Value<bool?>("LegacyEngine") ?? Settings.LegacyEngine;
                     Settings.KeybdSoundRecordActive = sets.Value<bool?>("KeybdSoundRecordActive") ?? Settings.KeybdSoundRecordActive;
                     Settings.KeyConvertEnabled = sets.Value<bool?>("KeyConvertEnabled") ?? Settings.KeyConvertEnabled;
-                    Settings.LimitKey = sets.Value<bool?>("LimitKey") ?? Settings.LimitKey;
                     Settings.GetDataFromAsyncInput = sets.Value<bool?>("GetDataFromAsyncInput") ?? Settings.GetDataFromAsyncInput;
 
                     Settings.EffectRemoverOn = sets.Value<bool?>("EffectRemoverOn") ?? Settings.EffectRemoverOn;

@@ -973,7 +973,37 @@ switch ($Which) {
             if ($i -eq $start) { [void]$lines.Add('        ReleaseGameControl();') }
         }
         SetLines 'Features\VideoRender\Pipeline\VideoRenderJob.cs' $lines.ToArray()
-    }    'MUT-X1' {
+    }
+    'MUT-V15' {
+        # ⑰c/⑰d/⑰e/⑰f：把「限制按键数」这个假开关的**四处痕迹分别加回来**。
+        #
+        #    2026-10-19 用户要求删除。删它不是因为"多余"，而是它是**假开关**：
+        #    文案说"限制单局记录的按键数量，防止超长关卡把回放文件撑得过大"，
+        #    而全仓没有一行收按键盘数的代码。Settings.LimitKey 唯一的消费点是
+        #    key_convert_list2array 的 `!LimitKey ||` 前置条件，而那个函数末尾
+        #    还有一条 `== 0xFFFF` 兜底循环把表整个重填一遍——开关真假只改中间态，
+        #    末态逐字节相同，拨它从来没有改变过任何行为。
+        #
+        #    **必须把四处一起加回来**，因为判据是四条反向判：只加 Settings 里
+        #    那一行只能证明 ⑰c 有效，另外三条仍可能是假的。这四条守的是"半删"
+        #    这个真实形态——只删界面的话手改 Configs.json 仍能把它读回 DLL；
+        #    只删字段的话 Loc 文案还在，下个人补界面时会以为"本来就该有这项"。
+        #
+        #    这里只注入**能让四条判据各自变红的最小集合**：
+        #      Settings.cs        ← ⑰c
+        #      ConfigManager.cs   ← ⑰d
+        #      Pages.cs           ← ⑰e
+        #      Loc.cs             ← ⑰f
+        Backup 'State\Settings.cs'
+        Backup 'State\ConfigManager.cs'
+        Backup 'Pages\Pages.cs'
+        Backup 'Ui\Loc.cs'
+        ReplaceExact 'State\Settings.cs' '    public static bool KeyConvertEnabled = false;' "    public static bool KeyConvertEnabled = false;`n    public static bool LimitKey = false;"
+        ReplaceExact 'State\ConfigManager.cs' '        public bool KeyConvertEnabled { get; set; }' "        public bool KeyConvertEnabled { get; set; }`n        public bool LimitKey { get; set; }"
+        ReplaceExact 'Pages\Pages.cs' '                OnGui.Row("record.backup", Backup, v => { Backup = v; Commit(); }, ReplayOn);' "                OnGui.Row(`"record.backup`", Backup, v => { Backup = v; Commit(); }, ReplayOn);`n                OnGui.Row(`"record.limitkey`", LimitKey, v => { LimitKey = v; Commit(); }, ReplayOn);"
+        ReplaceExact 'Ui\Loc.cs' '                { "record.backup", "额外存一份备份" },' "                { `"record.backup`", `"额外存一份备份`" },`n                { `"record.limitkey`", `"限制按键数`" },"
+    }
+    'MUT-X1' {
         # 跨线程可见性：把泵线程写、主线程读的 pumpFailure 退回普通字段。
         # 这类缺陷编译通过、跑起来也基本正常（x86 弱内存模型下常常碰巧看到新值），
         # 只在真机 JIT 重排时表现为"偶发卡住/状态不更新"——典型的"看着在工作"。

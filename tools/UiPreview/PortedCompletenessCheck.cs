@@ -322,6 +322,35 @@ namespace UiPreview
             //    "开了更安全"。同一处误导在 README 里也出现过。
             fail += CheckPredicate(projectRoot, "⑰ 中文文案不得把关卡称作存档（会让玩家以为动的是进度存档）",
                 "Ui\\Loc.cs", ChineseLocSaysLevelNotSave);
+            // ⑰b 「限制按键数」开关必须保持删除（2026-10-19 用户要求）。
+            //
+            //    删它的理由不是"多余"而是**它是假开关**，而且假得很彻底：
+            //      · 文案声称"限制单局记录的按键数量，防止超长关卡把回放文件撑得过大"，
+            //        而全仓没有任何收按键盘数的代码——这个功能不存在。
+            //      · Settings.LimitKey 唯一的消费点是 key_convert_list2array 的
+            //        `!LimitKey || !KeyConvertEnabled`，而该方法末尾还有一条
+            //        `== 0xFFFF` 兜底循环把表整个重填一遍；开关真假只改中间态，
+            //        末态**逐字节相同**。也就是说拨它从来没有改变过任何行为。
+            //    "有开关、有说明、没实现"比没有这个开关更糟：玩家会以为回放文件
+            //    体积被它控制着，于是去拨它、发现没反应，再去翻别的原因。
+            //
+            //    判据必须查**四个文件**（字段/落盘/界面/文案），只查一处的话
+            //    半删状态照样绿：界面删了、ConfigManager 还在写，玩家手改配置文件
+            //    仍然能让它回到 DLL 里。
+            fail += CheckPredicate(projectRoot, "⑰b 「限制按键数」假开关不得回归（无实现、且从未影响行为）",
+                "Pages\\Pages.cs", NoLimitKeyRow);
+            //    字段本身留没留，四条反向判据各查一个文件。理由：它曾同时活在
+            //    Settings（字段）/ ConfigManager（DTO+落盘+读回）/ Pages（界面行）/
+            //    Loc（标签与说明）。只删界面的话，手改 Configs.json 仍能把它读回
+            //    DLL；只删字段的话，Loc 文案还在，下个人补界面时会以为"本来就该有"。
+            fail += CheckAbsent(projectRoot, "⑰c 设置字段里不得再有 LimitKey",
+                "State\\Settings.cs", new[] { "LimitKey" });
+            fail += CheckAbsent(projectRoot, "⑰d 配置落盘不得再读写 LimitKey",
+                "State\\ConfigManager.cs", new[] { "LimitKey" });
+            fail += CheckAbsent(projectRoot, "⑰e 界面不得再有 record.limitkey 行",
+                "Pages\\Pages.cs", new[] { "record.limitkey" });
+            fail += CheckAbsent(projectRoot, "⑰f 文案表不得再留 limitkey 条目",
+                "Ui\\Loc.cs", new[] { "record.limitkey" });
             // ⑱ 系列（**总开关关掉时子设置必须压暗**）不在这里判：那四条要读
             // `Pages\\Pages.cs`，而它**没有链进本离屏套件**（见 UiPreview.csproj
             // 的链接清单——只链了 Loc.cs 与 Features\\Replay 那批）。放在这里的话
@@ -937,6 +966,22 @@ namespace UiPreview
             }
             return 0;
         }
+
+        /// <summary>
+        /// 录制页是否**不再**出现 LimitKey 这个开关（2026-10-19 用户要求删除）。
+        ///
+        /// 它曾是一行 `OnGui.Row("record.limitkey", LimitKey, …)`。删它的理由不是
+        /// "多余"而是**假开关**：文案说"限制单局记录的按键数量，防止超长关卡把
+        /// 回放文件撑得过大"，而全仓没有一行收按键盘数的代码；Settings.LimitKey
+        /// 唯一的消费点是 key_convert_list2array 的 `!LimitKey ||` 前置条件，
+        /// 而那个函数的末态由末尾 `== 0xFFFF` 兜底循环决定——开关真假只改中间态，
+        /// 表逐字节相同。留着一个拨了没反应、说明还在编功能的开关，比没有更糟。
+        ///
+        /// 判据落在**代码行**上（<see cref="HasCodeUse"/> 会剥注释）：Pages.cs 里
+        /// 解释"为什么删"的注释必然写到这个键名，不剥的话判据会被自己的说明判红。
+        /// </summary>
+        private static bool NoLimitKeyRow(string code)
+            => !HasCodeUse(code, "LimitKey") && !HasCodeUse(code, "record.limitkey");
 
         /// <summary>按符号清单判（每个符号都必须在代码里出现）。</summary>
         private static int Check(string projectRoot, string name, string[] files, string[] symbols)

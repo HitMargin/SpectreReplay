@@ -24,7 +24,6 @@ public static class Settings
     public static bool KeybdSoundRecordActive = true;
 
     public static bool KeyConvertEnabled = false;
-    public static bool LimitKey = false;
     public static bool GetDataFromAsyncInput = false;
 
     public static int SaveButton = 290;
@@ -323,7 +322,13 @@ public static class Settings
         key_code_convert = new ushort[256];
         for (int i = 0; i < 256; i++)
             key_code_convert[i] = 0xFFFF;
-        if (!LimitKey || !KeyConvertEnabled)
+        // （原式是 `!LimitKey || !KeyConvertEnabled`，2026-10-19 按用户要求删掉
+        //   LimitKey 后只剩 `!KeyConvertEnabled`。这不是"顺手改语义"：那个开关
+        //   对结果**从来没有影响过**——本方法末尾还有一条 `== 0xFFFF` 兜底循环，
+        //   把这里的预填整个重做一遍，所以 LimitKey 真假只改中间态，末态逐字节
+        //   相同。它的提示文案声称"限制单局记录的按键数量"，而全仓没有任何
+        //   收按键盘数的代码，属于"有开关、有说明、没实现"。）
+        if (!KeyConvertEnabled)
         {
             for (ushort num = 0; num < 256; num++)
                 key_code_convert[num] = num;
