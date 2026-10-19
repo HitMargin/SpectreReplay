@@ -51,7 +51,7 @@ SpectreReplay is a UnityModManager mod (mod id `com.spectre.replay`). It records
 
 - **Fully self-drawn controls.** Every control is drawn by the mod itself — rounded panels with nine-slice textures, custom sliders, toggles and text fields — so it looks the same regardless of the game's UI scaling.
 - **Hover explanations.** Each option explains itself on hover, including the input the game must have enabled for that option to do anything.
-- **Five pages** (Recording, Playback, Video Render, Effects, About), opened with a hotkey, and the interface follows the game's language.
+- **Five pages** (Recording, Playback, Video Render, Effects, About), opened with a hotkey, and the interface follows the game's language — all **14 languages** the game ships with (Simplified/Traditional Chinese, English, Japanese, Korean, Spanish, Portuguese, French, German, Polish, Czech, Romanian, Russian, Vietnamese).
 
 ## How it works
 

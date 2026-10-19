@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
@@ -30,8 +30,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- 文案表（Loc）链接真实源码 -->
+    <!-- 文案表（Loc）链接真实源码。LocData 是 14 语言 × 325 键的数据表，由
+         _gen_locdata.py 生成；Loc.cs 里只剩选择逻辑。两个都必须链——
+         漏了 LocData 就是编译错误（正是我们要的失败方式）。 -->
     <Compile Include="..\..\SpectreReplay\Ui\Loc.cs" Link="Real\Loc.cs" />
+    <Compile Include="..\..\SpectreReplay\Ui\LocData.cs" Link="Real\LocData.cs" />
     <!-- 回放文件格式编解码：纯 System，可直接跑往返测试 -->
     <Compile Include="..\..\SpectreReplay\Features\Replay\Data\Replay.cs" Link="Real\Replay.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\Data\ReplayKeys.cs" Link="Real\ReplayKeys.cs" />

@@ -1001,7 +1001,50 @@ switch ($Which) {
         ReplaceExact 'State\Settings.cs' '    public static bool KeyConvertEnabled = false;' "    public static bool KeyConvertEnabled = false;`n    public static bool LimitKey = false;"
         ReplaceExact 'State\ConfigManager.cs' '        public bool KeyConvertEnabled { get; set; }' "        public bool KeyConvertEnabled { get; set; }`n        public bool LimitKey { get; set; }"
         ReplaceExact 'Pages\Pages.cs' '                OnGui.Row("record.backup", Backup, v => { Backup = v; Commit(); }, ReplayOn);' "                OnGui.Row(`"record.backup`", Backup, v => { Backup = v; Commit(); }, ReplayOn);`n                OnGui.Row(`"record.limitkey`", LimitKey, v => { LimitKey = v; Commit(); }, ReplayOn);"
-        ReplaceExact 'Ui\Loc.cs' '                { "record.backup", "额外存一份备份" },' "                { `"record.backup`", `"额外存一份备份`" },`n                { `"record.limitkey`", `"限制按键数`" },"
+        ReplaceExact 'Ui\LocData.cs' '                    ["record.backup"] = "额外存一份备份",' "                    [``"record.backup``"] = ``"额外存一份备份``",`n                    [``"record.limitkey``"] = ``"限制按键数``","
+    }
+    'MUT-LANG1' {
+        # ⑲b：把 Loc.cs 里某语言的枚举映射改掉，而 LocalizationManager.langlist 不动。
+        #
+        #    复现的是「两套映射各写各的」这个真实形态：面板语言与运行时通知
+        #    的语言代码来源不同，玩家把游戏设成日语时面板日语、通知英语，
+        #    不报错、不抛异常，只在特定语言组合下暴露。
+        #
+        #    **必须改「枚举 → 语言代码」的值，而不是删一项**：删一项会让
+        #    两边的语言数量都变少，而那可能被别处的数量判据顺手抓到，
+        #    证明不了 ⑲b 真的在比对值。
+        Backup 'Ui\Loc.cs'
+        ReplaceExact 'Ui\Loc.cs' '{ SystemLanguage.Japanese, "ja" },' '{ SystemLanguage.Japanese, "ko" },'
+    }
+    'MUT-LANG2' {
+        # ⑲c：LocData.cs 少一种语言表。
+        #
+        #    复现的是「生成脚本漏了一种语言」：Loc.cs 照样 TryGetValue 失败
+        #    并静默回落到英文——玩家看到英文界面，没有任何报错。
+        #
+        #    删整块而不是删一条键：删一条键会被「各语言键集合一致」那条抓到，
+        #    与「整种语言缺失」是两种不同的失效，必须分开证明。
+        Backup 'Ui\LocData.cs'
+        $ls = Lines 'Ui\LocData.cs'
+        $drop = New-Object System.Collections.ArrayList
+        $skipping = $false
+        $depth = 0
+        foreach ($line in $ls) {
+            if (-not $skipping -and $line.Trim() -eq '["vi"] = new System.Collections.Generic.Dictionary<string, string>') {
+                $skipping = $true
+                $depth = 0
+                continue
+            }
+            if ($skipping) {
+                $depth += ([regex]::Matches($line, '\{')).Count
+                $depth -= ([regex]::Matches($line, '\}')).Count
+                if ($depth -le 0 -and $line.Trim() -eq '},') { $skipping = $false }
+                continue
+            }
+            [void]$drop.Add($line)
+        }
+        if ($drop.Count -eq $ls.Count) { throw 'MUT-I2 没删掉任何行（锚点没命中）' }
+        SetLines 'Ui\LocData.cs' $drop.ToArray()
     }
     'MUT-X1' {
         # 跨线程可见性：把泵线程写、主线程读的 pumpFailure 退回普通字段。

@@ -321,7 +321,7 @@ namespace UiPreview
             //    会让玩家以为它会动自己的过关记录，于是不敢开；或者反过来理解成
             //    "开了更安全"。同一处误导在 README 里也出现过。
             fail += CheckPredicate(projectRoot, "⑰ 中文文案不得把关卡称作存档（会让玩家以为动的是进度存档）",
-                "Ui\\Loc.cs", ChineseLocSaysLevelNotSave);
+                "Ui\\LocData.cs", ChineseLocSaysLevelNotSave);
             // ⑰b 「限制按键数」开关必须保持删除（2026-10-19 用户要求）。
             //
             //    删它的理由不是"多余"而是**它是假开关**，而且假得很彻底：
@@ -350,7 +350,7 @@ namespace UiPreview
             fail += CheckAbsent(projectRoot, "⑰e 界面不得再有 record.limitkey 行",
                 "Pages\\Pages.cs", new[] { "record.limitkey" });
             fail += CheckAbsent(projectRoot, "⑰f 文案表不得再留 limitkey 条目",
-                "Ui\\Loc.cs", new[] { "record.limitkey" });
+                "Ui\\LocData.cs", new[] { "record.limitkey" });
             // ⑱ 系列（**总开关关掉时子设置必须压暗**）不在这里判：那四条要读
             // `Pages\\Pages.cs`，而它**没有链进本离屏套件**（见 UiPreview.csproj
             // 的链接清单——只链了 Loc.cs 与 Features\\Replay 那批）。放在这里的话

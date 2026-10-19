@@ -1395,18 +1395,40 @@ namespace UiPreview
             }
             if (keys.Count == 0) return false;
 
-            string locPath = Path.Combine(projectRoot, "Ui", "Loc.cs");
+            // 文案表在 LocData.cs（Loc.cs 只剩选择逻辑）。
+            //
+            // **2026-10-19 这里差点变成假绿**：文案从 Loc.cs 搬走之后，本函数仍读
+            // 旧文件，`Index.Of("Dictionary<string, string> Zh") < 0` 直接 return false
+            // ——那样会"碰巧"还是红的，看起来判据没事。但反过来的情形才是真危险：
+            // 若判据写成"找不到表就跳过"，搬家当天它就会静默全绿，而 13 种语言的
+            // 说明一条都没验。所以这里找不到文件必须**判红**，不能放行。
+            string locPath = Path.Combine(projectRoot, "Ui", "LocData.cs");
             if (!File.Exists(locPath)) return false;
             string loc = SrcUtil.Clean(File.ReadAllText(locPath));
 
-            // 中英两表分开取：只查"整文件出现过 <key>.tip"会让"只写了一种语言"
-            // 蒙混过关，而那正是英文玩家看不到说明的形态。
-            int zhStart = loc.IndexOf("Dictionary<string, string> Zh", StringComparison.Ordinal);
-            int enStart = loc.IndexOf("Dictionary<string, string> En", StringComparison.Ordinal);
-            if (zhStart < 0 || enStart < 0 || enStart < zhStart) return false;
-            string zhTable = loc.Substring(zhStart, enStart - zhStart);
-            string enTable = loc.Substring(enStart);
+            // 逐语言切块：`["<lang>"] = new System.Collections.Generic.Dictionary...`
+            // 只在**整文件**搜 "<key>.tip" 会让"只写了一种语言"蒙混过关，
+            // 而玩家在另外 13 种语言下看不到说明。
+            var langBlocks = new System.Collections.Generic.Dictionary<string, string>(
+                StringComparer.Ordinal);
+            var marks = new System.Collections.Generic.List<(string Lang, int Start)>();
+            var langHits = System.Text.RegularExpressions.Regex.Matches(
+                loc, @"\[""([a-z\-]+)""\]\s*=\s*new\s+System\.Collections\.Generic\.Dictionary");
+            foreach (System.Text.RegularExpressions.Match m in langHits)
+            {
+                marks.Add((m.Groups[1].Value, m.Index));
+            }
+            if (marks.Count == 0) return false;
+            for (int i = 0; i < marks.Count; i++)
+            {
+                int end = i + 1 < marks.Count ? marks[i + 1].Start : loc.Length;
+                langBlocks[marks[i].Lang] = loc.Substring(marks[i].Start, end - marks[i].Start);
+            }
 
+            // 14 种语言**每一种**都要有这条说明。
+            // 为什么要全查而不是抽查中英：漏翻最常发生在小语种上，
+            // 而那正是"作者永远看不见"的那一侧。
+            string[] langs = LocCheck.Languages;
             foreach (string k in keys)
             {
                 string tip = k + ".tip";
@@ -1414,8 +1436,11 @@ namespace UiPreview
                 // 裸串会让 "render.fps.tip" 命中 "render.fps.tip.extra" 这类前缀重叠，
                 // 而本项目已经栽过一次前缀假判据（playback.openlevel）。
                 string want = "\"" + tip + "\"";
-                if (!zhTable.Contains(want, StringComparison.Ordinal)) return false;
-                if (!enTable.Contains(want, StringComparison.Ordinal)) return false;
+                foreach (string lang in langs)
+                {
+                    if (!langBlocks.TryGetValue(lang, out string table)) return false;
+                    if (!table.Contains(want, StringComparison.Ordinal)) return false;
+                }
             }
             return true;
         }

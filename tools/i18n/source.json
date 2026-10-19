@@ -1,0 +1,1627 @@
+[
+ {
+  "key": "page.record",
+  "zh": "录制",
+  "en": "Recording"
+ },
+ {
+  "key": "page.playback",
+  "zh": "回放",
+  "en": "Playback"
+ },
+ {
+  "key": "page.render",
+  "zh": "视频渲染",
+  "en": "Video Render"
+ },
+ {
+  "key": "page.about",
+  "zh": "关于",
+  "en": "About"
+ },
+ {
+  "key": "record.autosave",
+  "zh": "自动保存回放",
+  "en": "Auto-save replays"
+ },
+ {
+  "key": "record.recording",
+  "zh": "录制中",
+  "en": "Recording"
+ },
+ {
+  "key": "record.note",
+  "zh": "录制时按下按键即可。回放文件保存在下方「回放目录」所示的文件夹里。",
+  "en": "Keys pressed while playing are captured. Replays are saved in the folder shown under \"Replay folder\" below."
+ },
+ {
+  "key": "record.howto",
+  "zh": "① 在这里设好参数（快捷键：Ctrl+F10 打开本窗口）② 进关卡正常玩，按键会被记下来 ③ 通关后自动存成回放文件 ④ 在「回放」页载入，或在「视频渲染」页出片。",
+  "en": "1) Set options here (press Ctrl+F10 to open this window) 2) Play a level normally - your keys are recorded 3) Finishing saves a replay file 4) Load it on the Playback tab, or render it on the Video Render tab."
+ },
+ {
+  "key": "record.hotkeys",
+  "zh": "快捷键",
+  "en": "Hotkeys"
+ },
+ {
+  "key": "record.savekey",
+  "zh": "保存回放",
+  "en": "Save replay"
+ },
+ {
+  "key": "record.cancelsavekey",
+  "zh": "取消保存",
+  "en": "Cancel save"
+ },
+ {
+  "key": "record.completesave",
+  "zh": "只保存完整通关",
+  "en": "Only save full clears"
+ },
+ {
+  "key": "record.dontsavewhenauto",
+  "zh": "全自动局不保存",
+  "en": "Skip auto-played levels"
+ },
+ {
+  "key": "record.dontsavewhenmiss",
+  "zh": "有失误不保存",
+  "en": "Skip runs with a miss"
+ },
+ {
+  "key": "record.latesave",
+  "zh": "出关时再保存",
+  "en": "Save when leaving the level"
+ },
+ {
+  "key": "record.failsave",
+  "zh": "失败时也保存",
+  "en": "Also save on failure"
+ },
+ {
+  "key": "record.backup",
+  "zh": "额外存一份备份",
+  "en": "Keep an extra backup copy"
+ },
+ {
+  "key": "record.manualsave",
+  "zh": "F9 手动保存",
+  "en": "F9 manual save"
+ },
+ {
+  "key": "record.asyncinput",
+  "zh": "从异步输入取按键",
+  "en": "Read keys from async input"
+ },
+ {
+  "key": "record.asyncinput.off",
+  "zh": "游戏里没开「异步输入」，这一项现在不生效。请在游戏设置 → 输入里打开异步输入。",
+  "en": "Async input is off in the game, so this option has no effect. Enable async input in the game's settings → input."
+ },
+ {
+  "key": "record.keybd",
+  "zh": "键盘音",
+  "en": "Keyboard sound"
+ },
+ {
+  "key": "record.keybd.record",
+  "zh": "录制键盘音",
+  "en": "Record keyboard sound"
+ },
+ {
+  "key": "record.keybd.volume",
+  "zh": "键盘音音量",
+  "en": "Keyboard sound volume"
+ },
+ {
+  "key": "record.keybd.offset",
+  "zh": "时间偏移",
+  "en": "Time offset"
+ },
+ {
+  "key": "record.keybd.note",
+  "zh": "键盘音就是回放时按下去的“嗒嗒”声。时间偏移用于校准它整体的早晚：声音偏早就往负调，偏晚就往正调，单位毫秒。",
+  "en": "Keyboard sound is the tap played back when a key was pressed. Time offset calibrates it as a whole: shift negative if it is early, positive if late, in milliseconds."
+ },
+ {
+  "key": "record.stop",
+  "zh": "停止录制",
+  "en": "Stop recording"
+ },
+ {
+  "key": "record.specialkeys",
+  "zh": "特殊按键",
+  "en": "Special keys"
+ },
+ {
+  "key": "record.specialkeys.note",
+  "zh": "游戏默认把这些键当作“不算数”的按键，按下也不会进回放。你如果确实用它们打谱，就在这里勾上——勾了的键会被当成普通按键录制。",
+  "en": "The game treats these keys as \"not counting\" and they never reach the replay. If you actually play with them, tick them here and they will be recorded like normal keys."
+ },
+ {
+  "key": "record.specialkeys.kb",
+  "zh": "键盘输入",
+  "en": "Keyboard input"
+ },
+ {
+  "key": "record.specialkeys.async",
+  "zh": "异步输入",
+  "en": "Async input"
+ },
+ {
+  "key": "record.specialkeys.async.off",
+  "zh": "游戏里没开异步输入，这一组现在不生效。请在游戏设置 → 输入里打开。",
+  "en": "Async input is off in the game, so this group has no effect. Enable it in the game's settings -> input."
+ },
+ {
+  "key": "record.specialkeys.kb.tip",
+  "zh": "这里勾上的键会被当成普通按键录制。不勾时，游戏会把它们当作“不算数”的键从回放里剔掉。",
+  "en": "Keys ticked here are recorded like normal keys. Left unticked, the game drops them from the replay as \"not counting\" keys."
+ },
+ {
+  "key": "record.specialkeys.async.tip",
+  "zh": "异步输入那一套键名（PrintScreen / F12 / LAlt / Super）。游戏里没开异步输入时这一组不生效。",
+  "en": "Async-input key names (PrintScreen / F12 / LAlt / Super). This group has no effect unless async input is enabled in the game."
+ },
+ {
+  "key": "ui.presskey",
+  "zh": "按下任意键…",
+  "en": "Press any key..."
+ },
+ {
+  "key": "ui.nokey",
+  "zh": "未绑定",
+  "en": "Not bound"
+ },
+ {
+  "key": "ui.patchfailed",
+  "zh": "补丁未挂载（对应功能可能失效）",
+  "en": "Some patches failed to apply (features may be off)"
+ },
+ {
+  "key": "ui.on",
+  "zh": "开",
+  "en": "On"
+ },
+ {
+  "key": "ui.off",
+  "zh": "关",
+  "en": "Off"
+ },
+ {
+  "key": "ui.hint",
+  "zh": "Ctrl+F10 开关界面 · ESC 关闭",
+  "en": "Ctrl+F10 opens this panel · ESC closes"
+ },
+ {
+  "key": "playback.current",
+  "zh": "当前",
+  "en": "Current"
+ },
+ {
+  "key": "playback.idle",
+  "zh": "还没载入回放。在下面的列表里点「回放」即可。",
+  "en": "No replay loaded. Press \"Replay\" on a file below."
+ },
+ {
+  "key": "playback.idle_err",
+  "zh": "上一次的载入失败了：{0}",
+  "en": "The last load failed: {0}"
+ },
+ {
+  "key": "playback.empty",
+  "zh": "还没有回放文件。打一局关卡就会自动保存。",
+  "en": "No replays yet. Play a level and one is saved automatically."
+ },
+ {
+  "key": "playback.drive",
+  "zh": "回放驱动",
+  "en": "Playback driver"
+ },
+ {
+  "key": "playback.simulate",
+  "zh": "模拟按键",
+  "en": "Simulate key presses"
+ },
+ {
+  "key": "playback.drive.note",
+  "zh": "关掉后回放仍然会播放、但不再往游戏里送按键——星球不会动。停止回放时也不会松开已按住的键，所以只在排查「按键冲突」时关它。",
+  "en": "With this off, playback still runs but no keys are sent to the game, so the planet will not move. Held keys are also not released when playback stops, so keep it on unless you are debugging a key conflict."
+ },
+ {
+  "key": "playback.stop",
+  "zh": "停止回放",
+  "en": "Stop"
+ },
+ {
+  "key": "playback.unload",
+  "zh": "卸载回放",
+  "en": "Unload replay"
+ },
+ {
+  "key": "playback.note",
+  "zh": "回放由录制时的按键序列驱动，可用于复盘与练习。",
+  "en": "Playback is driven by the recorded key stream."
+ },
+ {
+  "key": "playback.ready",
+  "zh": "已装好：{0}——重新开始这关就会自动播放。",
+  "en": "Ready: {0} — restart this level to play it automatically."
+ },
+ {
+  "key": "playback.armed",
+  "zh": "正在播放：{0}",
+  "en": "Playing: {0}"
+ },
+ {
+  "key": "playback.restart",
+  "zh": "重开这关并播放",
+  "en": "Restart & play"
+ },
+ {
+  "key": "playback.cancel",
+  "zh": "取消待播",
+  "en": "Cancel"
+ },
+ {
+  "key": "playback.timing",
+  "zh": "命中误差",
+  "en": "Hit timing"
+ },
+ {
+  "key": "playback.timing_summary",
+  "zh": "已分析 {0} 击（偏早 {1} / 偏晚 {2}），中位数 {3}",
+  "en": "Analyzed {0} hits (early {1} / late {2}), median {3}"
+ },
+ {
+  "key": "playback.timing_detail",
+  "zh": "均值 {0}，标准差 {1}，范围 {2} ~ {3}",
+  "en": "Mean {0}, sigma {1}, range {2} ~ {3}"
+ },
+ {
+  "key": "playback.timing_skipped",
+  "zh": "另有 {0} 击未计入（自动命中或取不到谱面数据）。",
+  "en": "{0} more hits not counted (auto hits or missing chart data)."
+ },
+ {
+  "key": "playback.openlevel",
+  "zh": "打开这一关",
+  "en": "Open this level"
+ },
+ {
+  "key": "playback.openlevel.editor",
+  "zh": "打开编辑器",
+  "en": "Open editor"
+ },
+ {
+  "key": "playback.openlevel.official",
+  "zh": "该回放没有记录内部关卡名（旧版本录制），无法直达：",
+  "en": "This replay has no internal level name recorded (saved by an older version); cannot jump: "
+ },
+ {
+  "key": "playback.openlevel.official_go",
+  "zh": "官方关卡「{0}」，可直接打开。",
+  "en": "Official level \"{0}\" — can be opened directly."
+ },
+ {
+  "key": "playback.openlevel.official.go",
+  "zh": "进入官方关卡",
+  "en": "Enter official level"
+ },
+ {
+  "key": "playback.openlevel.missing",
+  "zh": "谱面文件不在了：",
+  "en": "Chart file is gone: "
+ },
+ {
+  "key": "playback.openlevel.busy",
+  "zh": "正在跳转，请稍候。",
+  "en": "Switching, please wait."
+ },
+ {
+  "key": "playback.analyze.hint",
+  "zh": "每一击一根柱子。高度与颜色用同一把尺子：按这一击自己的判定窗口算。绿=落在 Perfect 窗口内，黄=只落在 Pure 窗口内，红=两档都没进。越高越偏，达到完美窗口的 2 倍就顶格。",
+  "en": "One bar per hit. Height and color share the same scale (that hit's own judgment window): green = within Perfect, yellow = only within Pure, red = outside both. Taller means further off; 2x the Perfect window fills the height."
+ },
+ {
+  "key": "playback.analyze.none",
+  "zh": "没有可画的命中数据。",
+  "en": "No hit data to plot."
+ },
+ {
+  "key": "playback.err.no_data",
+  "zh": "没有可校验的回放数据。",
+  "en": "No replay data to validate."
+ },
+ {
+  "key": "playback.err.wrong_level",
+  "zh": "关卡不匹配：这份回放录自「{0}」。请打开那一关。",
+  "en": "Wrong level: this replay was recorded on \"{0}\". Open that one."
+ },
+ {
+  "key": "playback.err.floor_changed",
+  "zh": "谱面已被修改：这份回放是在旧版谱面上录的，按键位置会全部错位。",
+  "en": "The chart has changed since this replay was recorded; every key would land on the wrong tile."
+ },
+ {
+  "key": "playback.err.chart_mismatch",
+  "zh": "谱面参数不匹配（移调或 BPM 变了）：「{0}」。",
+  "en": "Chart parameters differ (pitch or BPM changed): \"{0}\"."
+ },
+ {
+  "key": "playback.err.wrong_difficulty",
+  "zh": "难度不匹配：这份回放录于「{0}」。请切换难度后重开。",
+  "en": "Wrong difficulty: this replay was recorded on \"{0}\". Switch difficulty and restart."
+ },
+ {
+  "key": "playback.err.wrong_tile",
+  "zh": "起点不匹配：这份回放从第 {0} 块开始，请先退到那个位置。",
+  "en": "Wrong start tile: this replay starts at tile {0}; rewind there first."
+ },
+ {
+  "key": "playback.err.wrong_speed",
+  "zh": "倍速不匹配：这份回放录于 {0} 倍速。",
+  "en": "Wrong speed: this replay was recorded at {0}x."
+ },
+ {
+  "key": "render.mode",
+  "zh": "渲染模式",
+  "en": "Render mode"
+ },
+ {
+  "key": "render.mode.live",
+  "zh": "边玩边录（推荐）",
+  "en": "Record while playing"
+ },
+ {
+  "key": "render.mode.offline",
+  "zh": "手动离线渲染",
+  "en": "Manual offline render"
+ },
+ {
+  "key": "render.fps",
+  "zh": "输出帧率",
+  "en": "Output FPS"
+ },
+ {
+  "key": "render.width",
+  "zh": "宽度",
+  "en": "Width"
+ },
+ {
+  "key": "render.height",
+  "zh": "高度",
+  "en": "Height"
+ },
+ {
+  "key": "render.surface",
+  "zh": "画面来源",
+  "en": "Frame source"
+ },
+ {
+  "key": "render.codec.auto",
+  "zh": "自动",
+  "en": "Auto"
+ },
+ {
+  "key": "render.codec.fastest",
+  "zh": "最快",
+  "en": "Fastest"
+ },
+ {
+  "key": "render.codec.quality",
+  "zh": "画质优先",
+  "en": "Quality first"
+ },
+ {
+  "key": "render.codec.cpu",
+  "zh": "仅 CPU",
+  "en": "CPU only"
+ },
+ {
+  "key": "render.quality.low",
+  "zh": "低",
+  "en": "Low"
+ },
+ {
+  "key": "render.quality.standard",
+  "zh": "标准",
+  "en": "Standard"
+ },
+ {
+  "key": "render.quality.high",
+  "zh": "高",
+  "en": "High"
+ },
+ {
+  "key": "render.quality.extreme",
+  "zh": "极高",
+  "en": "Extreme"
+ },
+ {
+  "key": "render.surface.clean",
+  "zh": "纯净相机（不含界面）",
+  "en": "Clean camera (no UI)"
+ },
+ {
+  "key": "render.surface.screen",
+  "zh": "游戏画面（含界面）",
+  "en": "Game screen (with UI)"
+ },
+ {
+  "key": "render.surface.screen_note",
+  "zh": "包含进度条等界面 UI；分辨率跟随游戏窗口，不可超分辨率；渲染时请收起模组窗口，否则会被录入画面。",
+  "en": "Includes screen-space UI such as the progress bar; resolution follows the game window (no supersampling); collapse the mod window while rendering or it will be captured."
+ },
+ {
+  "key": "render.surface.clean_note",
+  "zh": "不含任何界面元素，输出分辨率任意（可超采样）；适合做成纯画面展示或二次剪辑素材。",
+  "en": "No UI at all, any output resolution (supersampling allowed); good for pure footage or editing material."
+ },
+ {
+  "key": "render.clock.experimental",
+  "zh": "确定性渲染时钟（实验性）",
+  "en": "Deterministic render clock (experimental)"
+ },
+ {
+  "key": "render.clock.hint",
+  "zh": "打开后把游戏读到的时间源换成「帧号驱动」的虚拟时钟，游戏自己的节拍推进、相机事件、倒计时、按键音调度全部自动确定性化，成片帧率恒定、不受机器繁忙影响。关闭则走音频游标兜底：画面仍能出片，但时间轴由音频游标驱动，可能有毫秒级抖动，且视频背景不再随渲染速率调速。注意：它改的是游戏时间源本身，影响面较大；与其他视频渲染类模组同时启用时会争抢同一个补丁点（先加载者生效），此时本项会自动让位。若渲染报错或音画不同步，请先关掉这一项再试。",
+  "en": "Replaces the time source the game reads with a frame-index-driven virtual clock, making beat advancement, camera events, countdowns and keysound scheduling deterministic — output framerate stays constant regardless of machine load. Off = audio-cursor fallback: rendering still works, but the timeline is driven by the audio cursor (millisecond-level jitter) and video backgrounds are no longer speed-matched to the render rate. Note: this alters the game's own time source, so its blast radius is wider than other options; when another video-rendering mod is enabled at the same time, both contend for the same patch point (first to load wins) and this option yields automatically. If rendering errors or audio/video drift appears, turn this off first."
+ },
+ {
+  "key": "render.ffmpeg",
+  "zh": "ffmpeg",
+  "en": "ffmpeg"
+ },
+ {
+  "key": "render.ffmpeg.ready",
+  "zh": "ffmpeg 已就绪",
+  "en": "ffmpeg ready"
+ },
+ {
+  "key": "render.ffmpeg.missing",
+  "zh": "未找到 ffmpeg.exe，请放到模组目录或游戏根目录，或加入系统 PATH",
+  "en": "ffmpeg.exe not found; place it in the mod folder or game root, or add it to PATH"
+ },
+ {
+  "key": "render.codec",
+  "zh": "编码器",
+  "en": "Encoder"
+ },
+ {
+  "key": "render.codec.current",
+  "zh": "实际编码器",
+  "en": "Actual encoder"
+ },
+ {
+  "key": "render.quality",
+  "zh": "画质",
+  "en": "Quality"
+ },
+ {
+  "key": "render.format",
+  "zh": "输出格式",
+  "en": "Output format"
+ },
+ {
+  "key": "render.tail",
+  "zh": "结尾多录秒数",
+  "en": "Extra tail seconds"
+ },
+ {
+  "key": "render.outdir",
+  "zh": "输出目录",
+  "en": "Output folder"
+ },
+ {
+  "key": "render.outdir.empty",
+  "zh": "留空 = 模组目录下的 RenderVideos",
+  "en": "Empty = RenderVideos under the mod folder"
+ },
+ {
+  "key": "convert.title",
+  "zh": "转换已有视频",
+  "en": "Convert existing videos"
+ },
+ {
+  "key": "convert.hint",
+  "zh": "把上面输出目录里的视频转成所选格式。已在目标格式的文件会跳过；mp4/mov 之间通常秒级完成，转 webm 需要重编码（较慢）。",
+  "en": "Converts videos in the output folder above to the selected format. Files already in the target format are skipped; mp4/mov swaps are usually instant, while webm requires re-encoding (slower)."
+ },
+ {
+  "key": "convert.button",
+  "zh": "开始转换",
+  "en": "Start converting"
+ },
+ {
+  "key": "convert.target",
+  "zh": "目标格式",
+  "en": "Target format"
+ },
+ {
+  "key": "convert.running",
+  "zh": "正在转换 {0}/{1}（已转 {2}，跳过 {3}，失败 {4}）",
+  "en": "Converting {0}/{1} (done {2}, skipped {3}, failed {4})"
+ },
+ {
+  "key": "convert.done",
+  "zh": "转换完成：{0} 个已转，{1} 个跳过，{2} 个失败。",
+  "en": "Conversion finished: {0} converted, {1} skipped, {2} failed."
+ },
+ {
+  "key": "convert.err.no_ffmpeg",
+  "zh": "找不到 ffmpeg，无法转换。",
+  "en": "ffmpeg not found; cannot convert."
+ },
+ {
+  "key": "convert.err.no_dir",
+  "zh": "输出目录不存在或还没有视频。",
+  "en": "Output folder does not exist or has no videos yet."
+ },
+ {
+  "key": "render.start",
+  "zh": "开始渲染",
+  "en": "Render"
+ },
+ {
+  "key": "render.cancel",
+  "zh": "取消",
+  "en": "Cancel"
+ },
+ {
+  "key": "render.note.live",
+  "zh": "边玩边录：进入关卡自动开始，结算后自动完成。不需要再跑一遍关卡。",
+  "en": "Record-while-playing: starts automatically when you enter a level and finishes on results. The level is not replayed."
+ },
+ {
+  "key": "render.note.offline",
+  "zh": "离线渲染：重跑一遍回放逐帧捕获，耗时更长但画面与原回放完全一致。",
+  "en": "Offline: replays the level frame by frame. Slower, but pixel-identical to the replay."
+ },
+ {
+  "key": "render.offline_target",
+  "zh": "将渲染这份回放：{0}",
+  "en": "Will render this replay: {0}"
+ },
+ {
+  "key": "render.offline_noreplay",
+  "zh": "没有可用的回放文件：先打一局关卡（会自动保存），或到「回放」页确认目录里有 .srp。",
+  "en": "No replay file to render. Play a level first (it saves automatically), or check the Playback tab for .srp files."
+ },
+ {
+  "key": "about.note",
+  "zh": "SpectreReplay 是独立模组，不依赖 Spectre，两者可同时启用。",
+  "en": "SpectreReplay is standalone and does not require Spectre; both can be enabled at once."
+ },
+ {
+  "key": "about.version",
+  "zh": "版本",
+  "en": "Version"
+ },
+ {
+  "key": "about.path",
+  "zh": "保存目录",
+  "en": "Save folder"
+ },
+ {
+  "key": "about.engine",
+  "zh": "回放引擎",
+  "en": "Replay engine"
+ },
+ {
+  "key": "about.engine.value",
+  "zh": "Spectre 回放（录制 / 回放 / 视频渲染）",
+  "en": "Spectre replay (record / playback / video render)"
+ },
+ {
+  "key": "about.update.status",
+  "zh": "更新",
+  "en": "Update"
+ },
+ {
+  "key": "about.update.available",
+  "zh": "发现新版本",
+  "en": "New version"
+ },
+ {
+  "key": "about.update.available.value",
+  "zh": "可更新到 ",
+  "en": "Update available: "
+ },
+ {
+  "key": "about.update.latest",
+  "zh": "已是最新版本",
+  "en": "Up to date"
+ },
+ {
+  "key": "about.update.unknown",
+  "zh": "未检查（UMM 会在启动时自动检查）",
+  "en": "Not checked (UMM checks on startup)"
+ },
+ {
+  "key": "about.update.open",
+  "zh": "打开模组主页",
+  "en": "Open mod homepage"
+ },
+ {
+  "key": "about.update.open.tip",
+  "zh": "用浏览器打开模组的 GitHub 页面；更新检查也是查那里发布的版本。",
+  "en": "Opens the mod's GitHub page in your browser; update checks read the version published there."
+ },
+ {
+  "key": "record.savedir",
+  "zh": "回放目录",
+  "en": "Replay folder"
+ },
+ {
+  "key": "record.changedir",
+  "zh": "更改…",
+  "en": "Change..."
+ },
+ {
+  "key": "record.savedir.pick",
+  "zh": "选择回放保存目录",
+  "en": "Choose replay folder"
+ },
+ {
+  "key": "record.savedir.busy",
+  "zh": "录制中不能改保存目录：本局键盘音写在旧目录下，换了就找不回。先停止录制。",
+  "en": "Cannot change the folder while recording: this run's keyboard sound is being written to the old folder. Stop recording first."
+ },
+ {
+  "key": "render.outdir.pick",
+  "zh": "选择渲染输出目录",
+  "en": "Choose render output folder"
+ },
+ {
+  "key": "render.active",
+  "zh": "渲染中",
+  "en": "Rendering"
+ },
+ {
+  "key": "render.eta",
+  "zh": "预计剩余 {0}",
+  "en": "About {0} left"
+ },
+ {
+  "key": "render.progress",
+  "zh": "进度",
+  "en": "Progress"
+ },
+ {
+  "key": "status.idle",
+  "zh": "空闲：没在录制，也没在渲染。",
+  "en": "Idle: not recording, not rendering."
+ },
+ {
+  "key": "status.all_off",
+  "zh": "录制与渲染都已关闭：进关也不会记录任何东西。",
+  "en": "Recording and rendering are both off: playing a level records nothing."
+ },
+ {
+  "key": "status.recording",
+  "zh": "正在录制本局按键…",
+  "en": "Recording your keys..."
+ },
+ {
+  "key": "status.playing",
+  "zh": "回放进行中…",
+  "en": "Replay in progress..."
+ },
+ {
+  "key": "status.pending_short",
+  "zh": "回放已装好，重开关卡就会播放。",
+  "en": "Replay is loaded. Restart the level to play it."
+ },
+ {
+  "key": "status.pending_replay",
+  "zh": "回放已装好：{0}。重新开始这关（或从关卡列表再进一次）就会自动播放。",
+  "en": "Replay loaded: {0}. Restart this level (or re-enter it from the level list) to play it automatically."
+ },
+ {
+  "key": "status.rendering",
+  "zh": "正在渲染…{0}",
+  "en": "Rendering... {0}"
+ },
+ {
+  "key": "status.saved",
+  "zh": "回放已保存：{0}",
+  "en": "Replay saved: {0}"
+ },
+ {
+  "key": "status.saved_none",
+  "zh": "本局没有录到按键，未保存（这是正常的，空关不会产生回放）。",
+  "en": "No keys were recorded this run, so nothing was saved (normal for an empty level)."
+ },
+ {
+  "key": "status.loaded",
+  "zh": "已载入回放：{0}",
+  "en": "Replay loaded: {0}"
+ },
+ {
+  "key": "status.loaded_none",
+  "zh": "没有可载入的回放文件。",
+  "en": "No replay file available."
+ },
+ {
+  "key": "status.stopped",
+  "zh": "回放已停止。",
+  "en": "Replay stopped."
+ },
+ {
+  "key": "status.render_done",
+  "zh": "渲染完成：{0}",
+  "en": "Render finished: {0}"
+ },
+ {
+  "key": "status.render_start",
+  "zh": "开始渲染…",
+  "en": "Rendering started..."
+ },
+ {
+  "key": "render.duplicate_when_late",
+  "zh": "跟不上时复制上一帧",
+  "en": "Duplicate last frame when behind"
+ },
+ {
+  "key": "playback.files",
+  "zh": "回放文件",
+  "en": "Replays"
+ },
+ {
+  "key": "playback.replay",
+  "zh": "回放",
+  "en": "Replay"
+ },
+ {
+  "key": "playback.loaded",
+  "zh": "已载入",
+  "en": "Loaded"
+ },
+ {
+  "key": "playback.delete",
+  "zh": "删除",
+  "en": "Delete"
+ },
+ {
+  "key": "playback.delete.confirm",
+  "zh": "确认删除",
+  "en": "Confirm delete"
+ },
+ {
+  "key": "playback.delete.done",
+  "zh": "已删除：{0}",
+  "en": "Deleted: {0}"
+ },
+ {
+  "key": "playback.delete.err",
+  "zh": "删除失败：{0}",
+  "en": "Delete failed: {0}"
+ },
+ {
+  "key": "playback.delete.tip",
+  "zh": "直接删掉这个回放文件（不进回收站，删了无法恢复）。点第一下变成「确认删除」，再点一下才真的删除。",
+  "en": "Deletes this replay file (no recycle bin, cannot be undone). First click turns it into 'Confirm delete'; the second click actually deletes it."
+ },
+ {
+  "key": "playback.info.title",
+  "zh": "{0} — {1}",
+  "en": "{0} — {1}"
+ },
+ {
+  "key": "playback.info.unknown",
+  "zh": "未知",
+  "en": "Unknown"
+ },
+ {
+  "key": "playback.info.na",
+  "zh": "—",
+  "en": "—"
+ },
+ {
+  "key": "playback.info.tip",
+  "zh": "点文件名展开/收起这份回放的详情（歌名、难度、BPM、判定分布、文件信息）。",
+  "en": "Click the file name to expand/collapse details (song, difficulty, BPM, judgment spread, file info)."
+ },
+ {
+  "key": "playback.info.difficulty",
+  "zh": "难度",
+  "en": "Difficulty"
+ },
+ {
+  "key": "playback.info.bpm",
+  "zh": "BPM",
+  "en": "BPM"
+ },
+ {
+  "key": "playback.info.speed",
+  "zh": "倍速",
+  "en": "Speed"
+ },
+ {
+  "key": "playback.info.floor",
+  "zh": "起点 → 终点",
+  "en": "Start → End"
+ },
+ {
+  "key": "playback.info.hits",
+  "zh": "命中",
+  "en": "Hits"
+ },
+ {
+  "key": "playback.info.keys",
+  "zh": "按键",
+  "en": "Keys"
+ },
+ {
+  "key": "playback.info.duration",
+  "zh": "时长",
+  "en": "Duration"
+ },
+ {
+  "key": "playback.info.acc",
+  "zh": "Accuracy",
+  "en": "Accuracy"
+ },
+ {
+  "key": "playback.info.xacc",
+  "zh": "X-Accuracy",
+  "en": "X-Accuracy"
+ },
+ {
+  "key": "playback.info.judgments",
+  "zh": "判定分布",
+  "en": "Judgments"
+ },
+ {
+  "key": "playback.info.fileline",
+  "zh": "{0} · {1} · {2} · {3} · 模组 {4}",
+  "en": "{0} · {1} · {2} · {3} · mod {4}"
+ },
+ {
+  "key": "playback.info.encrypted",
+  "zh": "已加密",
+  "en": "encrypted"
+ },
+ {
+  "key": "playback.info.plain",
+  "zh": "未加密",
+  "en": "unencrypted"
+ },
+ {
+  "key": "playback.info.err.file_gone",
+  "zh": "文件已经不在了（可能被别的程序删掉）。",
+  "en": "The file is gone (removed by another program)."
+ },
+ {
+  "key": "playback.info.err.io_error",
+  "zh": "读不到文件信息（权限或磁盘错误）。",
+  "en": "Cannot read file info (permission or disk error)."
+ },
+ {
+  "key": "playback.info.err.decode_failed",
+  "zh": "读不出这份回放的元数据：文件可能已损坏，或不是本模组录的。",
+  "en": "Cannot read this replay's metadata: the file may be corrupted or not recorded by this mod."
+ },
+ {
+  "key": "playback.judge.tooearly",
+  "zh": "过早 {0}",
+  "en": "Too early {0}"
+ },
+ {
+  "key": "playback.judge.veryearly",
+  "zh": "很早 {0}",
+  "en": "Very early {0}"
+ },
+ {
+  "key": "playback.judge.earlyperfect",
+  "zh": "偏早 {0}",
+  "en": "Early perfect {0}"
+ },
+ {
+  "key": "playback.judge.perfectminus",
+  "zh": "完美- {0}",
+  "en": "Perfect- {0}"
+ },
+ {
+  "key": "playback.judge.xperfect",
+  "zh": "完美 {0}",
+  "en": "Perfect {0}"
+ },
+ {
+  "key": "playback.judge.perfectplus",
+  "zh": "完美+ {0}",
+  "en": "Perfect+ {0}"
+ },
+ {
+  "key": "playback.judge.lateperfect",
+  "zh": "偏晚 {0}",
+  "en": "Late perfect {0}"
+ },
+ {
+  "key": "playback.judge.verylate",
+  "zh": "很晚 {0}",
+  "en": "Very late {0}"
+ },
+ {
+  "key": "playback.judge.toolate",
+  "zh": "过晚 {0}",
+  "en": "Too late {0}"
+ },
+ {
+  "key": "playback.judge.multipress",
+  "zh": "多按 {0}",
+  "en": "Multipress {0}"
+ },
+ {
+  "key": "playback.judge.failmiss",
+  "zh": "漏击 {0}",
+  "en": "Miss {0}"
+ },
+ {
+  "key": "playback.judge.failoverload",
+  "zh": "过载 {0}",
+  "en": "Overload {0}"
+ },
+ {
+  "key": "playback.judge.auto",
+  "zh": "自动 {0}",
+  "en": "Auto {0}"
+ },
+ {
+  "key": "playback.judge.overpress",
+  "zh": "空按 {0}",
+  "en": "Overpress {0}"
+ },
+ {
+  "key": "playback.judge.midspin",
+  "zh": "中旋 {0}",
+  "en": "Midspin {0}"
+ },
+ {
+  "key": "playback.judge.failedfloor",
+  "zh": "失败 {0}",
+  "en": "Failed {0}"
+ },
+ {
+  "key": "render.on",
+  "zh": "启用视频渲染",
+  "en": "Enable video render"
+ },
+ {
+  "key": "render.enable",
+  "zh": "视频渲染",
+  "en": "Video render"
+ },
+ {
+  "key": "render.status",
+  "zh": "状态",
+  "en": "Status"
+ },
+ {
+  "key": "render.err.ffmpeg_start",
+  "zh": "无法启动 ffmpeg：{0}",
+  "en": "Cannot start ffmpeg: {0}"
+ },
+ {
+  "key": "render.err.ffmpeg_timeout",
+  "zh": "ffmpeg 超时未退出",
+  "en": "ffmpeg timed out and did not exit"
+ },
+ {
+  "key": "render.err.encoder_exit",
+  "zh": "编码器未正常退出",
+  "en": "Encoder did not exit cleanly"
+ },
+ {
+  "key": "render.err.encoder_gone",
+  "zh": "编码器进程已退出",
+  "en": "Encoder process has exited"
+ },
+ {
+  "key": "render.err.audio_start",
+  "zh": "无法启动混音采集（{0}）",
+  "en": "Cannot start mixdown capture ({0})"
+ },
+ {
+  "key": "render.err.audio_count",
+  "zh": "读取混音样本数失败（{0}）",
+  "en": "Cannot read mixdown sample count ({0})"
+ },
+ {
+  "key": "render.err.audio_render",
+  "zh": "混音渲染失败（{0}）",
+  "en": "Mixdown render failed ({0})"
+ },
+ {
+  "key": "render.err.audio_silent",
+  "zh": "混音持续无输出，已重启 {0} 次仍无效",
+  "en": "Mixdown silent after {0} restarts"
+ },
+ {
+  "key": "render.err.audio_seal",
+  "zh": "音频文件封口失败（{0}）",
+  "en": "Cannot finalise the audio file ({0})"
+ },
+ {
+  "key": "render.err.checkpoints",
+  "zh": "判定时刻数量异常：{0}",
+  "en": "Bad checkpoint count: {0}"
+ },
+ {
+  "key": "render.err.str_len",
+  "zh": "字符串长度异常：{0}",
+  "en": "Bad string length: {0}"
+ },
+ {
+  "key": "render.options",
+  "zh": "渲染选项",
+  "en": "Render options"
+ },
+ {
+  "key": "playback.structure_mismatch",
+  "zh": "SkyHook 结构不匹配，无法回放",
+  "en": "SkyHook layout mismatch — cannot replay"
+ },
+ {
+  "key": "render.err.no_replay",
+  "zh": "没有可用的回放文件",
+  "en": "No replay file available"
+ },
+ {
+  "key": "render.err.need_level",
+  "zh": "请先进入关卡再开始离线渲染",
+  "en": "Enter a level first to start offline render"
+ },
+ {
+  "key": "replay.err.not_replay",
+  "zh": "不是 SpectreReplay 回放文件",
+  "en": "Not a SpectreReplay replay file"
+ },
+ {
+  "key": "replay.err.version",
+  "zh": "回放文件版本 {0} 高于本版支持的 {1}",
+  "en": "Replay file version {0} is newer than supported {1}"
+ },
+ {
+  "key": "render.state.live",
+  "zh": "录制中",
+  "en": "Recording"
+ },
+ {
+  "key": "render.state.offline",
+  "zh": "离线渲染中",
+  "en": "Offline render"
+ },
+ {
+  "key": "render.state.finalizing",
+  "zh": "合成中",
+  "en": "Finalizing"
+ },
+ {
+  "key": "render.state.done",
+  "zh": "完成",
+  "en": "Done"
+ },
+ {
+  "key": "render.state.failed",
+  "zh": "失败",
+  "en": "Failed"
+ },
+ {
+  "key": "render.state.cancelled",
+  "zh": "已取消",
+  "en": "Cancelled"
+ },
+ {
+  "key": "page.effects",
+  "zh": "去特效",
+  "en": "Effects"
+ },
+ {
+  "key": "effects.master",
+  "zh": "主开关",
+  "en": "Master"
+ },
+ {
+  "key": "effects.visual",
+  "zh": "画面特效",
+  "en": "Visual effects"
+ },
+ {
+  "key": "effects.decor",
+  "zh": "装饰物",
+  "en": "Decorations"
+ },
+ {
+  "key": "effects.track",
+  "zh": "轨道",
+  "en": "Tracks"
+ },
+ {
+  "key": "effects.planet",
+  "zh": "星球与图标",
+  "en": "Planets and icons"
+ },
+ {
+  "key": "effects.audio",
+  "zh": "声音",
+  "en": "Sound"
+ },
+ {
+  "key": "effects.gameplay",
+  "zh": "玩法事件",
+  "en": "Gameplay events"
+ },
+ {
+  "key": "effects.on",
+  "zh": "启用去特效",
+  "en": "Enable effect removal"
+ },
+ {
+  "key": "effects.on.note",
+  "zh": "进关时把下列特效从谱面里摘掉。只影响这次运行的内存数据：不动磁盘上的原文件，除非你打开下面的「允许覆盖关卡」。",
+  "en": "Strips the effects below from the chart when a level loads. This only touches this run's in-memory data, not the file on disk, unless you enable overwriting saves below."
+ },
+ {
+  "key": "effects.enablesave",
+  "zh": "允许覆盖关卡",
+  "en": "Allow overwriting saves"
+ },
+ {
+  "key": "effects.enablesave.note",
+  "zh": "开着去特效时，编辑器默认禁止保存——否则你在编辑器里试听一次再存盘，会把清干净的谱面写回原文件。确实要覆盖关卡才打开它。",
+  "en": "While effect removal is on, the editor refuses to save by default. Otherwise previewing once in the editor and saving would write the stripped chart back over the original file. Turn this on only when you really mean to overwrite it."
+ },
+ {
+  "key": "effects.filters",
+  "zh": "滤镜与闪光",
+  "en": "Filters and flashes"
+ },
+ {
+  "key": "effects.advfilters",
+  "zh": "高级滤镜",
+  "en": "Advanced filters"
+ },
+ {
+  "key": "effects.particles",
+  "zh": "粒子效果",
+  "en": "Particles"
+ },
+ {
+  "key": "effects.backgrounds",
+  "zh": "自定义背景",
+  "en": "Custom backgrounds"
+ },
+ {
+  "key": "effects.cameras",
+  "zh": "镜头移动",
+  "en": "Camera moves"
+ },
+ {
+  "key": "effects.setcamerazoom",
+  "zh": "设置镜头缩放",
+  "en": "Set camera zoom"
+ },
+ {
+  "key": "effects.camerazoom",
+  "zh": "固定镜头缩放",
+  "en": "Fixed camera zoom"
+ },
+ {
+  "key": "effects.decorations",
+  "zh": "移除装饰物",
+  "en": "Remove decorations"
+ },
+ {
+  "key": "effects.removealldecor",
+  "zh": "移除全部装饰",
+  "en": "Remove all decorations"
+ },
+ {
+  "key": "effects.decor.note",
+  "zh": "关掉「移除全部装饰」时会保留被条件事件引用的装饰物——否则那些分支永远不会触发，看着像谱面做坏了。",
+  "en": "With \"Remove all decorations\" off, decorations referenced by conditional events are kept. Otherwise those branches would never fire and the chart would look broken."
+ },
+ {
+  "key": "effects.trackanim",
+  "zh": "轨道动画",
+  "en": "Track animations"
+ },
+ {
+  "key": "effects.trackpos",
+  "zh": "轨道位移",
+  "en": "Track positions"
+ },
+ {
+  "key": "effects.trackmove",
+  "zh": "移除轨道移动",
+  "en": "Remove track moves"
+ },
+ {
+  "key": "effects.trackcolor",
+  "zh": "轨道变色",
+  "en": "Track colours"
+ },
+ {
+  "key": "effects.resettrackopacity",
+  "zh": "重置轨道不透明度",
+  "en": "Reset track opacity"
+ },
+ {
+  "key": "effects.resettrackanim",
+  "zh": "重置轨道动画",
+  "en": "Reset track animation"
+ },
+ {
+  "key": "effects.resettrackcolor",
+  "zh": "重置轨道颜色",
+  "en": "Reset track colour"
+ },
+ {
+  "key": "effects.toggleall",
+  "zh": "全选",
+  "en": "Select all"
+ },
+ {
+  "key": "effects.planetorbit",
+  "zh": "星球旋转",
+  "en": "Planet orbit"
+ },
+ {
+  "key": "effects.planetscale",
+  "zh": "星球缩放",
+  "en": "Planet scale"
+ },
+ {
+  "key": "effects.planetradius",
+  "zh": "星球半径",
+  "en": "Planet radius"
+ },
+ {
+  "key": "effects.hideicons",
+  "zh": "隐藏图标",
+  "en": "Hide icons"
+ },
+ {
+  "key": "effects.hitsounds",
+  "zh": "打击音",
+  "en": "Hit sounds"
+ },
+ {
+  "key": "effects.holdsounds",
+  "zh": "长按音",
+  "en": "Hold sounds"
+ },
+ {
+  "key": "effects.checkpoints",
+  "zh": "检查点",
+  "en": "Checkpoints"
+ },
+ {
+  "key": "effects.inputevents",
+  "zh": "输入事件",
+  "en": "Input events"
+ },
+ {
+  "key": "effects.framerate",
+  "zh": "改变帧率",
+  "en": "Frame rate changes"
+ },
+ {
+  "key": "effects.repeatevents",
+  "zh": "重复事件",
+  "en": "Repeat events"
+ },
+ {
+  "key": "effects.gameplay.note",
+  "zh": "这一组会改变玩法本身：去掉检查点或输入事件后，谱面和原版不是同一个东西了。只为看清轨道的场合再开。",
+  "en": "This group changes gameplay itself. Without checkpoints or input events the chart is no longer the same thing as the original. Turn these on only when you just want to look at the tracks."
+ },
+ {
+  "key": "effects.on.tip",
+  "zh": "总开关。关掉后进关的谱面与原始数据完全一致，一个事件都不会被摘。",
+  "en": "Master switch. When off, a loaded chart matches the original data exactly; not a single event is stripped."
+ },
+ {
+  "key": "effects.enablesave.tip",
+  "zh": "允许在去特效生效时把当前谱面写回磁盘。默认关：这一步会覆盖关卡原文件，且没有撤销。",
+  "en": "Allow writing the current chart back to disk while effect removal is active. Off by default: this overwrites the original file and cannot be undone."
+ },
+ {
+  "key": "effects.filters.tip",
+  "zh": "摘掉闪光、屏幕震动、万花筒、泛光、屏幕平铺等整屏滤镜。",
+  "en": "Strips full-screen filters such as flash, screen shake, hall of mirrors, bloom and screen tile."
+ },
+ {
+  "key": "effects.advfilters.tip",
+  "zh": "摘掉高级滤镜事件。和上面的普通滤镜分开，方便只保留其中一类。",
+  "en": "Strips advanced filter events. Separate from the plain filters above so you can keep just one kind."
+ },
+ {
+  "key": "effects.particles.tip",
+  "zh": "摘掉添加/发射/设置粒子的事件。",
+  "en": "Strips events that add, emit or configure particles."
+ },
+ {
+  "key": "effects.backgrounds.tip",
+  "zh": "摘掉自定义背景，并把背景视频清空——只留纯色底色。",
+  "en": "Strips custom backgrounds and clears the background video, leaving a flat colour."
+ },
+ {
+  "key": "effects.cameras.tip",
+  "zh": "摘掉镜头移动事件，镜头保持不动。",
+  "en": "Strips camera movement events so the camera stays put."
+ },
+ {
+  "key": "effects.setcamerazoom.tip",
+  "zh": "摘掉镜头移动之后，把镜头锁成固定缩放。不打开这一项，下面的缩放比例不会生效。",
+  "en": "Lock the camera at a fixed zoom once camera moves are stripped. The zoom below does nothing unless this is on."
+ },
+ {
+  "key": "effects.camerazoom.tip",
+  "zh": "镜头锁定的缩放比例。只在上面的「设置镜头缩放」打开时生效。",
+  "en": "Zoom level to lock the camera at. Only applies when Set camera zoom above is on."
+ },
+ {
+  "key": "effects.decorations.tip",
+  "zh": "移除谱面里的装饰物、文字与自定义物件。",
+  "en": "Removes decorations, text and custom objects from the chart."
+ },
+ {
+  "key": "effects.removealldecor.tip",
+  "zh": "一个不留地清空装饰物。关掉则保留被条件事件引用的那些。",
+  "en": "Clear every decoration. When off, decorations referenced by conditional events are kept."
+ },
+ {
+  "key": "effects.trackanim.tip",
+  "zh": "摘掉轨道出现/消失的动画事件，让轨道直接出现。",
+  "en": "Strips track appear/disappear animations so tracks show up immediately."
+ },
+ {
+  "key": "effects.trackpos.tip",
+  "zh": "摘掉轨道的位置变化事件。",
+  "en": "Strips track position events."
+ },
+ {
+  "key": "effects.trackmove.tip",
+  "zh": "摘掉轨道移动事件。这是轨道动效里最常见的一类。",
+  "en": "Strips track move events, the most common kind of track motion."
+ },
+ {
+  "key": "effects.trackcolor.tip",
+  "zh": "摘掉轨道变色事件，让轨道保持单一颜色。",
+  "en": "Strips track colour events so tracks keep a single colour."
+ },
+ {
+  "key": "effects.resettrackopacity.tip",
+  "zh": "把保留下来的轨道移动事件的透明度统一改回 100%。",
+  "en": "Sets the opacity of any remaining track move events back to 100%."
+ },
+ {
+  "key": "effects.resettrackanim.tip",
+  "zh": "把轨道的出场/退场动画重置为淡入淡出，避免去完动画后轨道根本看不见。",
+  "en": "Resets track appear/disappear animations to a fade, so tracks do not vanish after their animations are stripped."
+ },
+ {
+  "key": "effects.resettrackcolor.tip",
+  "zh": "把轨道样式与颜色重置成默认的橙色标准轨。",
+  "en": "Resets track style and colour to the default orange standard track."
+ },
+ {
+  "key": "effects.toggleall.tip",
+  "zh": "把本组所有开关一次性打开，再按需关掉不需要的。",
+  "en": "Turn every switch in this group on at once, then turn off the ones you do not want."
+ },
+ {
+  "key": "effects.planetorbit.tip",
+  "zh": "摘掉星球旋转事件。",
+  "en": "Strips planet orbit events."
+ },
+ {
+  "key": "effects.planetscale.tip",
+  "zh": "摘掉星球缩放事件。",
+  "en": "Strips planet scale events."
+ },
+ {
+  "key": "effects.planetradius.tip",
+  "zh": "摘掉星球半径变化事件。",
+  "en": "Strips planet radius events."
+ },
+ {
+  "key": "effects.hideicons.tip",
+  "zh": "摘掉隐藏图标事件。",
+  "en": "Strips hide-icon events."
+ },
+ {
+  "key": "effects.hitsounds.tip",
+  "zh": "摘掉打击音与自定义音效事件。整首曲子会安静下来。",
+  "en": "Strips hit sounds and custom sound events. The song goes quiet."
+ },
+ {
+  "key": "effects.holdsounds.tip",
+  "zh": "摘掉长按音事件。",
+  "en": "Strips hold sound events."
+ },
+ {
+  "key": "effects.checkpoints.tip",
+  "zh": "摘掉检查点，中途失败必须从头再来。",
+  "en": "Strips checkpoints, so a mid-level failure sends you back to the start."
+ },
+ {
+  "key": "effects.inputevents.tip",
+  "zh": "摘掉输入事件（如自动播放、限制按键）。",
+  "en": "Strips input events such as autoplay and key limits."
+ },
+ {
+  "key": "effects.framerate.tip",
+  "zh": "摘掉改变帧率事件，全程保持同一帧率。",
+  "en": "Strips frame rate change events so the whole level runs at one rate."
+ },
+ {
+  "key": "effects.repeatevents.tip",
+  "zh": "摘掉重复事件。谱面里靠它复用的段落会一次性展开。",
+  "en": "Strips repeat events. Sections the chart reuses through them get expanded once."
+ },
+ {
+  "key": "record.recording.tip",
+  "zh": "总开关。关掉后进关不会记录任何按键。",
+  "en": "Master switch. When off, entering a level records nothing."
+ },
+ {
+  "key": "record.autosave.tip",
+  "zh": "通关后自动把本局存成回放文件。",
+  "en": "Saves this run as a replay file when you finish the level."
+ },
+ {
+  "key": "record.completesave.tip",
+  "zh": "只保存完整通关的局。关掉后打一半退出也会存下来。",
+  "en": "Only save full clears. Turn it off to also keep runs you abandoned midway."
+ },
+ {
+  "key": "record.dontsavewhenauto.tip",
+  "zh": "游戏自动播放的关卡不保存，避免刷出一堆重复回放。",
+  "en": "Skip levels the game played by itself, so autoplay does not flood your replay list."
+ },
+ {
+  "key": "record.dontsavewhenmiss.tip",
+  "zh": "有 miss 的局不保存。想留住失手的一局就关掉它。",
+  "en": "Skip runs containing a miss. Turn it off to keep a failed attempt."
+ },
+ {
+  "key": "record.latesave.tip",
+  "zh": "不在结算时保存，而是等你离开关卡那一刻再写文件。",
+  "en": "Save when you leave the level instead of at the results screen."
+ },
+ {
+  "key": "record.failsave.tip",
+  "zh": "中途死亡也保存。默认只在通关或按 F9 时写文件。",
+  "en": "Also save on death. By default a file is written only on clear or on manual save."
+ },
+ {
+  "key": "record.backup.tip",
+  "zh": "保存时额外留一份副本，同名旧文件不会被直接覆盖。",
+  "en": "Keep an extra copy when saving, so an existing file is not simply overwritten."
+ },
+ {
+  "key": "record.manualsave.tip",
+  "zh": "允许按 F9 手动保存当前这一局——练到一半也能存。",
+  "en": "Enable F9 to save the current run by hand, including a practice attempt midway."
+ },
+ {
+  "key": "record.asyncinput.tip",
+  "zh": "从游戏的异步输入系统取按键，时间戳更准。需要先在游戏设置里打开异步输入，否则勾了也不生效。",
+  "en": "Read keys from the game's async input for more accurate timestamps. The game's async input option must be enabled first, or this silently does nothing."
+ },
+ {
+  "key": "record.keybd.record.tip",
+  "zh": "把按键的“嗒嗒”声一起录成独立音轨，回放时能听到。",
+  "en": "Record the tap sound as a separate track so playback has keysounds."
+ },
+ {
+  "key": "record.keybd.volume.tip",
+  "zh": "键盘音在回放里的音量。0 = 静音。",
+  "en": "Volume of the keyboard sound during playback. 0 = muted."
+ },
+ {
+  "key": "record.keybd.offset.tip",
+  "zh": "校准键盘音整体的早晚偏移：偏早就往负调，偏晚往正调，单位毫秒。",
+  "en": "Calibrates the keyboard sound as a whole: negative if it is early, positive if late, in milliseconds."
+ },
+ {
+  "key": "record.savekey.tip",
+  "zh": "手动保存本局的快捷键，默认 F9。点一下它再按任意键即可改绑。",
+  "en": "Hotkey for saving this run, F9 by default. Click it, then press any key to rebind."
+ },
+ {
+  "key": "record.cancelsavekey.tip",
+  "zh": "放弃保存本局的快捷键。按下后这一局就不会再写文件。",
+  "en": "Hotkey that discards the pending save for this run."
+ },
+ {
+  "key": "playback.simulate.tip",
+  "zh": "回放的按键注入主开关。关掉后回放会播放但星球不动，停止时也不会松开已按住的键——只在排查按键冲突时才关它。",
+  "en": "Master switch for key injection. With it off, playback runs but the planet does not move, and held keys are not released on stop. Only turn it off to debug key conflicts."
+ },
+ {
+  "key": "render.on.tip",
+  "zh": "视频渲染总开关。关掉后既不会边玩边录也不会离线渲染。",
+  "en": "Master switch for video rendering. When off, neither live capture nor offline render runs."
+ },
+ {
+  "key": "render.width.tip",
+  "zh": "输出宽度。只在「纯净相机」下有效；「游戏画面」的分辨率跟随游戏窗口。",
+  "en": "Output width. Only used by the clean camera; the game screen follows the window size."
+ },
+ {
+  "key": "render.height.tip",
+  "zh": "输出高度。只在「纯净相机」下有效。",
+  "en": "Output height. Only used by the clean camera."
+ },
+ {
+  "key": "render.fps.tip",
+  "zh": "成片帧率。越高越流畅，渲染耗时按比例增长。",
+  "en": "Output framerate. Higher means smoother, and render time grows proportionally."
+ },
+ {
+  "key": "render.tail.tip",
+  "zh": "关卡结束后继续录制的秒数，用来留住收尾动画。",
+  "en": "Extra seconds recorded after the level ends, to keep the outro animation."
+ },
+ {
+  "key": "render.surface.tip",
+  "zh": "画面来源。「纯净相机」不含界面且分辨率任意；「游戏画面」含界面且跟随窗口。",
+  "en": "Frame source. Clean camera has no UI and any resolution; game screen includes UI and follows the window."
+ },
+ {
+  "key": "render.codec.tip",
+  "zh": "编码器选择。「最快」优先用显卡硬件编码，探测失败会退回 CPU——速度差一个数量级，实际用的那个在下面那行显示。",
+  "en": "Encoder choice. Fastest prefers GPU encoding and falls back to CPU when probing fails; the row below shows which one is actually in use."
+ },
+ {
+  "key": "render.quality.tip",
+  "zh": "编码画质。越高文件越大，渲染耗时也略增。",
+  "en": "Encoding quality. Higher gives larger files and slightly longer renders."
+ },
+ {
+  "key": "render.format.tip",
+  "zh": "成片的封装格式。mp4 最通用，webm 体积小但需要重编码。",
+  "en": "Container for the output file. mp4 is the most compatible; webm is smaller but needs re-encoding."
+ },
+ {
+  "key": "render.outdir.tip",
+  "zh": "成片存放目录。留空 = 模组目录下的 RenderVideos。",
+  "en": "Where finished videos go. Empty = RenderVideos under the mod folder."
+ },
+ {
+  "key": "render.clock.experimental.tip",
+  "zh": "把游戏读到的时间源换成帧号驱动的虚拟时钟，让成片帧率恒定、不受机器繁忙影响。它改的是游戏时间源本身，影响面较大；渲染报错或音画不同步时先关掉它。",
+  "en": "Replaces the game's time source with a frame-index-driven virtual clock so the output framerate stays constant regardless of machine load. It alters the game's own time source, so its blast radius is wide; turn it off first if rendering errors or audio drifts."
+ },
+ {
+  "key": "convert.target.tip",
+  "zh": "把输出目录里已有的视频转成这个格式，与上面的渲染格式互相独立。",
+  "en": "Converts existing videos in the output folder to this format, independently of the render format above."
+ },
+ {
+  "key": "render.start.tip",
+  "zh": "按当前参数开始离线渲染。需要先载入回放并进入那一关。",
+  "en": "Starts an offline render with the current settings. Load a replay and enter its level first."
+ },
+ {
+  "key": "render.cancel.tip",
+  "zh": "中止当前渲染。已经写入的部分会保留。",
+  "en": "Aborts the current render. What was already written is kept."
+ },
+ {
+  "key": "convert.button.tip",
+  "zh": "开始批量转换输出目录里的视频。",
+  "en": "Starts batch-converting the videos in the output folder."
+ },
+ {
+  "key": "record.changedir.tip",
+  "zh": "更换回放保存目录。录制中不能改，否则本局的键盘音会找不到。",
+  "en": "Change the replay folder. Not allowed while recording, or this run's keyboard sound would be lost."
+ }
+]

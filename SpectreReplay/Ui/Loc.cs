@@ -1,746 +1,140 @@
-﻿using UnityEngine;
+using System.Collections.Generic;
+using UnityEngine;
 
 namespace SpectreReplay.Ui
 {
     /// <summary>
-    /// 界面文案。中文/英文两套，按游戏语言自动选。
+    /// 界面文案。14 种语言，按游戏语言自动选。
     ///
-    /// 与 Spectre 的 LocalizationManager 不同：这里不建 14 语言大表，
-    /// 先把两种做实。选不中时回退到另一套，再不中才露出键名——把键名露给
-    /// 玩家是最糟的兜底，只该出现在"真的漏了"的时候。
+    /// **文案数据在 <see cref="LocData"/>，本文件只放选择逻辑。** 分开是因为
+    /// 数据有 14×325 条，混在一起会让这段逻辑（选语言、回退链）淹没在几千行
+    /// 字面量中间——而它恰恰是最需要被读懂的部分：漏一种语言、回退链断一级，
+    /// 都不报错，只表现为"界面上出现了另一种语言"。
+    ///
+    /// 语言集合与上游 Spectre 的 <c>LocalizationManager.langlist</c> **完全一致**
+    /// （zh / zh-t / en / ko / ja / es / pt / fr / de / pl / cs / ro / ru / vi）。
     /// </summary>
     internal static class Loc
     {
         internal const string Brand = "Spectre Replay";
+
         /// <summary>头部副标题。**走文案表**：原先写死成中文常量，英文界面下会直接显示
         /// 中文，而 Loc.cs 在硬编码检查里整文件豁免——这条永远不会被闸门抓到。
         /// 另外那句话本身也是错的：写的是 F9，而 F9 是「手动保存回放」的键，
         /// UMM 的开关窗口热键默认是 Ctrl+F10。</summary>
         internal static string Hint => T("ui.hint");
 
-        private static readonly System.Collections.Generic.Dictionary<string, string> Zh =
-            new System.Collections.Generic.Dictionary<string, string>
-            {
-                { "page.record", "录制" },
-                { "page.playback", "回放" },
-                { "page.render", "视频渲染" },
-                { "page.about", "关于" },
-
-                { "record.autosave", "自动保存回放" },
-                { "record.recording", "录制中" },
-                { "record.note", "录制时按下按键即可。回放文件保存在下方「回放目录」所示的文件夹里。" },
-                { "record.howto", "① 在这里设好参数（快捷键：Ctrl+F10 打开本窗口）② 进关卡正常玩，按键会被记下来 ③ 通关后自动存成回放文件 ④ 在「回放」页载入，或在「视频渲染」页出片。" },
-                { "record.hotkeys", "快捷键" },
-                { "record.savekey", "保存回放" },
-                { "record.cancelsavekey", "取消保存" },
-                { "record.completesave", "只保存完整通关" },
-                { "record.dontsavewhenauto", "全自动局不保存" },
-                { "record.dontsavewhenmiss", "有失误不保存" },
-                { "record.latesave", "出关时再保存" },
-                { "record.failsave", "失败时也保存" },
-                { "record.backup", "额外存一份备份" },
-                { "record.manualsave", "F9 手动保存" },
-                { "record.asyncinput", "从异步输入取按键" },
-                { "record.asyncinput.off", "游戏里没开「异步输入」，这一项现在不生效。请在游戏设置 → 输入里打开异步输入。" },
-                { "record.keybd", "键盘音" },
-                { "record.keybd.record", "录制键盘音" },
-                { "record.keybd.volume", "键盘音音量" },
-                { "record.keybd.offset", "时间偏移" },
-                { "record.keybd.note", "键盘音就是回放时按下去的“嗒嗒”声。时间偏移用于校准它整体的早晚：声音偏早就往负调，偏晚就往正调，单位毫秒。" },
-                { "record.stop", "停止录制" },
-                { "record.specialkeys", "特殊按键" },
-                { "record.specialkeys.note", "游戏默认把这些键当作“不算数”的按键，按下也不会进回放。你如果确实用它们打谱，就在这里勾上——勾了的键会被当成普通按键录制。" },
-                { "record.specialkeys.kb", "键盘输入" },
-                { "record.specialkeys.async", "异步输入" },
-                { "record.specialkeys.async.off", "游戏里没开异步输入，这一组现在不生效。请在游戏设置 → 输入里打开。" },
-                { "record.specialkeys.kb.tip", "这里勾上的键会被当成普通按键录制。不勾时，游戏会把它们当作“不算数”的键从回放里剔掉。" },
-                { "record.specialkeys.async.tip", "异步输入那一套键名（PrintScreen / F12 / LAlt / Super）。游戏里没开异步输入时这一组不生效。" },
-                { "ui.presskey", "按下任意键…" },
-                { "ui.nokey", "未绑定" },
-                { "ui.patchfailed", "补丁未挂载（对应功能可能失效）" },
-                { "ui.on", "开" },
-                { "ui.off", "关" },
-                { "ui.hint", "Ctrl+F10 开关界面 · ESC 关闭" },
-                { "playback.current", "当前" },
-                { "playback.idle", "还没载入回放。在下面的列表里点「回放」即可。" },
-                { "playback.idle_err", "上一次的载入失败了：{0}" },
-                { "playback.empty", "还没有回放文件。打一局关卡就会自动保存。" },
-                { "playback.drive", "回放驱动" },
-                { "playback.simulate", "模拟按键" },
-                { "playback.drive.note", "关掉后回放仍然会播放、但不再往游戏里送按键——星球不会动。停止回放时也不会松开已按住的键，所以只在排查「按键冲突」时关它。" },
-                { "playback.stop", "停止回放" },
-                { "playback.unload", "卸载回放" },
-                { "playback.note", "回放由录制时的按键序列驱动，可用于复盘与练习。" },
-                { "playback.ready", "已装好：{0}——重新开始这关就会自动播放。" },
-                { "playback.armed", "正在播放：{0}" },
-                { "playback.restart", "重开这关并播放" },
-                { "playback.cancel", "取消待播" },
-                { "playback.timing", "命中误差" },
-                { "playback.timing_summary", "已分析 {0} 击（偏早 {1} / 偏晚 {2}），中位数 {3}" },
-                { "playback.timing_detail", "均值 {0}，标准差 {1}，范围 {2} ~ {3}" },
-                { "playback.timing_skipped", "另有 {0} 击未计入（自动命中或取不到谱面数据）。" },
-                { "playback.openlevel", "打开这一关" },
-                { "playback.openlevel.editor", "打开编辑器" },
-                { "playback.openlevel.official", "该回放没有记录内部关卡名（旧版本录制），无法直达：" },
-                { "playback.openlevel.official_go", "官方关卡「{0}」，可直接打开。" },
-                { "playback.openlevel.official.go", "进入官方关卡" },
-                { "playback.openlevel.missing", "谱面文件不在了：" },
-                { "playback.openlevel.busy", "正在跳转，请稍候。" },
-                { "playback.analyze.hint", "每一击一根柱子。高度与颜色用同一把尺子：按这一击自己的判定窗口算。绿=落在 Perfect 窗口内，黄=只落在 Pure 窗口内，红=两档都没进。越高越偏，达到完美窗口的 2 倍就顶格。" },
-                { "playback.analyze.none", "没有可画的命中数据。" },
-                { "playback.err.no_data", "没有可校验的回放数据。" },
-                { "playback.err.wrong_level", "关卡不匹配：这份回放录自「{0}」。请打开那一关。" },
-                { "playback.err.floor_changed", "谱面已被修改：这份回放是在旧版谱面上录的，按键位置会全部错位。" },
-                { "playback.err.chart_mismatch", "谱面参数不匹配（移调或 BPM 变了）：「{0}」。" },
-                { "playback.err.wrong_difficulty", "难度不匹配：这份回放录于「{0}」。请切换难度后重开。" },
-                { "playback.err.wrong_tile", "起点不匹配：这份回放从第 {0} 块开始，请先退到那个位置。" },
-                { "playback.err.wrong_speed", "倍速不匹配：这份回放录于 {0} 倍速。" },
-                { "render.mode", "渲染模式" },
-                { "render.mode.live", "边玩边录（推荐）" },
-                { "render.mode.offline", "手动离线渲染" },
-                { "render.fps", "输出帧率" },
-                { "render.width", "宽度" },
-                { "render.height", "高度" },
-                { "render.surface", "画面来源" },
-                { "render.codec.auto", "自动" },
-                { "render.codec.fastest", "最快" },
-                { "render.codec.quality", "画质优先" },
-                { "render.codec.cpu", "仅 CPU" },
-                { "render.quality.low", "低" },
-                { "render.quality.standard", "标准" },
-                { "render.quality.high", "高" },
-                { "render.quality.extreme", "极高" },
-                { "render.surface.clean", "纯净相机（不含界面）" },
-                { "render.surface.screen", "游戏画面（含界面）" },
-                { "render.surface.screen_note", "包含进度条等界面 UI；分辨率跟随游戏窗口，不可超分辨率；渲染时请收起模组窗口，否则会被录入画面。" },
-                { "render.surface.clean_note", "不含任何界面元素，输出分辨率任意（可超采样）；适合做成纯画面展示或二次剪辑素材。" },
-                { "render.clock.experimental", "确定性渲染时钟（实验性）" },
-                { "render.clock.hint", "打开后把游戏读到的时间源换成「帧号驱动」的虚拟时钟，游戏自己的节拍推进、相机事件、倒计时、按键音调度全部自动确定性化，成片帧率恒定、不受机器繁忙影响。关闭则走音频游标兜底：画面仍能出片，但时间轴由音频游标驱动，可能有毫秒级抖动，且视频背景不再随渲染速率调速。注意：它改的是游戏时间源本身，影响面较大；与其他视频渲染类模组同时启用时会争抢同一个补丁点（先加载者生效），此时本项会自动让位。若渲染报错或音画不同步，请先关掉这一项再试。" },
-                { "render.ffmpeg", "ffmpeg" },
-                { "render.ffmpeg.ready", "ffmpeg 已就绪" },
-                { "render.ffmpeg.missing", "未找到 ffmpeg.exe，请放到模组目录或游戏根目录，或加入系统 PATH" },
-                { "render.codec", "编码器" },
-                { "render.codec.current", "实际编码器" },
-                { "render.quality", "画质" },
-                { "render.format", "输出格式" },
-                { "render.tail", "结尾多录秒数" },
-                { "render.outdir", "输出目录" },
-                { "render.outdir.empty", "留空 = 模组目录下的 RenderVideos" },
-                { "convert.title", "转换已有视频" },
-                { "convert.hint", "把上面输出目录里的视频转成所选格式。已在目标格式的文件会跳过；mp4/mov 之间通常秒级完成，转 webm 需要重编码（较慢）。" },
-                { "convert.button", "开始转换" },
-                { "convert.target", "目标格式" },
-                { "convert.running", "正在转换 {0}/{1}（已转 {2}，跳过 {3}，失败 {4}）" },
-                { "convert.done", "转换完成：{0} 个已转，{1} 个跳过，{2} 个失败。" },
-                { "convert.err.no_ffmpeg", "找不到 ffmpeg，无法转换。" },
-                { "convert.err.no_dir", "输出目录不存在或还没有视频。" },
-                { "render.start", "开始渲染" },
-                { "render.cancel", "取消" },
-                { "render.note.live", "边玩边录：进入关卡自动开始，结算后自动完成。不需要再跑一遍关卡。" },
-                { "render.note.offline", "离线渲染：重跑一遍回放逐帧捕获，耗时更长但画面与原回放完全一致。" },
-                { "render.offline_target", "将渲染这份回放：{0}" },
-                { "render.offline_noreplay", "没有可用的回放文件：先打一局关卡（会自动保存），或到「回放」页确认目录里有 .srp。" },
-                { "about.note", "SpectreReplay 是独立模组，不依赖 Spectre，两者可同时启用。" },
-                { "about.version", "版本" },
-                { "about.path", "保存目录" },
-                { "about.engine", "回放引擎" },
-                { "about.engine.value", "Spectre 回放（录制 / 回放 / 视频渲染）" },
-                { "about.update.status", "更新" },
-                { "about.update.available", "发现新版本" },
-                { "about.update.available.value", "可更新到 " },
-                { "about.update.latest", "已是最新版本" },
-                { "about.update.unknown", "未检查（UMM 会在启动时自动检查）" },
-                { "about.update.open", "打开模组主页" },
-                { "about.update.open.tip", "用浏览器打开模组的 GitHub 页面；更新检查也是查那里发布的版本。" },
-                { "record.savedir", "回放目录" },
-                { "record.changedir", "更改…" },
-                { "record.savedir.pick", "选择回放保存目录" },
-                { "record.savedir.busy", "录制中不能改保存目录：本局键盘音写在旧目录下，换了就找不回。先停止录制。" },
-                { "render.outdir.pick", "选择渲染输出目录" },
-                { "render.active", "渲染中" },
-                { "render.eta", "预计剩余 {0}" },
-                { "render.progress", "进度" },
-
-                // ── 状态提示 ──────────────────────────────────────
-                // 之前一个都没有：录制开始了没人知道、回放载入了没人知道、
-                // 渲染出片了没人知道。整个模组于是"像没生效"。
-                // Spectre 有 TriggerMessage 这一套（见它的 SpectreState.cs），
-                // 靠它自己场景里的 Notification 预制体——我们不能依赖那个资源，
-                // 改在自己的设置页顶部常驻一行，见 OnGui.DrawStatus。
-                { "status.idle", "空闲：没在录制，也没在渲染。" },
-                { "status.all_off", "录制与渲染都已关闭：进关也不会记录任何东西。" },
-                { "status.recording", "正在录制本局按键…" },
-                { "status.playing", "回放进行中…" },
-                // 顶栏用的是这条：它没有 {0}，顶栏不该去拼一个文件名出来。
-                { "status.pending_short", "回放已装好，重开关卡就会播放。" },
-                { "status.pending_replay", "回放已装好：{0}。重新开始这关（或从关卡列表再进一次）就会自动播放。" },
-                { "status.rendering", "正在渲染…{0}" },
-                { "status.saved", "回放已保存：{0}" },
-                { "status.saved_none", "本局没有录到按键，未保存（这是正常的，空关不会产生回放）。" },
-                { "status.loaded", "已载入回放：{0}" },
-                { "status.loaded_none", "没有可载入的回放文件。" },
-                { "status.stopped", "回放已停止。" },
-                { "status.render_done", "渲染完成：{0}" },
-                { "status.render_start", "开始渲染…" },
-
-                { "render.duplicate_when_late", "跟不上时复制上一帧" },
-                { "playback.files", "回放文件" },
-                { "playback.replay", "回放" },
-                { "playback.loaded", "已载入" },
-                { "playback.delete", "删除" },
-                { "playback.delete.confirm", "确认删除" },
-                { "playback.delete.done", "已删除：{0}" },
-                { "playback.delete.err", "删除失败：{0}" },
-                { "playback.delete.tip", "直接删掉这个回放文件（不进回收站，删了无法恢复）。点第一下变成「确认删除」，再点一下才真的删除。" },
-                { "playback.info.title", "{0} — {1}" },
-                { "playback.info.unknown", "未知" },
-                { "playback.info.na", "—" },
-                { "playback.info.tip", "点文件名展开/收起这份回放的详情（歌名、难度、BPM、判定分布、文件信息）。" },
-                { "playback.info.difficulty", "难度" },
-                { "playback.info.bpm", "BPM" },
-                { "playback.info.speed", "倍速" },
-                { "playback.info.floor", "起点 → 终点" },
-                { "playback.info.hits", "命中" },
-                { "playback.info.keys", "按键" },
-                { "playback.info.duration", "时长" },
-                { "playback.info.acc", "Accuracy" },
-                { "playback.info.xacc", "X-Accuracy" },
-                { "playback.info.judgments", "判定分布" },
-                { "playback.info.fileline", "{0} · {1} · {2} · {3} · 模组 {4}" },
-                { "playback.info.encrypted", "已加密" },
-                { "playback.info.plain", "未加密" },
-                { "playback.info.err.file_gone", "文件已经不在了（可能被别的程序删掉）。" },
-                { "playback.info.err.io_error", "读不到文件信息（权限或磁盘错误）。" },
-                { "playback.info.err.decode_failed", "读不出这份回放的元数据：文件可能已损坏，或不是本模组录的。" },
-                { "playback.judge.tooearly", "过早 {0}" },
-                { "playback.judge.veryearly", "很早 {0}" },
-                { "playback.judge.earlyperfect", "偏早 {0}" },
-                { "playback.judge.perfectminus", "完美- {0}" },
-                { "playback.judge.xperfect", "完美 {0}" },
-                { "playback.judge.perfectplus", "完美+ {0}" },
-                { "playback.judge.lateperfect", "偏晚 {0}" },
-                { "playback.judge.verylate", "很晚 {0}" },
-                { "playback.judge.toolate", "过晚 {0}" },
-                { "playback.judge.multipress", "多按 {0}" },
-                { "playback.judge.failmiss", "漏击 {0}" },
-                { "playback.judge.failoverload", "过载 {0}" },
-                { "playback.judge.auto", "自动 {0}" },
-                { "playback.judge.overpress", "空按 {0}" },
-                { "playback.judge.midspin", "中旋 {0}" },
-                { "playback.judge.failedfloor", "失败 {0}" },
-                { "render.on", "启用视频渲染" },
-                { "render.enable", "视频渲染" },
-                { "render.status", "状态" },
-                { "render.err.ffmpeg_start", "无法启动 ffmpeg：{0}" },
-                { "render.err.ffmpeg_timeout", "ffmpeg 超时未退出" },
-                { "render.err.encoder_exit", "编码器未正常退出" },
-                { "render.err.encoder_gone", "编码器进程已退出" },
-                { "render.err.audio_start", "无法启动混音采集（{0}）" },
-                { "render.err.audio_count", "读取混音样本数失败（{0}）" },
-                { "render.err.audio_render", "混音渲染失败（{0}）" },
-                { "render.err.audio_silent", "混音持续无输出，已重启 {0} 次仍无效" },
-                { "render.err.audio_seal", "音频文件封口失败（{0}）" },
-                { "render.err.checkpoints", "判定时刻数量异常：{0}" },
-                { "render.err.str_len", "字符串长度异常：{0}" },
-{ "render.options", "渲染选项" },
-                { "playback.structure_mismatch", "SkyHook 结构不匹配，无法回放" },
-                { "render.err.no_replay", "没有可用的回放文件" },
-                { "render.err.need_level", "请先进入关卡再开始离线渲染" },
-                { "replay.err.not_replay", "不是 SpectreReplay 回放文件" },
-                { "replay.err.version", "回放文件版本 {0} 高于本版支持的 {1}" },
-                { "render.state.live", "录制中" },
-                { "render.state.offline", "离线渲染中" },
-                { "render.state.finalizing", "合成中" },
-                { "render.state.done", "完成" },
-                { "render.state.failed", "失败" },
-                { "render.state.cancelled", "已取消" },
-                // ── 去特效 ──────────────────────────────────
-                { "page.effects", "去特效" },
-                { "effects.master", "主开关" },
-                { "effects.visual", "画面特效" },
-                { "effects.decor", "装饰物" },
-                { "effects.track", "轨道" },
-                { "effects.planet", "星球与图标" },
-                { "effects.audio", "声音" },
-                { "effects.gameplay", "玩法事件" },
-                { "effects.on", "启用去特效" },
-                { "effects.on.note", "进关时把下列特效从谱面里摘掉。只影响这次运行的内存数据：不动磁盘上的原文件，除非你打开下面的「允许覆盖关卡」。" },
-                { "effects.enablesave", "允许覆盖关卡" },
-                { "effects.enablesave.note", "开着去特效时，编辑器默认禁止保存——否则你在编辑器里试听一次再存盘，会把清干净的谱面写回原文件。确实要覆盖关卡才打开它。" },
-                { "effects.filters", "滤镜与闪光" },
-                { "effects.advfilters", "高级滤镜" },
-                { "effects.particles", "粒子效果" },
-                { "effects.backgrounds", "自定义背景" },
-                { "effects.cameras", "镜头移动" },
-                { "effects.setcamerazoom", "设置镜头缩放" },
-                { "effects.camerazoom", "固定镜头缩放" },
-                { "effects.decorations", "移除装饰物" },
-                { "effects.removealldecor", "移除全部装饰" },
-                { "effects.decor.note", "关掉「移除全部装饰」时会保留被条件事件引用的装饰物——否则那些分支永远不会触发，看着像谱面做坏了。" },
-                { "effects.trackanim", "轨道动画" },
-                { "effects.trackpos", "轨道位移" },
-                { "effects.trackmove", "移除轨道移动" },
-                { "effects.trackcolor", "轨道变色" },
-                { "effects.resettrackopacity", "重置轨道不透明度" },
-                { "effects.resettrackanim", "重置轨道动画" },
-                { "effects.resettrackcolor", "重置轨道颜色" },
-                { "effects.toggleall", "全选" },
-                { "effects.planetorbit", "星球旋转" },
-                { "effects.planetscale", "星球缩放" },
-                { "effects.planetradius", "星球半径" },
-                { "effects.hideicons", "隐藏图标" },
-                { "effects.hitsounds", "打击音" },
-                { "effects.holdsounds", "长按音" },
-                { "effects.checkpoints", "检查点" },
-                { "effects.inputevents", "输入事件" },
-                { "effects.framerate", "改变帧率" },
-                { "effects.repeatevents", "重复事件" },
-                { "effects.gameplay.note", "这一组会改变玩法本身：去掉检查点或输入事件后，谱面和原版不是同一个东西了。只为看清轨道的场合再开。" },
-                { "effects.on.tip", "总开关。关掉后进关的谱面与原始数据完全一致，一个事件都不会被摘。" },
-                { "effects.enablesave.tip", "允许在去特效生效时把当前谱面写回磁盘。默认关：这一步会覆盖关卡原文件，且没有撤销。" },
-                { "effects.filters.tip", "摘掉闪光、屏幕震动、万花筒、泛光、屏幕平铺等整屏滤镜。" },
-                { "effects.advfilters.tip", "摘掉高级滤镜事件。和上面的普通滤镜分开，方便只保留其中一类。" },
-                { "effects.particles.tip", "摘掉添加/发射/设置粒子的事件。" },
-                { "effects.backgrounds.tip", "摘掉自定义背景，并把背景视频清空——只留纯色底色。" },
-                { "effects.cameras.tip", "摘掉镜头移动事件，镜头保持不动。" },
-                { "effects.setcamerazoom.tip", "摘掉镜头移动之后，把镜头锁成固定缩放。不打开这一项，下面的缩放比例不会生效。" },
-                { "effects.camerazoom.tip", "镜头锁定的缩放比例。只在上面的「设置镜头缩放」打开时生效。" },
-                { "effects.decorations.tip", "移除谱面里的装饰物、文字与自定义物件。" },
-                { "effects.removealldecor.tip", "一个不留地清空装饰物。关掉则保留被条件事件引用的那些。" },
-                { "effects.trackanim.tip", "摘掉轨道出现/消失的动画事件，让轨道直接出现。" },
-                { "effects.trackpos.tip", "摘掉轨道的位置变化事件。" },
-                { "effects.trackmove.tip", "摘掉轨道移动事件。这是轨道动效里最常见的一类。" },
-                { "effects.trackcolor.tip", "摘掉轨道变色事件，让轨道保持单一颜色。" },
-                { "effects.resettrackopacity.tip", "把保留下来的轨道移动事件的透明度统一改回 100%。" },
-                { "effects.resettrackanim.tip", "把轨道的出场/退场动画重置为淡入淡出，避免去完动画后轨道根本看不见。" },
-                { "effects.resettrackcolor.tip", "把轨道样式与颜色重置成默认的橙色标准轨。" },
-                { "effects.toggleall.tip", "把本组所有开关一次性打开，再按需关掉不需要的。" },
-                { "effects.planetorbit.tip", "摘掉星球旋转事件。" },
-                { "effects.planetscale.tip", "摘掉星球缩放事件。" },
-                { "effects.planetradius.tip", "摘掉星球半径变化事件。" },
-                { "effects.hideicons.tip", "摘掉隐藏图标事件。" },
-                { "effects.hitsounds.tip", "摘掉打击音与自定义音效事件。整首曲子会安静下来。" },
-                { "effects.holdsounds.tip", "摘掉长按音事件。" },
-                { "effects.checkpoints.tip", "摘掉检查点，中途失败必须从头再来。" },
-                { "effects.inputevents.tip", "摘掉输入事件（如自动播放、限制按键）。" },
-                { "effects.framerate.tip", "摘掉改变帧率事件，全程保持同一帧率。" },
-                { "effects.repeatevents.tip", "摘掉重复事件。谱面里靠它复用的段落会一次性展开。" },
-                { "record.recording.tip", "总开关。关掉后进关不会记录任何按键。" },
-                { "record.autosave.tip", "通关后自动把本局存成回放文件。" },
-                { "record.completesave.tip", "只保存完整通关的局。关掉后打一半退出也会存下来。" },
-                { "record.dontsavewhenauto.tip", "游戏自动播放的关卡不保存，避免刷出一堆重复回放。" },
-                { "record.dontsavewhenmiss.tip", "有 miss 的局不保存。想留住失手的一局就关掉它。" },
-                { "record.latesave.tip", "不在结算时保存，而是等你离开关卡那一刻再写文件。" },
-                { "record.failsave.tip", "中途死亡也保存。默认只在通关或按 F9 时写文件。" },
-                { "record.backup.tip", "保存时额外留一份副本，同名旧文件不会被直接覆盖。" },
-                { "record.manualsave.tip", "允许按 F9 手动保存当前这一局——练到一半也能存。" },
-                { "record.asyncinput.tip", "从游戏的异步输入系统取按键，时间戳更准。需要先在游戏设置里打开异步输入，否则勾了也不生效。" },
-                { "record.keybd.record.tip", "把按键的“嗒嗒”声一起录成独立音轨，回放时能听到。" },
-                { "record.keybd.volume.tip", "键盘音在回放里的音量。0 = 静音。" },
-                { "record.keybd.offset.tip", "校准键盘音整体的早晚偏移：偏早就往负调，偏晚往正调，单位毫秒。" },
-                { "record.savekey.tip", "手动保存本局的快捷键，默认 F9。点一下它再按任意键即可改绑。" },
-                { "record.cancelsavekey.tip", "放弃保存本局的快捷键。按下后这一局就不会再写文件。" },
-                { "playback.simulate.tip", "回放的按键注入主开关。关掉后回放会播放但星球不动，停止时也不会松开已按住的键——只在排查按键冲突时才关它。" },
-                { "render.on.tip", "视频渲染总开关。关掉后既不会边玩边录也不会离线渲染。" },
-                { "render.width.tip", "输出宽度。只在「纯净相机」下有效；「游戏画面」的分辨率跟随游戏窗口。" },
-                { "render.height.tip", "输出高度。只在「纯净相机」下有效。" },
-                { "render.fps.tip", "成片帧率。越高越流畅，渲染耗时按比例增长。" },
-                { "render.tail.tip", "关卡结束后继续录制的秒数，用来留住收尾动画。" },
-                { "render.surface.tip", "画面来源。「纯净相机」不含界面且分辨率任意；「游戏画面」含界面且跟随窗口。" },
-                { "render.codec.tip", "编码器选择。「最快」优先用显卡硬件编码，探测失败会退回 CPU——速度差一个数量级，实际用的那个在下面那行显示。" },
-                { "render.quality.tip", "编码画质。越高文件越大，渲染耗时也略增。" },
-                { "render.format.tip", "成片的封装格式。mp4 最通用，webm 体积小但需要重编码。" },
-                { "render.outdir.tip", "成片存放目录。留空 = 模组目录下的 RenderVideos。" },
-                { "render.clock.experimental.tip", "把游戏读到的时间源换成帧号驱动的虚拟时钟，让成片帧率恒定、不受机器繁忙影响。它改的是游戏时间源本身，影响面较大；渲染报错或音画不同步时先关掉它。" },
-                { "convert.target.tip", "把输出目录里已有的视频转成这个格式，与上面的渲染格式互相独立。" },
-                { "render.start.tip", "按当前参数开始离线渲染。需要先载入回放并进入那一关。" },
-                { "render.cancel.tip", "中止当前渲染。已经写入的部分会保留。" },
-                { "convert.button.tip", "开始批量转换输出目录里的视频。" },
-                { "record.changedir.tip", "更换回放保存目录。录制中不能改，否则本局的键盘音会找不到。" },
-            };
-
-        private static readonly System.Collections.Generic.Dictionary<string, string> En =
-            new System.Collections.Generic.Dictionary<string, string>
-            {
-                { "page.record", "Recording" },
-                { "page.playback", "Playback" },
-                { "page.render", "Video Render" },
-                { "page.about", "About" },
-
-                { "record.autosave", "Auto-save replays" },
-                { "record.recording", "Recording" },
-                { "record.note", "Keys pressed while playing are captured. Replays are saved in the folder shown under \"Replay folder\" below." },
-                { "record.howto", "1) Set options here (press Ctrl+F10 to open this window) 2) Play a level normally - your keys are recorded 3) Finishing saves a replay file 4) Load it on the Playback tab, or render it on the Video Render tab." },
-                { "record.hotkeys", "Hotkeys" },
-                { "record.savekey", "Save replay" },
-                { "record.cancelsavekey", "Cancel save" },
-                { "record.completesave", "Only save full clears" },
-                { "record.dontsavewhenauto", "Skip auto-played levels" },
-                { "record.dontsavewhenmiss", "Skip runs with a miss" },
-                { "record.latesave", "Save when leaving the level" },
-                { "record.failsave", "Also save on failure" },
-                { "record.backup", "Keep an extra backup copy" },
-                { "record.manualsave", "F9 manual save" },
-                { "record.asyncinput", "Read keys from async input" },
-                { "record.asyncinput.off", "Async input is off in the game, so this option has no effect. Enable async input in the game's settings → input." },
-                { "record.keybd", "Keyboard sound" },
-                { "record.keybd.record", "Record keyboard sound" },
-                { "record.keybd.volume", "Keyboard sound volume" },
-                { "record.keybd.offset", "Time offset" },
-                { "record.keybd.note", "Keyboard sound is the tap played back when a key was pressed. Time offset calibrates it as a whole: shift negative if it is early, positive if late, in milliseconds." },
-                { "record.stop", "Stop recording" },
-                { "record.specialkeys", "Special keys" },
-                { "record.specialkeys.note", "The game treats these keys as \"not counting\" and they never reach the replay. If you actually play with them, tick them here and they will be recorded like normal keys." },
-                { "record.specialkeys.kb", "Keyboard input" },
-                { "record.specialkeys.async", "Async input" },
-                { "record.specialkeys.async.off", "Async input is off in the game, so this group has no effect. Enable it in the game's settings -> input." },
-                { "record.specialkeys.kb.tip", "Keys ticked here are recorded like normal keys. Left unticked, the game drops them from the replay as \"not counting\" keys." },
-                { "record.specialkeys.async.tip", "Async-input key names (PrintScreen / F12 / LAlt / Super). This group has no effect unless async input is enabled in the game." },
-                { "ui.presskey", "Press any key..." },
-                { "ui.nokey", "Not bound" },
-                { "ui.patchfailed", "Some patches failed to apply (features may be off)" },
-                { "ui.on", "On" },
-                { "ui.off", "Off" },
-                { "ui.hint", "Ctrl+F10 opens this panel · ESC closes" },
-                { "playback.current", "Current" },
-                { "playback.idle", "No replay loaded. Press \"Replay\" on a file below." },
-                { "playback.idle_err", "The last load failed: {0}" },
-                { "playback.empty", "No replays yet. Play a level and one is saved automatically." },
-                { "playback.drive", "Playback driver" },
-                { "playback.simulate", "Simulate key presses" },
-                { "playback.drive.note", "With this off, playback still runs but no keys are sent to the game, so the planet will not move. Held keys are also not released when playback stops, so keep it on unless you are debugging a key conflict." },
-                { "playback.stop", "Stop" },
-                { "playback.unload", "Unload replay" },
-                { "playback.note", "Playback is driven by the recorded key stream." },
-                { "playback.ready", "Ready: {0} — restart this level to play it automatically." },
-                { "playback.armed", "Playing: {0}" },
-                { "playback.restart", "Restart & play" },
-                { "playback.cancel", "Cancel" },
-                { "playback.timing", "Hit timing" },
-                { "playback.timing_summary", "Analyzed {0} hits (early {1} / late {2}), median {3}" },
-                { "playback.timing_detail", "Mean {0}, sigma {1}, range {2} ~ {3}" },
-                { "playback.timing_skipped", "{0} more hits not counted (auto hits or missing chart data)." },
-                { "playback.openlevel", "Open this level" },
-                { "playback.openlevel.editor", "Open editor" },
-                { "playback.openlevel.official", "This replay has no internal level name recorded (saved by an older version); cannot jump: " },
-                { "playback.openlevel.official_go", "Official level \"{0}\" — can be opened directly." },
-                { "playback.openlevel.official.go", "Enter official level" },
-                { "playback.openlevel.missing", "Chart file is gone: " },
-                { "playback.openlevel.busy", "Switching, please wait." },
-                { "playback.analyze.hint", "One bar per hit. Height and color share the same scale (that hit's own judgment window): green = within Perfect, yellow = only within Pure, red = outside both. Taller means further off; 2x the Perfect window fills the height." },
-                { "playback.analyze.none", "No hit data to plot." },
-                { "playback.err.no_data", "No replay data to validate." },
-                { "playback.err.wrong_level", "Wrong level: this replay was recorded on \"{0}\". Open that one." },
-                { "playback.err.floor_changed", "The chart has changed since this replay was recorded; every key would land on the wrong tile." },
-                { "playback.err.chart_mismatch", "Chart parameters differ (pitch or BPM changed): \"{0}\"." },
-                { "playback.err.wrong_difficulty", "Wrong difficulty: this replay was recorded on \"{0}\". Switch difficulty and restart." },
-                { "playback.err.wrong_tile", "Wrong start tile: this replay starts at tile {0}; rewind there first." },
-                { "playback.err.wrong_speed", "Wrong speed: this replay was recorded at {0}x." },
-                { "render.mode", "Render mode" },
-                { "render.mode.live", "Record while playing" },
-                { "render.mode.offline", "Manual offline render" },
-                { "render.fps", "Output FPS" },
-                { "render.width", "Width" },
-                { "render.height", "Height" },
-                { "render.surface", "Frame source" },
-                { "render.codec.auto", "Auto" },
-                { "render.codec.fastest", "Fastest" },
-                { "render.codec.quality", "Quality first" },
-                { "render.codec.cpu", "CPU only" },
-                { "render.quality.low", "Low" },
-                { "render.quality.standard", "Standard" },
-                { "render.quality.high", "High" },
-                { "render.quality.extreme", "Extreme" },
-                { "render.surface.clean", "Clean camera (no UI)" },
-                { "render.surface.screen", "Game screen (with UI)" },
-                { "render.surface.screen_note", "Includes screen-space UI such as the progress bar; resolution follows the game window (no supersampling); collapse the mod window while rendering or it will be captured." },
-                { "render.surface.clean_note", "No UI at all, any output resolution (supersampling allowed); good for pure footage or editing material." },
-                { "render.clock.experimental", "Deterministic render clock (experimental)" },
-                { "render.clock.hint", "Replaces the time source the game reads with a frame-index-driven virtual clock, making beat advancement, camera events, countdowns and keysound scheduling deterministic — output framerate stays constant regardless of machine load. Off = audio-cursor fallback: rendering still works, but the timeline is driven by the audio cursor (millisecond-level jitter) and video backgrounds are no longer speed-matched to the render rate. Note: this alters the game's own time source, so its blast radius is wider than other options; when another video-rendering mod is enabled at the same time, both contend for the same patch point (first to load wins) and this option yields automatically. If rendering errors or audio/video drift appears, turn this off first." },
-                { "render.ffmpeg", "ffmpeg" },
-                { "render.ffmpeg.ready", "ffmpeg ready" },
-                { "render.ffmpeg.missing", "ffmpeg.exe not found; place it in the mod folder or game root, or add it to PATH" },
-                { "render.codec", "Encoder" },
-                { "render.codec.current", "Actual encoder" },
-                { "render.quality", "Quality" },
-                { "render.format", "Output format" },
-                { "render.tail", "Extra tail seconds" },
-                { "render.outdir", "Output folder" },
-                { "render.outdir.empty", "Empty = RenderVideos under the mod folder" },
-                { "convert.title", "Convert existing videos" },
-                { "convert.hint", "Converts videos in the output folder above to the selected format. Files already in the target format are skipped; mp4/mov swaps are usually instant, while webm requires re-encoding (slower)." },
-                { "convert.button", "Start converting" },
-                { "convert.target", "Target format" },
-                { "convert.running", "Converting {0}/{1} (done {2}, skipped {3}, failed {4})" },
-                { "convert.done", "Conversion finished: {0} converted, {1} skipped, {2} failed." },
-                { "convert.err.no_ffmpeg", "ffmpeg not found; cannot convert." },
-                { "convert.err.no_dir", "Output folder does not exist or has no videos yet." },
-                { "render.start", "Render" },
-                { "render.cancel", "Cancel" },
-                { "render.progress", "Progress" },
-                { "render.note.live", "Record-while-playing: starts automatically when you enter a level and finishes on results. The level is not replayed." },
-                { "render.note.offline", "Offline: replays the level frame by frame. Slower, but pixel-identical to the replay." },
-                { "render.offline_target", "Will render this replay: {0}" },
-                { "render.offline_noreplay", "No replay file to render. Play a level first (it saves automatically), or check the Playback tab for .srp files." },
-                { "about.note", "SpectreReplay is standalone and does not require Spectre; both can be enabled at once." },
-                { "about.version", "Version" },
-                { "about.path", "Save folder" },
-                { "about.engine", "Replay engine" },
-                { "about.engine.value", "Spectre replay (record / playback / video render)" },
-                { "about.update.status", "Update" },
-                { "about.update.available", "New version" },
-                { "about.update.available.value", "Update available: " },
-                { "about.update.latest", "Up to date" },
-                { "about.update.unknown", "Not checked (UMM checks on startup)" },
-                { "about.update.open", "Open mod homepage" },
-                { "about.update.open.tip", "Opens the mod's GitHub page in your browser; update checks read the version published there." },
-                { "record.savedir", "Replay folder" },
-                { "record.changedir", "Change..." },
-                { "record.savedir.pick", "Choose replay folder" },
-                { "record.savedir.busy", "Cannot change the folder while recording: this run's keyboard sound is being written to the old folder. Stop recording first." },
-                { "render.outdir.pick", "Choose render output folder" },
-                { "render.active", "Rendering" },
-                { "render.eta", "About {0} left" },
-
-                { "status.idle", "Idle: not recording, not rendering." },
-                { "status.all_off", "Recording and rendering are both off: playing a level records nothing." },
-                { "status.recording", "Recording your keys..." },
-                { "status.playing", "Replay in progress..." },
-                { "status.pending_short", "Replay is loaded. Restart the level to play it." },
-                { "status.pending_replay", "Replay loaded: {0}. Restart this level (or re-enter it from the level list) to play it automatically." },
-                { "status.rendering", "Rendering... {0}" },
-                { "status.saved", "Replay saved: {0}" },
-                { "status.saved_none", "No keys were recorded this run, so nothing was saved (normal for an empty level)." },
-                { "status.loaded", "Replay loaded: {0}" },
-                { "status.loaded_none", "No replay file available." },
-                { "status.stopped", "Replay stopped." },
-                { "status.render_done", "Render finished: {0}" },
-                { "status.render_start", "Rendering started..." },
-
-                { "render.duplicate_when_late", "Duplicate last frame when behind" },
-                { "playback.files", "Replays" },
-                { "playback.replay", "Replay" },
-                { "playback.loaded", "Loaded" },
-                { "playback.delete", "Delete" },
-                { "playback.delete.confirm", "Confirm delete" },
-                { "playback.delete.done", "Deleted: {0}" },
-                { "playback.delete.err", "Delete failed: {0}" },
-                { "playback.delete.tip", "Deletes this replay file (no recycle bin, cannot be undone). First click turns it into 'Confirm delete'; the second click actually deletes it." },
-                { "playback.info.title", "{0} — {1}" },
-                { "playback.info.unknown", "Unknown" },
-                { "playback.info.na", "—" },
-                { "playback.info.tip", "Click the file name to expand/collapse details (song, difficulty, BPM, judgment spread, file info)." },
-                { "playback.info.difficulty", "Difficulty" },
-                { "playback.info.bpm", "BPM" },
-                { "playback.info.speed", "Speed" },
-                { "playback.info.floor", "Start → End" },
-                { "playback.info.hits", "Hits" },
-                { "playback.info.keys", "Keys" },
-                { "playback.info.duration", "Duration" },
-                { "playback.info.acc", "Accuracy" },
-                { "playback.info.xacc", "X-Accuracy" },
-                { "playback.info.judgments", "Judgments" },
-                { "playback.info.fileline", "{0} · {1} · {2} · {3} · mod {4}" },
-                { "playback.info.encrypted", "encrypted" },
-                { "playback.info.plain", "unencrypted" },
-                { "playback.info.err.file_gone", "The file is gone (removed by another program)." },
-                { "playback.info.err.io_error", "Cannot read file info (permission or disk error)." },
-                { "playback.info.err.decode_failed", "Cannot read this replay's metadata: the file may be corrupted or not recorded by this mod." },
-                { "playback.judge.tooearly", "Too early {0}" },
-                { "playback.judge.veryearly", "Very early {0}" },
-                { "playback.judge.earlyperfect", "Early perfect {0}" },
-                { "playback.judge.perfectminus", "Perfect- {0}" },
-                { "playback.judge.xperfect", "Perfect {0}" },
-                { "playback.judge.perfectplus", "Perfect+ {0}" },
-                { "playback.judge.lateperfect", "Late perfect {0}" },
-                { "playback.judge.verylate", "Very late {0}" },
-                { "playback.judge.toolate", "Too late {0}" },
-                { "playback.judge.multipress", "Multipress {0}" },
-                { "playback.judge.failmiss", "Miss {0}" },
-                { "playback.judge.failoverload", "Overload {0}" },
-                { "playback.judge.auto", "Auto {0}" },
-                { "playback.judge.overpress", "Overpress {0}" },
-                { "playback.judge.midspin", "Midspin {0}" },
-                { "playback.judge.failedfloor", "Failed {0}" },
-                { "render.on", "Enable video render" },
-                { "render.enable", "Video render" },
-                { "render.status", "Status" },
-                { "render.err.ffmpeg_start", "Cannot start ffmpeg: {0}" },
-                { "render.err.ffmpeg_timeout", "ffmpeg timed out and did not exit" },
-                { "render.err.encoder_exit", "Encoder did not exit cleanly" },
-                { "render.err.encoder_gone", "Encoder process has exited" },
-                { "render.err.audio_start", "Cannot start mixdown capture ({0})" },
-                { "render.err.audio_count", "Cannot read mixdown sample count ({0})" },
-                { "render.err.audio_render", "Mixdown render failed ({0})" },
-                { "render.err.audio_silent", "Mixdown silent after {0} restarts" },
-                { "render.err.audio_seal", "Cannot finalise the audio file ({0})" },
-                { "render.err.checkpoints", "Bad checkpoint count: {0}" },
-                { "render.err.str_len", "Bad string length: {0}" },
-{ "render.options", "Render options" },
-                { "playback.structure_mismatch", "SkyHook layout mismatch — cannot replay" },
-                { "render.err.no_replay", "No replay file available" },
-                { "render.err.need_level", "Enter a level first to start offline render" },
-                { "replay.err.not_replay", "Not a SpectreReplay replay file" },
-                { "replay.err.version", "Replay file version {0} is newer than supported {1}" },
-                { "render.state.live", "Recording" },
-                { "render.state.offline", "Offline render" },
-                { "render.state.finalizing", "Finalizing" },
-                { "render.state.done", "Done" },
-                { "render.state.failed", "Failed" },
-                { "render.state.cancelled", "Cancelled" },
-                // ── Effect remover ──────────────────────────
-                { "page.effects", "Effects" },
-                { "effects.master", "Master" },
-                { "effects.visual", "Visual effects" },
-                { "effects.decor", "Decorations" },
-                { "effects.track", "Tracks" },
-                { "effects.planet", "Planets and icons" },
-                { "effects.audio", "Sound" },
-                { "effects.gameplay", "Gameplay events" },
-                { "effects.on", "Enable effect removal" },
-                { "effects.on.note", "Strips the effects below from the chart when a level loads. This only touches this run's in-memory data, not the file on disk, unless you enable overwriting saves below." },
-                { "effects.enablesave", "Allow overwriting saves" },
-                { "effects.enablesave.note", "While effect removal is on, the editor refuses to save by default. Otherwise previewing once in the editor and saving would write the stripped chart back over the original file. Turn this on only when you really mean to overwrite it." },
-                { "effects.filters", "Filters and flashes" },
-                { "effects.advfilters", "Advanced filters" },
-                { "effects.particles", "Particles" },
-                { "effects.backgrounds", "Custom backgrounds" },
-                { "effects.cameras", "Camera moves" },
-                { "effects.setcamerazoom", "Set camera zoom" },
-                { "effects.camerazoom", "Fixed camera zoom" },
-                { "effects.decorations", "Remove decorations" },
-                { "effects.removealldecor", "Remove all decorations" },
-                { "effects.decor.note", "With \"Remove all decorations\" off, decorations referenced by conditional events are kept. Otherwise those branches would never fire and the chart would look broken." },
-                { "effects.trackanim", "Track animations" },
-                { "effects.trackpos", "Track positions" },
-                { "effects.trackmove", "Remove track moves" },
-                { "effects.trackcolor", "Track colours" },
-                { "effects.resettrackopacity", "Reset track opacity" },
-                { "effects.resettrackanim", "Reset track animation" },
-                { "effects.resettrackcolor", "Reset track colour" },
-                { "effects.toggleall", "Select all" },
-                { "effects.planetorbit", "Planet orbit" },
-                { "effects.planetscale", "Planet scale" },
-                { "effects.planetradius", "Planet radius" },
-                { "effects.hideicons", "Hide icons" },
-                { "effects.hitsounds", "Hit sounds" },
-                { "effects.holdsounds", "Hold sounds" },
-                { "effects.checkpoints", "Checkpoints" },
-                { "effects.inputevents", "Input events" },
-                { "effects.framerate", "Frame rate changes" },
-                { "effects.repeatevents", "Repeat events" },
-                { "effects.gameplay.note", "This group changes gameplay itself. Without checkpoints or input events the chart is no longer the same thing as the original. Turn these on only when you just want to look at the tracks." },
-                { "effects.on.tip", "Master switch. When off, a loaded chart matches the original data exactly; not a single event is stripped." },
-                { "effects.enablesave.tip", "Allow writing the current chart back to disk while effect removal is active. Off by default: this overwrites the original file and cannot be undone." },
-                { "effects.filters.tip", "Strips full-screen filters such as flash, screen shake, hall of mirrors, bloom and screen tile." },
-                { "effects.advfilters.tip", "Strips advanced filter events. Separate from the plain filters above so you can keep just one kind." },
-                { "effects.particles.tip", "Strips events that add, emit or configure particles." },
-                { "effects.backgrounds.tip", "Strips custom backgrounds and clears the background video, leaving a flat colour." },
-                { "effects.cameras.tip", "Strips camera movement events so the camera stays put." },
-                { "effects.setcamerazoom.tip", "Lock the camera at a fixed zoom once camera moves are stripped. The zoom below does nothing unless this is on." },
-                { "effects.camerazoom.tip", "Zoom level to lock the camera at. Only applies when Set camera zoom above is on." },
-                { "effects.decorations.tip", "Removes decorations, text and custom objects from the chart." },
-                { "effects.removealldecor.tip", "Clear every decoration. When off, decorations referenced by conditional events are kept." },
-                { "effects.trackanim.tip", "Strips track appear/disappear animations so tracks show up immediately." },
-                { "effects.trackpos.tip", "Strips track position events." },
-                { "effects.trackmove.tip", "Strips track move events, the most common kind of track motion." },
-                { "effects.trackcolor.tip", "Strips track colour events so tracks keep a single colour." },
-                { "effects.resettrackopacity.tip", "Sets the opacity of any remaining track move events back to 100%." },
-                { "effects.resettrackanim.tip", "Resets track appear/disappear animations to a fade, so tracks do not vanish after their animations are stripped." },
-                { "effects.resettrackcolor.tip", "Resets track style and colour to the default orange standard track." },
-                { "effects.toggleall.tip", "Turn every switch in this group on at once, then turn off the ones you do not want." },
-                { "effects.planetorbit.tip", "Strips planet orbit events." },
-                { "effects.planetscale.tip", "Strips planet scale events." },
-                { "effects.planetradius.tip", "Strips planet radius events." },
-                { "effects.hideicons.tip", "Strips hide-icon events." },
-                { "effects.hitsounds.tip", "Strips hit sounds and custom sound events. The song goes quiet." },
-                { "effects.holdsounds.tip", "Strips hold sound events." },
-                { "effects.checkpoints.tip", "Strips checkpoints, so a mid-level failure sends you back to the start." },
-                { "effects.inputevents.tip", "Strips input events such as autoplay and key limits." },
-                { "effects.framerate.tip", "Strips frame rate change events so the whole level runs at one rate." },
-                { "effects.repeatevents.tip", "Strips repeat events. Sections the chart reuses through them get expanded once." },
-                { "record.recording.tip", "Master switch. When off, entering a level records nothing." },
-                { "record.autosave.tip", "Saves this run as a replay file when you finish the level." },
-                { "record.completesave.tip", "Only save full clears. Turn it off to also keep runs you abandoned midway." },
-                { "record.dontsavewhenauto.tip", "Skip levels the game played by itself, so autoplay does not flood your replay list." },
-                { "record.dontsavewhenmiss.tip", "Skip runs containing a miss. Turn it off to keep a failed attempt." },
-                { "record.latesave.tip", "Save when you leave the level instead of at the results screen." },
-                { "record.failsave.tip", "Also save on death. By default a file is written only on clear or on manual save." },
-                { "record.backup.tip", "Keep an extra copy when saving, so an existing file is not simply overwritten." },
-                { "record.manualsave.tip", "Enable F9 to save the current run by hand, including a practice attempt midway." },
-                { "record.asyncinput.tip", "Read keys from the game's async input for more accurate timestamps. The game's async input option must be enabled first, or this silently does nothing." },
-                { "record.keybd.record.tip", "Record the tap sound as a separate track so playback has keysounds." },
-                { "record.keybd.volume.tip", "Volume of the keyboard sound during playback. 0 = muted." },
-                { "record.keybd.offset.tip", "Calibrates the keyboard sound as a whole: negative if it is early, positive if late, in milliseconds." },
-                { "record.savekey.tip", "Hotkey for saving this run, F9 by default. Click it, then press any key to rebind." },
-                { "record.cancelsavekey.tip", "Hotkey that discards the pending save for this run." },
-                { "playback.simulate.tip", "Master switch for key injection. With it off, playback runs but the planet does not move, and held keys are not released on stop. Only turn it off to debug key conflicts." },
-                { "render.on.tip", "Master switch for video rendering. When off, neither live capture nor offline render runs." },
-                { "render.width.tip", "Output width. Only used by the clean camera; the game screen follows the window size." },
-                { "render.height.tip", "Output height. Only used by the clean camera." },
-                { "render.fps.tip", "Output framerate. Higher means smoother, and render time grows proportionally." },
-                { "render.tail.tip", "Extra seconds recorded after the level ends, to keep the outro animation." },
-                { "render.surface.tip", "Frame source. Clean camera has no UI and any resolution; game screen includes UI and follows the window." },
-                { "render.codec.tip", "Encoder choice. Fastest prefers GPU encoding and falls back to CPU when probing fails; the row below shows which one is actually in use." },
-                { "render.quality.tip", "Encoding quality. Higher gives larger files and slightly longer renders." },
-                { "render.format.tip", "Container for the output file. mp4 is the most compatible; webm is smaller but needs re-encoding." },
-                { "render.outdir.tip", "Where finished videos go. Empty = RenderVideos under the mod folder." },
-                { "render.clock.experimental.tip", "Replaces the game's time source with a frame-index-driven virtual clock so the output framerate stays constant regardless of machine load. It alters the game's own time source, so its blast radius is wide; turn it off first if rendering errors or audio drifts." },
-                { "convert.target.tip", "Converts existing videos in the output folder to this format, independently of the render format above." },
-                { "render.start.tip", "Starts an offline render with the current settings. Load a replay and enter its level first." },
-                { "render.cancel.tip", "Aborts the current render. What was already written is kept." },
-                { "convert.button.tip", "Starts batch-converting the videos in the output folder." },
-                { "record.changedir.tip", "Change the replay folder. Not allowed while recording, or this run's keyboard sound would be lost." },
-            };
-
         /// <summary>
-        /// 界面用哪种语言。<see cref="RefreshLanguage"/> 会按游戏当前语言改它。
+        /// 游戏语言 → 我们的语言代码。
         ///
-        /// 之前这里是写死的"英文优先"——不管玩家把游戏设成什么语言，
-        /// 中文玩家看到的都是英文界面。
+        /// **为什么不复用 <c>LocalizationManager.langlist</c>：** 那张表在
+        /// <c>SpectreReplay</c> 命名空间下，而本文件被链接进离线预览工程
+        /// （<c>tools\UiPreview\UiPreview.csproj</c>）单独编译，那边没有
+        /// LocalizationManager。直接引用会让预览器编译不过，而预览器编译不过时
+        /// 闸门只会报"一条断言都没解析到"——看起来像套件崩了，不像"少链了一个文件"。
+        ///
+        /// 两张表的值必须一致（都对着游戏的 SystemLanguage 枚举）。判据 ⑲b 守这一点：
+        /// 它会读出两张表逐项比对，改了一边忘了另一边会直接红。
+        ///
+        /// （枚举值以游戏 UnityEngine.CoreModule.dll 为准逐个核对过：
+        ///   Czech=7、German=15、French=14、Japanese=22、Korean=23、Polish=27、
+        ///   Portuguese=28、Romanian=29、Russian=30、Spanish=34、Vietnamese=39、
+        ///   ChineseSimplified=40、ChineseTraditional=41、English=10。
+        ///   注意 Chinese=6 是"中文（合体）"，与这两个不是同一个值。
+        ///   预览桩件 LocStubs.cs 曾经把 ChineseSimplified 写成 41、Traditional 写成 42，
+        ///   比真值各偏 1——那种错误在真实游戏里表现为"简中玩家看到繁中"，
+        ///   而离线套件因为用的是同一份错误的桩，永远测不出来。）
         /// </summary>
-        internal static bool UseChinese = true;
+        private static readonly Dictionary<SystemLanguage, string> CodeByLanguage =
+            new Dictionary<SystemLanguage, string>
+            {
+                { SystemLanguage.English, "en" },
+                { SystemLanguage.Korean, "ko" },
+                { SystemLanguage.ChineseSimplified, "zh" },
+                { SystemLanguage.ChineseTraditional, "zh-t" },
+                { SystemLanguage.Spanish, "es" },
+                { SystemLanguage.Portuguese, "pt" },
+                { SystemLanguage.Japanese, "ja" },
+                { SystemLanguage.Polish, "pl" },
+                { SystemLanguage.Russian, "ru" },
+                { SystemLanguage.Romanian, "ro" },
+                { SystemLanguage.Vietnamese, "vi" },
+                { SystemLanguage.French, "fr" },
+                { SystemLanguage.Czech, "cs" },
+                { SystemLanguage.German, "de" },
+            };
 
         /// <summary>
-        /// 按游戏的语言设置选中文或英文。游戏把语言放在
+        /// 当前界面语言代码（"zh" / "en" / "ja" …）。
+        ///
+        /// **默认英文而不是中文。** 这里曾经是 `UseChinese = true`，理由是
+        /// "用户是中文用户"；但那句话只在作者自己的机器上成立。模组发出去之后，
+        /// 一个德语玩家在游戏初始化完成前打开面板，会先看到一整屏中文——
+        /// 而他没有任何办法让它变回去，除非去改游戏语言再改回来。
+        /// 英文是这张表里最安全的默认：14 种语言里没有人完全看不懂它。
+        /// </summary>
+        internal static string CurrentLanguage = "en";
+
+        /// <summary>
+        /// 按游戏的语言设置选界面语言。游戏把语言放在
         /// <c>RDString.language</c>（public static SystemLanguage）。
         /// 面板每次打开都调一次：玩家在设置里换语言后，模组界面跟着变。
+        ///
+        /// 游戏语言不在 14 种里（荷兰语、芬兰语…）时回落到英文——那种情况下
+        /// 界面语言的正确期望就是"用通用语"，而不是"猜一个最接近的"。
         /// </summary>
         internal static void RefreshLanguage()
         {
             try
             {
-                var l = RDString.language;
-                UseChinese = l == SystemLanguage.Chinese
-                    || l == SystemLanguage.ChineseSimplified
-                    || l == SystemLanguage.ChineseTraditional;
+                if (CodeByLanguage.TryGetValue(RDString.language, out string code))
+                {
+                    CurrentLanguage = code;
+                }
+                else
+                {
+                    CurrentLanguage = "en";
+                }
             }
             catch
             {
-                // 游戏还没初始化：保持中文（用户是中文用户）
-                UseChinese = true;
+                // 游戏还没初始化：保持英文默认。**不要在这里猜"用户是中文用户"**，
+                // 理由见 CurrentLanguage 的注释。
+                CurrentLanguage = "en";
             }
         }
 
+        /// <summary>
+        /// 取文案。回退链：当前语言 → 英文 → 中文 → 键名。
+        ///
+        /// 英文排在中文前面，是因为这张表里**没有一种语言的人看不懂英文**，
+        /// 而看得懂中文的只是其中一部分。中文放在最后一级，是因为漏翻
+        /// 最可能漏在别的语言上：作者母语是中文，中文表几乎总是最全的那一份，
+        /// 用它兜底最有可能真的兜住。
+        ///
+        /// 键名是最后的兜底，只该出现在"真的漏了"的时候——把
+        /// <c>record.autosave</c> 这种东西露给玩家是最糟的形态。
+        /// </summary>
         internal static string T(string key)
         {
             if (string.IsNullOrEmpty(key))
             {
                 return "";
             }
-            if (UseChinese && Zh.TryGetValue(key, out string zh))
+            if (LocData.Languages.TryGetValue(CurrentLanguage, out var table)
+                && table.TryGetValue(key, out string val))
             {
-                return zh;
+                return val;
             }
-            if (En.TryGetValue(key, out string en))
+            if (LocData.Languages.TryGetValue("en", out var en) && en.TryGetValue(key, out string enVal))
             {
-                return en;
+                return enVal;
             }
-            if (Zh.TryGetValue(key, out string zh2))
+            if (LocData.Languages.TryGetValue("zh", out var zh) && zh.TryGetValue(key, out string zhVal))
             {
-                return zh2;      // 另一种语言漏翻时兜底，别把键名露给玩家
+                return zhVal;
             }
-            return key;          // 两种语言都漏了才露键名——那是真漏
+            return key;          // 全都漏了才露键名——那是真漏
         }
 
         /// <summary>

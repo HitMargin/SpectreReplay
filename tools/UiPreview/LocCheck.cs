@@ -2,7 +2,7 @@
 //
 // 漏一个键，界面上就是空白或直接显示 "record.autosave" 这种原始键名——
 // 而这在真机上一眼就能看见，却恰恰是最容易在改版式时被忽略的地方。
-// 这里把"页面实际用到的键"逐一在两套字典里查一遍。
+// 这里把"页面实际用到的键"逐一在每一种语言的表里查一遍。
 //
 // 另外顺带做一件同类的事：界面里出现的每一个中文字符，是否都在
 // 当前 TMP 字体的字符表里。TMP 缺字形就是画一个空白方块，且不报错。
@@ -16,6 +16,16 @@ namespace UiPreview
 {
     internal static class LocCheck
     {
+        /// <summary>
+        /// 界面支持的全部语言代码。**必须与 Loc.CodeByLanguage 的值集合一致**，
+        /// 判据 ⑲a 会重新解析 Loc.cs 做比对——这里手写一份清单，是因为
+        /// 检查脚本要遍历它，而遍历 Reflect 出来的字典顺序不稳定。
+        /// </summary>
+        internal static readonly string[] Languages =
+        {
+            "zh", "zh-t", "en", "ko", "ja", "es", "pt", "fr", "de", "pl", "cs", "ro", "ru", "vi",
+        };
+
         /// <summary>直接扫页面源码，收集所有以字面量形式传入的键。</summary>
         internal static HashSet<string> CollectUsedKeys()
         {
@@ -38,147 +48,85 @@ namespace UiPreview
             @"..\..\SpectreReplay\Ui\OnGui.cs",
         };
 
-        /// <summary>
-        /// 扫描页面代码里用到的文案键。
-        ///
-        /// 以前这里还要和"预览 shim"对账——预览器内联了一份与 Pages.cs
-        /// 同步的页面内容，改一处忘另一处，预览出来的就跟实际界面不一样，
-        /// 而且图上看不出来。换成 UMM 的 OnGUI 之后**根本没有 shim**：
-        /// 预览器只验数据层，页面代码只有一份，这类"忘了同步"的坑整类消失。
-        /// </summary>
-        private static HashSet<string> KeysFrom(IEnumerable<string> files)
-        {
-            var set = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var f in files)
-            {
-                if (!File.Exists(f)) continue;
-                foreach (Match m in Regex.Matches(File.ReadAllText(f),
-                    @"""([a-z][a-z0-9]*\.[a-z0-9_.]+)"""))
-                {
-                    set.Add(m.Groups[1].Value);
-                }
-            }
-            return set;
-        }
-
         internal static int Run(HashSet<string> used)
         {
-            // 原来这里还有一次「预览 shim 与真实页面的文案键对账」。
-            // 预览器删掉之后那个坑不复存在：页面就是 Pages.cs 本身，
-            // 没有第二份需要同步的副本——曾经栽过的跟头不会再来。
-            var zh = Table("Zh");
-            var en = Table("En");
+            var tables = LocData.Languages;
             int fail = 0;
 
             Console.WriteLine("  ── 文案完整性 ──");
-            Console.WriteLine($"    页面用到 {used.Count} 个键；中文表 {zh.Count} 条，英文表 {en.Count} 条");
+            Console.WriteLine($"    页面用到 {used.Count} 个键；语言 {tables.Count} 套");
 
-            var missZh = new List<string>();
-            var missEn = new List<string>();
-            foreach (var k in used)
+            // ① 每种语言的表都必须与基准键集合一致。
+            //
+            //    这里**不是**只查"页面引用到的键"——那样只能发现被引用的漏翻，
+            //    而 14 语言里最容易出的事是"某个键在某种语言下整条缺失"，
+            //    它在别的语言下被引用过、在这个语言下没被引用就永远查不出来。
+            //    全量对账比"等被引用"更早发现，代价是零。
+            var baseline = new HashSet<string>(tables["en"].Keys, StringComparer.Ordinal);
+            foreach (var lang in Languages)
             {
-                if (!zh.ContainsKey(k)) missZh.Add(k);
-                if (!en.ContainsKey(k)) missEn.Add(k);
-            }
-            // 两种语言都缺的（那些是拼错的键，不是漏翻）
-            var bothMissing = new List<string>();
-            foreach (var k in used)
-            {
-                if (!zh.ContainsKey(k) && !en.ContainsKey(k)) bothMissing.Add(k);
-            }
-
-            foreach (var k in bothMissing)
-            {
-                Console.WriteLine($"    ✗ 两种语言都没有：{k}  ← 拼错了，界面上会显示原始键名");
-                fail++;
-            }
-            if (missZh.Count > 0 && bothMissing.Count == 0)
-            {
-                foreach (var k in missZh)
+                if (!tables.TryGetValue(lang, out var t))
                 {
-                    Console.WriteLine($"    ✗ 中文缺：{k}  ← 中文界面下会退到英文");
+                    Console.WriteLine($"    ✗ 缺少语言表：{lang}");
                     fail++;
+                    continue;
                 }
-            }
-            if (missEn.Count > 0 && bothMissing.Count == 0)
-            {
-                foreach (var k in missEn)
+                var miss = new List<string>();
+                foreach (var k in baseline) if (!t.ContainsKey(k)) miss.Add(k);
+                var extra = new List<string>();
+                foreach (var k in t.Keys) if (!baseline.Contains(k)) extra.Add(k);
+                if (miss.Count > 0 || extra.Count > 0)
                 {
-                    Console.WriteLine($"    ✗ 英文缺：{k}  ← 英文界面下会退到中文");
+                    Console.WriteLine($"    ✗ [{lang}] 键集合与 en 不一致：缺 {miss.Count}，多 {extra.Count}");
+                    foreach (var k in miss.GetRange(0, Math.Min(3, miss.Count)))
+                        Console.WriteLine($"        · 缺 {k}  ← 该语言下会退到英文");
+                    foreach (var k in extra.GetRange(0, Math.Min(3, extra.Count)))
+                        Console.WriteLine($"        · 多 {k}  ← en 里没有这个键");
                     fail++;
                 }
             }
             if (fail == 0)
             {
-                Console.WriteLine("    ✓ 页面引用的键在两种语言下都齐");
+                Console.WriteLine($"    ✓ {Languages.Length} 套语言表的键集合完全一致（各 {baseline.Count} 条）");
             }
 
-            // 表对账：两张字典的键集合必须一致。上面只查了“页面引用到的键”，
-            // 于是两张表**互相缺**的那类漂移永远查不出来（实测 render.progress
-            // 只有英文有、中文没有）。这类不一致的后果是：将来有人引用它时，
-            // 中文界面会静默退到英文或直接露出键名，而改的人根本不知道自己漏了。
-            // 全量对账比“等被引用”更早发现，代价是零。
-            var onlyZh = new List<string>();
-            var onlyEn = new List<string>();
-            foreach (var k in zh.Keys) if (!en.ContainsKey(k)) onlyZh.Add(k);
-            foreach (var k in en.Keys) if (!zh.ContainsKey(k)) onlyEn.Add(k);
-            onlyZh.Sort(StringComparer.Ordinal);
-            onlyEn.Sort(StringComparer.Ordinal);
-            foreach (var k in onlyZh)
+            // ② 页面引用到的键，在**每一种语言**下都必须能解析成非空、且不是键名本身。
+            foreach (var lang in Languages)
             {
-                Console.WriteLine($"    ✗ 只有中文表有：{k}  ← 英文界面下会退到中文");
-                fail++;
-            }
-            foreach (var k in onlyEn)
-            {
-                Console.WriteLine($"    ✗ 只有英文表有：{k}  ← 中文界面下会退到英文");
-                fail++;
-            }
-            if (onlyZh.Count == 0 && onlyEn.Count == 0)
-            {
-                Console.WriteLine($"    ✓ 两张表键集合一致（各 {zh.Count} 条）");
-            }
-
-            // 两种语言下都解析一遍，确认不会露出键名
-            foreach (var zhMode in new[] { true, false })
-            {
-                Loc.UseChinese = zhMode;
-                int leaked = 0;
+                if (!tables.ContainsKey(lang)) continue;
+                Loc.CurrentLanguage = lang;
+                int bad = 0;
                 foreach (var k in used)
                 {
                     string got = Loc.T(k);
                     if (got == k)
                     {
-                        Console.WriteLine($"    ✗ [{(zhMode ? "中文" : "英文")}] T(\"{k}\") 返回了键名本身");
-                        leaked++;
+                        Console.WriteLine($"    ✗ [{lang}] T(\"{k}\") 返回了键名本身");
+                        bad++;
                     }
-                    if (string.IsNullOrWhiteSpace(got))
+                    else if (string.IsNullOrWhiteSpace(got))
                     {
-                        Console.WriteLine($"    ✗ [{(zhMode ? "中文" : "英文")}] T(\"{k}\") 是空白");
-                        leaked++;
+                        Console.WriteLine($"    ✗ [{lang}] T(\"{k}\") 是空白");
+                        bad++;
                     }
                 }
-                if (leaked == 0)
+                if (bad == 0)
                 {
-                    Console.WriteLine($"    ✓ [{(zhMode ? "中文" : "英文")}] {used.Count} 个键都能解析成文案");
+                    Console.WriteLine($"    ✓ [{lang}] {used.Count} 个键都能解析成文案");
                 }
-                else
-                {
-                    fail += leaked;
-                }
+                fail += bad;
             }
-            Loc.UseChinese = true;
-            return fail;
-        }
 
-        private static Dictionary<string, string> Table(string field)
-        {
-            var t = typeof(Loc);
-            var f = t.GetField(field,
-                System.Reflection.BindingFlags.NonPublic
-                | System.Reflection.BindingFlags.Static);
-            return f?.GetValue(null) as Dictionary<string, string>
-                ?? new Dictionary<string, string>();
+            // ③ 未在 14 种语言里的键（比如荷兰语）必须回落到英文，而不是露键名。
+            Loc.CurrentLanguage = "nl";
+            string fallback = Loc.T("page.record");
+            string enVal = tables["en"]["page.record"];
+            bool okFallback = fallback == enVal;
+            Console.WriteLine($"    {(okFallback ? "✓" : "✗")} ③ 不支持的语言回落到英文（nl → \"{fallback}\"）");
+            if (!okFallback) fail++;
+
+            Loc.CurrentLanguage = "en";
+            return fail;
         }
     }
 }
