@@ -28,7 +28,7 @@ SpectreReplay is a UnityModManager mod (mod id `com.spectre.replay`). It records
 
 ### Video rendering
 
-- **Renders the replay to a file.** Two modes: capture live while the replay plays in the window, or render offline frame by frame — offline is slower but every frame is captured deliberately.
+- **Renders the replay to a file.** The level is replayed frame by frame with every frame captured deliberately, then encoded together with its audio track.
 - **Two frame sources.** *Game view* captures what the game shows, UI included, at window resolution. *Clean camera* renders the game's camera chain into an offscreen texture with no interface at all and at any resolution you like, including supersampling.
 - **Encoder and quality presets.** CPU (libx264) or hardware (NVENC) encoding, four speed/quality tiers, automatic fallback to CPU when no usable hardware encoder is found.
 - **Four containers: mp4, mkv, webm, mov.** Codec and audio codec are chosen to match the container (webm, for instance, re-encodes to VP9 + Opus).
