@@ -8,7 +8,7 @@
       ReplayEncoder / ReplayDecoder / ReplayCrypto /
       ReplayKeys / ReplayConstants / Replay.cs
       （ReplayBinaryIO / ReplayDataModels 随旧回放格式于 2026-10-18 删除）
-      以及 Features\VideoRender\VideoEncoder.cs（ffmpeg 参数拼装，纯 .NET）。
+      以及 Features\VideoRender\Pipeline\VideoEncoder.cs（ffmpeg 参数拼装，纯 .NET）。
   -->
 
   <PropertyGroup>
@@ -33,18 +33,18 @@
     <!-- 文案表（Loc）链接真实源码 -->
     <Compile Include="..\..\SpectreReplay\Ui\Loc.cs" Link="Real\Loc.cs" />
     <!-- 回放文件格式编解码：纯 System，可直接跑往返测试 -->
-    <Compile Include="..\..\SpectreReplay\Features\Replay\Replay.cs" Link="Real\Replay.cs" />
-    <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayKeys.cs" Link="Real\ReplayKeys.cs" />
-    <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayConstants.cs" Link="Real\ReplayConstants.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\Data\Replay.cs" Link="Real\Replay.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\Data\ReplayKeys.cs" Link="Real\ReplayKeys.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\Data\ReplayConstants.cs" Link="Real\ReplayConstants.cs" />
     
-    <Compile Include="..\..\SpectreReplay\Features\Replay\keyEvent.cs" Link="Real\keyEvent.cs" />
-    <Compile Include="..\..\SpectreReplay\Features\Replay\HitContext.cs" Link="Real\HitContext.cs" />
-    <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayCompression.cs" Link="Real\ReplayCompression.cs" />
-    <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayEncoder.cs" Link="Real\ReplayEncoder.cs" />
-    <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayDecoder.cs" Link="Real\ReplayDecoder.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\Data\keyEvent.cs" Link="Real\keyEvent.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\Data\HitContext.cs" Link="Real\HitContext.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\Codec\ReplayCompression.cs" Link="Real\ReplayCompression.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\Codec\ReplayEncoder.cs" Link="Real\ReplayEncoder.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\Codec\ReplayDecoder.cs" Link="Real\ReplayDecoder.cs" />
     
-    <Compile Include="..\..\SpectreReplay\Features\Replay\ReplayCrypto.cs" Link="Real\ReplayCrypto.cs" />
-    <Compile Include="..\..\SpectreReplay\Features\Replay\LegacyReplayData.cs" Link="Real\LegacyReplayData.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\Codec\ReplayCrypto.cs" Link="Real\ReplayCrypto.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\Data\LegacyReplayData.cs" Link="Real\LegacyReplayData.cs" />
     <Compile Include="..\..\SpectreReplay\Ui\HitScatterMath.cs" Link="Real\HitScatterMath.cs" />
   </ItemGroup>
 

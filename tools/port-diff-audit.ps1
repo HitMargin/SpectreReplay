@@ -35,12 +35,46 @@ function CodeOnly2([string]$t) {
     return $t.Trim()
 }
 
+# **匹配键是文件名，不是相对路径。**
+#
+# 原先按 `$ours` 下的相对路径去上游同名位置找（`Join-Path $theirs $rel`）。
+# 2026-10-19 把 Features 拆进职责子目录（Replay\Codec、VideoRender\Pipeline …）
+# 之后，那些文件的相对路径在上游**全部对不上**——它们会被静默归进
+# 「我们独有，无需比对」，于是移植保真度门禁对已移动的文件**永久失效**，
+# 而闸门只会更绿。这正是本仓库反复记录过的失效形态。
+#
+# 文件名做键是安全的：已核对本仓 61 个 .cs **无重名**；上游同名文件若有多份
+# （如 AssemblyInfo.cs / GlobalUsings.cs），按「路径尾部最长匹配」消歧——
+# 拆分只动了我们的目录层级，上游目录结构没变，所以尾部匹配是稳定的。
+$theirFiles = @(Get-ChildItem $theirs -Recurse -File -Filter *.cs -ErrorAction Stop |
+    Where-Object { $_.FullName -notmatch '\\(obj|bin)\\' })
+$theirsByName = @{}
+foreach ($tf in $theirFiles) {
+    if (-not $theirsByName.ContainsKey($tf.Name)) { $theirsByName[$tf.Name] = @() }
+    $theirsByName[$tf.Name] += $tf.FullName
+}
+
 $matched = @()
 $oursOnly = @()
 foreach ($f in $ourFiles) {
     $rel = $f.FullName.Substring($ours.Length + 1)
-    $t = Join-Path $theirs $rel
-    if (Test-Path $t) { $matched += [PSCustomObject]@{ Rel = $rel; Ours = $f.FullName; Theirs = $t } }
+    $candidates = $theirsByName[$f.Name]
+    if ($candidates -and $candidates.Count -gt 0) {
+        # 同名多份时取相对路径尾部重合最长的那个
+        $best = $candidates[0]
+        $bestScore = -1
+        foreach ($c in $candidates) {
+            $cRel = $c.Substring($theirs.Length + 1)
+            $a = $rel -split '[\\/]'
+            $b = $cRel -split '[\\/]'
+            $score = 0
+            for ($i = 1; $i -le [Math]::Min($a.Count, $b.Count); $i++) {
+                if ($a[$a.Count - $i] -eq $b[$b.Count - $i]) { $score++ } else { break }
+            }
+            if ($score -gt $bestScore) { $bestScore = $score; $best = $c }
+        }
+        $matched += [PSCustomObject]@{ Rel = $rel; Ours = $f.FullName; Theirs = $best }
+    }
     else { $oursOnly += $rel }
 }
 Write-Output "上游也有同名文件的 = $($matched.Count)"
@@ -90,6 +124,8 @@ $knownDeviations = @(
     @{ Pat = 'RenderOn';                              Why = '渲染总开关（原先绑 ReplayOn 会连带关录制）' }
     @{ Pat = 'rendervideo.disabled';                 Why = 'RenderOn 守卫的提示文案' }
     @{ Pat = 'Settings.KeybdSoundRecordActive';      Why = 'round 49 键盘音三项接线的连带改动' }
+    # 注：`Settings.Backup`（主保存失败不走备份）的登记在文件末尾那批**带 File = 限定**
+    # 的条目里 —— 泛名字必须限定文件，否则等于给全仓开后门。
     @{ Pat = 'pendingTick) == 0.0';                  Why = 'round 早 键盘音起始时间戳补真值' }
     @{ Pat = 'System.Collections.Generic;';          Why = 'using 区按我们自己的需要裁剪' }
     @{ Pat = 'Load() 进入';                          Why = 'round 19 Load() 启动行（铁律⑤地基）' }
@@ -347,6 +383,123 @@ $knownDeviations = @(
     @{ Pat = 'PatchType.Prefix';                     Why = '同上：钩子类型' }
     @{ Pat = 'scnEditor.RemakePath';                 Why = '同上：nameof 形式的注入点' }
     @{ Pat = '__instance';                          Why = '同上：注入钩子的目标实例形参（本仓补丁层约定，上游没有这条补丁）' }
+    # ══════════════════════════════════════════════════════════════════
+    # -- 2026-10-19 补登记：被"相对路径匹配"长期漏掉的历史漂移 -----------
+    #
+    # **这批不是新债，是审计以前看不见的地方。**
+    # 2026-10-19 把 Features 拆进职责子目录后，旧的按**相对路径**匹配
+    # （Join-Path $theirs $rel）对移动过的文件全部落空，它们被静默归进
+    # 「我们独有，无需比对」——61 个文件只真正比对了 34 个，其余 27 个
+    # 一整个月都在门禁视野之外，而闸门一直是绿的。
+    # 改成按**文件名**匹配后比对数 34→44，下面这 5 个文件才**第一次**进入
+    # 比对，历史漂移于是暴露出来。
+    #
+    # 每一条都用 File = 限定到具体文件。这些名字（Mathf.Clamp / File.Copy /
+    # File.Exists / Path.Combine）是泛称，不限定文件就等于给全仓开一道后门：
+    # 任何文件的同类漂移都会被这条记录顺手放过。
+    # ══════════════════════════════════════════════════════════════════
+
+    # -- AudioRecorder：多声道下混 + WAV 头 32 位溢出防护（2026-10-19）------
+    # 上游把每帧样本当单声道写，采样率/声道来自设备时长度字段会算错；
+    # 混音轨渲染出来的 wav 因此时长不对。改成按 channels 下混成单声道，
+    # 并且 dataSize 用 long 算、超 int 上限时明确报错而不是静默截断。
+    @{ Pat = 'BitConverter.GetBytes';   File = 'AudioRecorder.cs'; Why = '2026-10-19 WAV 头重写：dataSize 用 long 算后再写回 4 字节字段' }
+    @{ Pat = 'fileStream.Flush';        File = 'AudioRecorder.cs'; Why = '2026-10-19 每块落盘后 Flush：崩溃时已录部分不丢' }
+    @{ Pat = 'int.MaxValue';            File = 'AudioRecorder.cs'; Why = '2026-10-19 WAV 数据超 32 位长度字段上限时明确报错（上游静默截断）' }
+    @{ Pat = 'Math.Max';                File = 'AudioRecorder.cs'; Why = '2026-10-19 下混循环里的边界取值' }
+    @{ Pat = 'Math.Min';                File = 'AudioRecorder.cs'; Why = '同上' }
+    @{ Pat = 'Mathf.Clamp';             File = 'AudioRecorder.cs'; Why = '2026-10-19 下混后仍需 16bit 限幅（与上游同一个限幅式）' }
+
+    # -- ConfigManager：删掉 CustomJudge 那一整段 DTO（2026-10-17 用户裁决）--
+    # 用户原话「CustomJudge 并不属于 replay 和视频渲染的部分」。
+    # 上游的 ConfigData 里带 CustomJudgeData（tier_on/tier_inner/… 十来个数组）。
+    # 对应地，我们这边多了渲染相关的 Sets 字段（RenderWidth/Fps/…）要先落盘。
+    @{ Pat = 'File.WriteAllText';       File = 'ConfigManager.cs'; Why = '配置落盘：与上游同一个 File.WriteAllText，但调用点因 DTO 裁剪而移动' }
+    @{ Pat = 'Formatting.Indented';     File = 'ConfigManager.cs'; Why = '沿用上游的缩进格式（配置文件要人能看懂/手改）' }
+    @{ Pat = 'ints.Value';              File = 'ConfigManager.cs'; Why = '读配置时按 JTokenType 分派取值的连带 token' }
+    @{ Pat = 'json.ToString';           File = 'ConfigManager.cs'; Why = '同上：序列化出口' }
+    @{ Pat = 'JTokenType.Boolean';      File = 'ConfigManager.cs'; Why = '读配置按 JSON 类型分派（上游用强类型反序列化，我们改成容错读取）' }
+    @{ Pat = 'JTokenType.Float';        File = 'ConfigManager.cs'; Why = '同上' }
+    @{ Pat = 'JTokenType.Integer';      File = 'ConfigManager.cs'; Why = '同上' }
+    @{ Pat = 'JTokenType.String';       File = 'ConfigManager.cs'; Why = '同上' }
+    @{ Pat = 'Mathf.Clamp';             File = 'ConfigManager.cs'; Why = '读回数值时的区间钳制（防止手改配置写出越界值）' }
+    @{ Pat = 't.Type';                  File = 'ConfigManager.cs'; Why = '按 JSON 类型分派' }
+    @{ Pat = 't.Value';                 File = 'ConfigManager.cs'; Why = '同上：取实际值' }
+    @{ Pat = 'Settings.AutoSave';       File = 'ConfigManager.cs'; Why = 'DTO 裁剪：CustomJudge 段删除后的连带字段（上游还留着一堆 Custom* 设置）' }
+    @{ Pat = 'Settings.CancelSaveButton'; File = 'ConfigManager.cs'; Why = '同上' }
+    @{ Pat = 'Settings.ConvertTarget';  File = 'ConfigManager.cs'; Why = '视频渲染设置（上游没有这一整组）' }
+    @{ Pat = 'Settings.GetDataFromAsyncInput'; File = 'ConfigManager.cs'; Why = '异步输入开关的落盘（round 早）' }
+    @{ Pat = 'Settings.JudgeBarPositionY'; File = 'ConfigManager.cs'; Why = 'DTO 裁剪：判定条位置设置（上游 JudgeBar 整组已删）' }
+    @{ Pat = 'Settings.RenderCaptureMode'; File = 'ConfigManager.cs'; Why = '视频渲染设置（上游没有）' }
+    @{ Pat = 'Settings.RenderEncoderMode'; File = 'ConfigManager.cs'; Why = '同上' }
+    @{ Pat = 'Settings.RenderFps';      File = 'ConfigManager.cs'; Why = '同上' }
+    @{ Pat = 'Settings.RenderHeight';   File = 'ConfigManager.cs'; Why = '同上' }
+    @{ Pat = 'Settings.RenderOutputDir'; File = 'ConfigManager.cs'; Why = '同上' }
+    @{ Pat = 'Settings.RenderOutputFormat'; File = 'ConfigManager.cs'; Why = '同上' }
+    @{ Pat = 'Settings.RenderQualityMode'; File = 'ConfigManager.cs'; Why = '同上' }
+    @{ Pat = 'Settings.RenderTailSeconds'; File = 'ConfigManager.cs'; Why = '同上' }
+    @{ Pat = 'Settings.RenderWidth';    File = 'ConfigManager.cs'; Why = '同上' }
+    @{ Pat = 'Settings.SaveButton';     File = 'ConfigManager.cs'; Why = 'DTO 裁剪的连带字段' }
+
+    # -- Settings：删 CustomJudge / JudgeBar / PlanetColors 整组，加渲染组 --
+    # 与 ConfigManager 同源（2026-10-17 用户裁决）。EffectRemoverOn 默认值
+    # 由 true 改 false 是 2026-10-19 的决定：去特效会改变成片观感，
+    # 不该默认开。
+    @{ Pat = 'ConfigManager.SaveConfigs'; File = 'Settings.cs'; Why = '设置落盘入口（上游同名，调用点因裁组而移动）' }
+    @{ Pat = 'Configs.json';            File = 'Settings.cs'; Why = '配置文件路径拼装' }
+    @{ Pat = 'Main.mod.Path';           File = 'Settings.cs'; Why = '同上：从 mod 目录推配置路径' }
+    @{ Pat = 'System.Exception';        File = 'Settings.cs'; Why = '落盘失败的异常捕获（用全名免得动 using 区）' }
+    @{ Pat = 'System.IO.Path.Combine';  File = 'Settings.cs'; Why = '同上：路径拼装' }
+    @{ Pat = 'VanillaMarginColors.Length'; File = 'Settings.cs'; Why = '2026-10-18 判定窗口颜色改从游戏自带色表取（删掉上游的 Features.Other.JudgeTextDefaults）' }
+
+    # -- SpectreAPI：删掉 CustomJudge 整组 API（2026-10-17）---------------
+    # 上游这里导出 HitSign/TierCount/GetTierCounts 等一整套自定义判定接口。
+    # 换成我们的渲染阶段查询（PhaseNames 等）。
+    @{ Pat = 'Enum.GetNames';           File = 'SpectreAPI.cs'; Why = '2026-10-19 渲染阶段名表改成 Enum.GetNames 动态取（上游没有这套查询）' }
+    @{ Pat = 'PhaseNames.Length';       File = 'SpectreAPI.cs'; Why = '同上：枚举值越界时回落 "Idle" 的边界判断' }
+    @{ Pat = 'Features.VideoRender.VideoRender.CurrentPhase'; File = 'SpectreAPI.cs'; Why = '2026-10-19 新增渲染状态查询接口（上游无）' }
+    @{ Pat = 'Features.VideoRender.VideoRender.Phase'; File = 'SpectreAPI.cs'; Why = '同上：阶段枚举类型' }
+
+    # -- SpectreState：删 ReplaySaveFormat 三路保存 + 「打开这一关」新功能 --
+    # 前者是 2026-10-18 用户裁定删旧容器格式的连带面（上游还有 New/Crp2/Json
+    # 三条路径与 debug_save_format 开关）。
+    # 后者是我们自己加的功能：从回放列表直接打开关卡/官方关卡。
+    @{ Pat = 'OpenReplayLevel';         File = 'SpectreState.cs'; Why = '2026-10-19 新增「打开这一关」：从回放详情跳进关卡（上游无此功能）' }
+    @{ Pat = 'Go(string levelPath';     File = 'SpectreState.cs'; Why = '同上：入口方法签名' }
+    @{ Pat = 'string.IsNullOrEmpty(levelPath)'; File = 'SpectreState.cs'; Why = '同上：空路径早退' }
+    @{ Pat = 'data.ints.TryGetValue';   File = 'SpectreState.cs'; Why = '同上：起点砖取自回放数据（StartTile）' }
+    @{ Pat = 'data.bools.TryGetValue';  File = 'SpectreState.cs'; Why = '同上：跳转时按回放数据恢复「速度试炼」开关（SpeedTrailMode）' }
+    @{ Pat = 'Math.Max';                File = 'SpectreState.cs'; Why = '同上：起点砖下限钳制' }
+    @{ Pat = 'editor.floors';           File = 'SpectreState.cs'; Why = '同上：编辑器模式下定位到起始砖' }
+    @{ Pat = 'editor.isLoading';        File = 'SpectreState.cs'; Why = '同上：等编辑器加载完再定位' }
+    @{ Pat = 'editor.SelectFloor';      File = 'SpectreState.cs'; Why = '同上：选中起始砖' }
+    @{ Pat = 'scnEditor.levelToOpenOnLoad'; File = 'SpectreState.cs'; Why = '同上：编辑器要打开的关卡路径' }
+    @{ Pat = 'GCS.sceneToLoad';         File = 'SpectreState.cs'; Why = '同上：目标场景' }
+    @{ Pat = 'GCS.previousScene';       File = 'SpectreState.cs'; Why = '同上：返回场景' }
+    @{ Pat = 'GCS.speedTrialMode';      File = 'SpectreState.cs'; Why = '同上：速度试炼模式要跟着回放数据走' }
+    @{ Pat = 'GCS.practiceMode';        File = 'SpectreState.cs'; Why = '同上' }
+    @{ Pat = 'GCS.currentSpeedTrial';   File = 'SpectreState.cs'; Why = '同上：速度试炼的实际倍速' }
+    @{ Pat = 'GCS.customLevelPaths';    File = 'SpectreState.cs'; Why = '同上：自定义关卡路径（scrController 不在时的兜底）' }
+    @{ Pat = 'GCS.loadCustomFromBundle'; File = 'SpectreState.cs'; Why = '同上' }
+    @{ Pat = 'ADOBase.isScnGame';       File = 'SpectreState.cs'; Why = '同上：判断当前是否在游玩场景' }
+    @{ Pat = 'ADOBase.loader.LoadSceneWithTransition'; File = 'SpectreState.cs'; Why = '同上：带转场切场景' }
+    @{ Pat = 'controller.LoadCustomLevel'; File = 'SpectreState.cs'; Why = '同上：控制器在时直接载入关卡' }
+    @{ Pat = 'scrController.deaths';    File = 'SpectreState.cs'; Why = '同上：重开关卡要清死亡数' }
+    @{ Pat = 'MainThread.StartCoroutine'; File = 'SpectreState.cs'; Why = '同上：等编辑器就绪的协程' }
+    @{ Pat = 'System.Collections.IEnumerator'; File = 'SpectreState.cs'; Why = '同上：协程返回类型' }
+    @{ Pat = 'WipeDirection.StartsFromRight'; File = 'SpectreState.cs'; Why = '同上：转场方向' }
+    @{ Pat = 'PlayActions.StopPlaying';  File = 'SpectreState.cs'; Why = '同上：跳转前先停掉当前回放/录制' }
+    @{ Pat = 'PlayActions.StopRecording'; File = 'SpectreState.cs'; Why = '同上' }
+    @{ Pat = 'PlayActions.SwitchToRecordMode'; File = 'SpectreState.cs'; Why = '同上' }
+    @{ Pat = 'playback.openlevel.official'; File = 'SpectreState.cs'; Why = '同上：官方关卡入口的文案键' }
+    @{ Pat = 'ReplayManager.UnLoadReplay'; File = 'SpectreState.cs'; Why = '同上：跳转前卸载当前回放' }
+    @{ Pat = 'Settings.SavePath';       File = 'SpectreState.cs'; Why = '同上：跳转时要用回放所在目录' }
+    @{ Pat = 'Ui.Loc.T';                File = 'SpectreState.cs'; Why = '同上：文案走我们的 Loc（上游用 LocalizationManager 直取）' }
+    @{ Pat = 'Directory.CreateDirectory'; File = 'SpectreState.cs'; Why = '备份目录创建（上游在 SaveReplay 内部做）' }
+    @{ Pat = 'File.Copy';               File = 'SpectreState.cs'; Why = '2026-10-19 备份改成直接复制主文件，不再重跑保存管线（PBKDF2 一局两遍半秒卡顿）' }
+    @{ Pat = 'File.Exists';             File = 'SpectreState.cs'; Why = '同上：复制前确认源文件在' }
+    @{ Pat = 'Path.Combine';            File = 'SpectreState.cs'; Why = '同上：备份路径拼装' }
+    @{ Pat = 'Settings.Backup';         File = 'SpectreState.cs'; Why = '2026-10-19 主保存失败时不走备份：谓词改成 Settings.Backup && savedPath != null（上游无条件）。savedPath 为 null 时它是字符串拼接得裸串 "sprp"，File.Copy 抛异常被吞后再多报一条备份失败，把真因盖住' }
 )
 
 Write-Output ""
@@ -375,7 +528,12 @@ foreach ($m in ($matched | Sort-Object Rel)) {
     # 注意不能用 -like 做匹配：PowerShell 的 -like 会把 [ ] 当字符类通配符，
     # `'__p' -like '*[SpectreReplay]*'` 返回 True，任何含 S 的名字都会被放过。
     $covered = ($extra -join ' ')
+    # 登记项可带 File = 文件名（不含目录）：只在比对**该文件**时生效。
+    # 泛名字（Mathf.Clamp / File.Copy / File.Exists）必须限定文件，否则等于
+    # 给全仓开一道后门：任何文件的同类漂移都会被这条记录顺手放过。
+    $selfName = [IO.Path]::GetFileName($m.Rel)
     foreach ($k in $knownDeviations) {
+        if ($k.ContainsKey('File') -and $k.File -ne $selfName) { continue }
         $covered = [regex]::Replace($covered, [regex]::Escape($k.Pat), ' ')
     }
     foreach ($kw in @('if','else','for','foreach','while','do','return','void','const','new','using',

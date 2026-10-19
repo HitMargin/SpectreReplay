@@ -23,7 +23,7 @@ namespace UiPreview
         internal static int Run(string projectRoot)
         {
             Console.WriteLine("  ── 键盘音起始时间戳 ──");
-            string ok = Path.Combine(projectRoot, "Features", "Replay", "Patch_Playback.cs");
+            string ok = Path.Combine(projectRoot, "Features", "Replay", "Patches", "Patch_Playback.cs");
             if (!File.Exists(ok))
             {
                 Console.WriteLine("    ✗ 找不到 Patch_Playback.cs");

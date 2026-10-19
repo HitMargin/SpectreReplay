@@ -24,13 +24,13 @@ namespace UiPreview
         {
             (@"State\AudioRecorder.cs",        "isRecording"),
             (@"State\AudioRecorder.cs",        "recordingClip"),
-            (@"Features\VideoRender\VideoConverter.cs", "Running"),
-            (@"Features\VideoRender\VideoConverter.cs", "Total"),
-            (@"Features\VideoRender\VideoConverter.cs", "Done"),
-            (@"Features\VideoRender\VideoConverter.cs", "Converted"),
-            (@"Features\VideoRender\VideoConverter.cs", "Skipped"),
-            (@"Features\VideoRender\VideoConverter.cs", "Failed"),
-            (@"Features\VideoRender\VideoEncoder.cs",    "pumpFailure"),
+            (@"Features\VideoRender\Pipeline\VideoConverter.cs", "Running"),
+            (@"Features\VideoRender\Pipeline\VideoConverter.cs", "Total"),
+            (@"Features\VideoRender\Pipeline\VideoConverter.cs", "Done"),
+            (@"Features\VideoRender\Pipeline\VideoConverter.cs", "Converted"),
+            (@"Features\VideoRender\Pipeline\VideoConverter.cs", "Skipped"),
+            (@"Features\VideoRender\Pipeline\VideoConverter.cs", "Failed"),
+            (@"Features\VideoRender\Pipeline\VideoEncoder.cs",    "pumpFailure"),
         };
 
         internal static int Run(string projectRoot)

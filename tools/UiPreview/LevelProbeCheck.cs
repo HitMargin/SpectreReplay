@@ -109,7 +109,7 @@ namespace UiPreview
         {
             string path = System.IO.Path.Combine(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"),
-                "Features", "Replay", "Patch_Lifecycle.cs");
+                "Features", "Replay", "Patches", "Patch_Lifecycle.cs");
             if (!System.IO.File.Exists(path))
             {
                 Console.WriteLine("    ✗ ④ 找不到 Patch_Lifecycle.cs");

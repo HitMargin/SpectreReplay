@@ -86,7 +86,7 @@ namespace UiPreview
             //    但"扩展名清单只有一份"这条仍然要守——写死的第二份会在格式再变时
             //    静默失效（文件还在、列表里没有）。
             fail += Check(projectRoot, "⑧ 回放列表要列全部可读格式（不许只 glob 默认扩展名）",
-                new[] { "Pages\\Pages.cs", "Features\\Replay\\ReplayManager.cs" },
+                new[] { "Pages\\Pages.cs", "Features\\Replay\\Runtime\\ReplayManager.cs" },
                 new[] { "ReadableExtensions" });
             // ⑧b 清单内容：两种新格式都要在，且**旧格式的四个扩展名一个都不许回来**。
             //    前半段防"少列一种"（`.psprp` 漏掉 → 不解密录的文件点不开）；
@@ -99,9 +99,9 @@ namespace UiPreview
             //    同样带一个尾逗号 —— 于是把清单里的那一行删掉（MUT-U46）断言照样绿，
             //    它命中的是**用法**不是**清单**。这是"判据看错了地方"那一族。
             fail += CheckPredicate(projectRoot, "⑧b 可读格式清单只含新格式两种",
-                "Features\\Replay\\ReplayManager.cs", ReadableListHasBothFormats);
+                "Features\\Replay\\Runtime\\ReplayManager.cs", ReadableListHasBothFormats);
             fail += CheckAbsent(projectRoot, "⑧c 可读格式清单不得再列旧格式",
-                "Features\\Replay\\ReplayManager.cs",
+                "Features\\Replay\\Runtime\\ReplayManager.cs",
                 new[] { "\".crpl2\"", "\".pcrpl2\"", "\".crpl\"", "\".pcrpl\"" });
             // ⑨ 键盘音三项必须有界面入口。与 ⑥ 同族（搬了没接线）且**犯了第二次**：
             //   Settings 有字段、ConfigManager 落盘、Patch_Playback 有四处消费
@@ -122,7 +122,7 @@ namespace UiPreview
             //   合成一条的话 Check 会把全部符号往每个文件上套（界面键在 Settings.cs 里
             //   根本不存在），永远红——那是判据自身写错，不是抓到了缺陷。
             fail += Check(projectRoot, "⑨a 键盘音三项有定义、有消费方",
-                new[] { "State\\Settings.cs", "Features\\Replay\\Patch_Playback.cs",
+                new[] { "State\\Settings.cs", "Features\\Replay\\Patches\\Patch_Playback.cs",
                         "State\\ConfigManager.cs" },
                 new[] { "KeybdSoundRecordActive", "KeybdSoundVolume", "MicrophoneOffset" });
             fail += Check(projectRoot, "⑨b 键盘音三项要有界面入口（不能再数据在、链路通、界面缺）",
@@ -137,7 +137,7 @@ namespace UiPreview
             //   移植时丢了 UI ⇒ 只剩下 Configs.json 一条路，而它恰是"回放没反应"时
             //   最该查的一项。round 53 补上；这条防退回。
             fail += Check(projectRoot, "⑩ 回放驱动开关要有界面入口（LegacyEngine 不是废弃项）",
-                new[] { "State\\Settings.cs", "Features\\Replay\\ReplayPlayer.cs" },
+                new[] { "State\\Settings.cs", "Features\\Replay\\Runtime\\ReplayPlayer.cs" },
                 new[] { "LegacyEngine" });
             fail += Check(projectRoot, "⑩b 回放页要有该开关的控件",
                 new[] { "Pages\\Pages.cs" },
@@ -271,7 +271,7 @@ namespace UiPreview
             //      ④ 界面有控件（否则只能手改 Configs.json）。
             //    每条独立判、各自能单独变红，不用一条大判据蒙混。
             fail += Check(projectRoot, "⑮a 渲染时钟补丁必须挂在 FeatureKeys.RenderClock 上（否则开关是假的）",
-                new[] { "Features\\VideoRender\\VideoRenderClockPatches.cs" },
+                new[] { "Features\\VideoRender\\Patches\\VideoRenderClockPatches.cs" },
                 new[] { "Feature = FeatureKeys.RenderClock" });
             fail += Check(projectRoot, "⑮b Main 必须注册该 Feature 的谓词（未注册 = 按关闭处理）",
                 new[] { "Main.cs" },
@@ -298,7 +298,7 @@ namespace UiPreview
             //    只查 "TranspilerReady" 出现过是没用的（它本来就该出现）；
             //    必须钉住"它后面还 AND 了开关"这个形状。
             fail += Check(projectRoot, "⑮f 渲染作业的就绪判断必须与开关一起判（否则关掉后仍走确定性轨）",
-                new[] { "Features\\VideoRender\\VideoRenderJob.cs" },
+                new[] { "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs" },
                 new[] { "RenderClockSource.TranspilerReady && Settings.RenderClockOn" });
             // ⑯ 去特效总开关必须**默认关**（2026-10-17 用户裁决）。
             //

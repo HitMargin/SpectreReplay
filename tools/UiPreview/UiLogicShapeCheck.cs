@@ -157,7 +157,7 @@ namespace UiPreview
             //    "game Update likely changed"。
             fail += Check(projectRoot,
                 "⑦ RenderClock transpiler 必须识别「已被别的 mod 接管」（不许误报 game changed）",
-                "Features\\VideoRender\\VideoRenderClockPatches.cs",
+                "Features\\VideoRender\\Patches\\VideoRenderClockPatches.cs",
                 s => TranspilerDistinguishesTakeover(s));
             // ⑧ 喂给 AudioRenderer.Render 的原生容器必须**精确等于本帧样本数**。
             //
@@ -183,7 +183,7 @@ namespace UiPreview
             //    写着 Math.Max(floats, 桶大小)，整文件搜 Math.Max 是假判据。
             fail += Check(projectRoot,
                 "⑧ 混音轨 Render 容器必须精确（分桶会让捕获静默停住）",
-                "Features\\VideoRender\\VideoAudioTrack.cs",
+                "Features\\VideoRender\\Pipeline\\VideoAudioTrack.cs",
                 s => MixdownRenderBufferIsExact(s));
             // ⑨ 分组卡片**不许用 GUI.backgroundColor 染色**（它乘算，会抹平按钮 hover）。
             //
@@ -440,7 +440,7 @@ namespace UiPreview
             //    放开会让回放真的按下取消键、打断进关流程。
             fail += Check(projectRoot,
                 "㉑a 特殊按键两条输入路径都要挂 Feature(轮询 + 异步，缺一是静默半残)",
-                "Features\\Replay\\Patch_SpecialKeys.cs",
+                "Features\\Replay\\Patches\\Patch_SpecialKeys.cs",
                 s => CountClosedArgs(s, "Feature = FeatureKeys.SpecialKeys") == 2);
             fail += Check(projectRoot,
                 "㉑b Main 必须注册 SpecialKeys 的谓词(未注册 = 按关闭处理)",
@@ -448,7 +448,7 @@ namespace UiPreview
                 s => s.Contains("FeatureKeys.SpecialKeys,", StringComparison.Ordinal));
             fail += Check(projectRoot,
                 "㉑c Escape 不得进入允许集(它是取消键，放开会打断进关流程)",
-                "Features\\Replay\\Patch_SpecialKeys.cs",
+                "Features\\Replay\\Patches\\Patch_SpecialKeys.cs",
                 s => s.Contains("KeyCode.Escape", StringComparison.Ordinal)
                     && s.Contains("\"Escape\"", StringComparison.Ordinal));
             // ㉒ 「删除回放文件」必须是**两段式**（2026-10-18 用户要求新增该按钮）。
@@ -499,7 +499,7 @@ namespace UiPreview
                     && s.Contains("ReplayInfoPanel.Draw(captured)", StringComparison.Ordinal));
             fail += Check(projectRoot,
                 "㉓b 读详情必须无副作用(走 ReadReplayData，不许 LoadReplay)",
-                "Features\\Replay\\ReplayFileInfo.cs",
+                "Features\\Replay\\Data\\ReplayFileInfo.cs",
                 s => s.Contains("ReplayManager.ReadReplayData(", StringComparison.Ordinal)
                     && !s.Contains("ReplayManager.LoadReplay(", StringComparison.Ordinal)
                     && !s.Contains("LoadReplayAuto(", StringComparison.Ordinal));
@@ -510,7 +510,7 @@ namespace UiPreview
                     && ab.Contains("ReplayInfoPanel.Forget(", StringComparison.Ordinal));
             fail += Check(projectRoot,
                 "㉓d 判定分布文案键必须是字面量表(动态拼键会被判成死键)",
-                "Features\\Replay\\ReplayFileInfo.cs",
+                "Features\\Replay\\Data\\ReplayFileInfo.cs",
                 s => CountOccurrences(s, "\"playback.judge.") >= 16
                     && s.Contains("JudgmentLocaleKeys", StringComparison.Ordinal));
             // ㉔ 官方关卡回放必须记录**真实 BPM**（2026-10-18 用户截图报「官方关卡
@@ -528,7 +528,7 @@ namespace UiPreview
             //    且该函数走 conductor（scnGame.instance 可能为 null）。
             fail += Check(projectRoot,
                 "㉔ 官方关卡回放必须记录真实 BPM(硬写 0 会让详情面板显示「?」)",
-                "Features\\Replay\\Patch_Lifecycle.cs",
+                "Features\\Replay\\Patches\\Patch_Lifecycle.cs",
                 s => OfficialLevelBpmIsReal(s));
             // ㉕ 详情面板必须同时给 Accuracy 与 X-Accuracy（2026-10-18 用户报
             //    「有X-ACC少了ACC」）。
@@ -549,7 +549,7 @@ namespace UiPreview
                     && ds.Contains("playback.info.xacc", StringComparison.Ordinal));
             fail += Check(projectRoot,
                 "㉕b Accuracy 必须由判定分布还原(老回放没存这个字段，另存会显示占位符)",
-                "Features\\Replay\\ReplayFileInfo.cs",
+                "Features\\Replay\\Data\\ReplayFileInfo.cs",
                 s => s.Contains("HitMarginCompat.Accuracy(info.JudgmentCounts)", StringComparison.Ordinal));
             // ㉖ 渲染必须**自己**把回放记录的倍速装回编辑器（2026-10-18 用户报
             //    「等待回放开始超时」且画面没变慢）。
@@ -571,7 +571,7 @@ namespace UiPreview
             //      ③ 作业收尾必须撤销武装（否则倍速泄漏到之后的手动重开关卡）。
             fail += Check(projectRoot,
                 "㉖a 渲染必须自己装回录像倍速(Play() 会把程序化调用的倍速压成 1x)",
-                "Features\\VideoRender\\VideoRenderPatches.cs",
+                "Features\\VideoRender\\Patches\\VideoRenderPatches.cs",
                 // **必须锚到带 scnEditor 形参的那个 Prefix。** 本文件里还有
                 // Patch_VideoPinSet.Prefix 等同名方法，MethodBody 取到的是第一个
                 // （实测：第一版写成 MethodBody(s, "Prefix") 直接假红）。
@@ -580,11 +580,11 @@ namespace UiPreview
                     && s.Contains("nameof(scnEditor.RemakePath)", StringComparison.Ordinal));
             fail += Check(projectRoot,
                 "㉖b 倍速来源必须是录像的 PlaybackSpeed 且受 QuickPitched 门控",
-                "Features\\VideoRender\\VideoRenderJob.cs",
+                "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
                 s => SpeedOverrideComesFromReplay(s));
             fail += Check(projectRoot,
                 "㉖c 渲染收尾必须撤销倍速钉扎(否则泄漏到之后的手动重开关卡)",
-                "Features\\VideoRender\\VideoRenderJob.cs",
+                "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
                 s => MethodBody(s, "TearDown") is string tb
                     && tb.Contains("SpeedOverrideArmed = false", StringComparison.Ordinal));
             // ㉗ 「等待回放开始超时」必须**带出真正原因**（同一次用户报障）。
@@ -597,12 +597,12 @@ namespace UiPreview
             //    「关卡已在跑」——只看拒绝记录会误杀连发 Start_Rewind 中后一发成功的轮次。
             fail += Check(projectRoot,
                 "㉗a 等待失败时必须报出真实拒绝原因(不许只说超时)",
-                "Features\\VideoRender\\VideoRenderJob.cs",
+                "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
                 s => s.Contains("playbackRejectReason", StringComparison.Ordinal)
                     && s.Contains("Patch_StartRewind.LastReject", StringComparison.Ordinal));
             fail += Check(projectRoot,
                 "㉗b 早退必须同时要求「关卡已在跑」+「有拒绝记录」(只看其一会误杀)",
-                "Features\\VideoRender\\VideoRenderJob.cs",
+                "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
                 s => AwaitReplayAliveRequiresBoth(s));
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");

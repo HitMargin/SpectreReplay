@@ -20,8 +20,8 @@ namespace UiPreview
         // 已知必须带 IsDefined 护栏的调用点
         private static readonly (string file, string needle)[] Sites =
         {
-            (@"Features\Replay\Patch_Lifecycle.cs", "Enum.TryParse<HitMarginLimit>"),
-            (@"Features\Replay\ReplayAnalyzer.cs", "Enum.TryParse(judgeMode"),
+            (@"Features\Replay\Patches\Patch_Lifecycle.cs", "Enum.TryParse<HitMarginLimit>"),
+            (@"Features\Replay\Runtime\ReplayAnalyzer.cs", "Enum.TryParse(judgeMode"),
         };
 
         internal static int Run(string projectRoot)
