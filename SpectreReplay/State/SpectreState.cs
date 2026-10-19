@@ -515,7 +515,14 @@ public static class SpectreState
         // KeybdSoundFileName」找的（见 ReplayManager.TryLoadKeybdSound），
         // 所以备份目录里也必须有一份同名 wav，否则备份出来的回放**静默没有键盘音**
         // ——文件能开、能播，只是少了声音，玩家会以为原始录制就没录上。
-        if (Settings.Backup)
+        // **主保存失败时不能走备份。** savedPath 只在 SaveReplay 成功时才赋值
+        // （上面声明为 null），失败时它仍是 null，而 `savedPath + mainExt` 在
+        // C# 里是**字符串拼接**、不是空引用异常——得到裸串 "sprp"。于是
+        // File.Copy 去开一个叫 sprp 的文件、抛 FileNotFoundException，被下面的
+        // catch 吞掉后再追加一条「备份失败」：用户看到主保存失败 + 备份失败
+        // 两条，真正的原因反而被噪声盖住。
+        // 备份的对象是「刚写好的主文件」，主文件不存在时它本就无从谈起。
+        if (Settings.Backup && savedPath != null)
         {
             // 备份结果原本被完全忽略：主回放已保存成功时，备份可能因权限受限/磁盘满/
             // 目录不可写而失败，而用户毫无察觉 —— 直到真出事那天才发现"备份早就没了"。
