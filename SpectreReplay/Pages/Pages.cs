@@ -1046,6 +1046,15 @@ namespace SpectreReplay.Pages
         /// </summary>
         internal static void DrawEffects()
         {
+            // ── 「全选本组」只给 visual / track / planet 三组 ──────────────
+            // 口径是**这一组是不是一组同质的「要摘掉的事件类别」**，不是开关数量：
+            //   · visual / track / planet：整组都是「摘掉某类事件」，一键同开同关有意义；
+            //   · master：含总开关自身（自我指涉）与「允许覆盖关卡」授权，
+            //     一键把破坏性授权也打开，正是这页刻意避免的；
+            //   · decor：两项里「移除全部装饰」是清空级动作，不该被顺手打开；
+            //   · audio：只有两个开关，多一次点击反而更慢；
+            //   · gameplay：改的是运行逻辑不是画面，不该和视觉项共用一颗按钮。
+            // 口径若改，同步改 tools\UiPreview\UiLogicShapeCheck.cs 的 ⑱f。
             Gui.Section("effects.master", Gui.Accent, () =>
             {
                 OnGui.Row("effects.on", EffectRemoverOn, v =>
@@ -1099,6 +1108,19 @@ namespace SpectreReplay.Pages
 
             Gui.Section("effects.visual", Gui.Accent, () =>
             {
+                // 一键全选本组（双向，见 DrawEffects 开头那段口径）。
+                Gui.Dim(!EffectRemoverOn, () => OnGui.Button("effects.toggleall", () =>
+                {
+                    bool on = !(EffectRemoverFilters || EffectRemoverAdvancedFilters
+                             || EffectRemoverParticles || EffectRemoverBackgrounds
+                             || EffectRemoverCameras);
+                    EffectRemoverFilters = on;
+                    EffectRemoverAdvancedFilters = on;
+                    EffectRemoverParticles = on;
+                    EffectRemoverBackgrounds = on;
+                    EffectRemoverCameras = on;
+                    Commit();
+                }, false, EffectRemoverOn));
                 OnGui.Row("effects.filters", EffectRemoverFilters, v => { EffectRemoverFilters = v; Commit(); });
                 OnGui.Row("effects.advfilters", EffectRemoverAdvancedFilters, v => { EffectRemoverAdvancedFilters = v; Commit(); });
                 OnGui.Row("effects.particles", EffectRemoverParticles, v => { EffectRemoverParticles = v; Commit(); });
@@ -1121,8 +1143,15 @@ namespace SpectreReplay.Pages
             Gui.Section("effects.decor", Gui.Accent, () =>
             {
                 OnGui.Row("effects.decorations", EffectRemoverDecorations, v => { EffectRemoverDecorations = v; Commit(); });
+                // 父项门控：这一项是「移除装饰物」的**清除口径**，不是独立动作。
+                // 全仓只有 EffectRemover.RemoveDecorations 读它，而那个方法只在
+                // `if (Settings.EffectRemoverDecorations)` 里被调；父项关着时它拨到哪
+                // 都不改变任何一个字节。原先没挂 enabled，于是成了「拨得动、没反应」。
+                // 上游更彻底——它只在父项开着时**渲染**这一行
+                // （SpectreUiPages.Features.cs:85-86），本项目不藏控件，改成压暗。
                 OnGui.Row("effects.removealldecor", EffectRemoverRemoveAllDecorations,
-                    v => { EffectRemoverRemoveAllDecorations = v; Commit(); });
+                    v => { EffectRemoverRemoveAllDecorations = v; Commit(); },
+                    EffectRemoverOn && EffectRemoverDecorations);
                 OnGui.Note("effects.decor.note");
             }, EffectRemoverOn);
 
@@ -1131,12 +1160,20 @@ namespace SpectreReplay.Pages
                 // 一键全选本组（上游 effectremover.toggleall 同形）。
                 // 放在组首：这是「先决定这一组要不要」的动作，不是某一项的配套。
                 // 受总开关管——总开关关着时按下去等于什么都没发生，会误导。
+                // **双向**：本组已有一项开着，按下去是全部关掉；全关着才全部打开。
+                // 单向「只开不关」的话，玩家批量打开后想撤销只能逐项去点。
+                //
+                // **只覆盖「摘掉某类事件」的四项**，不含三个 reset：
+                // resettrackopacity/resettrackanim 是改写残余事件的参数，
+                // 不是「多摘一类」，混进全选会变成「顺手改了参数」。
                 Gui.Dim(!EffectRemoverOn, () => OnGui.Button("effects.toggleall", () =>
                 {
-                    EffectRemoverTrackAnimations = true;
-                    EffectRemoverTrackPositions = true;
-                    EffectRemoverTrackMoves = true;
-                    EffectRemoverTrackColors = true;
+                    bool on = !(EffectRemoverTrackAnimations || EffectRemoverTrackPositions
+                             || EffectRemoverTrackMoves || EffectRemoverTrackColors);
+                    EffectRemoverTrackAnimations = on;
+                    EffectRemoverTrackPositions = on;
+                    EffectRemoverTrackMoves = on;
+                    EffectRemoverTrackColors = on;
                     Commit();
                 }, false, EffectRemoverOn));
                 OnGui.Row("effects.trackanim", EffectRemoverTrackAnimations, v => { EffectRemoverTrackAnimations = v; Commit(); });
@@ -1159,12 +1196,16 @@ namespace SpectreReplay.Pages
             Gui.Section("effects.planet", Gui.Accent, () =>
             {
                 // 一键全选本组（同上）。
+                // **双向**，同轨道组。四项都属于「摘掉一类行星相关事件」，
+                // hideicons 摘的是 Hide 事件，同质，留在同一颗按钮里。
                 Gui.Dim(!EffectRemoverOn, () => OnGui.Button("effects.toggleall", () =>
                 {
-                    EffectRemoverPlanetOrbit = true;
-                    EffectRemoverPlanetScale = true;
-                    EffectRemoverPlanetRadius = true;
-                    EffectRemoverHideIcons = true;
+                    bool on = !(EffectRemoverPlanetOrbit || EffectRemoverPlanetScale
+                             || EffectRemoverPlanetRadius || EffectRemoverHideIcons);
+                    EffectRemoverPlanetOrbit = on;
+                    EffectRemoverPlanetScale = on;
+                    EffectRemoverPlanetRadius = on;
+                    EffectRemoverHideIcons = on;
                     Commit();
                 }, false, EffectRemoverOn));
                 OnGui.Row("effects.planetorbit", EffectRemoverPlanetOrbit, v => { EffectRemoverPlanetOrbit = v; Commit(); });

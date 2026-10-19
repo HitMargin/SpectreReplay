@@ -156,7 +156,7 @@ $__throwAnchor = 'throw "' + '未知变异'
 $__thrIdx = $__selfText.IndexOf($__throwAnchor)
 if ($__swIdx -ge 0 -and $__thrIdx -gt $__swIdx) {
     $__swBody = $__selfText.Substring($__swIdx, $__thrIdx - $__swIdx)
-    $__labels = @([regex]::Matches($__swBody, "'(MUT-[A-Z0-9]+)'\s*\{") |
+    $__labels = @([regex]::Matches($__swBody, "'(MUT-[A-Za-z0-9]+)'\s*\{") |
         ForEach-Object { $_.Groups[1].Value })
     $__dups = @($__labels | Group-Object | Where-Object { $_.Count -gt 1 })
     if ($__dups.Count -gt 0) {
@@ -1534,17 +1534,84 @@ switch ($Which) {
     'MUT-D18' {
         # ⑱f 全选按钮回归：行星组那个按钮不再挂总开关
         #      （总开关关着时按下去毫无反应，玩家会以为功能坏了）。
-        #      只改第二处：第一处在轨道组，判据若只认"第一处命中"照样绿。
+        #      只改最后一处：三颗分别在 visual / track / planet，判据若只认「第一处命中」照样绿。
         Backup 'Pages\Pages.cs'
         $ls = Lines 'Pages\Pages.cs'
         $hit = -1; $n = 0
         for ($i = 0; $i -lt $ls.Count; $i++) {
             if ($ls[$i].Trim() -eq '}, false, EffectRemoverOn));') { $n++; $hit = $i }
         }
-        if ($n -ne 2) { throw ('MUT-D18 unexpected count=' + $n) }
+        if ($n -ne 3) { throw ('MUT-D18 unexpected count=' + $n) }
         $ls[$hit] = $ls[$hit].Replace('}, false, EffectRemoverOn));', '}, false));')
         SetLines 'Pages\Pages.cs' $ls
     }
+    'MUT-D19' {
+        # ⑱f 分区口径回归：把 visual 组那颗「全选本组」整段搬到 audio 组。
+        #      按钮总数仍是 3、门控也都还在，所以「个数加末参」那一半照样绿，
+        #      只有「哪个 Section 里有」这一半会红——这是唯一能证明分区判断
+        #      不是摆设的形状：只判调用点数量的实现会放过它。
+        Backup 'Pages\Pages.cs'
+        $ls = Lines 'Pages\Pages.cs'
+        $start = -1
+        for ($i = 0; $i -lt $ls.Count; $i++) {
+            if ($ls[$i].Contains('OnGui.Button("effects.toggleall"')) { $start = $i; break }
+        }
+        if ($start -lt 0) { throw 'MUT-D19: cannot find visual toggleall' }
+        $end = -1
+        for ($j = $start; $j -lt $ls.Count; $j++) {
+            if ($ls[$j].Trim() -eq '}, false, EffectRemoverOn));') { $end = $j; break }
+        }
+        if ($end -lt 0) { throw 'MUT-D19: cannot find end of visual toggleall' }
+        $kept = New-Object System.Collections.Generic.List[string]
+        for ($i = 0; $i -lt $ls.Count; $i++) {
+            if ($i -lt $start -or $i -gt $end) { $kept.Add($ls[$i]) }
+        }
+        $audio = -1
+        for ($i = 0; $i -lt $kept.Count; $i++) {
+            if ($kept[$i].Contains('Gui.Section("effects.audio"')) { $audio = $i; break }
+        }
+        if ($audio -lt 0) { throw 'MUT-D19: cannot find audio section' }
+        $kept.Insert($audio + 1, '                Gui.Dim(!EffectRemoverOn, () => OnGui.Button("effects.toggleall", () => {')
+        $kept.Insert($audio + 2, '                    bool on = !(EffectRemoverHitSounds || EffectRemoverHoldSounds);')
+        $kept.Insert($audio + 3, '                    EffectRemoverHitSounds = on;')
+        $kept.Insert($audio + 4, '                    EffectRemoverHoldSounds = on;')
+        $kept.Insert($audio + 5, '                    Commit();')
+        $kept.Insert($audio + 6, '                }, false, EffectRemoverOn));')
+        SetLines 'Pages\Pages.cs' $kept.ToArray()
+        # 自检：按钮仍是三颗（搬走一颗、插进一颗），否则说明锚点没对上。
+        $after = Lines 'Pages\Pages.cs'
+        $n = 0
+        for ($i = 0; $i -lt $after.Count; $i++) {
+            if ($after[$i].Contains('OnGui.Button("effects.toggleall"')) { $n++ }
+        }
+        if ($n -ne 3) { throw ('MUT-D19 unexpected button count=' + $n) }
+    }
+    'MUT-D20' {
+        # ⑱f2 双向回归：第一颗「全选本组」退回单向打开。
+        #      true 或非后短路，行为与单向等于 true 完全一样，
+        #      但文本里不再有 bool on = !( ——判据必须因此变红。
+        #      只改第一颗：判据若只查第一处命中，另外两颗的单向化会漏检。
+        Backup 'Pages\Pages.cs'
+        $ls = Lines 'Pages\Pages.cs'
+        $hit = 0
+        for ($i = 0; $i -lt $ls.Count; $i++) {
+            if ($ls[$i].Contains('bool on = !(')) {
+                $ls[$i] = $ls[$i].Replace('bool on = !(', 'bool on = true || !(')
+                $hit++
+                break
+            }
+        }
+        if ($hit -ne 1) { throw 'MUT-D20: cannot find bool on' }
+        SetLines 'Pages\Pages.cs' $ls
+    }
+    'MUT-D21' {
+        # ⑱i 父项门控回归：「移除全部装饰」退回只挂总开关。
+        #      它是「移除装饰物」的清除口径，父项关着时拨它不改变任何字节，
+        #      不压暗就是「拨得动、没反应」。
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' 'EffectRemoverOn && EffectRemoverDecorations);' 'EffectRemoverOn);'
+    }
+
     'MUT-D14' {
         # ㉔ BPM 回归：官方关卡退回硬写 0（详情面板重新显示成问号）。
         Backup 'Features\Replay\Patches\Patch_Lifecycle.cs'

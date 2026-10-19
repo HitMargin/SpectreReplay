@@ -720,6 +720,16 @@
   "en": "Render finished: {0}"
  },
  {
+  "key": "status.render_canceled",
+  "zh": "渲染已取消",
+  "en": "Render canceled"
+ },
+ {
+  "key": "status.render_failed",
+  "zh": "渲染失败",
+  "en": "Render failed"
+ },
+ {
   "key": "status.render_start",
   "zh": "开始渲染…",
   "en": "Rendering started..."
@@ -1121,8 +1131,8 @@
  },
  {
   "key": "effects.toggleall",
-  "zh": "全选",
-  "en": "Select all"
+  "zh": "全开/全关",
+  "en": "Toggle all"
  },
  {
   "key": "effects.planetorbit",
@@ -1271,8 +1281,8 @@
  },
  {
   "key": "effects.toggleall.tip",
-  "zh": "把本组所有开关一次性打开，再按需关掉不需要的。",
-  "en": "Turn every switch in this group on at once, then turn off the ones you do not want."
+  "zh": "本组只要有一项开着，按一下就全部关掉；全关着时按一下全部打开。只作用于「摘掉哪类事件」的开关，重置类与配套参数不在其中。",
+  "en": "If any switch in this group is on, one press turns them all off; if all are off, one press turns them all on. Only the switches that remove a kind of event are included; resets and companion options are not."
  },
  {
   "key": "effects.planetorbit.tip",

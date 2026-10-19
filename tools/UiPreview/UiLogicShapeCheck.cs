@@ -359,13 +359,21 @@ namespace UiPreview
                 "Pages\\Pages.cs",
                 s => KeybdRowsDimWithRecord(s));
             fail += Check(projectRoot,
-                "⑱f 去特效两个「全选本组」按钮都必须挂总开关",
+                "⑱f 去特效「全选本组」只许长在 visual/track/planet 三组且都挂总开关",
                 "Pages\\Pages.cs",
-                s => ToggleAllButtonsGatedByMaster(s));
+                s => ToggleAllPerSection(s));
+            fail += Check(projectRoot,
+                "⑱f2 去特效「全选本组」必须是双向切换(否则批量打开后无法批量撤销)",
+                "Pages\\Pages.cs",
+                s => ToggleAllBidirectional(s));
             fail += Check(projectRoot,
                 "⑱g 镜头缩放：开关挂「镜头移动」，滑条再挂该开关(否则拖了没用)",
                 "Pages\\Pages.cs",
                 s => CameraZoomGatedByParent(s));
+            fail += Check(projectRoot,
+                "⑱i「移除全部装饰」挂两个父项(它是清除口径,父项关着时拨了没用)",
+                "Pages\\Pages.cs",
+                s => RemoveAllDecorGatedByParent(s));
             // ⑲ 更新检查：三种态必须分开说，且版本比较方向不能反。
             //
             //    2026-10-17 用户要求「关于列表里加一个检测更新的功能 并且用上UMM
@@ -748,8 +756,19 @@ namespace UiPreview
         /// 锚点失效（有人改了调用形状），而不是「全都合规」。
         /// </summary>
         private static string CallBody(string code, string open)
+            => CallBody(code, open, 0);
+
+        /// <summary>
+        /// 同上，但从 <paramref name="from"/> 起找锚点。遍历**多个**同名调用点
+        /// （比如三颗「全选本组」）时必须用这个重载：不带偏移的版本每次都从文件头
+        /// 找起，循环里三次拿到的是同一颗按钮的体——第三颗单向 `= true` 也照样绿。
+        /// 这不是假想：<see cref="ToggleAllBidirectional"/> 第一版就是这么写的（实测）。
+        /// </summary>
+        private static string CallBody(string code, string open, int from)
         {
-            int at = code.IndexOf(open, StringComparison.Ordinal);
+            int at = from <= 0
+                ? code.IndexOf(open, StringComparison.Ordinal)
+                : code.IndexOf(open, from, StringComparison.Ordinal);
             if (at < 0) return null;
             // open 的**首字符就是那个 '('**。这里第一版写成从 at + open.Length - 1
             // 往后找 '('，结果落到了收尾引号之后、命中括号体里的 `Commit(`，
@@ -894,13 +913,78 @@ namespace UiPreview
         }
 
         /// <summary>
-        /// 去特效两个「全选本组」按钮（轨道组、行星组各一个）是否都挂了总开关。
+        /// 「全选本组」按钮的**分区口径**与门控。
         ///
-        /// 不能用 <c>RowCallEndsWith</c>：它只找**第一处**出现——轨道组挂对了、
-        /// 行星组漏了照样绿。这里逐个调用点判末参，并要求调用点数量正好是 2。
+        /// ① 该有的三组（visual / track / planet）各有一个，不该有的四组
+        ///    （master / decor / audio / gameplay）一个都没有；
+        /// ② 每个都挂总开关 <c>EffectRemoverOn</c>，且调用点数量正好是 3。
+        ///
+        /// 为什么不能用 <c>RowCallEndsWith</c>：它只找**第一处**出现——轨道组挂对了、
+        /// 行星组漏了照样绿。这里逐个调用点判末参，并要求数量。
+        ///
+        /// 为什么判「哪个分区里有」而不是只判数量：数量对上但长错了分区
+        /// （比如给 decor 加一个、给 planet 删一个）是同一句话的另一种错法，
+        /// 只判数量的话它照样绿。分区判断用 <see cref="CallBody"/> 取整段
+        /// `Gui.Section(...)` 实参（含 lambda 体），看里面有没有那颗按钮。
         /// </summary>
-        private static bool ToggleAllButtonsGatedByMaster(string code)
-            => AllCallsEndWith(code, "effects.toggleall", "EffectRemoverOn", 2);
+        private static bool ToggleAllPerSection(string code)
+        {
+            foreach (string title in new[] { "effects.visual", "effects.track", "effects.planet" })
+            {
+                string body = CallBody(code, "(\"" + title + "\"");
+                if (body == null || !body.Contains("effects.toggleall", StringComparison.Ordinal))
+                    return false;
+            }
+            foreach (string title in new[]
+            {
+                "effects.master", "effects.decor", "effects.audio", "effects.gameplay",
+            })
+            {
+                string body = CallBody(code, "(\"" + title + "\"");
+                if (body == null) return false;
+                if (body.Contains("effects.toggleall", StringComparison.Ordinal)) return false;
+            }
+            return AllCallsEndWith(code, "effects.toggleall", "EffectRemoverOn", 3);
+        }
+
+        /// <summary>
+        /// 每颗「全选本组」都必须是**双向**的：本组已有一项开着时按下去是全部关掉。
+        ///
+        /// 单向 `= true` 的版本能通过前一条判据（门控、分区都对），但玩家批量
+        /// 打开后没有任何办法批量撤销——只能逐项去点，而按钮名叫「全选」。
+        /// 判法：每个调用点体内必须有 `bool on = !(` 这个形状，且有 `= on;` 赋值。
+        /// 只判「出现过 !」不够（`!EffectRemoverOn` 在外层 Dim 里到处都是）。
+        /// </summary>
+        private static bool ToggleAllBidirectional(string code)
+        {
+            string open = "(\"effects.toggleall\"";
+            int seen = 0;
+            int from = 0;
+            while (true)
+            {
+                int at = code.IndexOf(open, from, StringComparison.Ordinal);
+                if (at < 0) break;
+                string body = CallBody(code, open, at);
+                if (body == null) return false;
+                if (!body.Contains("bool on = !(", StringComparison.Ordinal)) return false;
+                if (!body.Contains("= on;", StringComparison.Ordinal)) return false;
+                seen++;
+                from = at + open.Length;
+            }
+            return seen == 3;
+        }
+
+        /// <summary>
+        /// 「移除全部装饰」是否挂在两个父项上：<c>EffectRemoverOn &amp;&amp; EffectRemoverDecorations</c>。
+        ///
+        /// 它是「移除装饰物」的清除口径，不是独立动作：全仓只有
+        /// <c>EffectRemover.RemoveDecorations</c> 读它，而那个方法只在
+        /// <c>if (Settings.EffectRemoverDecorations)</c> 里被调。父项关着时它
+        /// 拨到哪都不改变任何字节，不压暗就是「拨得动、没反应」。
+        /// </summary>
+        private static bool RemoveAllDecorGatedByParent(string code)
+            => AllCallsEndWith(code, "effects.removealldecor",
+                   "EffectRemoverOn && EffectRemoverDecorations", 1);
 
         /// <summary>
         /// 「移除镜头移动」的配套控件是否按父子关系门控：

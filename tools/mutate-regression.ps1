@@ -15,7 +15,7 @@ $mut = Join-Path $root 'tools\mutate.ps1'
 if (-not (Test-Path $mut)) { throw "找不到 $mut" }
 
 $text = [IO.File]::ReadAllText($mut, [Text.Encoding]::UTF8)
-$all = [regex]::Matches($text, "'(MUT-[A-Z0-9]+)'\s*\{") |
+$all = [regex]::Matches($text, "'(MUT-[A-Za-z0-9]+)'\s*\{") |
     ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
 if ($Filter) { $all = $all | Where-Object { $_ -like "*$Filter*" } }
 
