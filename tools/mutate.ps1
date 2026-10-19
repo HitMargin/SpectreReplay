@@ -131,7 +131,8 @@ trap {
 
 $ENC = 'Features\Replay\Codec\ReplayEncoder.cs'
 $DEC = 'Features\Replay\Codec\ReplayDecoder.cs'
-$LOC = 'Ui\Loc.cs'
+# 界面文案表在 LocData.cs（14 语言块）。Loc.cs 现在只剩选择逻辑，不含任何键值。
+$LOC = 'Ui\LocData.cs'
 $ONGUI = 'Ui\OnGui.cs'
 $LMMGR = 'State\LocalizationManager.cs'
 
@@ -189,8 +190,17 @@ switch ($Which) {
     # 表对账的自证：只删中文表里的一条键（英文表留着）。
     # 这模拟的是“改中文文案时手滑删了一行”“新键只加到了英文表”这类真实漂移。
     'MUT-P7' {
+        # **锚点必须选一个"全文件只出现一次"的字面量。**
+        # 2026-10-19 文案表搬进 LocData.cs（14 语言 × N 键的字典字面量）之后，
+        # 原先那句 `{ "render.progress", "进度" },` 的形态已经不存在了——现在长这样：
+        # `["page.record"] = "录制",`，而且**同名键在 14 个语言块里各出现一次**。
+        # 拿通用键做锚点会让 ReplaceExact 的"命中必须恰好 1 次"直接抛，
+        # 变异体连跑都跑不起来，那会被误判成"变异没被检出"、冤枉判据。
+        #
+        # 所以锚在**中文块第一条键**上：`["page.record"] = "录制",` 里的中文值
+        # 只出现在 zh 块（繁中写「錄製」、日文写「録画」），全文件唯一。
         Backup $LOC
-        ReplaceExact $LOC '{ "render.progress", "进度" },' '{ "render.progress_REMOVED", "进度" },'
+        ReplaceExact $LOC '["page.record"] = "录制",' '["page.record_REMOVED"] = "录制",'
     }
     'MUT-P1' {
         Backup $ENC
@@ -997,11 +1007,45 @@ switch ($Which) {
         Backup 'State\Settings.cs'
         Backup 'State\ConfigManager.cs'
         Backup 'Pages\Pages.cs'
-        Backup 'Ui\Loc.cs'
+        Backup 'Ui\LocData.cs'
         ReplaceExact 'State\Settings.cs' '    public static bool KeyConvertEnabled = false;' "    public static bool KeyConvertEnabled = false;`n    public static bool LimitKey = false;"
         ReplaceExact 'State\ConfigManager.cs' '        public bool KeyConvertEnabled { get; set; }' "        public bool KeyConvertEnabled { get; set; }`n        public bool LimitKey { get; set; }"
         ReplaceExact 'Pages\Pages.cs' '                OnGui.Row("record.backup", Backup, v => { Backup = v; Commit(); }, ReplayOn);' "                OnGui.Row(`"record.backup`", Backup, v => { Backup = v; Commit(); }, ReplayOn);`n                OnGui.Row(`"record.limitkey`", LimitKey, v => { LimitKey = v; Commit(); }, ReplayOn);"
-        ReplaceExact 'Ui\LocData.cs' '                    ["record.backup"] = "额外存一份备份",' "                    [``"record.backup``"] = ``"额外存一份备份``",`n                    [``"record.limitkey``"] = ``"限制按键数``","
+        # 文案表在 LocData.cs（14 语言块）；锚在中文块里那一条上，全文件唯一。
+        # 替换串里同时有引号和逗号：用 here-string 明确边界，
+        # 拼两个参数再传，否则 PowerShell 会把逗号当成参数分隔符
+        # （实测报错：ReplaceExact 多出 1 个实参）。
+        $locOld = '["record.backup"] = "额外存一份备份",'
+        $locNew = @'
+["record.backup"] = "额外存一份备份",
+                    ["record.limitkey"] = "限制按键数",
+'@
+        ReplaceExact 'Ui\LocData.cs' $locOld $locNew.TrimEnd()
+    }
+    'MUT-PIN1' {
+        # ① 撤销失败时把 detour 一起丢掉（原实现的形状）。
+        #
+        #    复现的是 2026-10-19 用户报的「取消渲染后下一次时钟全炸」的**第一半**：
+        #    Dispose 抛异常被吞、detours.Clear() 照样执行，那个 detour 仍然挂在
+        #    Time.unscaledDeltaTime 上，而我们已经不知道它存在。
+        #
+        #    判据必须落在**控制流**上：只查"文件里出现过 detours.Add(d)"是假判据，
+        #    因为把它删掉、或者挪到 Clear 之前，结果都是坏的但子串还在。
+        #    这里就是把 Add 删掉——最直接的坏形态。
+        Backup 'Features\VideoRender\Patches\VideoRenderPatches.cs'
+        ReplaceExact 'Features\VideoRender\Patches\VideoRenderPatches.cs' '            detours.Add(d);' '            /* 变异：撤不掉的直接丢掉（原实现的缺陷） */'
+    }
+    'MUT-PIN2' {
+        # ③ 钉扎位移退回用 Time.captureFramerate 做除数。
+        #
+        #    这是「取消后时钟全炸」的**第二半**，也是真正把画面变成 NaN 的那一步：
+        #    收尾时 RestoreGlobalState 把 captureFramerate 还原成 0，
+        #    而残留 detour 还在算 1f / 0 = Infinity ⇒ 星球位置 NaN。
+        #
+        #    只改 PinnedDelta 一处：TickFrame 与 CurrentDelta 是另外两条独立路径，
+        #    全部改掉会分不清判据抓的是哪一个。
+        Backup 'Features\VideoRender\Patches\VideoRenderPatches.cs'
+        ReplaceExact 'Features\VideoRender\Patches\VideoRenderPatches.cs' 'private static float PinnedDelta() => 1f / armedFps;' 'private static float PinnedDelta() => 1f / Time.captureFramerate;'
     }
     'MUT-LANG1' {
         # ⑲b：把 Loc.cs 里某语言的枚举映射改掉，而 LocalizationManager.langlist 不动。

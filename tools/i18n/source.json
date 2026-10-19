@@ -365,21 +365,6 @@
   "en": "Wrong speed: this replay was recorded at {0}x."
  },
  {
-  "key": "render.mode",
-  "zh": "渲染模式",
-  "en": "Render mode"
- },
- {
-  "key": "render.mode.live",
-  "zh": "边玩边录（推荐）",
-  "en": "Record while playing"
- },
- {
-  "key": "render.mode.offline",
-  "zh": "手动离线渲染",
-  "en": "Manual offline render"
- },
- {
   "key": "render.fps",
   "zh": "输出帧率",
   "en": "Output FPS"
@@ -570,24 +555,9 @@
   "en": "Cancel"
  },
  {
-  "key": "render.note.live",
-  "zh": "边玩边录：进入关卡自动开始，结算后自动完成。不需要再跑一遍关卡。",
-  "en": "Record-while-playing: starts automatically when you enter a level and finishes on results. The level is not replayed."
- },
- {
   "key": "render.note.offline",
-  "zh": "离线渲染：重跑一遍回放逐帧捕获，耗时更长但画面与原回放完全一致。",
-  "en": "Offline: replays the level frame by frame. Slower, but pixel-identical to the replay."
- },
- {
-  "key": "render.offline_target",
-  "zh": "将渲染这份回放：{0}",
-  "en": "Will render this replay: {0}"
- },
- {
-  "key": "render.offline_noreplay",
-  "zh": "没有可用的回放文件：先打一局关卡（会自动保存），或到「回放」页确认目录里有 .srp。",
-  "en": "No replay file to render. Play a level first (it saves automatically), or check the Playback tab for .srp files."
+  "zh": "重跑一遍回放、逐帧捕获后合成视频。需要先载入回放并进入它录自的那一关。",
+  "en": "Replays the recording frame by frame and encodes the result. Load a replay and enter the level it was recorded on first."
  },
  {
   "key": "about.note",
@@ -685,11 +655,6 @@
   "en": "About {0} left"
  },
  {
-  "key": "render.progress",
-  "zh": "进度",
-  "en": "Progress"
- },
- {
   "key": "status.idle",
   "zh": "空闲：没在录制，也没在渲染。",
   "en": "Idle: not recording, not rendering."
@@ -758,11 +723,6 @@
   "key": "status.render_start",
   "zh": "开始渲染…",
   "en": "Rendering started..."
- },
- {
-  "key": "render.duplicate_when_late",
-  "zh": "跟不上时复制上一帧",
-  "en": "Duplicate last frame when behind"
  },
  {
   "key": "playback.files",
@@ -995,66 +955,6 @@
   "en": "Video render"
  },
  {
-  "key": "render.status",
-  "zh": "状态",
-  "en": "Status"
- },
- {
-  "key": "render.err.ffmpeg_start",
-  "zh": "无法启动 ffmpeg：{0}",
-  "en": "Cannot start ffmpeg: {0}"
- },
- {
-  "key": "render.err.ffmpeg_timeout",
-  "zh": "ffmpeg 超时未退出",
-  "en": "ffmpeg timed out and did not exit"
- },
- {
-  "key": "render.err.encoder_exit",
-  "zh": "编码器未正常退出",
-  "en": "Encoder did not exit cleanly"
- },
- {
-  "key": "render.err.encoder_gone",
-  "zh": "编码器进程已退出",
-  "en": "Encoder process has exited"
- },
- {
-  "key": "render.err.audio_start",
-  "zh": "无法启动混音采集（{0}）",
-  "en": "Cannot start mixdown capture ({0})"
- },
- {
-  "key": "render.err.audio_count",
-  "zh": "读取混音样本数失败（{0}）",
-  "en": "Cannot read mixdown sample count ({0})"
- },
- {
-  "key": "render.err.audio_render",
-  "zh": "混音渲染失败（{0}）",
-  "en": "Mixdown render failed ({0})"
- },
- {
-  "key": "render.err.audio_silent",
-  "zh": "混音持续无输出，已重启 {0} 次仍无效",
-  "en": "Mixdown silent after {0} restarts"
- },
- {
-  "key": "render.err.audio_seal",
-  "zh": "音频文件封口失败（{0}）",
-  "en": "Cannot finalise the audio file ({0})"
- },
- {
-  "key": "render.err.checkpoints",
-  "zh": "判定时刻数量异常：{0}",
-  "en": "Bad checkpoint count: {0}"
- },
- {
-  "key": "render.err.str_len",
-  "zh": "字符串长度异常：{0}",
-  "en": "Bad string length: {0}"
- },
- {
   "key": "render.options",
   "zh": "渲染选项",
   "en": "Render options"
@@ -1065,16 +965,6 @@
   "en": "SkyHook layout mismatch — cannot replay"
  },
  {
-  "key": "render.err.no_replay",
-  "zh": "没有可用的回放文件",
-  "en": "No replay file available"
- },
- {
-  "key": "render.err.need_level",
-  "zh": "请先进入关卡再开始离线渲染",
-  "en": "Enter a level first to start offline render"
- },
- {
   "key": "replay.err.not_replay",
   "zh": "不是 SpectreReplay 回放文件",
   "en": "Not a SpectreReplay replay file"
@@ -1083,36 +973,6 @@
   "key": "replay.err.version",
   "zh": "回放文件版本 {0} 高于本版支持的 {1}",
   "en": "Replay file version {0} is newer than supported {1}"
- },
- {
-  "key": "render.state.live",
-  "zh": "录制中",
-  "en": "Recording"
- },
- {
-  "key": "render.state.offline",
-  "zh": "离线渲染中",
-  "en": "Offline render"
- },
- {
-  "key": "render.state.finalizing",
-  "zh": "合成中",
-  "en": "Finalizing"
- },
- {
-  "key": "render.state.done",
-  "zh": "完成",
-  "en": "Done"
- },
- {
-  "key": "render.state.failed",
-  "zh": "失败",
-  "en": "Failed"
- },
- {
-  "key": "render.state.cancelled",
-  "zh": "已取消",
-  "en": "Cancelled"
  },
  {
   "key": "page.effects",
@@ -1546,8 +1406,8 @@
  },
  {
   "key": "render.on.tip",
-  "zh": "视频渲染总开关。关掉后既不会边玩边录也不会离线渲染。",
-  "en": "Master switch for video rendering. When off, neither live capture nor offline render runs."
+  "zh": "视频渲染总开关。关掉后无法开始新的渲染。",
+  "en": "Master switch for video rendering. When off, no new render can be started."
  },
  {
   "key": "render.width.tip",
@@ -1606,8 +1466,8 @@
  },
  {
   "key": "render.start.tip",
-  "zh": "按当前参数开始离线渲染。需要先载入回放并进入那一关。",
-  "en": "Starts an offline render with the current settings. Load a replay and enter its level first."
+  "zh": "按当前参数开始渲染。需要先载入回放并进入那一关。",
+  "en": "Starts a render with the current settings. Load a replay and enter its level first."
  },
  {
   "key": "render.cancel.tip",

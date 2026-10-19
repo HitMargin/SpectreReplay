@@ -402,6 +402,18 @@ $knownDeviations = @(
     @{ Pat = 'TimeSpan.FromSeconds';    File = 'VideoRenderJob.cs'; Why = '同上：TearDown 的有界等待时长' }
     @{ Pat = 'System.Runtime.ExceptionServices.ExceptionDispatchInfo'; File = 'VideoRenderJob.cs'; Why = '同上：保留工作线程异常的原始堆栈（直接 throw 会把堆栈重置到重抛那一行）' }
     @{ Pat = 'movflags';                File = 'VideoEncoder.cs'; Why = '2026-10-19 去掉 +faststart：它要求 moov 前置，ffmpeg 只能把整个成片重写一遍搬过去；本地文件播放不需要它' }
+    # -- 2026-10-19 时间钉扎的跨作业状态安全（用户报「取消渲染后下一次时钟全炸」）--
+    # 上游两处都更脆：Uninstall 把撤不掉的 detour 连同列表一起丢掉（detour 仍挂在
+    # Time.* 上但已无人知晓），且 PinnedDelta 用 Time.captureFramerate 做除数
+    # （收尾会把它还原成 0 ⇒ 1/0 = Infinity ⇒ 星球位置 NaN）。修法是"失败项留着"
+    # + "帧率快照"。这些名字全是这个文件独有的局部/成员名，但仍逐个限定 File。
+    @{ Pat = 'failed.Add';              File = 'VideoRenderPatches.cs'; Why = '2026-10-19 撤销失败的 detour 收集起来（原实现直接丢弃）' }
+    @{ Pat = 'detours.Add';             File = 'VideoRenderPatches.cs'; Why = '同上：把撤不掉的放回列表，下次再试' }
+    @{ Pat = 'detours.Count';           File = 'VideoRenderPatches.cs'; Why = '同上：Install 里据此判断是否有残留并先尝试撤销' }
+    @{ Pat = 'd.Dispose';               File = 'VideoRenderPatches.cs'; Why = '同上：带重试的撤销（首次失败常因目标正在销毁）' }
+    @{ Pat = 'ex2.Message';             File = 'VideoRenderPatches.cs'; Why = '同上：重试仍失败的日志' }
+    @{ Pat = 'armedFps';                File = 'VideoRenderPatches.cs'; Why = '2026-10-19 帧率快照：钉扎位移不再读会被还原成 0 的 Time.captureFramerate' }
+    @{ Pat = 'Time.captureFramerate';   File = 'VideoRenderPatches.cs'; Why = '同上：只在 Install 时读一次做快照，不再当除数' }
     # 主线程等不及收尾线程时的延迟清理（见 DeferCleanupAfterWorker）。清理不能就地做
     # （会 Kill 掉工作线程正等的 ffmpeg、删掉它正读的 raw 视频），也不能不做
     # （编码器持有进程与帧队列，临时目录几百 MB）。所以挂到工作线程之后，在另一个

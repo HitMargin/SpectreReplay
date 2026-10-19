@@ -50,13 +50,15 @@ namespace UiPreview
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
             int locLangFail = LocLanguageCheck.Run(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+            int pinStateFail = PinStateCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
             int injectFail = InstanceInjectionCheck.Run(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
             int logPrefixFail = LogPrefixCheck.Run(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
             int scatterFail = HitScatterMathCheck.Run();            int orphanFail = PortedCompletenessCheck.NoOrphanChecks(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
-            int total = locFail + hardFail + replayFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + locLangFail + injectFail + logPrefixFail + scatterFail + orphanFail;
+            int total = locFail + hardFail + replayFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + locLangFail + pinStateFail + injectFail + logPrefixFail + scatterFail + orphanFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"

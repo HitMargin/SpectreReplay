@@ -89,10 +89,34 @@ internal static class UnscaledDeltaPin
     private static double baseRealtime;    // Time.realtimeSinceStartup 安装时基值
     private static double virtualElapsed;  // 安装后累计的虚拟时间
 
+    // 钉扎期使用的帧率快照。**不能直接读 Time.captureFramerate 做除数。**
+    // 收尾时 RestoreGlobalState 会把它还原成安装前的值（通常是 0），而
+    // PinnedDelta 正是 `1f / Time.captureFramerate`——0 做除数得 Infinity，
+    // 灌进星球位置后整个画面变 NaN。快照一旦定下来就不再跟随后续还原。
+    private static int armedFps = 60;
+
     internal static void Install()
     {
+        // **不能直接 return。** 上一轮 Uninstall 若有 detour 撤不掉（见 Uninstall
+        // 的说明），列表里会留下那个仍然挂着的 detour。此时若 return，本轮
+        // 「什么都不装」，而 Time.unscaledDeltaTime 仍被残留 detour 接管——
+        // 它读的是 captureFramerate，那个值此刻已恢复成 0 ⇒ 1/0 = Infinity
+        // ⇒ 星球位置 NaN。表现就是用户报的「取消一次渲染后，下一次时钟全炸」。
+        // 所以有残留时先尽力清掉，清掉了再正常安装。
         if (detours.Count > 0)
-            return;
+        {
+            Uninstall();
+            if (detours.Count > 0)
+            {
+                // 确实撤不掉。**不再往上叠新 detour**：叠上去就是两层钉扎，
+                // 而旧那层读的是本类的静态字段、新那层也是，两者互相踩，
+                // 比单纯残留更难定位。明确告警并放弃本轮钉扎——游戏拿到的是
+                // 真实时钟，成片可能不够"确定性"，但不会静默产出 NaN。
+                Debug.LogWarning("[SpectreReplay] unscaled time pin: "
+                    + detours.Count + " 个残留 detour 撤销失败，本次不钉扎（走真实时钟）");
+                return;
+            }
+        }
         try
         {
             if (createDetour == null)
@@ -120,6 +144,9 @@ internal static class UnscaledDeltaPin
             baseUnscaled = Time.unscaledTime;
             baseRealtime = Time.realtimeSinceStartup;
             virtualElapsed = 0.0;
+            // 先把帧率快照定死再装 detour。装完之后 PinnedDelta 只认这个快照，
+            // 不再读 Time.captureFramerate——它会在收尾时被还原成 0。
+            armedFps = Time.captureFramerate > 0 ? Time.captureFramerate : 60;
 
             // 增量是关键项（雨滴等逐帧动画），绝对值为尽力项（个别 Unity 版本缺 AsDouble）
             TryMake(nameof(Time.unscaledDeltaTime), nameof(PinnedDelta), critical: true);
@@ -137,7 +164,7 @@ internal static class UnscaledDeltaPin
 
     // 渲染循环每帧调用一次，推进虚拟时钟（与增量钉扎值严格一致）
     internal static void TickFrame()
-        => virtualElapsed += 1f / Time.captureFramerate;
+        => virtualElapsed += 1.0 / armedFps;
 
     // 供 RenderClock 时间源 Transpiler 复用：unscaled 绝对时间只有一个权威实现。
     // 否则"Transpiler 用 dsp 锚点"与"原生 detour 用 unscaled 基值"会形成两套虚拟时钟，
@@ -145,16 +172,41 @@ internal static class UnscaledDeltaPin
     internal static bool Installed => detours.Count > 0;
     internal static double CurrentUnscaledD => baseUnscaled + virtualElapsed;
     internal static float CurrentUnscaledF => (float)(baseUnscaled + virtualElapsed);
-    internal static float CurrentDelta => 1f / Time.captureFramerate;
+    internal static float CurrentDelta => 1f / armedFps;
 
     internal static void Uninstall()
     {
+        // 撤不掉的 detour **必须留在列表里**，不能连同 Clear 一起丢掉。
+        //
+        // 后果链是这样的：取消渲染发生在场景切换途中（渲染第一步就是 SwitchToPlayMode
+        // 重开关卡），此时目标 getter 所在的对象可能已被卸载，MonoMod 的 Dispose
+        // 会抛。原实现把异常吞掉后照样 detours.Clear()，于是那个 detour
+        // **仍然挂在 Time.unscaledDeltaTime 上，但我们再也不知道它的存在**。
+        // 下一轮 Install 看到 Count == 0 就正常安装，旧 detour 成了永久接管者，
+        // 读的却是新一轮的静态字段 —— 时钟就此错乱。
+        var failed = new List<IDisposable>();
         foreach (IDisposable d in detours)
         {
-            try { d.Dispose(); }
-            catch (Exception ex) { Debug.Log("[SpectreReplay] unscaled time pin undo failed: " + ex.Message); }
+            bool undone = false;
+            try { d.Dispose(); undone = true; }
+            catch (Exception ex)
+            {
+                Debug.Log("[SpectreReplay] unscaled time pin undo failed: " + ex.Message
+                    + "（重试一次）");
+                // 重试一次：首次失败常常是目标对象正在销毁、下一帧就正常了
+                try { d.Dispose(); undone = true; }
+                catch (Exception ex2)
+                {
+                    Debug.LogError("[SpectreReplay] unscaled time pin undo keeps failing: "
+                        + ex2.Message + "（保留引用以便下次再试）");
+                }
+            }
+            if (!undone)
+                failed.Add(d);
         }
         detours.Clear();
+        foreach (IDisposable d in failed)
+            detours.Add(d);          // 留着，下次 Install/Uninstall 再试
     }
 
     private static void TryMake(string propertyName, string pinMethodName, bool critical)
@@ -181,7 +233,7 @@ internal static class UnscaledDeltaPin
             && ps[3].ParameterType == typeof(bool);
     }
 
-    private static float PinnedDelta() => 1f / Time.captureFramerate;
+    private static float PinnedDelta() => 1f / armedFps;
     private static float PinnedUnscaled() => (float)(baseUnscaled + virtualElapsed);
     private static double PinnedUnscaledD() => baseUnscaled + virtualElapsed;
     private static float PinnedRealtime() => (float)(baseRealtime + virtualElapsed);
