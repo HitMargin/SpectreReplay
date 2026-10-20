@@ -131,8 +131,8 @@ public static class ConfigManager
         // 保持升级前行为——此前这条补丁是"常开无开关"，但**旧配置里没有这个键**，
         // 若缺键当 true 会让所有存量玩家在不知情下启用实验性功能。
         public bool render_clock_on { get; set; }
-        // 是否把鼠标指针画进成片（见 Settings.RenderCursorOn）。缺键时跟随字段默认值（true），
-        // 让升级上来的玩家也能看到指针——旧配置里没有这个键。
+        // 是否把鼠标指针画进成片（见 Settings.RenderCursorOn）。缺键时跟随字段默认值（false），
+        // 保持升级前行为——此前模组从不往画面里画指针，旧配置里也没有这个键。
         public bool render_cursor_on { get; set; }
         public float judgebar_anim_duration { get; set; }
         public float judgebar_sensitivity { get; set; }

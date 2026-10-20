@@ -313,6 +313,16 @@ namespace UiPreview
             //    两种状态，子串 `EffectRemoverOn` 永远命中，判"出现过"是假判据。
             fail += CheckPredicate(projectRoot, "⑯ 去特效总开关必须默认关（它改的是关卡内容本身）",
                 "State\\Settings.cs", EffectRemoverDefaultsOff);
+            // ⑯b 指针叠加必须**默认关**（2026-10-20 用户裁决）。
+            //
+            //    这一项不是"录得更全"，而是**往画面里加东西**：指针本来就不在游戏画面里
+            //    （Cursor.visible 只藏/显硬件光标），打开后是模组自己画一个上去。成片的默认
+            //    语义是"这关本来的样子"，要多出一样东西得玩家自己说要——和 ⑯ 同一条理由。
+            //
+            //    判法同样必须读**赋值结果**：`= true` 与 `= false` 是同一行代码的两种状态，
+            //    判"出现过 RenderCursorOn" 是假判据（注释里就写着这个名字）。
+            fail += CheckPredicate(projectRoot, "⑯b 鼠标指针叠加必须默认关（它是往画面里加东西，不是录得更全）",
+                "State\\Settings.cs", CursorOverlayDefaultsOff);
             // ⑰ 中文文案里不许把「关卡」称作「存档」（2026-10-17 用户指出：
             //    「存档翻译存在问题 应为 关卡」）。
             //
@@ -666,6 +676,33 @@ namespace UiPreview
                 if (eq < 0) continue;
                 string rhs = line.Substring(eq + 1).Trim();
                 // 去掉行尾注释残留与分号
+                if (rhs.StartsWith("true", StringComparison.Ordinal)) return false;
+                if (rhs.StartsWith("false", StringComparison.Ordinal)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 鼠标指针叠加是否**默认关**（2026-10-20 用户裁决）。
+        ///
+        /// 理由与 ⑯ 同源：这一项不是"录得更全"，而是往画面里加东西。指针本来就不在
+        /// 游戏画面里，打开后是模组自己画一个上去；成片的默认语义是"这关本来的样子"。
+        ///
+        /// 判法与 <see cref="EffectRemoverDefaultsOff"/> 一致：找声明行读等号右边，
+        /// 不判子串、跳过注释行——否则把默认值改回 true 时判据照样绿。
+        /// </summary>
+        private static bool CursorOverlayDefaultsOff(string code)
+        {
+            foreach (string raw in code.Replace("\r\n", "\n").Split('\n'))
+            {
+                string line = raw.TrimStart();
+                if (line.StartsWith("//", StringComparison.Ordinal)
+                    || line.StartsWith("*", StringComparison.Ordinal)) continue;
+                if (!line.Contains("bool RenderCursorOn", StringComparison.Ordinal))
+                    continue;
+                int eq = line.IndexOf('=');
+                if (eq < 0) continue;
+                string rhs = line.Substring(eq + 1).Trim();
                 if (rhs.StartsWith("true", StringComparison.Ordinal)) return false;
                 if (rhs.StartsWith("false", StringComparison.Ordinal)) return true;
             }

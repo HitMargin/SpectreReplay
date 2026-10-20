@@ -1648,25 +1648,33 @@ switch ($Which) {
         ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'if (conductor != null && counting)' 'if (conductor != null && counting && songNow >= -2.0)'
     }
 
-'MUT-D26' {
+    'MUT-D26' {
         # ㉚ 鼠标指针开关回归：界面上有这一行、但它写的不是 RenderCursorOn
         # （改成写别的字段），等于界面和字段之间断线——典型「有控件没实现」。
         Backup 'Pages\Pages.cs'
         ReplaceExact 'Pages\Pages.cs' 'RenderCursorOn = v;' 'RenderClockOn = v;'
     }
 
-'MUT-D27' {
+    'MUT-D27' {
         # ㉛ 开关没有通到画帧的地方：渲染作业不再把设置交给画面源，改成恒 true。
         # 这时界面上关掉指针，成片里照样有——开关是假的。
         Backup 'Features\VideoRender\Pipeline\VideoRenderJob.cs'
         ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'frames.DrawCursor = Settings.RenderCursorOn;' 'frames.DrawCursor = true;'
     }
 
-'MUT-D28' {
+    'MUT-D28' {
         # ㉜ 无鼠标设备时的护栏：去掉 Input.mousePresent 判断，指针会被画在 (0,0)。
         # 这条守的是「没有鼠标就别画」，与位置采样时机是两件事。
         Backup 'Features\VideoRender\Pipeline\VideoFrameSource.cs'
         ReplaceExact 'Features\VideoRender\Pipeline\VideoFrameSource.cs' 'if (DrawCursor && Input.mousePresent)' 'if (DrawCursor)'
+    }
+
+    'MUT-D29' {
+        # ⑯b 指针叠加的默认值回归：把 Settings.RenderCursorOn 改回 true。
+        # 这一项是「往画面里加东西」，默认开等于所有成片都多出一个本不存在的指针，
+        # 而且玩家不会想到是新装的模组干的（同 ⑯ 去特效总开关那条的理由）。
+        Backup 'State\Settings.cs'
+        ReplaceExact 'State\Settings.cs' 'public static bool RenderCursorOn = false;' 'public static bool RenderCursorOn = true;'
     }
 
 

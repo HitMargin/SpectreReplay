@@ -287,11 +287,12 @@ public static class Settings
     // 且玩家很可能分几次转同一批文件。
     public static int ConvertTarget = 0;       // 转换目标容器：0 mp4 1 mkv 2 webm 3 mov
     public static float RenderTailSeconds = 3f;
-    // 是否把鼠标指针画进成片。**默认开**：录屏看起来就该有指针（关掉反而像"指针丢了"），
-    // 而游戏本身没把指针画进 backbuffer（Cursor.visible 只是藏/显硬件光标），
-    // 所以这一项是"我们自己画一个上去"，见 Features\VideoRender\Pipeline\CursorOverlay.cs。
+    // 是否把鼠标指针画进成片。**默认关**（2026-10-20 用户裁决）：这一项不是"录得更全"，
+    // 而是**往画面里加东西**——指针本来就不在游戏画面里（Cursor.visible 只藏/显硬件光标），
+    // 打开后是我们自己画一个上去（见 Features\VideoRender\Pipeline\CursorOverlay.cs）。
+    // 成片的默认语义是"这关本来的样子"，要多出一样东西得玩家自己说要。
     // 纯净相机模式下尤其明显：三台相机被劫持到自建纹理后，屏幕上连指针都没有。
-    public static bool RenderCursorOn = true;
+    public static bool RenderCursorOn = false;
     public static string RenderOutputDir = ""; // 留空 = SavePath/RenderVideos
 
     // 键位重映射：list 为持久化 JSON 源（KeyCodeConvert），array 为运行时映射表
