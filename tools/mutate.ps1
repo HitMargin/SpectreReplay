@@ -1648,6 +1648,28 @@ switch ($Which) {
         ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'if (conductor != null && counting)' 'if (conductor != null && counting && songNow >= -2.0)'
     }
 
+'MUT-D26' {
+        # ㉚ 鼠标指针开关回归：界面上有这一行、但它写的不是 RenderCursorOn
+        # （改成写别的字段），等于界面和字段之间断线——典型「有控件没实现」。
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' 'RenderCursorOn = v;' 'RenderClockOn = v;'
+    }
+
+'MUT-D27' {
+        # ㉛ 开关没有通到画帧的地方：渲染作业不再把设置交给画面源，改成恒 true。
+        # 这时界面上关掉指针，成片里照样有——开关是假的。
+        Backup 'Features\VideoRender\Pipeline\VideoRenderJob.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'frames.DrawCursor = Settings.RenderCursorOn;' 'frames.DrawCursor = true;'
+    }
+
+'MUT-D28' {
+        # ㉜ 无鼠标设备时的护栏：去掉 Input.mousePresent 判断，指针会被画在 (0,0)。
+        # 这条守的是「没有鼠标就别画」，与位置采样时机是两件事。
+        Backup 'Features\VideoRender\Pipeline\VideoFrameSource.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoFrameSource.cs' 'if (DrawCursor && Input.mousePresent)' 'if (DrawCursor)'
+    }
+
+
     'MUT-D14' {
         # ㉔ BPM 回归：官方关卡退回硬写 0（详情面板重新显示成问号）。
         Backup 'Features\Replay\Patches\Patch_Lifecycle.cs'

@@ -56,9 +56,13 @@ namespace UiPreview
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
             int logPrefixFail = LogPrefixCheck.Run(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
-            int scatterFail = HitScatterMathCheck.Run();            int orphanFail = PortedCompletenessCheck.NoOrphanChecks(
+            int scatterFail = HitScatterMathCheck.Run();
+            // 鼠标指针合成：没有异常的那类缺陷——指针不出现、画反、上下颠倒，
+            // 只有翻成片才发现，所以拿真源码往 byte[] 上真画一遍再验像素。
+            int cursorFail = CursorOverlayCheck.Run();
+            int orphanFail = PortedCompletenessCheck.NoOrphanChecks(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
-            int total = locFail + hardFail + replayFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + locLangFail + pinStateFail + injectFail + logPrefixFail + scatterFail + orphanFail;
+            int total = locFail + hardFail + replayFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + locLangFail + pinStateFail + injectFail + logPrefixFail + scatterFail + cursorFail + orphanFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"

@@ -25,6 +25,14 @@ internal sealed class VideoFrameSource
     {
         public int Index;
         public AsyncGPUReadbackRequest Request;
+        // 指针位置必须在 Grab 那一刻采样、随帧排队：回读是异步的，交付时才读
+        // Input.mousePosition 会把「两三帧之后」的位置画进这一帧，快速移动会甩尾。
+        // 见 CursorOverlay 的类注释。
+        public bool CursorDrawn;
+        public float MouseX;
+        public float MouseY;
+        public float ScreenW;
+        public float ScreenH;
     }
 
     private readonly VideoSurface surface;
@@ -142,13 +150,28 @@ internal sealed class VideoFrameSource
         frameBytes = Width * Height * 4;
     }
 
+    // 是否把鼠标指针画进帧（由渲染作业每轮按 Settings.RenderCursorOn 写入）。
+    // 放在这里而不是每帧传参：Grab 与 TryTake 分处两段代码，开关只该读一次。
+    internal bool DrawCursor { get; set; }
+
     internal void Grab(int index)
     {
         if (surface == VideoSurface.WholeScreen)
             ScreenCapture.CaptureScreenshotIntoRenderTexture(texture);
         AsyncGPUReadbackRequest request = AsyncGPUReadback.Request(
             texture, 0, TextureFormat.RGBA32, _ => { });
-        flights.Enqueue(new Flight { Index = index, Request = request });
+        Flight flight = new Flight { Index = index, Request = request };
+        // 指针位置在**这一帧**采样：见 Flight 里 CursorDrawn 的注释。
+        // mousePresent 为假（无鼠标/被断开）时不画，免得画在 (0,0) 上。
+        if (DrawCursor && Input.mousePresent)
+        {
+            flight.CursorDrawn = true;
+            flight.MouseX = Input.mousePosition.x;
+            flight.MouseY = Input.mousePosition.y;
+            flight.ScreenW = Screen.width;
+            flight.ScreenH = Screen.height;
+        }
+        flights.Enqueue(flight);
     }
 
     // 只看队首：完成或出错才交付，保证帧序
@@ -176,6 +199,13 @@ internal sealed class VideoFrameSource
         }
         pixels = Rent();
         data.CopyTo(pixels);
+        // 指针最后画：此时像素已拷进托管数组，且位置是 Grab 那一帧记下的。
+        // rowsBottomUp 照 NeedsRowFlip——编码器只对 CleanCamera 做 vflip。
+        if (head.CursorDrawn)
+        {
+            CursorOverlay.Draw(pixels, Width, Height, NeedsRowFlip,
+                head.MouseX, head.MouseY, head.ScreenW, head.ScreenH);
+        }
         return true;
     }
 

@@ -370,6 +370,26 @@ $knownDeviations = @(
     @{ Pat = 'Patch_StartRewind.LastReject';         Why = '2026-10-18 等待失败要报真实原因：拒绝记录接线到渲染失败通知' }
     @{ Pat = 'Patch_StartRewind.ResetRejectLog';     Why = '同上：作业启动时清掉上一轮残留' }
     @{ Pat = 'rendervideo.replay_not_taken';         Why = '同上：新增的 14 语言文案键（关卡已跑但回放未接管）' }
+    @{ Pat = 'CursorOverlay.Draw'; File = 'VideoFrameSource.cs'; Why = '2026-10-20 录制鼠标指针：交付像素前把箭头合成进 RGBA 帧（上游没有这个功能）' }
+    @{ Pat = 'flight.CursorDrawn'; File = 'VideoFrameSource.cs'; Why = '同上：回读是异步的，指针位置必须随 Flight 一起排队，交付时才知道该不该画' }
+    @{ Pat = 'flight.MouseX'; File = 'VideoFrameSource.cs'; Why = '同上：Grab 那一刻的指针位置（交付时现读会甩尾两三帧）' }
+    @{ Pat = 'flight.MouseY'; File = 'VideoFrameSource.cs'; Why = '同上' }
+    @{ Pat = 'flight.ScreenW'; File = 'VideoFrameSource.cs'; Why = '同上：像素坐标要按当时窗口尺寸换算，窗口中途变化也不会画错位置' }
+    @{ Pat = 'flight.ScreenH'; File = 'VideoFrameSource.cs'; Why = '同上' }
+    @{ Pat = 'flights.Enqueue'; File = 'VideoFrameSource.cs'; Why = '同上：改成先构造 Flight 再入队（要先填指针采样字段）' }
+    @{ Pat = 'head.CursorDrawn'; File = 'VideoFrameSource.cs'; Why = '同上：出队后按这一帧自己记的开关/位置决定画不画' }
+    @{ Pat = 'head.MouseX'; File = 'VideoFrameSource.cs'; Why = '同上' }
+    @{ Pat = 'head.MouseY'; File = 'VideoFrameSource.cs'; Why = '同上' }
+    @{ Pat = 'head.ScreenW'; File = 'VideoFrameSource.cs'; Why = '同上' }
+    @{ Pat = 'head.ScreenH'; File = 'VideoFrameSource.cs'; Why = '同上' }
+    @{ Pat = 'Input.mousePosition.x'; File = 'VideoFrameSource.cs'; Why = '同上：指针位置来源（游戏没有软件光标，硬件光标不在 backbuffer 里）' }
+    @{ Pat = 'Input.mousePosition.y'; File = 'VideoFrameSource.cs'; Why = '同上（Unity 的鼠标坐标是左下原点，CursorOverlay 内部转左上）' }
+    @{ Pat = 'Input.mousePresent'; File = 'VideoFrameSource.cs'; Why = '2026-10-20 录制鼠标指针：没有指针设备时不要画一个停在原地的箭头' }
+    @{ Pat = 'Screen.width'; File = 'VideoFrameSource.cs'; Why = '同上：按采样那一刻的窗口尺寸换算归一化坐标' }
+    @{ Pat = 'Screen.height'; File = 'VideoFrameSource.cs'; Why = '同上' }
+    @{ Pat = 'frames.DrawCursor'; File = 'VideoRenderJob.cs'; Why = '2026-10-20 录制鼠标指针：渲染作业把开关交给画面源，开关才真的作用于像素' }
+    @{ Pat = 'Settings.RenderCursorOn'; File = 'VideoRenderJob.cs'; Why = '同上：开关字段' }
+    @{ Pat = 'Settings.RenderCursorOn'; File = 'ConfigManager.cs'; Why = '同上：开关的持久化读写（render_cursor_on）' }
     @{ Pat = 'rendervideo.wait_timeout';             Why = '同上：失败通知从「只说超时」改为「超时 + 真实原因」' }
     @{ Pat = 'SpectreState.data.bools.TryGetValue';  Why = '同上：倍速来源读录像的 QuickPitched 门控' }
     @{ Pat = 'controller.state';                     Why = '同上：早退判据要同时看关卡是否已在跑' }

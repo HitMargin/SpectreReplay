@@ -870,6 +870,12 @@ namespace SpectreReplay.Pages
             // 两个键都写在源码里（三元表达式），LocCheck 才能都核到。
             OnGui.Note(RenderCaptureMode == 1
                 ? "render.surface.screen_note" : "render.surface.clean_note");
+            // 鼠标指针开关：对应 **Settings.RenderCursorOn**。
+            // 放在画面来源之后，因为它描述的是"成片里有什么"，与分辨率/帧率无关。
+            // 游戏本身不把指针画进 backbuffer（Cursor.visible 只是藏/显硬件光标），
+            // 所以打开时由 CursorOverlay 在像素层画一个上去。
+            OnGui.Row("render.cursor", RenderCursorOn,
+                v => { RenderCursorOn = v; Commit(); });
             OnGui.RowDropdown("render.codec", new[]
             {
                 Loc.T("render.codec.auto"), Loc.T("render.codec.fastest"),

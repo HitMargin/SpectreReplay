@@ -678,6 +678,28 @@ namespace UiPreview
                 "㉙ 等待放行必须允许倒计时阶段(否则倒计时整段录不到)且保留 PlayerControl 那道闸",
                 "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
                 s => CountdownReleaseKeepsPlayGate(s));
+            // ㉚ 渲染选项里的「鼠标指针」开关必须真的通到像素上。
+            //
+            //    这一项最容易做成假功能：界面上加一行、Settings 加个字段，两边都
+            //    编译过，但**没人把开关读到画帧的地方**——这正是本项目反复栽的
+            //    「有开关、有说明、没实现」。三段分开判，红了能直接看出断在哪：
+            //    ① 界面上有 `render.cursor` 这一行且回调真的写 RenderCursorOn；
+            //    ② 渲染作业把设置交给画面源（frames.DrawCursor）；
+            //    ③ 画面源在像素交付路径上真的调 CursorOverlay.Draw，且指针位置
+            //       是 Grab 那一刻采样的（交付时现读会甩尾两三帧）。
+            fail += Check(projectRoot,
+                "㉚ 渲染选项里的鼠标指针开关必须接到 Settings.RenderCursorOn",
+                "Pages\\Pages.cs",
+                s => s.Contains("OnGui.Row(\"render.cursor\", RenderCursorOn", StringComparison.Ordinal)
+                    && s.Contains("RenderCursorOn = v;", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㉛ 渲染作业必须把「录不录指针」交给画面源(否则开关只在界面上存在)",
+                "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
+                s => s.Contains("frames.DrawCursor = Settings.RenderCursorOn;", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㉜ 指针要在像素交付路径上画且位置随 Grab 采样(交付时现读会甩尾)",
+                "Features\\VideoRender\\Pipeline\\VideoFrameSource.cs",
+                s => CursorInkedIntoFrame(s));
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");
             return fail;
@@ -791,6 +813,29 @@ namespace UiPreview
                 && body.Contains("sawPositivePosition", StringComparison.Ordinal);
             return hasCountdown && hasDerived && hasRelease && hasPlayGate
                 && releaseUnconditional && noFixedWindow;
+        }
+
+        /// <summary>
+        /// 指针是不是**在像素交付路径上**画进去的，且位置采在正确的时刻。
+        ///
+        /// 三条缺一不可：
+        /// ① <c>Grab</c> 里读 <c>Input.mousePosition</c>——回读是异步的，位置必须在
+        ///    画面被截下的那一帧采样；交付时才读会把两三帧之后的位置画进这一帧，
+        ///    快速移动时指针明显甩在画面后面。
+        /// ② <c>Grab</c> 里用 <c>Input.mousePresent</c> 把「没有鼠标」挡掉，否则
+        ///    无鼠标设备时会往 (0,0) 画一个指针。
+        /// ③ <c>TryTake</c>（像素真正交付的地方）调 <c>CursorOverlay.Draw</c>。
+        ///    只在 Grab 里读位置、却不在这里画，等于开关没有任何效果。
+        /// </summary>
+        private static bool CursorInkedIntoFrame(string code)
+        {
+            string grab = MethodBody(code, "Grab");
+            string take = MethodBody(code, "TryTake");
+            if (grab == null || take == null) return false;
+            return grab.Contains("Input.mousePosition", StringComparison.Ordinal)
+                && grab.Contains("Input.mousePresent", StringComparison.Ordinal)
+                && grab.Contains("DrawCursor", StringComparison.Ordinal)
+                && take.Contains("CursorOverlay.Draw", StringComparison.Ordinal);
         }
 
         private static bool DeleteIsTwoStep(string body)

@@ -131,6 +131,9 @@ public static class ConfigManager
         // 保持升级前行为——此前这条补丁是"常开无开关"，但**旧配置里没有这个键**，
         // 若缺键当 true 会让所有存量玩家在不知情下启用实验性功能。
         public bool render_clock_on { get; set; }
+        // 是否把鼠标指针画进成片（见 Settings.RenderCursorOn）。缺键时跟随字段默认值（true），
+        // 让升级上来的玩家也能看到指针——旧配置里没有这个键。
+        public bool render_cursor_on { get; set; }
         public float judgebar_anim_duration { get; set; }
         public float judgebar_sensitivity { get; set; }
         public float judgebar_life { get; set; }
@@ -302,6 +305,7 @@ public static class ConfigManager
                 render_tail = Settings.RenderTailSeconds,
                 render_on = Settings.RenderOn,
                 render_clock_on = Settings.RenderClockOn,
+                render_cursor_on = Settings.RenderCursorOn,
                 judgebar_anim_duration = Settings.JudgeBarAnimationDuration,
                 judgebar_sensitivity = Settings.JudgeBarSensitivity,
                 judgebar_life = Settings.JudgeBarTickLife,
@@ -665,6 +669,7 @@ public static class ConfigManager
                     Settings.RenderTailSeconds = Mathf.Clamp(ints.Value<float?>("render_tail") ?? Settings.RenderTailSeconds, 0f, 15f);
                     Settings.RenderOn = ints.Value<bool?>("render_on") ?? Settings.RenderOn;
                     Settings.RenderClockOn = ints.Value<bool?>("render_clock_on") ?? Settings.RenderClockOn;
+                    Settings.RenderCursorOn = ints.Value<bool?>("render_cursor_on") ?? Settings.RenderCursorOn;
                     Settings.JudgeBarAnimationDuration = Mathf.Clamp(ints.Value<float?>("judgebar_anim_duration") ?? Settings.JudgeBarAnimationDuration, 0f, 1f);
                     Settings.JudgeBarSensitivity = Mathf.Clamp(ints.Value<float?>("judgebar_sensitivity") ?? Settings.JudgeBarSensitivity, 0f, 1f);
                     Settings.JudgeBarTickLife = Mathf.Clamp(ints.Value<float?>("judgebar_life") ?? Settings.JudgeBarTickLife, 0f, 10f);

@@ -239,6 +239,8 @@ internal sealed class VideoRenderJob : MonoBehaviour
 
         // 就位：画面源 + 混音轨 + 编码器
         frames = new VideoFrameSource((VideoSurface)Settings.RenderCaptureMode, Settings.RenderWidth, Settings.RenderHeight);
+        // 指针是否进成片，由设置决定；具体在哪一层画见 CursorOverlay 与 VideoFrameSource.Flight。
+        frames.DrawCursor = Settings.RenderCursorOn;
         mixdown = new VideoAudioTrack(wavPath, fps);
         if (mixdown.Dead)
         {
