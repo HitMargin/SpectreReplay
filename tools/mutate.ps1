@@ -1633,6 +1633,21 @@ switch ($Which) {
         Backup 'Features\VideoRender\Pipeline\VideoRenderJob.cs'
         ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'bool counting = controller != null && controller.state == States.Countdown;' 'bool counting = controller != null && controller.state == States.Checkpoint;'
     }
+    'MUT-D24' {
+        # ㉙ 倒计时窗口必须按谱面派生：把拍数写成常数 4，等于假设所有谱都是
+        # 4 拍 145 BPM——慢歌长倒计时（或短倒计时）又会把开头切掉/多录。
+        # 只改这一行：判据要能看出「没有从 conductor 读数」。
+        Backup 'Features\VideoRender\Pipeline\VideoRenderJob.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'int countdownTickCount = Mathf.Max(1, conductor.countdownTicks);' 'int countdownTickCount = 4;'
+    }
+
+    'MUT-D25' {
+        # ㉙ 倒计时放行不许再写死绝对秒数窗口：把 -2.0 s 下界加回去，慢歌 / 大
+        # offset 的谱面就会晚放行、切掉 GET READY 段（2026-10-20 用户指出的那类回归）。
+        Backup 'Features\VideoRender\Pipeline\VideoRenderJob.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'if (conductor != null && counting)' 'if (conductor != null && counting && songNow >= -2.0)'
+    }
+
     'MUT-D14' {
         # ㉔ BPM 回归：官方关卡退回硬写 0（详情面板重新显示成问号）。
         Backup 'Features\Replay\Patches\Patch_Lifecycle.cs'

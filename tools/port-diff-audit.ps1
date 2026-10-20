@@ -609,8 +609,8 @@ $knownDeviations = @(
     @{ Pat = 'Elapsed.TotalSeconds'; File = 'VideoRenderJob.cs'; Why = '同上：Stopwatch 的计时读数（超时日志里打真实等了多久，方便下次看到底是慢还是真死）' }
     @{ Pat = 'AudioListener.pause'; File = 'VideoRenderJob.cs'; Why = '2026-10-20 等待期每帧解除全局音频暂停：倒计时与歌曲调度全靠 AudioSettings.dspTime，暂停 ⇒ 停在 Countdown 不动' }
     @{ Pat = 'songNow.ToString'; File = 'VideoRenderJob.cs'; Why = '2026-10-20 倒计时就放行：这条日志是复测判据——出现它就说明成片从倒计时开始录（上游直接等 PlayerControl，没有倒计时提前录制的需求）' }
-    @{ Pat = 'CountdownWindowFrom'; File = 'VideoRenderJob.cs'; Why = '同上：倒计时放行的 songposition 窗口下界（-2 s，兜住 GET READY 段）' }
-    @{ Pat = 'CountdownWindowTo'; File = 'VideoRenderJob.cs'; Why = '同上：窗口上界（+1 s，卡顿错过窗口时的兜底）' }
+    @{ Pat = 'countdownEnd.ToString'; File = 'VideoRenderJob.cs'; Why = '2026-10-20 倒计时长度按谱面派生（countdownTicks×crotchetAtStart÷countdownSpeedMultiplier）：这条日志把算出来的终点打出来，用户复测时能直接核对成片开头是否覆盖整段倒计时' }
+    @{ Pat = 'Mathf.Max'; File = 'VideoRenderJob.cs'; Why = '同上：拍数与倍率都做了下限保护（拍数至少 1、countdownSpeedMultiplier 至少 0.01），避免除零或空转；上游没有「按谱面派生倒计时窗口」这段' }
     @{ Pat = 'rendervideo.replay_not_taken'; File = 'VideoRenderJob.cs'; Why = '2026-10-20 超时兜底文案：没有具体拒绝原因时也要报一条可读的话，而不是空着' }
 )
 

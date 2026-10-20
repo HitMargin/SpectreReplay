@@ -760,18 +760,37 @@ namespace UiPreview
         /// 方法体里注释也会出现它，而注释在判据跑之前已被 SrcUtil.Clean 剥掉，
         /// 所以这里比对的是活代码：`controller.state == States.Countdown`
         /// 只出现在计数阶段的定义里，把它换成别的状态（MUT-D23）就红。
+        ///
+        /// ③ 倒计时长度必须按谱面派生：方法体里要出现 conductor.countdownTicks /
+        ///    countdownSpeedMultiplier / crotchetAtStart 三个读数。把拍数写死成
+        ///    常数（MUT-D24）就红——那正是「倒计时不一定只有两秒」的反面。
+        ///
+        /// ④ 放行条件必须只有 `if (conductor != null && counting)`，且方法体里
+        ///    不许再出现 `CountdownWindowFrom` / `CountdownWindowTo` 这类绝对
+        ///    秒数窗口：加回 `-2.0` 下界（MUT-D25）就红。
         /// </summary>
         private static bool CountdownReleaseKeepsPlayGate(string code)
         {
             string body = MethodBody(code, "AwaitReplayAlive");
             if (body == null) return false;
             bool hasCountdown = body.Contains("controller.state == States.Countdown", StringComparison.Ordinal);
-            bool hasWindow = body.Contains("CountdownWindowFrom", StringComparison.Ordinal)
-                && body.Contains("CountdownWindowTo", StringComparison.Ordinal);
+            // 窗口长度必须按谱面派生（读 countdownTicks / crotchetAtStart /
+            // countdownSpeedMultiplier），不许写死秒数——2026-10-20 用户指出
+            // 「倒计时不一定只有两秒」，写死会在慢歌长倒计时上切掉开头。
+            bool hasDerived = body.Contains("conductor.countdownTicks", StringComparison.Ordinal)
+                && body.Contains("conductor.countdownSpeedMultiplier", StringComparison.Ordinal)
+                && body.Contains("conductor.crotchetAtStart", StringComparison.Ordinal);
             bool hasRelease = body.Contains("render starts during countdown", StringComparison.Ordinal);
+            // 放行条件必须**只有**「在倒计时态」这一条；再加回任何写死的秒数
+            // 下界/上界（MUT-D25 的手法）都会让这里的整串比对失败。
+            bool releaseUnconditional = body.Contains("if (conductor != null && counting)",
+                StringComparison.Ordinal);
+            bool noFixedWindow = !body.Contains("CountdownWindowFrom", StringComparison.Ordinal)
+                && !body.Contains("CountdownWindowTo", StringComparison.Ordinal);
             bool hasPlayGate = body.Contains("controller.state == States.PlayerControl", StringComparison.Ordinal)
                 && body.Contains("sawPositivePosition", StringComparison.Ordinal);
-            return hasCountdown && hasWindow && hasRelease && hasPlayGate;
+            return hasCountdown && hasDerived && hasRelease && hasPlayGate
+                && releaseUnconditional && noFixedWindow;
         }
 
         private static bool DeleteIsTwoStep(string body)

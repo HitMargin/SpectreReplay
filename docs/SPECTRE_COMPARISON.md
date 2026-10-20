@@ -203,7 +203,11 @@ public static int RenderCaptureMode = 1;  // 0 纯净相机 1 游戏画面(含UI
    等待预算是**真实秒数**（`Stopwatch`，10 s 上限）：等待期 `Time.captureFramerate` 早已设成 fps
    且不限帧，按帧计数会在倒计时（走真实 `AudioSettings.dspTime`，约 2.1 s）走完之前就误报超时；
    也不能改用 `Time.realtimeSinceStartup`/`unscaledTime`——它们已被下面的 `UnscaledDeltaPin` 换成虚拟时钟；
-   **放行条件必须包含 `States.Countdown`**（且 `songposition_minusi` 落在倒计时窗口内），
+   **放行条件必须包含 `States.Countdown`，且不设绝对秒数窗口**：长度随 BPM / offset 变
+   （`(countdownTicks - 1) × crotchetAtStart ÷ countdownSpeedMultiplier` 才切 PlayerControl，
+   本谱 3 × 0.4138 ≈ 1.24 s；offset 与音频 buffer 还会把进入前的负段拉长）。
+   写死「-2 秒到 +1 秒」只对当前谱面成立，慢歌长倒计时会把 GET READY 段切掉；
+   `state==Countdown` 是活状态机（最多持续到切换点），第一次看到它就是倒计时开头；
    否则捕获起点被卡在 `PlayerControl`——而它恰恰是倒计时刚结束那一刻（`beatNumber` 逐拍
    +1，切状态时 songposition 已 ≈1.24 s），成片会整段缺 GET READY / 3 2 1 / GO 与 4 声提示音。
    锚点因此可以为负：`pin = 负锚点 + 已录秒数`，正好在歌曲 0 s 处过零；

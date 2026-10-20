@@ -676,12 +676,6 @@ internal sealed class VideoRenderJob : MonoBehaviour
     {
         // 10 秒真实预算：正常倒计时约 2.1 s，余量留给场景加载慢 / 外部 mod 抢时序
         const double WaitBudgetSeconds = 10.0;
-        // 倒计时窗口（songposition_minusi 单位，秒）：
-        // Countdown 状态刚进入时 songposition ≈ -buffer(0.5)，随后 GET READY 一直到
-        // 0 s 才换成 3/2/1。窗口下界取 -2 秒是为了「只要还能看到倒计时就录」，
-        // 上界取 1 秒是兜底：万一某帧卡顿错过了整个窗口，也宁可只丢一部分倒计时。
-        const double CountdownWindowFrom = -2.0;
-        const double CountdownWindowTo = 1.0;
         System.Diagnostics.Stopwatch waitClock = System.Diagnostics.Stopwatch.StartNew();
         while (waitClock.Elapsed.TotalSeconds < WaitBudgetSeconds)
         {
@@ -733,28 +727,35 @@ internal sealed class VideoRenderJob : MonoBehaviour
             // 倒计时结束之后。
             //
             // 现在分两条路放行：
-            //   · 倒计时（state==Countdown 且 songposition 落在下面那个窗口内）：
-            //     **提前放行**，锚点取当时的 songposition（这段时间它是负数，
-            //     pin = 负锚点 + 已录秒数，正好在歌曲 0 s 处过零），倒计时整段
-            //     进片，提示音也一起进音轨。
+            //   · 倒计时（state==Countdown）：**无条件提前放行**，锚点取当时的
+            //     songposition（这段时间它是负数，pin = 负锚点 + 已录秒数，正好在
+            //     歌曲 0 s 处过零），倒计时整段进片，4 声提示音也一起进音轨。
             //   · 本来就没有倒计时（forceNoCountdown，或检查点开局走 Checkpoint
             //     再进 PlayerControl）：保持原来的两道闸（PlayerControl + 连续两帧
             //     正位置），它挡的是「按检查点 seek 还没把位置写回」的瞬间。
             //
-            // **这里故意不要求 hasSongStarted。** 它是粘的（只在
-            // ToggleHasSongStarted 里置 true，同一条 conductor 内重启歌曲不会清回
-            // false，要清得整段 Rewind），而它置 true 的时刻正是 songposition
-            // ≈ -buffer，比 Countdown 入口还晚——等它就等于把 GET READY 让掉。
-            // 真正防「上一轮残留」的是下面那个窗口：倒计时刚进来时 songposition
-            // 必然在 -buffer 附近，而不是 2026-10-19 那次残留的 49 秒。
-            if (conductor != null && counting
-                && songNow >= CountdownWindowFrom
-                && songNow <= CountdownWindowTo)
+            // **倒计时这条路不设任何绝对秒数窗口。** 长度由谱面决定：
+            //     (countdownTicks - 1) 拍 × crotchetAtStart(60/BPM) ÷ countdownSpeedMultiplier
+            // 本谱 4 拍 / 145 BPM ⇒ 3 × 0.4138 ≈ 1.24 s 后才切 PlayerControl；换 100 BPM
+            // 就是 1.8 s，谱面 offset 与音频 buffer（0.5 s）还会把进入前的负段拉得更长。
+            // 2026-10-20 那版把下界写死 -2.0 s：offset 一大或 BPM 一慢就晚放行，
+            // GET READY 段被切掉（用户当场指出「倒计时不一定只有两秒」）。
+            //
+            // 真正可靠的信号是**活的状态机**：state==Countdown 由 Countdown_Update
+            // 按 beatNumber 逐拍推进（scrConductor.Update:860-865，每帧最多一拍），
+            // 最多持续到切换点，不会残留到下一轮；等待循环的轮询频率又远高于帧率，
+            // 所以第一次看到它就等于倒计时刚开头。万一发现时已是末尾（场景加载慢），
+            // 从当时开始录仍好过落到 PlayerControl 再录——少录一段，而不是整段丢失。
+            if (conductor != null && counting)
             {
-                // 这行日志是复测时的判据：出现它就说明这次是从倒计时开始录的，
-                // 成片开头应当能看到 GET READY / 3 / 2 / 1 / GO 与那 4 声提示音。
-                Debug.Log("[SpectreReplay] render starts during countdown: songposition="
-                    + songNow.ToString("0.000") + "s (state=Countdown)");
+                // 下面两个数只进日志、不进判断：报出这段倒计时的长度，方便复测者
+                // 核对成片开头是否真的覆盖整段（负数 songposition = 还在歌曲 0 s 之前）。
+                int countdownTickCount = Mathf.Max(1, conductor.countdownTicks);
+                float countdownSpeed = Mathf.Max(0.01f, conductor.countdownSpeedMultiplier);
+                double countdownEnd = (countdownTickCount - 1) * conductor.crotchetAtStart / countdownSpeed;
+                Debug.Log("[SpectreReplay] render starts during countdown: songposition=" + songNow.ToString("0.000")
+                    + "s countdownEnd=" + countdownEnd.ToString("0.000") + "s ticks=" + countdownTickCount
+                    + " (state=Countdown)");
                 playbackLive = true;
                 yield break;
             }
