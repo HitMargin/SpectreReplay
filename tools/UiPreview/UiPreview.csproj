@@ -41,17 +41,20 @@
     <Compile Include="..\..\SpectreReplay\Features\Replay\Data\ReplayConstants.cs" Link="Real\ReplayConstants.cs" />
     
     <Compile Include="..\..\SpectreReplay\Features\Replay\Data\keyEvent.cs" Link="Real\keyEvent.cs" />
-    <Compile Include="..\..\SpectreReplay\Features\Replay\Data\HitContext.cs" Link="Real\HitContext.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\Data\HitSnapshot.cs" Link="Real\HitSnapshot.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\Codec\ReplayCompression.cs" Link="Real\ReplayCompression.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\Codec\ReplayEncoder.cs" Link="Real\ReplayEncoder.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\Codec\ReplayDecoder.cs" Link="Real\ReplayDecoder.cs" />
     
     <Compile Include="..\..\SpectreReplay\Features\Replay\Codec\ReplayCrypto.cs" Link="Real\ReplayCrypto.cs" />
-    <Compile Include="..\..\SpectreReplay\Features\Replay\Data\LegacyReplayData.cs" Link="Real\LegacyReplayData.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\Data\ReplayData.cs" Link="Real\ReplayData.cs" />
     <Compile Include="..\..\SpectreReplay\Ui\HitScatterMath.cs" Link="Real\HitScatterMath.cs" />
     <!-- 鼠标指针合成：纯 System（只碰 byte[]），可以在离线闸门里真的画一遍再验像素。
          与 HitScatterMath 同理——逻辑放在不依赖 UnityEngine 的类里，才有机会被“真的算过”。 -->
     <Compile Include="..\..\SpectreReplay\Features\VideoRender\Pipeline\CursorOverlay.cs" Link="Real\CursorOverlay.cs" />
+    <!-- 系统指针位图的数据载体：纯 int/byte[]，无 UnityEngine 依赖，所以能链接进闸门；
+         抓取端 SystemCursor.cs 依赖 UnityEngine.Application，不能链。 -->
+    <Compile Include="..\..\SpectreReplay\Features\VideoRender\Pipeline\SystemCursorImage.cs" Link="Real\SystemCursorImage.cs" />
   </ItemGroup>
 
   <ItemGroup>

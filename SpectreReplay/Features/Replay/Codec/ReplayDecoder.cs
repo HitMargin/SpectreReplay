@@ -9,15 +9,6 @@ namespace SpectreReplay.Features.Replay;
 
 internal static class ReplayDecoder
 {
-    private static string GetStr(Dictionary<string, string> d, string k)
-    {
-        if (d.TryGetValue(k, out var v) && v != null) return v;
-        return "";
-    }
-    private static int GetInt(Dictionary<string, int> d, string k) => d.ContainsKey(k) ? d[k] : 0;
-    private static double GetDbl(Dictionary<string, double> d, string k) => d.ContainsKey(k) ? d[k] : 0.0;
-    private static bool GetBool(Dictionary<string, bool> d, string k) => d.ContainsKey(k) && d[k];
-
     public static Replay Decode(byte[] data)
     {
         var decompressed = Decompress(data);
@@ -43,7 +34,7 @@ internal static class ReplayDecoder
                 replay.EndTime = DateTimeOffset.Parse(endTimeStr, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
         }
         replay.KeyEvents = ReadKeyEvents(r);
-        replay.HitContexts = ReadHitContexts(r);
+        replay.HitSnapshots = ReadHitSnapshots(r);
         return replay;
     }
 
@@ -68,7 +59,7 @@ internal static class ReplayDecoder
     // 每条记录的最小字节数：用于把文件里的 count 收敛到"流里真能装下这么多条"，
     // 避免损坏/截断文件把 count 读成垃圾值后直接拿去做 List 容量
     private const int MinKeyEventBytes = 8 + 2 + 1;      // double + ushort + bool
-    private const int MinHitContextBytes = 4 + 8 + 4 + 1 + 1 + 1 + 8 + 8 + 1 + 1 + 4 + 1; // 含末尾 HitTick 最小 1B
+    private const int MinHitSnapshotBytes = 4 + 8 + 4 + 1 + 1 + 1 + 8 + 8 + 1 + 1 + 4 + 1; // 含末尾 HitTick 最小 1B
 
     // count 来自文件内容，不是可信输入：负数（最高位置 1）会让 List 容量抛
     // ArgumentOutOfRangeException，巨大值会在读到数据前就 OutOfMemoryException。
@@ -99,7 +90,7 @@ internal static class ReplayDecoder
             throw new InvalidDataException($"Bad metadata magic: 0x{magic:X}");
 
         var ver = r.ReadInt32();
-        // 段版本上界校验（与 ReadKeyEvents/ReadHitContexts 同理）：metadata 尾部按
+        // 段版本上界校验（与 ReadKeyEvents/ReadHitSnapshots 同理）：metadata 尾部按
         // "ver >= 2"追加 PercentXacc/MaximumUsedKeys/JudgmentList，遇到未来版本
         // 会被按 v2 解析而**跳过新增字段**，后续段整体错位 → 加载失败或回放错乱
         if (ver > ReplayConstants.MetadataVersion)
@@ -158,7 +149,7 @@ internal static class ReplayDecoder
             throw new InvalidDataException($"Bad key event magic: 0x{magic:X}");
 
         var ver = r.ReadInt32();
-        // 同 ReadHitContexts：段版本显式上界，避免未来版本按当前布局静默错位
+        // 同 ReadHitSnapshots：段版本显式上界，避免未来版本按当前布局静默错位
         if (ver > ReplayConstants.KeyEventVersion)
             throw new InvalidDataException(
                 $"KeyEvent version {ver} too new (known: {ReplayConstants.KeyEventVersion})");
@@ -174,10 +165,10 @@ internal static class ReplayDecoder
         return events;
     }
 
-    private static List<HitContext> ReadHitContexts(BinaryReader r)
+    private static List<HitSnapshot> ReadHitSnapshots(BinaryReader r)
     {
         var magic = r.ReadUInt64();
-        if (magic != ReplayConstants.MagicHitContext)
+        if (magic != ReplayConstants.MagicHitSnapshot)
             throw new InvalidDataException($"Bad hit context magic: 0x{magic:X}");
 
         var ver = r.ReadInt32();
@@ -186,14 +177,14 @@ internal static class ReplayDecoder
         // 读不读 HitTick，遇到未来版本（ver=3，尾部追加了新字段）就会**按 v2 解析**：
         // 每条记录少读若干字节，从第 2 条起全部错位 —— 症状是"回放只推进一格就卡住"
         // （floorID 门永不成立），且没有任何报错。宁可明确拒绝，也别静默错位。
-        if (ver > ReplayConstants.HitContextVersion)
+        if (ver > ReplayConstants.HitSnapshotVersion)
             throw new InvalidDataException(
-                $"HitContext version {ver} too new (known: {ReplayConstants.HitContextVersion})");
-        var count = ReadCount(r, MinHitContextBytes);
-        var contexts = new List<HitContext>(count);
+                $"HitSnapshot version {ver} too new (known: {ReplayConstants.HitSnapshotVersion})");
+        var count = ReadCount(r, MinHitSnapshotBytes);
+        var contexts = new List<HitSnapshot>(count);
         for (int i = 0; i < count; i++)
         {
-            contexts.Add(new HitContext
+            contexts.Add(new HitSnapshot
             {
                 CurrentFloorID = r.ReadInt32(),
                 CurrAngle = r.ReadDouble(),
@@ -220,114 +211,117 @@ internal static class ReplayDecoder
         return contexts;
     }
 
-    public static Replay ConvertFromOldFormat(LegacyReplayData old)
+    public static Replay FromReplayData(ReplayData replayData)
     {
-        if (old == null) return null;
+        if (replayData == null) return null;
         var replay = new Replay();
         var m = replay.Metadata;
 
-        m.SceneName = GetStr(old.strings, SceneName);
-        m.SongName = GetStr(old.strings, SongName);
-        m.ArtistName = GetStr(old.strings, ArtistName);
-        m.FileName = GetStr(old.strings, FileName);
-        m.JudgeMode = GetStr(old.strings, JudgeMode);
-        m.LevelPath = GetStr(old.strings, LevelPath);
-        m.InternalLevelName = GetStr(old.strings, InternalLevelName);
-        m.HitMarginLimit = GetStr(old.strings, HitMarginLimitKey);
-        m.HoldBehavior = GetStr(old.strings, HoldBehaviorKey);
-        m.LoadedMods = GetStr(old.strings, LoadedMods);
-        m.DeviceID = GetStr(old.strings, DeviceID);
-        m.ModVersion = GetStr(old.strings, ModVersion);
-        m.KeybdSoundFileName = GetStr(old.strings, KeybdSoundFileName);
-        m.KeybdSoundHash = GetStr(old.strings, KeybdSoundHash);
+        // 缺失语义与旧字典版逐字一致：字符串缺失记空串，数值/布尔缺失记 0 / false。
+        m.SceneName = replayData.SceneName ?? "";
+        m.SongName = replayData.SongName ?? "";
+        m.ArtistName = replayData.ArtistName ?? "";
+        m.FileName = replayData.FileName ?? "";
+        m.JudgeMode = replayData.JudgeMode ?? "";
+        m.LevelPath = replayData.LevelPath ?? "";
+        m.InternalLevelName = replayData.InternalLevelName ?? "";
+        m.HitMarginLimit = replayData.HitMarginLimit ?? "";
+        m.HoldBehavior = replayData.HoldBehavior ?? "";
+        m.LoadedMods = replayData.LoadedMods ?? "";
+        m.DeviceID = replayData.DeviceId ?? "";
+        m.ModVersion = replayData.ModVersion ?? "";
+        m.KeybdSoundFileName = replayData.KeybdSoundFileName ?? "";
+        m.KeybdSoundHash = replayData.KeybdSoundHash ?? "";
 
-        m.StartTile = GetInt(old.ints, StartTile);
-        m.TotalFloorCount = GetInt(old.ints, EndTile) + 1;
-        m.FloorHash = GetInt(old.ints, FloorHash);
-        m.SpeedHash = GetInt(old.ints, SpeedHash);
-        m.TimeHash = GetInt(old.ints, TimeHash);
-        m.Pitch = GetInt(old.ints, Pitch);
-        m.LevelID = GetInt(old.ints, LevelID);
-        m.AudioBufferSize = GetInt(old.ints, AudioBufferSize);
+        m.StartTile = replayData.StartTile ?? 0;
+        // EndTile 缺失时旧版 GetInt 返回 0，于是 TotalFloorCount 落成 1。这个怪癖必须保留，
+        // 否则缺字段的回放会从“1 层”变成“0 层”，CRC 与进位判断都会跟着漂。
+        m.TotalFloorCount = (replayData.EndTile ?? 0) + 1;
+        m.FloorHash = replayData.FloorHash ?? 0;
+        m.SpeedHash = replayData.SpeedHash ?? 0;
+        m.TimeHash = replayData.TimeHash ?? 0;
+        m.Pitch = replayData.Pitch ?? 0;
+        m.LevelID = replayData.LevelId ?? 0;
+        m.AudioBufferSize = replayData.AudioBufferSize ?? 0;
 
-        m.Bpm = GetDbl(old.doubles, Bpm);
-        m.SpeedTrail = GetDbl(old.doubles, SpeedTrail);
-        m.PlaybackSpeed = GetDbl(old.doubles, PlaybackSpeed);
-        m.KeybdSoundStartTick = GetDbl(old.doubles, KeybdSoundStartTick);
+        m.Bpm = replayData.Bpm ?? 0.0;
+        m.SpeedTrail = replayData.SpeedTrail ?? 0.0;
+        m.PlaybackSpeed = replayData.PlaybackSpeed ?? 0.0;
+        m.KeybdSoundStartTick = replayData.KeybdSoundStartTick ?? 0.0;
 
-        m.IsOfficialLevel = GetBool(old.bools, IsOfficialLevel);
-        m.SpeedTrailMode = GetBool(old.bools, SpeedTrailMode);
-        m.QuickPitched = GetBool(old.bools, QuickPitched);
-        m.IfNoFail = GetBool(old.bools, IfNoFail);
+        m.IsOfficialLevel = replayData.IsOfficialLevel ?? false;
+        m.SpeedTrailMode = replayData.SpeedTrailMode ?? false;
+        m.QuickPitched = replayData.QuickPitched ?? false;
+        m.IfNoFail = replayData.IfNoFail ?? false;
 
-        m.PercentXacc = GetDbl(old.doubles, PercentXacc);
-        m.MaximumUsedKeys = GetInt(old.ints, MaximumUsedKeys);
-        m.JudgmentList = GetStr(old.strings, JudgmentList);
+        m.PercentXacc = replayData.PercentXacc ?? 0.0;
+        m.MaximumUsedKeys = replayData.MaximumUsedKeys ?? 0;
+        m.JudgmentList = replayData.JudgmentList ?? "";
 
-        replay.KeyEvents = old.KeyEvent_list.ConvertAll(k => new KeyEvent
+        replay.KeyEvents = replayData.KeyEvents.ConvertAll(k => new KeyEvent
         {
             KeyCode = k.KeyCode,
             IsPressed = k.IsPressed,
             SongPosition = k.SongPosition
         });
 
-        replay.HitContexts = old.HitContext_list;
+        replay.HitSnapshots = replayData.HitSnapshots;
         return replay;
     }
 
-    public static LegacyReplayData ConvertToOldFormat(Replay replay)
+    public static ReplayData ToReplayData(Replay replay)
     {
-        var old = new LegacyReplayData();
-        old.reset();
+        var replayData = new ReplayData();
+        replayData.Reset();
         var m = replay.Metadata;
 
-        old.strings[SceneName] = m.SceneName;
-        old.strings[SongName] = m.SongName;
-        old.strings[ArtistName] = m.ArtistName;
-        old.strings[FileName] = m.FileName;
-        old.strings[JudgeMode] = m.JudgeMode;
-        old.strings[LevelPath] = m.LevelPath;
-        old.strings[InternalLevelName] = m.InternalLevelName;
-        old.strings[HitMarginLimitKey] = m.HitMarginLimit;
-        old.strings[HoldBehaviorKey] = m.HoldBehavior;
-        old.strings[LoadedMods] = m.LoadedMods;
-        old.strings[DeviceID] = m.DeviceID;
-        old.strings[ModVersion] = m.ModVersion;
-        old.strings[KeybdSoundFileName] = m.KeybdSoundFileName;
-        old.strings[KeybdSoundHash] = m.KeybdSoundHash;
+        replayData.SceneName = m.SceneName;
+        replayData.SongName = m.SongName;
+        replayData.ArtistName = m.ArtistName;
+        replayData.FileName = m.FileName;
+        replayData.JudgeMode = m.JudgeMode;
+        replayData.LevelPath = m.LevelPath;
+        replayData.InternalLevelName = m.InternalLevelName;
+        replayData.HitMarginLimit = m.HitMarginLimit;
+        replayData.HoldBehavior = m.HoldBehavior;
+        replayData.LoadedMods = m.LoadedMods;
+        replayData.DeviceId = m.DeviceID;
+        replayData.ModVersion = m.ModVersion;
+        replayData.KeybdSoundFileName = m.KeybdSoundFileName;
+        replayData.KeybdSoundHash = m.KeybdSoundHash;
 
-        old.ints[StartTile] = m.StartTile;
-        old.ints[EndTile] = m.TotalFloorCount - 1;
-        old.ints[FloorHash] = m.FloorHash;
-        old.ints[SpeedHash] = m.SpeedHash;
-        old.ints[TimeHash] = m.TimeHash;
-        old.ints[Pitch] = m.Pitch;
-        old.ints[LevelID] = m.LevelID;
-        old.ints[AudioBufferSize] = m.AudioBufferSize;
+        replayData.StartTile = m.StartTile;
+        replayData.EndTile = m.TotalFloorCount - 1;
+        replayData.FloorHash = m.FloorHash;
+        replayData.SpeedHash = m.SpeedHash;
+        replayData.TimeHash = m.TimeHash;
+        replayData.Pitch = m.Pitch;
+        replayData.LevelId = m.LevelID;
+        replayData.AudioBufferSize = m.AudioBufferSize;
 
-        old.doubles[Bpm] = m.Bpm;
-        old.doubles[SpeedTrail] = m.SpeedTrail;
-        old.doubles[PlaybackSpeed] = m.PlaybackSpeed;
-        old.doubles[KeybdSoundStartTick] = m.KeybdSoundStartTick;
+        replayData.Bpm = m.Bpm;
+        replayData.SpeedTrail = m.SpeedTrail;
+        replayData.PlaybackSpeed = m.PlaybackSpeed;
+        replayData.KeybdSoundStartTick = m.KeybdSoundStartTick;
 
-        old.bools[IsOfficialLevel] = m.IsOfficialLevel;
-        old.bools[SpeedTrailMode] = m.SpeedTrailMode;
-        old.bools[QuickPitched] = m.QuickPitched;
-        old.bools[IfNoFail] = m.IfNoFail;
+        replayData.IsOfficialLevel = m.IsOfficialLevel;
+        replayData.SpeedTrailMode = m.SpeedTrailMode;
+        replayData.QuickPitched = m.QuickPitched;
+        replayData.IfNoFail = m.IfNoFail;
 
-        old.doubles[PercentXacc] = m.PercentXacc;
-        old.ints[MaximumUsedKeys] = m.MaximumUsedKeys;
-        old.strings[JudgmentList] = m.JudgmentList;
+        replayData.PercentXacc = m.PercentXacc;
+        replayData.MaximumUsedKeys = m.MaximumUsedKeys;
+        replayData.JudgmentList = m.JudgmentList;
 
         foreach (var k in replay.KeyEvents)
-            old.KeyEvent_list.Add(new KeyEvent
+            replayData.KeyEvents.Add(new KeyEvent
             {
                 KeyCode = k.KeyCode,
                 IsPressed = k.IsPressed,
                 SongPosition = k.SongPosition
             });
 
-        old.HitContext_list = replay.HitContexts;
-        return old;
+        replayData.HitSnapshots = replay.HitSnapshots;
+        return replayData;
     }
 }

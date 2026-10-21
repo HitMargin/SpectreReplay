@@ -52,15 +52,15 @@ internal static class Patch_Hit
                 && !GameCompat.HitInputEvent(controller.playerOne, isAuto, InputEventState.Down)) return false;
             if (!is_recording) return true;
 
-            if (data == null) data = new LegacyReplayData();
-            if (!data.strings.ContainsKey(SceneName)) return true;
-            if (SceneManager.GetActiveScene().name != data.strings[SceneName]) return true;
+            if (data == null) data = new ReplayData();
+            if (data.SceneName == null) return true;
+            if (SceneManager.GetActiveScene().name != data.SceneName) return true;
             if (__instance != controller.playerOne) return true;
 
             var player = controller.playerOne;
             float angle = GetAngle();
             var nextfloor = controller.chosenPlanet.currfloor.nextfloor;
-            var item = new HitContext
+            var item = new HitSnapshot
             {
                 CurrentFloorID = controller.currFloor.seqID,
                 CurrAngle = angle,
@@ -84,7 +84,7 @@ internal static class Patch_Hit
             // catch 捕获，而那个 catch 会直接 StopRecording —— 代价是用户正在录的回放
             // 全部作废。用 min() 最多丢失末尾几个 margin 桶的统计，录制仍能继续。
             int count = Math.Min(HitMarginCounts.Length, marginCounts.Length);
-            if (data.HitContext_list.Count == 0)
+            if (data.HitSnapshots.Count == 0)
             {
                 CurrentHitFloor = controller.chosenPlanet.currfloor;
                 for (int i = 0; i < count; i++)
@@ -104,14 +104,14 @@ internal static class Patch_Hit
 #if DEBUG
                     Debug.Log("hit deleted");
 #endif
-                    data.HitContext_list.RemoveAt(data.HitContext_list.Count - 1);
+                    data.HitSnapshots.RemoveAt(data.HitSnapshots.Count - 1);
                 }
             }
 
             CurrentHitFloor = controller.chosenPlanet.currfloor;
             for (int k = 0; k < count; k++)
                 HitMarginCounts[k] = marginCounts[k];
-            data.HitContext_list.Add(item);
+            data.HitSnapshots.Add(item);
             return true;
         }
         catch (Exception ex)
@@ -130,11 +130,11 @@ internal class Patch_OnLandOnPortal
     [SpectrePatch(typeof(scrController), "OnLandOnPortal", PatchType.Postfix, Feature = FeatureKeys.Replay)]
     internal static void Postfix(scrController __instance, Portal portalDestination, string portalArguments)
     {
-        if ((int)portalDestination != 1 || !data.strings.ContainsKey(SceneName)) return;
-        if (SceneManager.GetActiveScene().name != data.strings[SceneName]) return;
+        if ((int)portalDestination != 1 || data.SceneName == null) return;
+        if (SceneManager.GetActiveScene().name != data.SceneName) return;
         if (!is_recording || !Settings.AutoSave) return;
         if (Settings.DontSaveWhenAuto && AllAutoHits) return;
-        if (Settings.CompleteSave && data.ints[StartTile] != 0) return;
+        if (Settings.CompleteSave && data.StartTile != 0) return;
 
         if (Settings.LateSave) { LateSaveMode = true; return; }
 

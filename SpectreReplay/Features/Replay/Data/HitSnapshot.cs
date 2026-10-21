@@ -1,6 +1,6 @@
 namespace SpectreReplay.Features.Replay;
 
-public class HitContext
+public class HitSnapshot
 {
     public int CurrentFloorID;
 

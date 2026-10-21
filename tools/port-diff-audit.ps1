@@ -26,12 +26,34 @@ $ourFiles = @(Get-ChildItem $ours -Recurse -File -Filter *.cs -ErrorAction Stop 
 if ($ourFiles.Count -eq 0) { Write-Output "✗ 没扫到任何 .cs"; exit 3 }
 Write-Output "我们的文件数 = $($ourFiles.Count)"
 
-function CodeOnly2([string]$t) {
+# **改名归一化：我方主动改过的类型名，比对前先折回上游名。**
+#
+# 2026-10-21 把 HitContext → HitSnapshot（12 字段的逐帧状态快照，不含判定结果）。
+# 这是一次**纯标识符改名**，wire 格式与行为一字未动。但如果不折回，比对端会
+# 把它当成漂移，而且**报出来的位置极具误导性**：上游 Replay DTO 的属性本来
+# 就叫 HitContexts，改名前我方 WriteHitContexts(writer, replay.HitContexts) 与上游
+# **逐 token 相同**，那几句根本没进差异集；改名后我方变成 HitSnapshots，与上游
+# 不再相同，于是整段差异被“撑开”，把同一句里历来无人登记的东西（w.Write 等）
+# 一起顶成未登记。也就是说：不折回就只能逐处补登记，而每改一次上下文，补的
+# 那批登记就得重排一次——登记表会被一次改名搅成噪声，门禁反而更难判读。
+#
+# 折回只作用于**我方**文本（上游文本必须保持原样，否则是在改上游）。语义上它
+# 和上面第 33 行抹掉 `SpectreReplay.` 前缀是同一类操作：都是把“我方已知的、有意
+# 的、非行为性的命名差”先约掉，让剩下的差异只表示真正的功能差异。
+#
+# 约定：**下面的登记表里 `Pat` 一律写折回后的名字**（即上游形 data.HitContexts，
+# 而不是我方源码里的 data.HitSnapshots）。新增改名时，在这里补一行即可。
+$renameFold = @(
+    @{ Ours = 'HitSnapshot'; Upstream = 'HitContext' }   # 2026-10-21 类型改名，子串折回同时覆盖 HitSnapshots/MagicHitSnapshot/HitSnapshotVersion/ReadHitSnapshots/WriteHitSnapshots
+)
+
+function CodeOnly2([string]$t, [switch]$Our) {
     $t = [regex]::Replace($t, '(?m)^\s*//.*$', ' ')
     $t = [regex]::Replace($t, '/\*.*?\*/', ' ', 'Singleline')
     $t = [regex]::Replace($t, '\s+', ' ')
     $t = $t -replace 'SpectreReplay\.', '' -replace 'Spectre\.', ''
     $t = $t -replace 'namespace SpectreReplay;', '' -replace 'namespace Spectre;', ''
+    if ($Our) { foreach ($r in $renameFold) { $t = $t -replace $r.Ours, $r.Upstream } }
     return $t.Trim()
 }
 
@@ -54,11 +76,25 @@ foreach ($tf in $theirFiles) {
     $theirsByName[$tf.Name] += $tf.FullName
 }
 
+# **改过名的移植文件要显式登记。** 上游叫 X、我们改叫 Y 时，按文件名查不到 →
+# 整份文件落进「我们独有，无需比对」→ 门禁对它**永久失效**，而闸门只会更绿。
+# 这与上面 §40-44 的目录搬家是同一种失效形态，只是规模小、更难注意到。
+# 键 = 我方文件名，值 = 上游文件名。只登记「类型改名」这类真正的名字差异；
+# 纯目录层级差异仍由下面的尾部最长匹配解决，别拿它绕路。
+# 别名只负责“让它进比对”。真正的名字差由下面的 $renameFold 在归一化阶段折回，
+# 所以 HitSnapshot.cs 折回后与上游 HitContext.cs 内容一致，不会以差异身份出现。
+$fileAlias = @{
+    'HitSnapshot.cs' = 'HitContext.cs'   # 2026-10-21 HitContext → HitSnapshot
+}
+
 $matched = @()
 $oursOnly = @()
+$aliased = 0
 foreach ($f in $ourFiles) {
     $rel = $f.FullName.Substring($ours.Length + 1)
-    $candidates = $theirsByName[$f.Name]
+    $lookupName = $f.Name
+    if ($fileAlias.ContainsKey($f.Name)) { $lookupName = $fileAlias[$f.Name] }
+    $candidates = $theirsByName[$lookupName]
     if ($candidates -and $candidates.Count -gt 0) {
         # 同名多份时取相对路径尾部重合最长的那个
         $best = $candidates[0]
@@ -73,11 +109,18 @@ foreach ($f in $ourFiles) {
             }
             if ($score -gt $bestScore) { $bestScore = $score; $best = $c }
         }
+        if ($lookupName -ne $f.Name) { $aliased++ }
         $matched += [PSCustomObject]@{ Rel = $rel; Ours = $f.FullName; Theirs = $best }
     }
     else { $oursOnly += $rel }
 }
 Write-Output "上游也有同名文件的 = $($matched.Count)"
+if ($aliased -gt 0) {
+    # 只报实际用上的那几对，并把「我们→上游」两个名字都打出来：核对时一眼能看出
+    # 配对的是哪两个文件，而不是只知道"有 N 个靠改名配对"。
+    $pairs = ($fileAlias.GetEnumerator() | ForEach-Object { $_.Key + ' → 上游 ' + $_.Value }) -join '；'
+    Write-Output ('  其中按改名配对 = ' + $aliased + '（' + $pairs + '；理由见脚本里 $fileAlias 处的注释）')
+}
 Write-Output "我们独有的 = $($oursOnly.Count)"
 if ($oursOnly.Count -gt 0) {
     Write-Output "── 我们独有（这些是新建的，不是移植，无需比对）──"
@@ -88,7 +131,7 @@ Write-Output ""
 Write-Output "=== 逐个比对（剥注释归一化后）==="
 $identical = 0; $diff = 0
 foreach ($m in ($matched | Sort-Object Rel)) {
-    $a = CodeOnly2 ([IO.File]::ReadAllText($m.Ours))
+    $a = CodeOnly2 ([IO.File]::ReadAllText($m.Ours)) -Our
     $b = CodeOnly2 ([IO.File]::ReadAllText($m.Theirs))
     if ($a -eq $b) { $identical++ }
     else {
@@ -490,6 +533,11 @@ $knownDeviations = @(
     @{ Pat = 'Settings.CancelSaveButton'; File = 'ConfigManager.cs'; Why = '同上' }
     @{ Pat = 'Settings.ConvertTarget';  File = 'ConfigManager.cs'; Why = '视频渲染设置（上游没有这一整组）' }
     @{ Pat = 'Settings.GetDataFromAsyncInput'; File = 'ConfigManager.cs'; Why = '异步输入开关的落盘（round 早）' }
+    # -- 2026-10-21 补 CancelSave 读盘侧（写盘侧本就有，读侧漏了）--------------
+    # Sets.CancelSave 一直在写，LoadFromFile 里却没有对应的读回；手改成 false
+    # 后重启会被静默读回默认 true（玩家看到「这个开关自己又开了」）。
+    @{ Pat = 'Settings.CancelSave';     File = 'ConfigManager.cs'; Why = '2026-10-21 补读盘：该开关的持久化读回（上游没有这个按键补丁开关）' }
+    @{ Pat = 'sets.Value';              File = 'ConfigManager.cs'; Why = '2026-10-21 补读盘的连带 token：容错读取 bool 键（与上面 ints.Value 同一种取法）' }
     @{ Pat = 'Settings.JudgeBarPositionY'; File = 'ConfigManager.cs'; Why = 'DTO 裁剪：判定条位置设置（上游 JudgeBar 整组已删）' }
     @{ Pat = 'Settings.RenderCaptureMode'; File = 'ConfigManager.cs'; Why = '视频渲染设置（上游没有）' }
     @{ Pat = 'Settings.RenderEncoderMode'; File = 'ConfigManager.cs'; Why = '同上' }
@@ -632,7 +680,92 @@ $knownDeviations = @(
     @{ Pat = 'countdownEnd.ToString'; File = 'VideoRenderJob.cs'; Why = '2026-10-20 倒计时长度按谱面派生（countdownTicks×crotchetAtStart÷countdownSpeedMultiplier）：这条日志把算出来的终点打出来，用户复测时能直接核对成片开头是否覆盖整段倒计时' }
     @{ Pat = 'Mathf.Max'; File = 'VideoRenderJob.cs'; Why = '同上：拍数与倍率都做了下限保护（拍数至少 1、countdownSpeedMultiplier 至少 0.01），避免除零或空转；上游没有「按谱面派生倒计时窗口」这段' }
     @{ Pat = 'rendervideo.replay_not_taken'; File = 'VideoRenderJob.cs'; Why = '2026-10-20 超时兜底文案：没有具体拒绝原因时也要报一条可读的话，而不是空着' }
-)
+    # ══════════════════════════════════════════════════════════════════
+    # -- 2026-10-20 ReplayData 去字典化（用户："别拿 dict 表存字段"）--
+    # 旧实现是四张 Dictionary<string,T>，33 个字段全靠字符串键寻址：每次读写都要算
+    # 字符串哈希，键名写成 "bpm" 还是 "Bpm" 编译器一点忙帮不上，错了只能运行时炸。
+    # 改成强类型可空自动属性：string 用 null 表示缺失，int?/bool?/double? 用
+    # HasValue 表示缺失——这与旧版 ContainsKey 的"这个键在不在"**逐字等价**，
+    # 所以全仓 143 处存在性判断是保义搬迁，没有一处退化成"缺失即默认值"。
+    # 顺带 KeyEvent_list/HitContext_list 去掉下划线后缀改成 KeyEvents/HitSnapshots
+    # （后者 2026-10-21 又随类型改名 HitContext→HitSnapshot 变成复数形），
+    # reset() 改成 Reset()（C# 命名惯例）。
+    #
+    # 为什么按 `data.` 前缀登记而不是按文件：同一次改名横跨 12 个文件，逐文件写 12×33
+    # 行只是噪音。`data.` 在本仓始终就是回放容器（SpectreState.data），`old.` 只在
+    # ReplayDecoder 的旧格式桥里出现，`d.` 只在 SpectreAPI 的实参里出现——三者都是
+    # 限定过的形态，不是 File.Copy 那种"任何文件都可能撞上"的泛名字。
+    # 反过来：裸属性名（Bpm / StartTile …）绝不全局登记，只在 ReplayData.cs 里
+    # 用 File 限定放行，否则等于给全仓开一道后门。
+    @{ Pat = 'data.FileName'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["FileName"] → 强类型属性 data.FileName（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.KeybdSoundFileName'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["KeybdSoundFileName"] → 强类型属性 data.KeybdSoundFileName（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.KeybdSoundHash'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["KeybdSoundHash"] → 强类型属性 data.KeybdSoundHash（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.SongName'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["SongName"] → 强类型属性 data.SongName（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.ArtistName'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["ArtistName"] → 强类型属性 data.ArtistName（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.SceneName'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["SceneName"] → 强类型属性 data.SceneName（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.JudgeMode'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["JudgeMode"] → 强类型属性 data.JudgeMode（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.InternalLevelName'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["InternalLevelName"] → 强类型属性 data.InternalLevelName（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.LevelPath'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["LevelPath"] → 强类型属性 data.LevelPath（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.HitMarginLimit'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["HitMarginLimit"] → 强类型属性 data.HitMarginLimit（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.HoldBehavior'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["HoldBehavior"] → 强类型属性 data.HoldBehavior（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.LoadedMods'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["LoadedMods"] → 强类型属性 data.LoadedMods（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.DeviceId'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["DeviceId"] → 强类型属性 data.DeviceId（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.ModVersion'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["ModVersion"] → 强类型属性 data.ModVersion（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.JudgmentList'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["JudgmentList"] → 强类型属性 data.JudgmentList（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.StartTile'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["StartTile"] → 强类型属性 data.StartTile（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.EndTile'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["EndTile"] → 强类型属性 data.EndTile（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.FloorHash'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["FloorHash"] → 强类型属性 data.FloorHash（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.SpeedHash'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["SpeedHash"] → 强类型属性 data.SpeedHash（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.TimeHash'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["TimeHash"] → 强类型属性 data.TimeHash（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.Pitch'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["Pitch"] → 强类型属性 data.Pitch（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.LevelId'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["LevelId"] → 强类型属性 data.LevelId（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.AudioBufferSize'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["AudioBufferSize"] → 强类型属性 data.AudioBufferSize（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.MaximumUsedKeys'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["MaximumUsedKeys"] → 强类型属性 data.MaximumUsedKeys（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.IsOfficialLevel'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["IsOfficialLevel"] → 强类型属性 data.IsOfficialLevel（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.SpeedTrailMode'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["SpeedTrailMode"] → 强类型属性 data.SpeedTrailMode（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.QuickPitched'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["QuickPitched"] → 强类型属性 data.QuickPitched（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.IfNoFail'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["IfNoFail"] → 强类型属性 data.IfNoFail（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.Bpm'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["Bpm"] → 强类型属性 data.Bpm（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.SpeedTrail'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["SpeedTrail"] → 强类型属性 data.SpeedTrail（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.PercentXacc'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["PercentXacc"] → 强类型属性 data.PercentXacc（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.PlaybackSpeed'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["PlaybackSpeed"] → 强类型属性 data.PlaybackSpeed（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'data.KeybdSoundStartTick'; Why = '2026-10-20 去字典化：旧 data.strings/ints/bools/doubles["KeybdSoundStartTick"] → 强类型属性 data.KeybdSoundStartTick（字符串键哈希与拼写错误一起消失）' }
+    @{ Pat = 'replayData.'; File = 'ReplayDecoder.cs'; Why = '同上：旧格式桥 FromReplayData 的形参从 old 改名 replayData，取值改为 replayData.属性 ?? 默认值（四个字典辅助方法已随之删除）' }
+    @{ Pat = 'd.';     File = 'SpectreAPI.cs';    Why = '同上：GetLoadedReplayInfo 取值从 GetStr(d, 键) 辅助方法改为 d.属性 ?? 缺省，该辅助方法已删除' }
+    @{ Pat = 'HasValue'; File = 'ReplayData.cs'; Why = '同上：FirstMissingRequiredKey 用 HasValue 判必填字段是否缺失（旧版是四张键清单 + 字典 ContainsKey，键名写错会静默漏检）' }
+    @{ Pat = 'Clear';    File = 'ReplayData.cs'; Why = '同上：Reset() 清空两个事件流' }
+    @{ Pat = 'Settings.RenderStopOn';  File = 'ConfigManager.cs'; Why = '2026-10-20 渲染中止热键（既有在途功能，非本次重构）：新设置项的持久化读写' }
+    @{ Pat = 'Settings.RenderStopKey'; File = 'ConfigManager.cs'; Why = '同上：热键码字段的持久化读写' }
+    @{ Pat = 'data.KeyEvents';   Why = '2026-10-20 去字典化随行的列表改名：旧 KeyEvent_list → KeyEvents（列表本身不是字典，改名只为去掉下划线后缀、与 C# 命名惯例一致）' }
+    @{ Pat = 'data.HitContexts'; Why = '同上：旧 HitContext_list → HitContexts（去掉下划线后缀）。注意本条 Pat 写的是归一化后的上游形：我方源码现在写作 data.HitSnapshots，比对前已被 $renameFold 折回（见该处注释）' }
+    @{ Pat = 'SpectreState.data.HitContexts'; Why = '同上：渲染侧经 SpectreState 读同一个容器（前缀更长，单列一条以免与上一条的减法顺序相争）' }
+    @{ Pat = 'KeyEvents.';   File = 'ReplayDecoder.cs'; Why = '同上：旧格式桥里的 old.KeyEvent_list.ConvertAll 改名后留下的成员片段（receiver 已被 old. 那条吃掉）' }
+    @{ Pat = 'HitContexts.'; File = 'ReplayDecoder.cs'; Why = '同上：旧格式桥里的 HitContext_list 改名后的成员访问片段（我方现写作 HitSnapshots.，比对前已折回）' }
+    @{ Pat = 'ReplayDecoder.FromReplayData'; File = 'ReplayManager.cs'; Why = '2026-10-20 去字典化随行的桥方法改名：ConvertFromOldFormat → FromReplayData（旧名字描述的是重构前那个字典世界，已不存在，留着只会误导）' }
+    @{ Pat = 'ReplayDecoder.ToReplayData';   File = 'ReplayManager.cs'; Why = '同上：ConvertToOldFormat → ToReplayData' }
+    @{ Pat = 'Input.GetKeyDown'; File = 'VideoRenderJob.cs'; Why = '2026-10-20 渲染中止热键（既有在途功能，与本轮去字典化无关）：渲染循环里轮询该按键以请求停止' }
+    @{ Pat = 'Settings.RenderStopOn';  File = 'VideoRenderJob.cs'; Why = '同上：读取“启用中止热键”开关' }
+    @{ Pat = 'Settings.RenderStopKey'; File = 'VideoRenderJob.cs'; Why = '同上：读取中止热键码，交给 Enum.IsDefined 判有效' }
+    # -- 2026-10-21 渲染起点改成玩家在编辑器里选中的那块砖 -------------------
+    # 上游只认 ADOBase.editor.Play() 的默认起点（0 号砖或 GCS.checkpointNum 的
+    # 残留值），所以从中间砖渲染要先手动起播一次。改成读选区后多了这段取值/钳制/日志。
+    @{ Pat = 'Main.mod'; File = 'VideoRenderJob.cs'; Why = '2026-10-21 选区读失败时留一行日志（按 Play() 的 else 分支取 0 这件事要能查；上游没有选区起点这段）' }
+    @{ Pat = 'e.Message'; File = 'VideoRenderJob.cs'; Why = '同上：把异常信息拼进那行日志（否则只知道失败了不知道为什么）' }
+    @{ Pat = 'Mathf.Clamp'; File = 'VideoRenderJob.cs'; Why = '2026-10-21 起点砖按 floors.Count / floorLimit 钳制：选区是玩家手点的，可能越界（游戏 Play() 自己也会钳）' }
+    # -- 2026-10-21 检查点开局（从中间砖渲染）也要放行 -----------------------
+    # 从中间砖开始时 OnMusicScheduled 走 checkpoint 分支：Scrub 把音乐 seek 到
+    # 该砖前 4 拍（倒计时领奏），然后 ChangeState(States.Checkpoint)。整段倒计时
+    # 因此在 States.Checkpoint 里播，永远不出现 States.Countdown；上游的放行条件
+    # 只认 Countdown / PlayerControl，那条路只覆盖「从 0 号砖开始」。
+    @{ Pat = 'States.Checkpoint'; File = 'VideoRenderJob.cs'; Why = '2026-10-21 检查点开局放行：从中间砖渲染时倒计时整个在 Checkpoint 里播，只认 Countdown 会整段录不到（含 GET READY）' }
+    # -- 2026-10-21 系统光标（真实 Windows 箭头，不是手绘）--------------------
+    # 游戏不画软件光标，硬件光标也不在 backbuffer 里，所以帧里本来没有箭头。
+    # 上游没有这个功能；这里按帧抓 DrawIconEx(DI_NORMAL) 出来的位图，
+    # 在交付像素时按 premultiplied alpha 合成（句柄无效则回退手绘箭头）。
+    @{ Pat = 'SystemCursor.TryAcquire'; File = 'VideoFrameSource.cs'; Why = '2026-10-21 系统光标：抓真实 Windows 光标位图（上游没有这个功能，手绘箭头只是兜底）' }
+    @{ Pat = 'flight.Cursor'; File = 'VideoFrameSource.cs'; Why = '同上：光标图在 Grab 那一刻随 Flight 排队，交付时再取会与帧错位' }
+    @{ Pat = 'head.Cursor'; File = 'VideoFrameSource.cs'; Why = '同上：出队后按这一帧自己记下的光标图合成' })
+
 
 Write-Output ""
 Write-Output "=== 汇总：完全一致 $identical / 有差异 $diff ==="
@@ -644,7 +777,7 @@ Write-Output "=== 汇总：完全一致 $identical / 有差异 $diff ==="
 # **用"存在一个解释"代替"每个差异都有解释"**。现在改成逐 token 判定。
 $unexplained = 0
 foreach ($m in ($matched | Sort-Object Rel)) {
-    $a = CodeOnly2 ([IO.File]::ReadAllText($m.Ours))
+    $a = CodeOnly2 ([IO.File]::ReadAllText($m.Ours)) -Our
     $b = CodeOnly2 ([IO.File]::ReadAllText($m.Theirs))
     if ($a -eq $b) { continue }
     $extra = @((Compare-Object ($b -split ' ') ($a -split ' ')) |

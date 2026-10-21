@@ -300,21 +300,18 @@ public static class SpectreAPI
         var d = SpectreState.data;
         if (d == null) return null;
         return new ReplayInfo(
-            GetStr(d, ReplayKeys.SongName),
-            GetStr(d, ReplayKeys.ArtistName),
-            GetStr(d, ReplayKeys.JudgeMode),
-            GetStr(d, ReplayKeys.InternalLevelName),
-            GetStr(d, ReplayKeys.ModVersion),
-            d.ints.TryGetValue(ReplayKeys.StartTile, out int st) ? st : -1,
-            d.ints.TryGetValue(ReplayKeys.EndTile, out int et) ? et : -1,
-            d.doubles.TryGetValue(ReplayKeys.Bpm, out double bpm) ? bpm : 0,
-            d.doubles.TryGetValue(ReplayKeys.PlaybackSpeed, out double spd) ? spd : 1,
-            d.HitContext_list?.Count ?? 0,
-            d.KeyEvent_list?.Count ?? 0);
+            d.SongName ?? "",
+            d.ArtistName ?? "",
+            d.JudgeMode ?? "",
+            d.InternalLevelName ?? "",
+            d.ModVersion ?? "",
+            d.StartTile ?? -1,
+            d.EndTile ?? -1,
+            d.Bpm ?? 0,
+            d.PlaybackSpeed ?? 1,
+            d.HitSnapshots?.Count ?? 0,
+            d.KeyEvents?.Count ?? 0);
     }
-
-    private static string GetStr(LegacyReplayData d, string key)
-        => d.strings.TryGetValue(key, out string v) ? v : "";
 }
 
 /// <summary>已加载回放的只读信息快照（SpectreAPI.GetLoadedReplayInfo 返回值）。</summary>

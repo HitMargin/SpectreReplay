@@ -160,13 +160,247 @@ namespace UiPreview
                 }
             }
 
+            // ⑥ 系统位图落位与行序。热点 (0,0) 的 8×8 不透明纯红，1:1 映射下必须正好
+            //    盖住鼠标点右下方的 8×8 个纹素。判据用**精确边界**而不是容差：
+            //    这里全是 float 换算，只要漏掉那半个像素（(x+0.5)）就会整体错一格，
+            //    而错一格的指针在成片里看着「差不多」——只能靠精确断言抓。
+            {
+                SystemCursorImage cur = SolidCursor(8, 8, 0, 0, 255, 0, 0, 255);
+                bool ok = true;
+                string detail = "";
+
+                byte[] top = Frame();
+                CursorOverlay.Draw(top, W, H, rowsBottomUp: false, cur, W / 2f, H / 2f, W, H);
+                InkedBounds(top, W, out int x0, out int y0, out int x1, out int y1);
+                if (x0 != W / 2 || x1 != W / 2 + 7 || y0 != 60 || y1 != 67)
+                {
+                    ok = false;
+                    detail = "顶行在前时落在 (" + x0 + "," + y0 + ")-(" + x1 + "," + y1 +
+                        ")，应为 (80,60)-(87,67)";
+                }
+
+                byte[] bottom = Frame();
+                CursorOverlay.Draw(bottom, W, H, rowsBottomUp: true, cur, W / 2f, H / 2f, W, H);
+                InkedBounds(bottom, W, out int bx0, out int by0, out int bx1, out int by1);
+                if (ok && (bx0 != 80 || bx1 != 87 || by0 != 52 || by1 != 59))
+                {
+                    ok = false;
+                    detail = "底行在前时落在 (" + bx0 + "," + by0 + ")-(" + bx1 + "," + by1 +
+                        ")，应为 (80,52)-(87,59)";
+                }
+
+                if (!ok)
+                {
+                    Console.WriteLine("    ✗ ⑥ 系统位图没落在热点右下方：" + detail);
+                    fail++;
+                }
+                else
+                {
+                    Console.WriteLine("    ✓ ⑥ 系统位图按热点落位，两种行序各落在正确半边");
+                }
+            }
+
+            // ⑦ 预乘 alpha 只能乘一次。半透明的预乘像素 (128,0,0,128) 盖在纯蓝上：
+            //    正解 out.r = 128 + 0*(1-a) = 128；再乘一次 alpha 会掉到 ≈64，
+            //    也就是成片里指针边缘发暗。这条是抓「暗边」的唯一自动判据。
+            {
+                SystemCursorImage cur = SolidCursor(8, 8, 0, 0, 128, 0, 0, 128);
+                byte[] buf = Frame(W, H, 0, 0, 255);
+                CursorOverlay.Draw(buf, W, H, rowsBottomUp: false, cur, W / 2f, H / 2f, W, H);
+
+                bool ok = true;
+                string detail = "";
+                int checkedPixels = 0;
+                for (int y = 60; y <= 67 && ok; y++)
+                {
+                    for (int x = 80; x <= 87 && ok; x++)
+                    {
+                        int i = (y * W + x) * 4;
+                        int r = buf[i], b = buf[i + 2], a = buf[i + 3];
+                        checkedPixels++;
+                        if (r < 126 || r > 130)
+                        {
+                            ok = false;
+                            detail = "(" + x + "," + y + ") 红=" + r + "，应为 ≈128" +
+                                "（≈64 说明 alpha 被乘了两遍）";
+                        }
+                        else if (b < 125 || b > 129)
+                        {
+                            ok = false;
+                            detail = "(" + x + "," + y + ") 蓝=" + b + "，应为 ≈127（被遮掉一半）";
+                        }
+                        else if (a != 255)
+                        {
+                            ok = false;
+                            detail = "(" + x + "," + y + ") alpha=" + a + "，yuv420 没有 alpha 位，必须写满 255";
+                        }
+                    }
+                }
+                if (ok && checkedPixels != 64)
+                {
+                    ok = false;
+                    detail = "只查了 " + checkedPixels + " 个像素，应为 64";
+                }
+
+                if (!ok)
+                {
+                    Console.WriteLine("    ✗ ⑦ 预乘合成不对：" + detail);
+                    fail++;
+                }
+                else
+                {
+                    Console.WriteLine("    ✓ ⑦ 预乘像素只乘一次（半透明边不会发暗）");
+                }
+            }
+
+            // ⑧ 热点必须真的对上：位图里打在热点上的那个像素，要正好落在鼠标点下。
+            //    这里用「全透明 8×8，只有热点那一格是白色」当探针；热点 (2,3) 时
+            //    白点必须出现在鼠标点 (80,60) 的**同一列、后一行**（y 向下）。
+            {
+                SystemCursorImage cur = MarkerCursor(8, 8, 2, 3);
+                byte[] buf = Frame();
+                CursorOverlay.Draw(buf, W, H, rowsBottomUp: false, cur, 80f, 60f, W, H);
+                InkedBounds(buf, W, out int x0, out int y0, out int x1, out int y1);
+
+                bool ok = x0 == 80 && x1 == 80 && y0 == 60 && y1 == 60;
+                if (!ok)
+                {
+                    Console.WriteLine("    ✗ ⑧ 热点没对上：白点落在 (" + x0 + "," + y0 + ")-(" +
+                        x1 + "," + y1 + ")，热点 (2,3) 应把它放在 (80,60) 单点");
+                    fail++;
+                }
+                else
+                {
+                    Console.WriteLine("    ✓ ⑧ 位图热点正好压在鼠标点上");
+                }
+            }
+
+            // ⑨ 尺寸按**输出宽度**换算（width/screenWidth），不是 height/720：
+            //    位图尺寸由系统 DPI 决定，只有按「纹理像素/屏幕像素」换算，
+            //    指针在任意分辨率的成片里才和现场看到的一样大。
+            {
+                bool ok = true;
+                string detail = "";
+
+                // 宽高都翻倍 ⇒ 指针也跟着翻倍（8 → 16）。
+                byte[] big = Frame(W * 2, H * 2, 0, 0, 0);
+                CursorOverlay.Draw(big, W * 2, H * 2, rowsBottomUp: false,
+                    SolidCursor(8, 8, 0, 0, 255, 0, 0, 255), W / 2f, H / 2f, W, H);
+                InkedBounds(big, W * 2, out int x0, out _, out int x1, out _);
+                if (x1 - x0 + 1 != 16)
+                {
+                    ok = false;
+                    detail = "宽度翻倍后指针占 " + (x1 - x0 + 1) + " 像素，应为 16";
+                }
+
+                // 只把高度拉高、宽度不变 ⇒ 横向尺寸必须不变（8）。
+                if (ok)
+                {
+                    byte[] tall = Frame(W, H * 2, 0, 0, 0);
+                    CursorOverlay.Draw(tall, W, H * 2, rowsBottomUp: false,
+                        SolidCursor(8, 8, 0, 0, 255, 0, 0, 255), W / 2f, H / 2f, W, H);
+                    InkedBounds(tall, W, out int tx0, out _, out int tx1, out _);
+                    if (tx1 - tx0 + 1 != 8)
+                    {
+                        ok = false;
+                        detail = "只有高度变化时横向变了：" + (tx1 - tx0 + 1) + " 像素，应为 8";
+                    }
+                }
+
+                if (!ok)
+                {
+                    Console.WriteLine("    ✗ ⑨ 指针尺寸换算不对：" + detail);
+                    fail++;
+                }
+                else
+                {
+                    Console.WriteLine("    ✓ ⑨ 指针尺寸按输出宽度等比换算（纯净相机任意分辨率都不变形）");
+                }
+            }
+
+            // ⑩ 抓取失败时（空位图 / 零尺寸 / 屏幕尺寸为 0）必须一个字节都不动，
+            //    由调用方回落到手绘箭头；这里动了就等于画出一个幽灵指针。
+            {
+                bool ok = true;
+                byte[] buf = Frame();
+                byte[] before = (byte[])buf.Clone();
+                CursorOverlay.Draw(buf, W, H, rowsBottomUp: false,
+                    (SystemCursorImage)null, W / 2f, H / 2f, W, H);
+                SystemCursorImage noPixels = SolidCursor(8, 8, 0, 0, 255, 0, 0, 255);
+                noPixels.Rgba = null;
+                CursorOverlay.Draw(buf, W, H, rowsBottomUp: false, noPixels, W / 2f, H / 2f, W, H);
+                CursorOverlay.Draw(buf, W, H, rowsBottomUp: false,
+                    SolidCursor(0, 0, 0, 0, 255, 0, 0, 255), W / 2f, H / 2f, W, H);
+                CursorOverlay.Draw(buf, W, H, rowsBottomUp: false,
+                    SolidCursor(8, 8, 0, 0, 255, 0, 0, 255), W / 2f, H / 2f, 0f, H);
+                if (!Same(buf, before)) ok = false;
+
+                if (!ok)
+                {
+                    Console.WriteLine("    ✗ ⑩ 位图无效时改动了像素（该回落到手绘箭头而不是画幽灵指针）");
+                    fail++;
+                }
+                else
+                {
+                    Console.WriteLine("    ✓ ⑩ 抓不到位图时不碰像素（交给手绘箭头兜底）");
+                }
+            }
+
             return fail;
+        }
+
+        /// <summary>造一张纯色位图：颜色是**预乘后**的值，和抓取端落下来的格式一致。</summary>
+        private static SystemCursorImage SolidCursor(int w, int h, int hx, int hy,
+            byte r, byte g, byte b, byte a)
+        {
+            byte[] px = new byte[w * h * 4];
+            for (int i = 0; i < px.Length; i += 4)
+            {
+                px[i] = r;
+                px[i + 1] = g;
+                px[i + 2] = b;
+                px[i + 3] = a;
+            }
+            return new SystemCursorImage
+            {
+                Width = w,
+                Height = h,
+                HotspotX = hx,
+                HotspotY = hy,
+                Rgba = px,
+            };
+        }
+
+        /// <summary>全透明位图，只有热点那一格是不透明白色——用来验热点是否真的对上。</summary>
+        private static SystemCursorImage MarkerCursor(int w, int h, int hx, int hy)
+        {
+            SystemCursorImage img = SolidCursor(w, h, hx, hy, 0, 0, 0, 0);
+            int i = (hy * w + hx) * 4;
+            img.Rgba[i] = 255;
+            img.Rgba[i + 1] = 255;
+            img.Rgba[i + 2] = 255;
+            img.Rgba[i + 3] = 255;
+            return img;
         }
 
         private static byte[] Frame()
         {
             byte[] buf = new byte[W * H * 4];
             for (int i = 3; i < buf.Length; i += 4) buf[i] = 255;
+            return buf;
+        }
+
+        /// <summary>指定尺寸与底色的不透明画布：验预乘合成时需要一块非黑底。</summary>
+        private static byte[] Frame(int w, int h, byte r, byte g, byte b)
+        {
+            byte[] buf = new byte[w * h * 4];
+            for (int i = 0; i < buf.Length; i += 4)
+            {
+                buf[i] = r;
+                buf[i + 1] = g;
+                buf[i + 2] = b;
+                buf[i + 3] = 255;
+            }
             return buf;
         }
 

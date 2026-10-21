@@ -34,8 +34,8 @@ namespace UiPreview
                 var bad = new List<string>();
                 if (back.KeyEvents.Count != src.KeyEvents.Count)
                     bad.Add("KeyEvents 数不符 " + back.KeyEvents.Count + " vs " + src.KeyEvents.Count);
-                if (back.HitContexts.Count != src.HitContexts.Count)
-                    bad.Add("HitContexts 数不符 " + back.HitContexts.Count + " vs " + src.HitContexts.Count);
+                if (back.HitSnapshots.Count != src.HitSnapshots.Count)
+                    bad.Add("HitSnapshots 数不符 " + back.HitSnapshots.Count + " vs " + src.HitSnapshots.Count);
                 if (back.Metadata == null || back.Metadata.SongName != src.Metadata.SongName)
                     bad.Add("Metadata.SongName 不一致");
                 if (back.Metadata.StartingFloorId != src.Metadata.StartingFloorId)
@@ -47,15 +47,15 @@ namespace UiPreview
                         || Math.Abs(a.SongPosition - b.SongPosition) > 1e-9)
                     { bad.Add("KeyEvents[" + i + "] 不一致"); break; }
                 }
-                for (int i = 0; i < src.HitContexts.Count && i < back.HitContexts.Count; i++)
+                for (int i = 0; i < src.HitSnapshots.Count && i < back.HitSnapshots.Count; i++)
                 {
-                    var a = src.HitContexts[i]; var b = back.HitContexts[i];
+                    var a = src.HitSnapshots[i]; var b = back.HitSnapshots[i];
                     if (a.CurrentFloorID != b.CurrentFloorID
                         || Math.Abs(a.CachedAngle - b.CachedAngle) > 1e-9
                         || Math.Abs(a.TargetExitAngle - b.TargetExitAngle) > 1e-9
                         || a.IsAuto != b.IsAuto || a.NoFailHit != b.NoFailHit
                         || a.MidspinInfiniteMargin != b.MidspinInfiniteMargin)
-                    { bad.Add("HitContexts[" + i + "] 不一致"); break; }
+                    { bad.Add("HitSnapshots[" + i + "] 不一致"); break; }
                 }
                 if (bad.Count == 0) { Console.WriteLine("    ✓ " + name); return 0; }
                 foreach (var p in bad) Console.WriteLine("    ✗ " + name + "：" + p);
@@ -189,7 +189,7 @@ namespace UiPreview
                     SongPosition = 0.5 * (i + 1)
                 });
             for (int i = 0; i < hits; i++)
-                r.HitContexts.Add(new HitContext
+                r.HitSnapshots.Add(new HitSnapshot
                 {
                     CurrentFloorID = 7 + i,
                     CurrAngle = 31.0 + i,

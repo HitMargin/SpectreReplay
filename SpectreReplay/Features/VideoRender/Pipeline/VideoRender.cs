@@ -100,7 +100,7 @@ internal static class VideoRender
             TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.disabled"), 3f, NotifType.Warning);
             return;
         }
-        if (SpectreState.data == null || SpectreState.data.HitContext_list.Count == 0)
+        if (SpectreState.data == null || SpectreState.data.HitSnapshots.Count == 0)
         {
             TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.need_replay"), 3f, NotifType.Warning);
             return;

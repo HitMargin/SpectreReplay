@@ -29,6 +29,9 @@ internal sealed class VideoFrameSource
         // Input.mousePosition 会把「两三帧之后」的位置画进这一帧，快速移动会甩尾。
         // 见 CursorOverlay 的类注释。
         public bool CursorDrawn;
+        // 系统指针位图在 Grab 那一帧抓，随帧排队。null 表示抓不到（非 Windows、
+        // 句柄无效等），交付时回退到 CursorOverlay 的手绘箭头。
+        public SystemCursorImage Cursor;
         public float MouseX;
         public float MouseY;
         public float ScreenW;
@@ -166,6 +169,9 @@ internal sealed class VideoFrameSource
         if (DrawCursor && Input.mousePresent)
         {
             flight.CursorDrawn = true;
+            // 系统指针位图也在这里抓：GDI 只能在有窗口站的主线程调，而且位图
+            // 会随指针形状变化（I 型/手型/自定义 .cur），必须每帧对一次
+            SystemCursor.TryAcquire(out flight.Cursor);
             flight.MouseX = Input.mousePosition.x;
             flight.MouseY = Input.mousePosition.y;
             flight.ScreenW = Screen.width;
@@ -203,8 +209,17 @@ internal sealed class VideoFrameSource
         // rowsBottomUp 照 NeedsRowFlip——编码器只对 CleanCamera 做 vflip。
         if (head.CursorDrawn)
         {
-            CursorOverlay.Draw(pixels, Width, Height, NeedsRowFlip,
-                head.MouseX, head.MouseY, head.ScreenW, head.ScreenH);
+            // 抓到系统位图就用真的（热点、箭头/手型/I 型都对），抓不到回退手绘
+            if (head.Cursor != null)
+            {
+                CursorOverlay.Draw(pixels, Width, Height, NeedsRowFlip, head.Cursor,
+                    head.MouseX, head.MouseY, head.ScreenW, head.ScreenH);
+            }
+            else
+            {
+                CursorOverlay.Draw(pixels, Width, Height, NeedsRowFlip,
+                    head.MouseX, head.MouseY, head.ScreenW, head.ScreenH);
+            }
         }
         return true;
     }

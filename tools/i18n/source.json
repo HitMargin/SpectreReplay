@@ -90,6 +90,11 @@
   "en": "F9 manual save"
  },
  {
+  "key": "record.cancelsave",
+  "zh": "允许取消保存",
+  "en": "Allow cancel save"
+ },
+ {
   "key": "record.asyncinput",
   "zh": "从异步输入取按键",
   "en": "Read keys from async input"
@@ -498,6 +503,31 @@
   "key": "render.tail",
   "zh": "结尾多录秒数",
   "en": "Extra tail seconds"
+ },
+ {
+  "key": "render.stop.enable",
+  "zh": "允许中途结束渲染",
+  "en": "Stop rendering early"
+ },
+ {
+  "key": "render.stop.key",
+  "zh": "提前结束键",
+  "en": "Stop hotkey"
+ },
+ {
+  "key": "render.stop.enable.tip",
+  "zh": "打开后，渲染过程中随时可以按键提前收尾：按到哪、成片就导出到哪，状态与正常渲染完成一致（不是中止）。关闭则渲染始终跑到结尾。",
+  "en": "When on, you can press a key mid-render to finish early: the video is exported up to that moment and completes normally (it is not a cancel). Turn off to always render to the end."
+ },
+ {
+  "key": "render.stop.key.tip",
+  "zh": "点一下再按任意键改绑，等待期间按 Esc 取消。仅在上一项打开时生效。",
+  "en": "Click, then press any key to rebind; press Esc to cancel while waiting. Only used when the option above is on."
+ },
+ {
+  "key": "render.stop.hint",
+  "zh": "渲染中按下此键立即收尾并导出成品：导出到按键那一刻为止，不含「结尾多录秒数」。",
+  "en": "Pressing this key during a render finishes it immediately and exports the video up to that moment, without the extra tail seconds."
  },
  {
   "key": "render.outdir",
@@ -1383,6 +1413,11 @@
   "key": "record.manualsave.tip",
   "zh": "允许按 F9 手动保存当前这一局——练到一半也能存。",
   "en": "Enable F9 to save the current run by hand, including a practice attempt midway."
+ },
+ {
+  "key": "record.cancelsave.tip",
+  "zh": "用快捷键放弃本局待存的回放。关掉这一项，下面那个快捷键整条无效。",
+  "en": "Discard the pending save for this run with a hotkey. Turn this off and the hotkey below does nothing."
  },
  {
   "key": "record.asyncinput.tip",

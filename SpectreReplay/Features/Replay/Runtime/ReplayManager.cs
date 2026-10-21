@@ -71,10 +71,10 @@ internal static class ReplayManager
         ReplayConstants.ExtensionNoEncrypt,  // .psprp 不解密
     };
 
-    internal static bool SaveReplay(LegacyReplayData replayData, string filePath, bool no_encryption = false)
+    internal static bool SaveReplay(ReplayData replayData, string filePath, bool no_encryption = false)
         => SaveReplayNew(replayData, filePath, no_encryption);
 
-    internal static bool SaveReplayNew(LegacyReplayData replayData, string filePath, bool no_encryption = false)
+    internal static bool SaveReplayNew(ReplayData replayData, string filePath, bool no_encryption = false)
     {
         // 截断标记：File.WriteAllBytes 内部是 Create 打开（先截断）再写，写到一半失败
         // （磁盘满/IO 错误）会留下残缺文件，而末尾的 File.Exists 会把它当成功——
@@ -82,7 +82,7 @@ internal static class ReplayManager
         bool opened = false;
         try
         {
-            var replay = ReplayDecoder.ConvertFromOldFormat(replayData);
+            var replay = ReplayDecoder.FromReplayData(replayData);
             if (replay == null) return false;
             replay.EndTime = DateTimeOffset.UtcNow;
 
@@ -114,9 +114,9 @@ internal static class ReplayManager
         return File.Exists(filePath);
     }
 
-    internal static void UnLoadReplay(out LegacyReplayData replayData)
+    internal static void UnLoadReplay(out ReplayData replayData)
     {
-        replayData = new LegacyReplayData();
+        replayData = new ReplayData();
         WavLoader.loaded_clip = null;
         SpectreState.HasKeybdSound = false;
     }
@@ -130,7 +130,7 @@ internal static class ReplayManager
     /// 都拖进一条慢路径，且失败后只吐一句笼统的错误，玩家分不清是文件坏了、
     /// 选错了、还是版本不对。现在一步到位，错误信息更具体。
     /// </summary>
-    internal static bool LoadReplay(out LegacyReplayData replayData, string filePath, bool no_encryption = false)
+    internal static bool LoadReplay(out ReplayData replayData, string filePath, bool no_encryption = false)
     {
         if (!ReadReplayData(out replayData, filePath, no_encryption))
             return false;
@@ -149,10 +149,10 @@ internal static class ReplayManager
     /// <para>给「点开文件看信息」用：那条路径要拿到元数据，但玩家并没有装载它，
     /// 不该因此改变当前回放的播放状态。</para>
     /// </summary>
-    internal static bool ReadReplayData(out LegacyReplayData replayData, string filePath,
+    internal static bool ReadReplayData(out ReplayData replayData, string filePath,
         bool no_encryption = false)
     {
-        replayData = new LegacyReplayData();
+        replayData = new ReplayData();
         if (!File.Exists(filePath))
         {
             Debug.LogError("[SpectreReplay] 回放文件不存在: \"" + filePath + "\"");
@@ -211,7 +211,7 @@ internal static class ReplayManager
                 + "文件头不匹配或数据损坏（本模组只认 .sprp / .psprp）: " + ex.Message);
             return false;
         }
-        replayData = ReplayDecoder.ConvertToOldFormat(replay);
+        replayData = ReplayDecoder.ToReplayData(replay);
         return true;
     }
 
@@ -220,15 +220,15 @@ internal static class ReplayManager
     /// 旧实现在这里先试 CRP2、再试新格式、最后回落到旧 JSON，三条路已合并成一条。
     /// 保留这个名字是因为界面层（`Pages.cs`）与离屏套件都按它调用。
     /// </summary>
-    internal static bool LoadReplayAuto(out LegacyReplayData replayData, string filePath, bool no_encryption = false)
+    internal static bool LoadReplayAuto(out ReplayData replayData, string filePath, bool no_encryption = false)
         => LoadReplay(out replayData, filePath, no_encryption);
 
-    private static void TryLoadKeybdSound(string filePath, LegacyReplayData data)
+    private static void TryLoadKeybdSound(string filePath, ReplayData data)
     {
         // 仅当文件名与哈希均非空（即确实录制了键盘音）时才加载，
         // 否则 KeybdSoundFileName 为空串会导致 Path.Combine 退化为目录路径而误报“文件不存在”。
-        if (data.strings.TryGetValue(KeybdSoundFileName, out var fileName)
-            && data.strings.TryGetValue(KeybdSoundHash, out var hash)
+        if (data.KeybdSoundFileName is string fileName
+            && data.KeybdSoundHash is string hash
             && !string.IsNullOrEmpty(fileName)
             && !string.IsNullOrEmpty(hash))
         {

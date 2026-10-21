@@ -42,10 +42,10 @@ internal static class ReplayConstants
     public const ulong MagicKeyEvent = 0x74_6E65_7645_7965_4B;
     public const int KeyEventVersion = 1;
 
-    public const ulong MagicHitContext = 0x74_7865_7443_7469_48;
-    // v2：追加 HitContext.HitTick（r150+ 异步输入音频 tick）。
+    public const ulong MagicHitSnapshot = 0x74_7865_7443_7469_48;
+    // v2：追加 HitSnapshot.HitTick（r150+ 异步输入音频 tick）。
     // 解码端按版本分支读取，v1 旧谱 HitTick 保持 null
-    public const int HitContextVersion = 2;
+    public const int HitSnapshotVersion = 2;
 
     public const string Extension = ".sprp";
     public const string ExtensionNoEncrypt = ".psprp";

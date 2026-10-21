@@ -525,7 +525,7 @@ namespace UiPreview
             //    的 BPM 怎么是个问号」）。
             //
             //    根因不在面板：录制时 `if (ADOBase.isOfficialLevel)` 那一段把
-            //    `data.doubles[Bpm]` 硬写成 0.0，面板再把 `<= 0` 渲染成「?」。
+            //    `data.Bpm` 硬写成 0.0，面板再把 `<= 0` 渲染成「?」。
             //    面板的显示规则本身是对的（0 确实不该显示成 0 BPM）——所以
             //    修的地方在录制侧，判据也必须钉在录制侧，否则改面板只会把
             //    「?」变成「0」，仍然是错的。
@@ -700,6 +700,48 @@ namespace UiPreview
                 "㉜ 指针要在像素交付路径上画且位置随 Grab 采样(交付时现读会甩尾)",
                 "Features\\VideoRender\\Pipeline\\VideoFrameSource.cs",
                 s => CursorInkedIntoFrame(s));
+            // ㉝ 渲染起点必须取**玩家点渲染时选中的砖块**，不许回退录像的 data.StartTile。
+            //
+            //    2026-10-21 现场：在第 N 块点「渲染」，成片却从第 0 块开始——必须在
+            //    选中的地板上先手动播一次、退出，再渲染才正确。成因是起点取的是
+            //    SpectreState.data.StartTile（录像里记的**录制时**起点），而玩家这次
+            //    想从哪开始跟录像无关。
+            //
+            //    判据拆成四段，红了能直接看出断在哪一段：
+            //    ① 起点由 ResolveRequestedStartFloor() 解析，且**抓取发生在重启之前**
+            //       ——SwitchToPlayMode/Play() 会重开关卡，之后选区已经不是玩家原来那个；
+            //    ② 解析只认 editor.selectedFloors[0].seqID（与 scnEditor.Play() 的
+            //       SelectionIsSingle 分支同式），**不许读 GCS.checkpointNum**——那是
+            //       Play() 写入的「上次播过哪里」，首次打开关卡时是 0，正是本 bug 的形态；
+            //    ③ Phases 里不许再出现 StartTile：出现即回退；
+            //    ④ 起点要真的送进 Play()：Clamp → SelectFloor → checkpointNum → Play 的顺序。
+            fail += Check(projectRoot,
+                "㉝ 渲染起点必须取玩家当前选区(不许回退录像的 data.StartTile)",
+                "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
+                s => RenderStartFloorComesFromSelection(s));
+            // ㉞ 检查点开局（= 从中间砖块渲染）必须在 States.Checkpoint 放行。
+            //
+            //    2026-10-21 现场：从第 N 块点渲染，成片开头没有倒计时。根因不在倒计时
+            //    长度，而在**放行条件**：从中间开局走的是 scrController.OnMusicScheduled
+            //    的检查点分支（:1611 置 hasSongStarted=true → Scrub 到该砖块 entryTime
+            //    − 4 拍 → :1613 ChangeState(States.Checkpoint)），**整段倒计时都在
+            //    States.Checkpoint 里放完**，状态机从不经过 States.Countdown；而旧闸
+            //    只认 Countdown / PlayerControl，于是一路等到 PlayerControl 才放行——
+            //    那正好是倒计时结束的瞬间，开头必然丢失。
+            //
+            //    四段缺一不可，每段对应一种「看起来改了」的假修：
+            //    ① checkpointing 这个活变量真的从 controller.state 取 States.Checkpoint；
+            //    ② levelRunning 把 checkpointing 算作「关卡在跑」，否则等待期会被
+            //       LastReject 早退判死，还没放行就先报失败；
+            //    ③ hasSongStarted 那条放行路要**同时**认 checkpointing——只做 ①② 不做
+            //       这里，状态认得出来却仍然不放行（这正是本 bug 的半修形态）；
+            //    ④ 那条路保留 freshStartPosition 新鲜度闸：hasSongStarted 一旦为真就
+            //       永远为真，不做新鲜度判断的话，上一轮播完位置停在结尾，下一轮等待
+            //       会立刻误放行（录到一段空转画面）。
+            fail += Check(projectRoot,
+                "㉞ 检查点开局(从中间渲染)必须在 Checkpoint 放行(否则倒计时整段录不到)",
+                "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
+                s => CheckpointStartCanRelease(s));
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");
             return fail;
@@ -717,7 +759,7 @@ namespace UiPreview
         /// 官方关卡分支是否记录了**真实**的 BPM。
         ///
         /// 三条一起判，缺一条都能被"看起来改了"骗过：
-        /// ① `data.doubles[Bpm] = 0.0;` 这一行**必须消失**——只判"有没有赋值"
+        /// ① `data.Bpm = 0.0;` 这一行**必须消失**——只判"有没有赋值"
         ///    的话，硬写 0 那行照样命中；
         /// ② 必须改成调用 <c>CurrentBpm()</c>；
         /// ③ 那个助手必须走 <c>ADOBase.conductor</c>，不许碰
@@ -726,7 +768,7 @@ namespace UiPreview
         /// </summary>
         private static bool OfficialLevelBpmIsReal(string code)
         {
-            if (!code.Contains("data.doubles[Bpm] = CurrentBpm();", StringComparison.Ordinal))
+            if (!code.Contains("data.Bpm = CurrentBpm();", StringComparison.Ordinal))
                 return false;
             string body = MethodBody(code, "CurrentBpm");
             if (body == null) return false;
@@ -816,6 +858,82 @@ namespace UiPreview
         }
 
         /// <summary>
+        /// 检查点开局（= 从中间砖块渲染）能不能在 <c>States.Checkpoint</c> 放行。
+        ///
+        /// 判法全在 <c>AwaitReplayAlive</c> 的**活代码**里取具体 token：注释在判据
+        /// 跑之前已被 SrcUtil.Clean 剥掉，所以这里比对的是真代码而不是说明文字。
+        ///
+        /// 四段缺一不可，每段对应一种「看起来改了」的假修：
+        /// ① <c>controller.state == States.Checkpoint</c> 真的被读进一个布尔量；
+        /// ② <c>levelRunning</c> 的定义句里带上 checkpointing——否则等待期会被
+        ///    「关卡在跑 + 有 LastReject」早退判死，还没放行就先报失败；
+        /// ③ <c>hasSongStarted</c> 那条放行路的**条件里**同时有 checkpointing——
+        ///    只做 ①② 不做这里，状态认得出来却仍然不放行（本 bug 的半修形态）；
+        /// ④ 同一条件里保留 freshStartPosition，且它的定义读的是 songNow 的区间
+        ///    而不是常数：<c>hasSongStarted</c> 一旦为真就永远为真，去掉新鲜度
+        ///    判断后，上一轮停在结尾的位置会让下一轮等待立刻误放行。同时不许
+        ///    把旧的「必须 songNow &gt; 0」加回条件——检查点前导位置是负的，
+        ///    加回它等于把这条路关掉。
+        /// </summary>
+        private static bool CheckpointStartCanRelease(string code)
+        {
+            string body = MethodBody(code, "AwaitReplayAlive");
+            if (body == null) return false;
+
+            // ① 检查点状态真的从 controller.state 取
+            if (!body.Contains("controller.state == States.Checkpoint", StringComparison.Ordinal))
+                return false;
+
+            // ② levelRunning 把检查点算作「关卡在跑」
+            int running = body.IndexOf("bool levelRunning =", StringComparison.Ordinal);
+            if (running < 0) return false;
+            int runningEnd = body.IndexOf(';', running);
+            if (runningEnd < 0) return false;
+            if (!body.Substring(running, runningEnd - running)
+                     .Contains("checkpointing", StringComparison.Ordinal))
+                return false;
+
+            // ③ hasSongStarted 那条放行路。锚点带 if 前缀：levelRunning 里也有一处
+            //    conductor.hasSongStarted，但它只是「关卡在跑」的判断，不是放行点。
+            const string release = "if (conductor != null && conductor.hasSongStarted";
+            int releaseAt = body.IndexOf(release, StringComparison.Ordinal);
+            if (releaseAt < 0) return false;
+            // 按括号配平取**完整条件文本**，而不是「到下一个 yield break 为止」：
+            // 后面那段 Debug.Log 的三元式里也写着 checkpointing，混进来会把
+            // 「条件里删掉 checkpointing、日志里留着」这种假修判绿。
+            int open = body.IndexOf('(', releaseAt);
+            if (open < 0) return false;
+            int depth = 0, close = -1;
+            for (int i = open; i < body.Length; i++)
+            {
+                if (body[i] == '(') depth++;
+                else if (body[i] == ')')
+                {
+                    depth--;
+                    if (depth == 0) { close = i; break; }
+                }
+            }
+            if (close < 0) return false;
+            string cond = body.Substring(releaseAt, close - releaseAt + 1);
+            if (!cond.Contains("checkpointing", StringComparison.Ordinal)) return false;
+
+            // ④ 新鲜度闸还在，且读的是 songNow 的区间
+            if (!cond.Contains("freshStartPosition", StringComparison.Ordinal)) return false;
+            int fresh = body.IndexOf("freshStartPosition =", StringComparison.Ordinal);
+            if (fresh < 0) return false;
+            int freshEnd = body.IndexOf(';', fresh);
+            if (freshEnd < 0) return false;
+            string freshDef = body.Substring(fresh, freshEnd - fresh);
+            if (!freshDef.Contains("songNow", StringComparison.Ordinal)
+                || !freshDef.Contains(">=", StringComparison.Ordinal)
+                || !freshDef.Contains("<", StringComparison.Ordinal))
+                return false;
+
+            // 不许把「必须 songNow > 0」加回放行条件
+            return !cond.Contains("positiveNow", StringComparison.Ordinal);
+        }
+
+        /// <summary>
         /// 指针是不是**在像素交付路径上**画进去的，且位置采在正确的时刻。
         ///
         /// 三条缺一不可：
@@ -836,6 +954,47 @@ namespace UiPreview
                 && grab.Contains("Input.mousePresent", StringComparison.Ordinal)
                 && grab.Contains("DrawCursor", StringComparison.Ordinal)
                 && take.Contains("CursorOverlay.Draw", StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// 渲染起点是不是**玩家当前的选择**，而不是录像里记的起点。
+        ///
+        /// 四段缺一不可，任何一段塌掉都会退回「从第 0 块开始」这个现场：
+        /// ① 抓取时机：<c>requestedStartFloor = ResolveRequestedStartFloor()</c> 必须
+        ///    在 <c>SwitchToPlayMode</c> **之前**——重启会换掉关卡与选区，晚抓等于白抓；
+        /// ② 来源：解析式走 <c>SelectionIsSingle()</c> + <c>selectedFloors[0].seqID</c>，
+        ///    且体里不许出现 <c>checkpointNum</c>（那是 Play() 写的残留值，首次打开
+        ///    关卡时恒 0，正是本 bug 的形态）；
+        /// ③ 不留回退：Phases 里出现 <c>StartTile</c> 即判红；
+        /// ④ 送达：<c>Clamp(requestedStartFloor</c> / <c>SelectFloor(</c> /
+        ///    <c>GCS.checkpointNum = floor</c> / <c>ADOBase.editor.Play()</c> 齐备，
+        ///    且选中必须**先于** Play()——Play() 是用当前选区推导起点的。
+        /// </summary>
+        private static bool RenderStartFloorComesFromSelection(string code)
+        {
+            string phases = MethodBody(code, "Phases");
+            string resolve = MethodBody(code, "ResolveRequestedStartFloor");
+            if (phases == null || resolve == null) return false;
+
+            // ① 抓取点在重启之前
+            int capture = phases.IndexOf("requestedStartFloor = ResolveRequestedStartFloor()", StringComparison.Ordinal);
+            int restart = phases.IndexOf("SwitchToPlayMode", StringComparison.Ordinal);
+            if (capture < 0 || restart < 0 || capture > restart) return false;
+
+            // ③ 不许回退录像起点
+            if (phases.Contains("StartTile", StringComparison.Ordinal)) return false;
+
+            // ② 来源必须是当前选区，且不读残留的 checkpointNum
+            if (!resolve.Contains("SelectionIsSingle()", StringComparison.Ordinal)) return false;
+            if (!resolve.Contains("selectedFloors[0].seqID", StringComparison.Ordinal)) return false;
+            if (resolve.Contains("checkpointNum", StringComparison.Ordinal)) return false;
+
+            // ④ 真的送进 Play()，且选中先于 Play()
+            int clamp = phases.IndexOf("Mathf.Clamp(requestedStartFloor", StringComparison.Ordinal);
+            int select = phases.IndexOf("SelectFloor(", StringComparison.Ordinal);
+            int setCp = phases.IndexOf("GCS.checkpointNum = floor", StringComparison.Ordinal);
+            int play = phases.IndexOf("ADOBase.editor.Play()", StringComparison.Ordinal);
+            return clamp >= 0 && select >= 0 && setCp >= 0 && play >= 0 && select < play;
         }
 
         private static bool DeleteIsTwoStep(string body)

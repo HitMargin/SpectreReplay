@@ -293,6 +293,17 @@ public static class Settings
     // 成片的默认语义是"这关本来的样子"，要多出一样东西得玩家自己说要。
     // 纯净相机模式下尤其明显：三台相机被劫持到自建纹理后，屏幕上连指针都没有。
     public static bool RenderCursorOn = false;
+    // 是否允许在渲染途中按一个快捷键**提前结束**，把「从开始渲染到按键那一刻」
+    // 的画面导出——也就是渲染不再受回放文件长度限制。
+    //
+    // **默认关**（理由与 RenderCursorOn 同一类）：它会改变成片的长度。开着时
+    // 一按那个键，视频就在那里结束；默认语义仍应是「整份回放录完」，要提前
+    // 结束得玩家自己打开并指定按键——否则一句「这视频怎么短了」无从解释。
+    public static bool RenderStopOn = false;
+    // 提前结束键（KeyCode 数值，与 SaveButton / CancelSaveButton 同一域）。
+    // 290 / 291 已被录制页的「保存 / 取消保存」占用，这里取 292（F11）：避开
+    // 它们，也避开游戏常用的字母区与 Esc（Esc 是各处的取消键）。
+    public static int RenderStopKey = 292;
     public static string RenderOutputDir = ""; // 留空 = SavePath/RenderVideos
 
     // 键位重映射：list 为持久化 JSON 源（KeyCodeConvert），array 为运行时映射表

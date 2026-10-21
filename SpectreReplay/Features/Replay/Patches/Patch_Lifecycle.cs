@@ -193,24 +193,24 @@ internal class Patch_StartRewind
                         "players=" + scrPlayerManager.instance.players.Count());
                     return;
                 }
-                if (data.bools[IsOfficialLevel] != ADOBase.isOfficialLevel)
+                if (data.IsOfficialLevel != ADOBase.isOfficialLevel)
                 {
-                    // TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error1") + data.strings[SongName], 3f, NotifType.Warning);
+                    // TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error1") + data.SongName, 3f, NotifType.Warning);
                     // return;
                 }
-                if (data.bools[IsOfficialLevel])
+                if (data.IsOfficialLevel == true)
                 {
-                    // if (data.strings[SceneName] != SceneManager.GetActiveScene().name)
+                    // if (data.SceneName != SceneManager.GetActiveScene().name)
                     // {
-                    //     TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error1") + data.strings[SongName], 3f, NotifType.Warning);
+                    //     TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error1") + data.SongName, 3f, NotifType.Warning);
                     //     return;
                     // }
-                    if (!string.IsNullOrEmpty(data.strings[InternalLevelName])
-                        && data.strings[InternalLevelName] != GCS.internalLevelName)
+                    if (!string.IsNullOrEmpty(data.InternalLevelName)
+                        && data.InternalLevelName != GCS.internalLevelName)
                     {
-                        Reject(LocalizationManager.GetLocalizedText("note.play_error1") + data.strings[SongName]);
+                        Reject(LocalizationManager.GetLocalizedText("note.play_error1") + data.SongName);
                         Debug.Log("[SpectreReplay]   细节 internal: 录="
-                            + data.strings[InternalLevelName] + " 现=" + GCS.internalLevelName);
+                            + data.InternalLevelName + " 现=" + GCS.internalLevelName);
                         return;
                     }
                 }
@@ -219,20 +219,20 @@ internal class Patch_StartRewind
                     : (scnGame.instance.levelData.isOldLevel
                         ? scnGame.instance.levelData.pathData.GetHashCode()
                         : ComputeAngleHash(scnGame.instance.levelData.angleData));
-                if (floorHash != data.ints[FloorHash])
+                if (floorHash != data.FloorHash)
                 {
                     Reject(LocalizationManager.GetLocalizedText("note.play_error2"));
                     Debug.Log("[SpectreReplay]   细节 floorHash: 录="
-                        + data.ints[FloorHash] + " 现=" + floorHash);
+                        + data.FloorHash + " 现=" + floorHash);
                     return;
                 }
                 if (!ADOBase.isOfficialLevel
-                    && (data.ints[Pitch] != scnGame.instance.levelData.pitch
-                        || data.doubles[Bpm] != (double)scnGame.instance.levelData.bpm))
+                    && (data.Pitch != scnGame.instance.levelData.pitch
+                        || data.Bpm != (double)scnGame.instance.levelData.bpm))
                 {
                     Reject(LocalizationManager.GetLocalizedText("note.play_error2"));
                     Debug.Log("[SpectreReplay]   细节 pitch/bpm: 录="
-                        + data.ints[Pitch] + "/" + data.doubles[Bpm]
+                        + data.Pitch + "/" + data.Bpm
                         + " 现=" + scnGame.instance.levelData.pitch + "/" + scnGame.instance.levelData.bpm);
                     return;
                 }
@@ -247,9 +247,9 @@ internal class Patch_StartRewind
                 // 用 Enum.TryParse + IsDefined 而不是直接赋值：回放文件是玩家
                 // 可编辑的文本，写个 "99" 进去会让判定窗口按不存在的档位走，
                 // 且不抛异常、回放照常开始。解析失败就保持当前难度（退回旧行为）。
-                if (GCS.difficulty.ToString() != data.strings[JudgeMode])
+                if (GCS.difficulty.ToString() != data.JudgeMode)
                 {
-                    if (Enum.TryParse(data.strings[JudgeMode], out Difficulty storedDifficulty)
+                    if (Enum.TryParse(data.JudgeMode, out Difficulty storedDifficulty)
                         && Enum.IsDefined(typeof(Difficulty), storedDifficulty))
                     {
                         CachedDifficulty = GCS.difficulty;
@@ -262,29 +262,37 @@ internal class Patch_StartRewind
                     {
                         // 解析不出合法难度：保持当前难度继续播放。判定可能与该录像
                         // 录制时不一致，但拒绝播放会让玩家什么都做不了。
-                        Debug.Log("[SpectreReplay] 判定模式无法解析: \"" + data.strings[JudgeMode]
+                        Debug.Log("[SpectreReplay] 判定模式无法解析: \"" + data.JudgeMode
                             + "\"，保持当前难度 " + GCS.difficulty);
                     }
                 }
-                if (!IsFullRun && data.ints.TryGetValue(EndTile, out var endTileVal))
+                if (!IsFullRun && data.EndTile is int endTileVal)
                 {
-                    if (GCS.checkpointNum < data.ints[StartTile] || GCS.checkpointNum > endTileVal)
+                    if (GCS.checkpointNum < data.StartTile || GCS.checkpointNum > endTileVal)
                     {
-                        Reject(LocalizationManager.GetLocalizedText("note.play_error4") + data.ints[StartTile]);
+                        Reject(LocalizationManager.GetLocalizedText("note.play_error4") + data.StartTile);
                         Debug.Log("[SpectreReplay]   细节 checkpointNum=" + GCS.checkpointNum
-                            + " 区间=" + data.ints[StartTile] + ".." + endTileVal);
+                            + " 区间=" + data.StartTile + ".." + endTileVal);
                         return;
                     }
                 }
-                else if (!IsFullRun && GCS.checkpointNum != data.ints[StartTile])
+                // **不再要求与录像起点完全相等。** 回放按 GCS.checkpointNum 调
+                // ReplayPlayer.FastForward 对齐按键游标，本来就能从区间内任意砖块起跑；
+                // 强制相等等于禁止「从当前位置开始回放/渲染」。
+                //
+                // 唯一仍需拒绝的是**早于录像起点**：录像在 StartTile 之前没有任何
+                // 按键数据，从那里起跑只会空转到起点才接上，音画对不上。
+                else if (!IsFullRun && GCS.checkpointNum < data.StartTile)
                 {
-                    Reject(LocalizationManager.GetLocalizedText("note.play_error4") + data.ints[StartTile],
-                        "checkpointNum=" + GCS.checkpointNum);
+                    // detail 只进日志（见 Reject 注释），所以用 ASCII 与其余几处
+                    // （"DataIntegrity" / "BlockPlaying: "）保持一致，别把中文漏进界面文案扫描。
+                    Reject(LocalizationManager.GetLocalizedText("note.play_error4") + data.StartTile,
+                        "checkpointNum=" + GCS.checkpointNum + " < StartTile=" + data.StartTile);
                     return;
                 }
-                if (data.bools[SpeedTrailMode] || data.bools[QuickPitched])
+                if (data.SpeedTrailMode == true || data.QuickPitched == true)
                 {
-                    // if (data.strings[SceneName] != SceneManager.GetActiveScene().name)
+                    // if (data.SceneName != SceneManager.GetActiveScene().name)
                     // {
                     //     TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error6"), 3f, NotifType.Warning);
                     //     return;
@@ -295,12 +303,12 @@ internal class Patch_StartRewind
                 if (SceneManager.GetActiveScene().name == "scnEditor")
                 {
                     actualSpeed = GCS.editorQuickPitchedPlaying ? scnEditor.instance.playbackSpeed : 1f;
-                    expectedSpeed = data.bools[QuickPitched] ? data.doubles[PlaybackSpeed] : 1.0;
+                    expectedSpeed = data.QuickPitched == true ? (data.PlaybackSpeed ?? 1.0) : 1.0;
                 }
                 else
                 {
                     actualSpeed = (GCS.speedTrialMode || GCS.practiceMode) ? GCS.currentSpeedTrial : 1f;
-                    expectedSpeed = data.bools[SpeedTrailMode] ? data.doubles[SpeedTrail] : 1.0;
+                    expectedSpeed = data.SpeedTrailMode == true ? (data.SpeedTrail ?? 1.0) : 1.0;
                 }
                 if (actualSpeed != expectedSpeed)
                 {
@@ -318,8 +326,8 @@ internal class Patch_StartRewind
             // 判定窗口按一个不存在的档位走，且回放照常开始。回放文件是玩家可编辑的
             // 文本，这一项比 ReplayAnalyzer 里那处更敏感（那里只影响显示宽度）。
             StoredHitMarginLimit = (HitMarginLimit)0;
-            if (data.strings.ContainsKey(HitMarginLimitKey)
-                && Enum.TryParse<HitMarginLimit>(data.strings[HitMarginLimitKey], out var result)
+            if (data.HitMarginLimit != null
+                && Enum.TryParse<HitMarginLimit>(data.HitMarginLimit, out var result)
                 && Enum.IsDefined(typeof(HitMarginLimit), result))
                 StoredHitMarginLimit = result;
             GCS.hitMarginLimit = StoredHitMarginLimit;
@@ -327,11 +335,11 @@ internal class Patch_StartRewind
             scrController.instance.noFail = true;
             SyncEditorNoFailButton();
 
-            IsFullRun = data.ints.ContainsKey(StartTile) && data.ints.ContainsKey(EndTile)
-                && data.ints[StartTile] == 0
-                && data.ints[EndTile] == ADOBase.lm.listFloors.Count - 1;
+            IsFullRun = data.StartTile.HasValue && data.EndTile.HasValue
+                && data.StartTile == 0
+                && data.EndTile == ADOBase.lm.listFloors.Count - 1;
 
-            if (GCS.checkpointNum != data.ints[StartTile])
+            if (GCS.checkpointNum != data.StartTile)
                 ReplayPlayer.FastForward(GCS.checkpointNum);
 
             PlayActions.StartPlaying();
@@ -352,7 +360,7 @@ internal class Patch_StartRewind
     {
         try
         {
-            if (data == null) data = new LegacyReplayData();
+            if (data == null) data = new ReplayData();
             if (LateSaveMode)
             {
                 if (Settings.DontSaveWhenMiss)
@@ -367,17 +375,17 @@ internal class Patch_StartRewind
                 TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error8"), 3f, NotifType.Warning);
                 return;
             }
-            data.reset();
-            data.ints[StartTile] = GCS.checkpointNum;
-            data.strings[SceneName] = SceneManager.GetActiveScene().name;
-            data.strings[JudgeMode] = GCS.difficulty.ToString();
-            data.doubles[SpeedTrail] = GCS.currentSpeedTrial;
-            data.bools[SpeedTrailMode] = GCS.speedTrialMode || GCS.practiceMode;
-            data.strings[InternalLevelName] = GCS.internalLevelName ?? "";
-            data.bools[IsOfficialLevel] = ADOBase.isOfficialLevel;
-            data.bools[QuickPitched] = GCS.editorQuickPitchedPlaying;
-            data.bools[IfNoFail] = ADOBase.controller?.noFail ?? GCS.useNoFail;
-            data.ints[FloorHash] = ADOBase.isOfficialLevel
+            data.Reset();
+            data.StartTile = GCS.checkpointNum;
+            data.SceneName = SceneManager.GetActiveScene().name;
+            data.JudgeMode = GCS.difficulty.ToString();
+            data.SpeedTrail = GCS.currentSpeedTrial;
+            data.SpeedTrailMode = GCS.speedTrialMode || GCS.practiceMode;
+            data.InternalLevelName = GCS.internalLevelName ?? "";
+            data.IsOfficialLevel = ADOBase.isOfficialLevel;
+            data.QuickPitched = GCS.editorQuickPitchedPlaying;
+            data.IfNoFail = ADOBase.controller?.noFail ?? GCS.useNoFail;
+            data.FloorHash = ADOBase.isOfficialLevel
                 ? 0
                 : (scnGame.instance.levelData.isOldLevel
                     ? scnGame.instance.levelData.pathData.GetHashCode()
@@ -389,18 +397,18 @@ internal class Patch_StartRewind
                 if (i > 0) times.Add(ADOBase.lm.listFloors[i].entryTime - ADOBase.lm.listFloors[i - 1].entryTime);
                 speeds.Add(ADOBase.lm.listFloors[i].speed * (ADOBase.lm.listFloors[i].isCCW ? -1f : 1f));
             }
-            data.ints[SpeedHash] = ComputeDoubleListHash(speeds);
-            data.ints[TimeHash] = ComputeTimeListHash(times);
-            data.strings[LevelPath] = "";
+            data.SpeedHash = ComputeDoubleListHash(speeds);
+            data.TimeHash = ComputeTimeListHash(times);
+            data.LevelPath = "";
             if (ADOBase.isOfficialLevel)
             {
-                data.strings[ArtistName] = "OfficialLevel";
+                data.ArtistName = "OfficialLevel";
                 string songName = GCS.internalLevelName ?? "";
-                if (data.strings[SceneName] != "scnGame" && data.strings[SceneName] != "scnEditor")
-                    songName = data.strings[SceneName];
-                data.strings[SongName] = songName;
-                data.strings[LevelPath] = "OfficialLevel " + songName;
-                data.ints[Pitch] = 0;
+                if (data.SceneName != "scnGame" && data.SceneName != "scnEditor")
+                    songName = data.SceneName;
+                data.SongName = songName;
+                data.LevelPath = "OfficialLevel " + songName;
+                data.Pitch = 0;
                 // **BPM 不能硬写 0。** 这里原先两行都是 0，理由是"官方关卡
                 // 不比 Pitch/BPM"——但那是不比，不是不知道。写 0 的直接后果
                 // 是详情面板把它显示成「?」（2026-10-18 用户截图报的就是它），
@@ -417,11 +425,11 @@ internal class Patch_StartRewind
                 // conductor 的 instance getter 自带 FindAnyObjectByType 兜底。
                 // Pitch 仍留 0：面板不显示它，而数值一旦变成真值就会让"官方
                 // 关卡 Pitch 恒为 0"这个既有约定悄悄失效。
-                data.doubles[Bpm] = CurrentBpm();
+                data.Bpm = CurrentBpm();
             }
             else
             {
-                data.strings[ArtistName] = (scnGame.instance.levelData.artist ?? "").Trim();
+                data.ArtistName = (scnGame.instance.levelData.artist ?? "").Trim();
                 string song = (scnGame.instance.levelData.song ?? "").Trim();
                 if (string.IsNullOrEmpty(song))
                 {
@@ -429,19 +437,19 @@ internal class Patch_StartRewind
                     int dot = song.IndexOf('.');
                     if (dot != -1) song = song.Substring(0, dot);
                 }
-                data.strings[SongName] = song;
-                data.strings[LevelPath] = scnGame.instance.levelPath ?? "";
-                data.ints[Pitch] = scnGame.instance.levelData.pitch;
-                data.doubles[Bpm] = scnGame.instance.levelData.bpm;
+                data.SongName = song;
+                data.LevelPath = scnGame.instance.levelPath ?? "";
+                data.Pitch = scnGame.instance.levelData.pitch;
+                data.Bpm = scnGame.instance.levelData.bpm;
             }
-            data.doubles[PlaybackSpeed] = SceneManager.GetActiveScene().name == "scnEditor"
+            data.PlaybackSpeed = SceneManager.GetActiveScene().name == "scnEditor"
                 ? scnEditor.instance.playbackSpeed : 1.0;
-            data.ints[AudioBufferSize] = Persistence.audioBufferSize;
-            data.strings[HoldBehaviorKey] = Persistence.holdBehavior.ToString();
-            data.strings[HitMarginLimitKey] = Persistence.hitMarginLimit.ToString();
-            data.strings[LoadedMods] = string.Join("\n", Main.GetLoadedMods().Select(m => Main.mod2string(m)));
-            data.strings[DeviceID] = SystemInfo.deviceUniqueIdentifier;
-            data.strings[ModVersion] = Main.mod.Info.Version;
+            data.AudioBufferSize = Persistence.audioBufferSize;
+            data.HoldBehavior = Persistence.holdBehavior.ToString();
+            data.HitMarginLimit = Persistence.hitMarginLimit.ToString();
+            data.LoadedMods = string.Join("\n", Main.GetLoadedMods().Select(m => Main.mod2string(m)));
+            data.DeviceId = SystemInfo.deviceUniqueIdentifier;
+            data.ModVersion = Main.mod.Info.Version;
             PlayActions.StartRecording();
             TriggerMessage(LocalizationManager.GetLocalizedText("note.start_recording"));
         }

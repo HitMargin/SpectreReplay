@@ -120,8 +120,8 @@ internal static class Patch_UpdateFreeroam
     internal static bool Prefix(scrController __instance)
     {
         if (__instance == null) return true;
-        if (is_playing && PlayIndex < data.HitContext_list.Count
-            && data.HitContext_list[PlayIndex].curFreeRoamSection == __instance.curFreeRoamSection)
+        if (is_playing && PlayIndex < data.HitSnapshots.Count
+            && data.HitSnapshots[PlayIndex].curFreeRoamSection == __instance.curFreeRoamSection)
         {
             // 无论 ADOBase.lm / starts 状态如何，当前都统一禁止原 UpdateFreeroam 逻辑，
             // 避免回放期间自由漫游区段被干扰。所有分支都返回 false。

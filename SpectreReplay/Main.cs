@@ -119,8 +119,8 @@ namespace SpectreReplay
                 SpectrePatchHub.Refresh();
 
                 SpectreState.SetGetKeyAsyncEnabled(Settings.ReplayOn && Settings.GetDataFromAsyncInput);
-                SpectreState.data = new LegacyReplayData();
-                SpectreState.data.reset();
+                SpectreState.data = new ReplayData();
+                SpectreState.data.Reset();
                 SpectreState.PlayActions.SwitchToRecordMode();
 
                 SpectrePatchHub.ShowApplyFailureSummary();

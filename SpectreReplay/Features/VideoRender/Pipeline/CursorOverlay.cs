@@ -98,6 +98,102 @@ internal static class CursorOverlay
         }
     }
 
+    /// <summary>
+    /// 用抓下来的系统指针位图取代手绘箭头：热点定位、双线性缩放、预乘 alpha 合成。
+    ///
+    /// **为什么按 width/screenWidth 而不是 height/720 缩放。** 位图是系统按当前 DPI
+    /// 和「光标大小」渲染出来的物理像素；用户在屏幕上看到的指针就是这个像素尺寸。
+    /// 成片分辨率与窗口不一致时（CleanCamera 可任意分辨率），只有按「纹理像素 /
+    /// 屏幕像素」换算，指针在成片里的相对大小才和现场看到的一致。
+    ///
+    /// **预乘 alpha 只能乘一次。** 位图落下来已经是 src*a，这里只做
+    /// out = src + dst*(1-a)；再乘一次 alpha 会让边缘发黑（见 SystemCursorImage）。
+    /// </summary>
+    internal static void Draw(byte[] pixels, int width, int height, bool rowsBottomUp,
+        SystemCursorImage cursor, float mouseX, float mouseY, float screenWidth, float screenHeight)
+    {
+        if (cursor == null || cursor.Rgba == null) return;
+        if (pixels == null || width <= 0 || height <= 0) return;
+        if (pixels.Length < width * height * 4) return;
+        if (screenWidth <= 0f || screenHeight <= 0f) return;
+        int cw = cursor.Width;
+        int ch = cursor.Height;
+        if (cw <= 0 || ch <= 0) return;
+        if (cursor.Rgba.Length < cw * ch * 4) return;
+
+        float sx = width / screenWidth;
+        float sy = height / screenHeight;
+        if (sx <= 0f || sy <= 0f) return;
+
+        // 位图左上角在纹理坐标（左下原点）里的位置：热点对齐指针位置
+        float left = (mouseX - cursor.HotspotX) * sx;
+        float top = (mouseY + cursor.HotspotY) * sy;
+
+        int x0 = Math.Max(0, (int)Math.Floor(left));
+        int x1 = Math.Min(width - 1, (int)Math.Ceiling(left + cw * sx));
+        int y0 = Math.Max(0, (int)Math.Floor(top - ch * sy));
+        int y1 = Math.Min(height - 1, (int)Math.Ceiling(top));
+        if (x0 > x1 || y0 > y1) return;
+
+        byte[] src = cursor.Rgba;
+        for (int row = y0; row <= y1; row++)
+        {
+            int dstRow = rowsBottomUp ? row : height - 1 - row;
+            if (dstRow < 0 || dstRow >= height) continue;
+            int rowBase = dstRow * width * 4;
+            for (int col = x0; col <= x1; col++)
+            {
+                // 目标像素中心（左下原点）→ 位图坐标（原点左上、y 向下）
+                float u = (col + 0.5f - left) / sx;
+                float v = (top - (row + 0.5f)) / sy;
+                if (u <= 0f || v <= 0f || u >= cw || v >= ch) continue;
+
+                float fu = u - 0.5f;
+                float fv = v - 0.5f;
+                int u0 = (int)Math.Floor(fu);
+                int v0 = (int)Math.Floor(fv);
+                float tu = fu - u0;
+                float tv = fv - v0;
+
+                float r = 0f, g = 0f, b = 0f, a = 0f;
+                Accumulate(src, cw, ch, u0, v0, (1f - tu) * (1f - tv), ref r, ref g, ref b, ref a);
+                Accumulate(src, cw, ch, u0 + 1, v0, tu * (1f - tv), ref r, ref g, ref b, ref a);
+                Accumulate(src, cw, ch, u0, v0 + 1, (1f - tu) * tv, ref r, ref g, ref b, ref a);
+                Accumulate(src, cw, ch, u0 + 1, v0 + 1, tu * tv, ref r, ref g, ref b, ref a);
+                if (a < 0.5f) continue;
+
+                int idx = rowBase + col * 4;
+                float inv = 1f - a / 255f;
+                if (inv < 0f) inv = 0f;
+                pixels[idx] = ClampByte(pixels[idx] * inv + r);
+                pixels[idx + 1] = ClampByte(pixels[idx + 1] * inv + g);
+                pixels[idx + 2] = ClampByte(pixels[idx + 2] * inv + b);
+                // 视频是 yuv420，没有 alpha 通道，写满更省得编码器猜
+                pixels[idx + 3] = 255;
+            }
+        }
+    }
+
+    // 预乘 alpha 的双线性取样：权重只按几何覆盖算，颜色/alpha 一起插值
+    private static void Accumulate(byte[] src, int cw, int ch, int u, int v, float w,
+        ref float r, ref float g, ref float b, ref float a)
+    {
+        if (w <= 0f) return;
+        if (u < 0 || u >= cw || v < 0 || v >= ch) return;
+        int i = (v * cw + u) * 4;
+        r += src[i] * w;
+        g += src[i + 1] * w;
+        b += src[i + 2] * w;
+        a += src[i + 3] * w;
+    }
+
+    private static byte ClampByte(float value)
+    {
+        if (value <= 0f) return 0;
+        if (value >= 255f) return 255;
+        return (byte)value;
+    }
+
     private static bool Inside(float x, float y)
     {
         bool inside = false;

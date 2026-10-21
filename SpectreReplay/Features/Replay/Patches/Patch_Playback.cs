@@ -64,7 +64,7 @@ internal class Patch_PlayerControlUpdate
         // conductor，**记 0 而不是 return**，下面每帧都会把缺 0 的 tick 补上。
         if (is_recording && Settings.KeybdSoundRecordActive
             && !AudioRecorder.Instance.IsRecording
-            && !data.doubles.ContainsKey(KeybdSoundStartTick))
+            && !data.KeybdSoundStartTick.HasValue)
         {
             string filePath = Path.Combine(Settings.SavePath, "tmp.wav");
             // 清掉上一次遗留的 tmp.wav：上次录音若因崩溃/强退而异常结束，tmp.wav 会留在
@@ -85,19 +85,19 @@ internal class Patch_PlayerControlUpdate
             // Patch_Playback:187 判到没有 KeybdSoundStartTick 就静默 return，
             // 键盘声整段消失且没有任何提示（HasKeybdSound 仍为 true，没有别处会报）。
             // 记 0 占位：它让下面"缺 tick 就补"的分支接管，导体就绪后立刻补真值。
-            data.doubles[KeybdSoundStartTick] = 0.0;
+            data.KeybdSoundStartTick = 0.0;
         }
 
         // 补起始时间戳：起录帧没有导体时留下的是 0，这里每帧试着换成真值。
         // 只补一次（非 0 即视为已记），不覆盖已记下的真值。
         if (is_recording && Settings.KeybdSoundRecordActive
             && AudioRecorder.Instance.IsRecording
-            && data.doubles.TryGetValue(KeybdSoundStartTick, out double pendingTick)
+            && data.KeybdSoundStartTick is double pendingTick
             && pendingTick == 0.0)
         {
             scrConductor tickConductor = ADOBase.conductor;
             if (tickConductor != null)
-                data.doubles[KeybdSoundStartTick] = tickConductor.songposition_minusi;
+                data.KeybdSoundStartTick = tickConductor.songposition_minusi;
         }
 
         if (is_recording && Application.isFocused) Record_kbdstate();
@@ -105,31 +105,31 @@ internal class Patch_PlayerControlUpdate
 
         if (PlayIndex < 0) { KeyEventIndex = 0; PlayIndex = 0; }
 
-        var hitContexts = data.HitContext_list;
-        if (hitContexts.Count == 0)
+        var hitSnapshots = data.HitSnapshots;
+        if (hitSnapshots.Count == 0)
         {
             PlayActions.StopPlaying();
             TriggerMessage(LocalizationManager.GetLocalizedText("note.data_empty"));
             return;
         }
 
-        if (PlayIndex < hitContexts.Count)
+        if (PlayIndex < hitSnapshots.Count)
         {
-            var hc = hitContexts[PlayIndex];
+            var hc = hitSnapshots[PlayIndex];
             if (__instance.currFloor.seqID != hc.CurrentFloorID
                 || __instance.curFreeRoamSection > hc.curFreeRoamSection)
             {
-                while (PlayIndex < hitContexts.Count
-                    && (hitContexts[PlayIndex].CurrentFloorID < __instance.currFloor.seqID
-                        || hitContexts[PlayIndex].curFreeRoamSection < __instance.curFreeRoamSection))
+                while (PlayIndex < hitSnapshots.Count
+                    && (hitSnapshots[PlayIndex].CurrentFloorID < __instance.currFloor.seqID
+                        || hitSnapshots[PlayIndex].curFreeRoamSection < __instance.curFreeRoamSection))
                     PlayIndex++;
-                if (PlayIndex >= hitContexts.Count)
+                if (PlayIndex >= hitSnapshots.Count)
                 {
                     PlayActions.StopPlaying();
                     TriggerMessage(LocalizationManager.GetLocalizedText("note.data_empty"));
                     return;
                 }
-                hc = hitContexts[PlayIndex];
+                hc = hitSnapshots[PlayIndex];
             }
 
             float angle = GetAngle();
@@ -161,9 +161,9 @@ internal class Patch_PlayerControlUpdate
                     }
                 }
                 PlayIndex++;
-                if (PlayIndex >= hitContexts.Count) break;
+                if (PlayIndex >= hitSnapshots.Count) break;
                 angle = GetAngle();
-                hc = hitContexts[PlayIndex];
+                hc = hitSnapshots[PlayIndex];
                 if (__instance.currFloor.seqID != hc.CurrentFloorID
                     || __instance.curFreeRoamSection > hc.curFreeRoamSection)
                 {
@@ -174,8 +174,8 @@ internal class Patch_PlayerControlUpdate
 
         Play_keybd_event(flag: false);
 
-        if (PlayIndex >= hitContexts.Count
-            && KeyEventIndex >= data.KeyEvent_list.Count)
+        if (PlayIndex >= hitSnapshots.Count
+            && KeyEventIndex >= data.KeyEvents.Count)
         {
             KeyEventIndex = 0;
             PlayIndex = 0;
@@ -199,7 +199,7 @@ internal class Patch_PlayerControlUpdate
             return;
         }
 
-        if (!data.doubles.TryGetValue(KeybdSoundStartTick, out double keybdStartTick))
+        if (data.KeybdSoundStartTick is not double keybdStartTick)
             return;
         // tick 为 0 = 起录帧没拿到导体、之后也一直没补上（极端情况：整个倒计时
         // 阶段导体都未就绪）。此时拿 0 当基准会把 wav 从头对齐到歌曲中段，

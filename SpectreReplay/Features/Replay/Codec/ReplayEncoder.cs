@@ -18,7 +18,7 @@ internal static class ReplayEncoder
             WriteMetadata(writer, replay.Metadata);
             WriteStr(writer, replay.EndTime?.ToString("O") ?? "");
             WriteKeyEvents(writer, replay.KeyEvents);
-            WriteHitContexts(writer, replay.HitContexts);
+            WriteHitSnapshots(writer, replay.HitSnapshots);
         }
 
         var compressed = ReplayCompression.Compress(ms.ToArray());
@@ -82,10 +82,10 @@ internal static class ReplayEncoder
         }
     }
 
-    private static void WriteHitContexts(BinaryWriter w, List<HitContext> contexts)
+    private static void WriteHitSnapshots(BinaryWriter w, List<HitSnapshot> contexts)
     {
-        w.Write(ReplayConstants.MagicHitContext);
-        w.Write(ReplayConstants.HitContextVersion);
+        w.Write(ReplayConstants.MagicHitSnapshot);
+        w.Write(ReplayConstants.HitSnapshotVersion);
         w.Write(contexts.Count);
         foreach (var h in contexts)
         {

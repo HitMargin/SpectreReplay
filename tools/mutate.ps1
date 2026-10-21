@@ -757,7 +757,7 @@ switch ($Which) {
         # **整段键盘音消失且没有任何提示**（HasKeybdSound 仍为 true）。
         # 同时那一帧的 Record_kbdstate 也被跳过（按键少采一帧）。
         Backup 'Features\Replay\Patches\Patch_Playback.cs'
-        ReplaceExact 'Features\Replay\Patches\Patch_Playback.cs' 'data.doubles[KeybdSoundStartTick] = 0.0;' 'if (ADOBase.conductor == null) { return; }'
+        ReplaceExact 'Features\Replay\Patches\Patch_Playback.cs' 'data.KeybdSoundStartTick = 0.0;' 'if (ADOBase.conductor == null) { return; }'
     }
     'MUT-A2' {
         # 键盘音起始时间戳：删掉"缺 tick 就补真值"的分支（把补记那一段判成恒假）。
@@ -1681,7 +1681,7 @@ switch ($Which) {
     'MUT-D14' {
         # ㉔ BPM 回归：官方关卡退回硬写 0（详情面板重新显示成问号）。
         Backup 'Features\Replay\Patches\Patch_Lifecycle.cs'
-        ReplaceExact 'Features\Replay\Patches\Patch_Lifecycle.cs' 'data.doubles[Bpm] = CurrentBpm();' 'data.doubles[Bpm] = 0.0;'
+        ReplaceExact 'Features\Replay\Patches\Patch_Lifecycle.cs' 'data.Bpm = CurrentBpm();' 'data.Bpm = 0.0;'
     }
     'MUT-D8' {
         # ㉓b 副作用回归：读详情改用会碰键盘音的 LoadReplay。

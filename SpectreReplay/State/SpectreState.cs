@@ -24,32 +24,16 @@ public static class SpectreState
 {
     internal static class DataIntegrity
     {
-        public static List<string> strings_ = new List<string> { SongName, SceneName, InternalLevelName, JudgeMode };
-
-        public static List<string> bools_ = new List<string> { IsOfficialLevel, SpeedTrailMode, QuickPitched };
-
-        public static List<string> ints_ = new List<string> { FloorHash, TimeHash, SpeedHash, Pitch, StartTile };
-
-        public static List<string> doubles_ = new List<string> { Bpm, PlaybackSpeed, SpeedTrail };
-
+        /// <summary>
+        /// 回放数据缺字段就返回 true（名字沿用旧版“Check 为真即有问题”的语义，调用点在 Patch_Lifecycle）。
+        /// 必需字段清单现在集中定义在 <see cref="ReplayData.FirstMissingRequiredKey"/>，
+        /// 不再用四张字符串键列表 + 字典 ContainsKey 逐项比对——键名写错在旧实现里是静默漏检。
+        /// </summary>
         internal static bool Check()
         {
-            return !HasAllKeys(data.strings, strings_, "String")
-                || !HasAllKeys(data.bools, bools_, "Bool")
-                || !HasAllKeys(data.ints, ints_, "Int")
-                || !HasAllKeys(data.doubles, doubles_, "Double");
-        }
-
-        private static bool HasAllKeys<T>(Dictionary<string, T> dict, List<string> keys, string kind)
-        {
-            foreach (string key in keys)
-            {
-                if (!dict.ContainsKey(key))
-                {
-                    Debug.Log("Missing " + kind + ":" + key);
-                    return false;
-                }
-            }
+            string missing = data?.FirstMissingRequiredKey;
+            if (missing == null) return false;
+            Debug.Log("Missing:" + missing);
             return true;
         }
     }
@@ -86,7 +70,7 @@ public static class SpectreState
             PlayActions.StopPlaying();
             PlayActions.StopRecording();
 
-            int startTile = data != null && data.ints.TryGetValue(StartTile, out int stv)
+            int startTile = data != null && data.StartTile is int stv
                 ? Math.Max(0, stv) : 0;
 
             if (editorReplay)
@@ -112,10 +96,10 @@ public static class SpectreState
                 GCS.previousScene = "scnGame";
                 // 飙速模式的倍速要一并还原：回放是按当时倍速录的，
                 // 不还原会让整份回放的按键位置全错。
-                if (data != null && data.bools.TryGetValue(SpeedTrailMode, out bool stm))
+                if (data != null && data.SpeedTrailMode is bool stm)
                 {
                     GCS.speedTrialMode = stm;
-                    if (stm && data.doubles.TryGetValue(SpeedTrail, out double st))
+                    if (stm && data.SpeedTrail is double st)
                     {
                         GCS.currentSpeedTrial = (float)st;
                     }
@@ -162,7 +146,7 @@ public static class SpectreState
         /// 另一边，留着上一关的自制谱路径会让关卡选错。
         ///
         /// **关卡名从哪来**：回放录制时 <c>Patch_Lifecycle</c> 就把
-        /// <c>GCS.internalLevelName</c> 存进了 <c>data.strings[InternalLevelName]</c>
+        /// <c>GCS.internalLevelName</c> 存进了 <c>data.InternalLevelName</c>
         /// （官方关卡才有值，自制谱是空串）。所以这里**不需要**从 LevelPath 里
         /// 反解——那个字段对官方关卡是 <c>"OfficialLevel &lt;歌名&gt;"</c>，不是关卡 id。
         /// </summary>
@@ -172,7 +156,7 @@ public static class SpectreState
             {
                 return;
             }
-            if (!data.strings.TryGetValue(InternalLevelName, out string internalName)
+            if (data.InternalLevelName is not string internalName
                 || string.IsNullOrEmpty(internalName))
             {
                 // 老回放（该字段还没加时录的）没有内部关卡名，跳不了。
@@ -190,7 +174,7 @@ public static class SpectreState
             PlayActions.StopPlaying();
             PlayActions.StopRecording();
 
-            int startTile = data.ints.TryGetValue(StartTile, out int stv)
+            int startTile = data.StartTile is int stv
                 ? Math.Max(0, stv) : 0;
 
             GCS.checkpointNum = startTile;
@@ -202,10 +186,10 @@ public static class SpectreState
             GCS.internalLevelName = internalName;
             // 飙速/练习标记必须还原成录制时的样子：回放按键位置是按当时的
             // 速度与起跳点录的，不还原会整体错位。
-            if (data.bools.TryGetValue(SpeedTrailMode, out bool stm))
+            if (data.SpeedTrailMode is bool stm)
             {
                 GCS.speedTrialMode = stm;
-                if (stm && data.doubles.TryGetValue(SpeedTrail, out double st))
+                if (stm && data.SpeedTrail is double st)
                 {
                     GCS.currentSpeedTrial = (float)st;
                 }
@@ -397,9 +381,9 @@ public static class SpectreState
         if (scnEditor.instance == null) return;
         var btn = scnEditor.instance.buttonNoFail;
         if (btn == null) return;
-        if (data == null || !data.bools.ContainsKey(IfNoFail)) return;
+        if (data == null || !data.IfNoFail.HasValue) return;
         var img = btn.GetComponent<UnityEngine.UI.Image>();
-        img.color = data.bools[IfNoFail] ? Color.white : new Color(0.5f, 0.5f, 0.5f, 1f);
+        img.color = data.IfNoFail == true ? Color.white : new Color(0.5f, 0.5f, 0.5f, 1f);
     }
 
     internal static bool RecordMode = true;
@@ -421,7 +405,7 @@ public static class SpectreState
     // 仅作引用比较的哨兵（Patch_Recording 里判断是否同一块），不实例化 MonoBehaviour
     internal static scrFloor CurrentHitFloor;
 
-    internal static LegacyReplayData data;
+    internal static ReplayData data;
 
     internal static int PlayIndex = 0;
 
@@ -492,10 +476,11 @@ public static class SpectreState
         string savedPath = null;
         if (retry)
         {
-            data.strings[FileName] = CreateFileName(safe_mode: true);
-            data.strings[KeybdSoundFileName] = data.strings[FileName] + ".wav";
+            data.FileName = CreateFileName(safe_mode: true);
+            data.KeybdSoundFileName = data.FileName + ".wav";
         }
-        string fileName = !data.strings.ContainsKey(FileName) ? CreateFileName() : data.strings[FileName];
+        // 旧字典版用 ContainsKey 判存在：空串算“有值”。这里必须是 == null，不能换成 IsNullOrEmpty。
+        string fileName = data.FileName == null ? CreateFileName() : data.FileName;
         string savePath = Path.Combine(Settings.SavePath, fileName);
         if (ReplayManager.SaveReplay(data, savePath, debug_no_encryption))
         {
@@ -507,10 +492,10 @@ public static class SpectreState
             message += LocalizationManager.GetLocalizedText("note.save_fail") + savePath + "\n";
             success = false;
         }
-        if (!without_sound && data.strings.ContainsKey(KeybdSoundFileName))
+        if (!without_sound && data.KeybdSoundFileName != null)
         {
             string tmpPath = Path.Combine(Settings.SavePath, "tmp.wav");
-            string keybdName = data.strings[KeybdSoundFileName];
+            string keybdName = data.KeybdSoundFileName;
             // 键存在但值为空串时（解码自外部/损坏的回放文件），Path.Combine 会退化成
             // "目录\tmp.wav" 这样的路径：要么 File.Move 抛异常，要么把 tmp.wav 移到目录上。
             // ReplayManager.TryLoadKeybdSound 已对同源问题做了这道判断，这里对齐。
@@ -596,7 +581,7 @@ public static class SpectreState
                 message += LocalizationManager.GetLocalizedText("note.save_fail") + "backup\n";
             }
             else if (!without_sound
-                     && data.strings.TryGetValue(KeybdSoundFileName, out string backupWav)
+                     && data.KeybdSoundFileName is string backupWav
                      && !string.IsNullOrEmpty(backupWav))
             {
                 // 同名 wav 复制过去。失败只提示、不算整局保存失败。
@@ -676,7 +661,7 @@ public static class SpectreState
             if (graphics[i] != null) graphics[i].raycastTarget = states[i];
     }
 
-    public static bool ReplayHit(scrPlayer player, HitContext hitdata)
+    public static bool ReplayHit(scrPlayer player, HitSnapshot hitdata)
         => ReplayPlayer.ReplayHit(player, hitdata);
 
     internal static void Play_keybd_event(bool flag)
@@ -767,23 +752,25 @@ public static class SpectreState
             return DateTime.Now.ToString("yyyyMMddHHmmss") + "_";
         }
         string fileName = "";
-        if (data.strings.ContainsKey(ArtistName) && data.strings.ContainsKey(SongName))
+        if (data.ArtistName != null && data.SongName != null)
         {
-            fileName = data.strings[ArtistName] + "_" + data.strings[SongName];
+            fileName = data.ArtistName + "_" + data.SongName;
         }
         fileName = Regex.Replace(fileName, "<[^>]*>", string.Empty);
         fileName = DateTime.Now.ToString("yyyyMMddHHmmss") + "_" + fileName;
         try
         {
-            bool isFullRun = data.ints[EndTile] == ADOBase.lm.listFloors.Count - 1 && data.ints[StartTile] == 0;
+            bool isFullRun = data.EndTile == ADOBase.lm.listFloors.Count - 1 && data.StartTile == 0;
             if (isFullRun)
             {
                 fileName += "_" + (100.0 * ComputePercentXaccVanilla()).ToString("F2");
             }
-            else
+            else if (data.StartTile.HasValue && data.EndTile.HasValue)
             {
-                fileName += "_" + (100.0 * ComputePercentComplete(data.ints[StartTile])).ToString("F0")
-                    + "-" + (100.0 * ComputePercentComplete(data.ints[EndTile])).ToString("F0");
+                // 缺起点/终点字段时旧版会抛 KeyNotFoundException 并被外层 catch 吞掉（不加后缀），
+                // 这里显式跳过以保持一致，而不是把缺失当 0 处理。
+                fileName += "_" + (100.0 * ComputePercentComplete(data.StartTile.Value)).ToString("F0")
+                    + "-" + (100.0 * ComputePercentComplete(data.EndTile.Value)).ToString("F0");
             }
         }
         catch

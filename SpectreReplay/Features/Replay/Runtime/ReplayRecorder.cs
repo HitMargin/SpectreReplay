@@ -44,20 +44,20 @@ internal static class ReplayRecorder
         {
             HitMarginCounts[i] = marginCounts[i];
         }
-        data.ints[EndTile] = scrController.instance.currentSeqID;
-        data.strings[JudgmentList] = "[" + string.Join(",", HitMarginCounts) + "]";
-        data.doubles[PercentXacc] = ComputePercentXacc();
-        data.ints.TryGetValue(MaximumUsedKeys, out int peak);
+        data.EndTile = scrController.instance.currentSeqID;
+        data.JudgmentList = "[" + string.Join(",", HitMarginCounts) + "]";
+        data.PercentXacc = ComputePercentXacc();
+        int peak = data.MaximumUsedKeys ?? 0;
         int cur = ADOBase.controller?.maximumUsedKeys ?? 0;
-        data.ints[MaximumUsedKeys] = Math.Max(peak, cur);
-        data.strings[FileName] = CreateFileName();
+        data.MaximumUsedKeys = Math.Max(peak, cur);
+        data.FileName = CreateFileName();
         if (Settings.KeybdSoundRecordActive)
         {
-            data.strings[KeybdSoundFileName] = data.strings[FileName] + ".wav";
+            data.KeybdSoundFileName = data.FileName + ".wav";
         }
         if (AudioRecorder.Instance.IsRecording)
         {
-            data.strings[KeybdSoundHash] = AudioRecorder.Instance.StopRecording();
+            data.KeybdSoundHash = AudioRecorder.Instance.StopRecording();
         }
         if (!LateSaveMode)
         {
@@ -82,10 +82,10 @@ internal static class ReplayRecorder
         if (data == null) return;
         if (ADOBase.controller != null)
         {
-            data.ints.TryGetValue(MaximumUsedKeys, out int prev);
+            int prev = data.MaximumUsedKeys ?? 0;
             int cur = ADOBase.controller.maximumUsedKeys;
             if (cur > prev)
-                data.ints[MaximumUsedKeys] = cur;
+                data.MaximumUsedKeys = cur;
         }
 
         // 异步输入开启时按键由 AsyncKeyRecorder 记录，轮询路径只兜 forceSync（结算画面）
@@ -104,7 +104,7 @@ internal static class ReplayRecorder
         var conductor = ADOBase.conductor;
         if (conductor == null)
             return;
-        var events = data.KeyEvent_list;
+        var events = data.KeyEvents;
         for (int i = 1; i < 256; i++)
         {
             if ((PrevKeyState[i] & 0x80) == 0 && (CurrKeyState[i] & 0x80) != 0)

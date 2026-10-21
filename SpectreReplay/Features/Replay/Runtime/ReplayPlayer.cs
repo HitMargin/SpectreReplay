@@ -79,9 +79,9 @@ internal static class ReplayPlayer
         if (data == null) return;
 
         PlayIndex = 0;
-        for (int i = 0; i < data.HitContext_list.Count; i++)
+        for (int i = 0; i < data.HitSnapshots.Count; i++)
         {
-            if (data.HitContext_list[i].CurrentFloorID >= targetFloor)
+            if (data.HitSnapshots[i].CurrentFloorID >= targetFloor)
             {
                 PlayIndex = i;
                 break;
@@ -94,9 +94,9 @@ internal static class ReplayPlayer
         {
             double targetTime = ADOBase.lm.listFloors[targetFloor].entryTime;
             KeyEventIndex = 0;
-            for (int i = 0; i < data.KeyEvent_list.Count; i++)
+            for (int i = 0; i < data.KeyEvents.Count; i++)
             {
-                if (data.KeyEvent_list[i].SongPosition >= targetTime)
+                if (data.KeyEvents[i].SongPosition >= targetTime)
                 {
                     KeyEventIndex = i;
                     break;
@@ -112,11 +112,11 @@ internal static class ReplayPlayer
     {
         // data 为空时（回放数据尚未装载/已被清空）直接返回：本方法每帧被调用，
         // 缺这一句就是每帧一次 NullReferenceException
-        if (data == null || data.KeyEvent_list == null)
+        if (data == null || data.KeyEvents == null)
         {
             return;
         }
-        if (KeyEventIndex < 0 || KeyEventIndex >= data.KeyEvent_list.Count)
+        if (KeyEventIndex < 0 || KeyEventIndex >= data.KeyEvents.Count)
         {
             return;
         }
@@ -130,15 +130,15 @@ internal static class ReplayPlayer
         }
         double songPosition = conductor.songposition_minusi;
         // 无待办事件时提前返回，避免空 List 分配
-        if (songPosition < data.KeyEvent_list[KeyEventIndex].SongPosition)
+        if (songPosition < data.KeyEvents[KeyEventIndex].SongPosition)
             return;
 
         var inputs = _inputBuffer;
         inputs.Clear();
-        while (KeyEventIndex < data.KeyEvent_list.Count
-            && songPosition >= data.KeyEvent_list[KeyEventIndex].SongPosition)
+        while (KeyEventIndex < data.KeyEvents.Count
+            && songPosition >= data.KeyEvents[KeyEventIndex].SongPosition)
         {
-            var ev = data.KeyEvent_list[KeyEventIndex];
+            var ev = data.KeyEvents[KeyEventIndex];
             if (Settings.LegacyEngine && Application.isFocused)
             {
                 // 回放文件里的键码是 ushort，损坏/伪造文件可能越界；映射表恒为 256 长度，
@@ -155,7 +155,7 @@ internal static class ReplayPlayer
             KeyEventIndex++;
         }
         KeyboardSimulation.SendInputs(inputs);
-        if (KeyEventIndex >= data.KeyEvent_list.Count)
+        if (KeyEventIndex >= data.KeyEvents.Count)
         {
             if (flag)
             {
@@ -167,7 +167,7 @@ internal static class ReplayPlayer
         }
     }
 
-    internal static bool ReplayHitOld(scrPlayer player, HitContext hitdata)
+    internal static bool ReplayHitOld(scrPlayer player, HitSnapshot hitdata)
     {
         player.consecMultipressCounter = 0;
         // 命中路径上 controller 一定存在（游戏正是在派发命中），但场景卸载的中间态里
@@ -310,7 +310,7 @@ internal static class ReplayPlayer
         return result;
     }
 
-    internal static bool ReplayHit(scrPlayer player, HitContext hitdata)
+    internal static bool ReplayHit(scrPlayer player, HitSnapshot hitdata)
     {
         if (debug_use_old_hit)
         {

@@ -124,6 +124,47 @@ internal sealed class VideoRenderJob : MonoBehaviour
     // AwaitReplayAlive 用：上一帧是否已看到正的 songposition（连续两帧才算稳）
     private bool sawPositivePosition;
 
+    // 渲染起点：玩家点「渲染」时所在砖块。必须在重启/切模式之前抓取。
+    private int requestedStartFloor;
+
+    /// <summary>
+    /// 解析「玩家想从哪里开始渲染」。
+    ///
+    /// **为什么不能读 GCS.checkpointNum。** 它只在 <c>scnEditor.Play()</c>
+    /// （scnEditor.cs:7270）里被写入，单纯点选地板不会更新它。首次打开关卡时
+    /// 它是 0，导致首次渲染从第 0 块开始；必须先在选中的地板上播一次、退出，
+    /// 渲染才正确。玩家表达意图的字段是 <c>editor.selectedFloors</c>。
+    ///
+    /// 判定与 <c>scnEditor.Play()</c>（scnEditor.cs:7237-7251）逐条照搬，
+    /// **不做任何自己的发挥**：
+    ///   - <c>SelectionIsSingle()</c> → 用 <c>selectedFloors[0].seqID</c>
+    ///   - 否则                      → 0（和 Play() 的 else 一致）
+    ///
+    /// Play() 还有第三个分支（选中装饰物时用 lastSelectedFloor.seqID），但那
+    /// 字段是 private 够不着；且玩家点渲染时选中的是装饰物的话，本来也没有
+    /// 「从哪块砖开始」的意图，落到 0 与手动播放的行为一致。
+    ///
+    /// **绝不回退 GCS.checkpointNum。** 那是 Play() 写入的「上次播过哪里」的
+    /// 残留值，不是玩家当前的选择——首次打开关卡时它为 0，正是「首次渲染从
+    /// 第 0 块开始、必须先播一次才正常」的成因。
+    /// </summary>
+    private int ResolveRequestedStartFloor()
+    {
+        try
+        {
+            if (ADOBase.editor != null && ADOBase.editor.SelectionIsSingle())
+            {
+                return ADOBase.editor.selectedFloors[0].seqID;
+            }
+        }
+        catch (Exception e)
+        {
+            try { Main.mod?.Logger?.Log("[SpectreReplay] ResolveRequestedStartFloor 读取选区失败，按 Play() 的 else 分支取 0: " + e.Message); } catch { }
+        }
+
+        return 0;
+    }
+
     private void Start()
     {
         StartCoroutine(Drive());
@@ -168,6 +209,13 @@ internal sealed class VideoRenderJob : MonoBehaviour
     private IEnumerator Phases()
     {
         int fps = Math.Max(1, Settings.RenderFps);
+        // 起点 = **编辑器里当前选中的地板**，必须在下面的重启/切模式之前抓取。
+        //
+        // 不能用 GCS.checkpointNum：它只在 scnEditor.Play()（:7270）里被写入，
+        // 单纯点选地板**不会**更新它。首次打开关卡时它是 0，于是首次渲染会
+        // 从第 0 块开始，必须「先在选中的地板上播一次、再退出」才正确。
+        // 玩家真正表达意图的字段是 editor.selectedFloors。
+        requestedStartFloor = ResolveRequestedStartFloor();
         float tailSeconds = Mathf.Clamp(Settings.RenderTailSeconds, 0f, 15f);
         var container = (VideoEncoder.OutContainer)Mathf.Clamp(Settings.RenderOutputFormat, 0, 3);
         string outputPath = BuildOutputPath(container);
@@ -186,23 +234,32 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // 程序化调用会把倍速压成 1x，然后立刻用它推导 song.pitch；不改回来，
         // TryStartPlayback 的倍速校验必然拒绝，回放永远不接管——现象就是
         // 「等待回放开始超时」而画面照常跑。录像若没记倍速则保持 1x。
-        // **只在录像确实处于飙速态时才套用倍速。** 校验式的期望值就是
-        // `QuickPitched ? PlaybackSpeed : 1.0`：非飙速录像若把 playerSpeed
-        // 写成 1.5，校验仍按 1.0 通过，但 song.pitch 已被拉高——时间轴与录像
-        // 对不上，成片从头到尾音画不同步。
-        bool quickPitched = SpectreState.data.bools.TryGetValue(QuickPitched, out bool qp) && qp;
+        // 套用条件与 Start_Rewind 的校验期望严格同式：`QuickPitched ? PlaybackSpeed : 1.0`
+        // （Patch_Lifecycle.cs:298）。两者必须一致，否则期望=1.0 而实际=1.5，
+        // 校验拒绝、回放永不接管。
+        // 注意 QuickPitched 与 playbackSpeed 在 scnEditor.Play()（:7233-7234）
+        // 是成对写入的，录制侧（Patch_Lifecycle.cs:378/:437）也是同一时刻采样，
+        // 所以不存在「非飙速却存了 1.5」的组合。
+        bool quickPitched = SpectreState.data.QuickPitched is bool qp && qp;
         VideoRender.SpeedOverrideQuickPitched = quickPitched;
         VideoRender.SpeedOverride = quickPitched
-            && SpectreState.data.doubles.TryGetValue(PlaybackSpeed, out double spd) && spd > 0.0
+            && SpectreState.data.PlaybackSpeed is double spd && spd > 0.0
             ? (float)spd
             : 1f;
         VideoRender.SpeedOverrideArmed = true;
 
-        int startTile = SpectreState.data.ints.TryGetValue(StartTile, out int st) ? st : 0;
+        // **起点由玩家决定，不再强制跳到录像的 data.StartTile。**
+        // 需求是「从任意位置开始渲染」，所以起点取玩家点渲染时所在的砖块
+        // （requestedStartFloor，已在重启前抓取）。回放侧本来就支持任意起点：
+        // Patch_Lifecycle 用 GCS.checkpointNum 调 ReplayPlayer.FastForward
+        // 对齐按键游标，并且已放开对应的区间校验。
+        //
+        // 注意 Play() 的起点推导（scnEditor.cs:7237-7251）：只有「已选中砖块」
+        // 才会用它的 seqID，否则走 else 落到 0——直接不传起点反而会强制回第 0 块。
+        // 所以这里必须显式选中目标砖块，而不是「什么都不做」。
         if (ADOBase.editor != null && ADOBase.editor.floors != null && ADOBase.editor.floors.Count > 1)
         {
-            // 编辑器统一走官方 Play 路径；Play() 以当前选中砖块为起点，先选中回放起始砖块
-            int floor = Mathf.Clamp(startTile, 0, ADOBase.editor.floors.Count - 1);
+            int floor = Mathf.Clamp(requestedStartFloor, 0, ADOBase.editor.floors.Count - 1);
             ADOBase.editor.SelectFloor(ADOBase.editor.floors[floor], cameraJump: false);
             GCS.checkpointNum = floor;
             ADOBase.editor.Play();
@@ -210,7 +267,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
         else
         {
             int floorLimit = ADOBase.lm != null && ADOBase.lm.listFloors != null ? ADOBase.lm.listFloors.Count - 1 : 0;
-            GCS.checkpointNum = Mathf.Clamp(startTile, 0, Math.Max(0, floorLimit));
+            GCS.checkpointNum = Mathf.Clamp(requestedStartFloor, 0, Math.Max(0, floorLimit));
         }
 
         SetPhase(VideoRender.Phase.WaitingPlayback, "rendervideo.stage.waiting", "");
@@ -337,6 +394,22 @@ internal sealed class VideoRenderJob : MonoBehaviour
 
             // 编辑器/后台聚焦策略可能暂停全局音频，渲染期间强制开启（离线混音依赖它）
             AudioListener.pause = false;
+
+            // ── 手动提前结束（渲染页的「提前结束键」）──────────────────────
+            // 与 cancelRequested 是**两件不同的事**：后者是「中止、不留成品」
+            // （Esc / 离开试玩 / 时间轴被重置），走 NotifyCanceled 丢弃一切；
+            // 这里玩家要的恰恰是成品——按到哪就导出到哪，状态必须是 Completed。
+            // 所以只钉 endFrame（循环的唯一下一出口），绝不碰 cancelRequested。
+            //
+            // 钉在当前帧而不是加尾巴：设置项的语义是「导出到按键那一刻」，
+            // 加 tailSeconds 会让成片比玩家看到的终点长几秒，无从解释。
+            // 这一帧本身仍会被 CaptureFrame/Grab 采到（endFrame 在 :482 才生效）。
+            if (StopRequestedByHotkey())
+            {
+                endFrame = frameIndex;
+                Debug.Log("[SpectreReplay] render stopped by hotkey at frame " + frameIndex
+                    + " (" + (frameIndex / (double)fps).ToString("0.00") + "s)");
+            }
 
             // 结算转场等场景切换后相机已销毁，提前收尾
             if (scrCamera.instance == null && endFrame < 0)
@@ -692,6 +765,9 @@ internal sealed class VideoRenderJob : MonoBehaviour
             scrController controller = scrController.instance;
             bool counting = controller != null && controller.state == States.Countdown;
             bool inPlay = controller != null && controller.state == States.PlayerControl;
+            // 检查点开局的状态：从中间砖块起播时，倒计时整段都在这个状态里放完
+            // （scrController.OnMusicScheduled 的检查点分支不经过 States.Countdown）
+            bool checkpointing = controller != null && controller.state == States.Checkpoint;
             double songNow = conductor != null ? conductor.songposition_minusi : 0.0;
 
             // 关卡已经在跑（歌已开始 / 已进 PlayerControl）而回放仍未接管：
@@ -702,7 +778,10 @@ internal sealed class VideoRenderJob : MonoBehaviour
             // 且确实有一条校验拒绝记录。少任何一条都保持原语义继续等：
             // Start_Rewind 会连发多次（前一发被拒、后一发成功是常态），
             // 只看其中一条会误杀本来能成功的那些轮次。
-            bool levelRunning = (conductor != null && conductor.hasSongStarted) || counting || inPlay;
+            // 检查点开局没有 States.Countdown 这一段（见下方 ② 的说明），把关卡
+            // 「已经在跑」的判断补上 Checkpoint，否则从中间起播时回放若始终没接管，
+            // 这里会把一次确定的失败拖成 10 秒空转才报超时。
+            bool levelRunning = (conductor != null && conductor.hasSongStarted) || counting || inPlay || checkpointing;
             if (!SpectreState.is_playing)
             {
                 if (levelRunning && !string.IsNullOrEmpty(Patch_StartRewind.LastReject))
@@ -728,13 +807,16 @@ internal sealed class VideoRenderJob : MonoBehaviour
             // pin=6.236、已录 5.000 s ⇒ audioAnchor = 1.236 s，第一帧已经在
             // 倒计时结束之后。
             //
-            // 现在分两条路放行：
-            //   · 倒计时（state==Countdown）：**无条件提前放行**，锚点取当时的
-            //     songposition（这段时间它是负数，pin = 负锚点 + 已录秒数，正好在
-            //     歌曲 0 s 处过零），倒计时整段进片，4 声提示音也一起进音轨。
-            //   · 本来就没有倒计时（forceNoCountdown，或检查点开局走 Checkpoint
-            //     再进 PlayerControl）：保持原来的两道闸（PlayerControl + 连续两帧
-            //     正位置），它挡的是「按检查点 seek 还没把位置写回」的瞬间。
+            // 现在分三条路放行（顺序即优先级）：
+            //   ① 倒计时（state==Countdown，第 0 块开局）：**无条件提前放行**，锚点取
+            //      当时的 songposition（这段时间它是负数，pin = 负锚点 + 已录秒数，
+            //      正好在歌曲 0 s 处过零），倒计时整段进片，4 声提示音也一起进音轨。
+            //   ② 歌已开始（conductor.hasSongStarted）：检查点开局唯一可行的闸门。
+            //      从中间砖块起播时状态机走 Checkpoint 而不是 Countdown，倒计时在
+            //      Checkpoint 里放完，等 Countdown 永远等不到。详见下方 ② 的说明。
+            //   ③ PlayerControl + 连续两帧正位置：兜底。挡的是「按检查点 seek 还没把
+            //      位置写回」的瞬间，也就是 hasSongStarted 已经置起、但 songposition
+            //      仍是上一轮残留值的极端时序。正常上面两路先命中，走不到这里。
             //
             // **倒计时这条路不设任何绝对秒数窗口。** 长度由谱面决定：
             //     (countdownTicks - 1) 拍 × crotchetAtStart(60/BPM) ÷ countdownSpeedMultiplier
@@ -748,6 +830,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
             // 最多持续到切换点，不会残留到下一轮；等待循环的轮询频率又远高于帧率，
             // 所以第一次看到它就等于倒计时刚开头。万一发现时已是末尾（场景加载慢），
             // 从当时开始录仍好过落到 PlayerControl 再录——少录一段，而不是整段丢失。
+            // ① 倒计时开局（第 0 块，checkpointNum==0）
             if (conductor != null && counting)
             {
                 // 下面两个数只进日志、不进判断：报出这段倒计时的长度，方便复测者
@@ -758,6 +841,32 @@ internal sealed class VideoRenderJob : MonoBehaviour
                 Debug.Log("[SpectreReplay] render starts during countdown: songposition=" + songNow.ToString("0.000")
                     + "s countdownEnd=" + countdownEnd.ToString("0.000") + "s ticks=" + countdownTickCount
                     + " (state=Countdown)");
+                playbackLive = true;
+                yield break;
+            }
+
+            // ② 任意砖块检查点开局（含「从中间渲染」）：**这条路上没有 States.Countdown。**
+            //    scrController.OnMusicScheduled(:1599) 先把 conductor.hasSongStarted 置回
+            //    false，检查点分支(:1611) 置 true，紧接着 Scrub(checkpointNum) 把音乐 seek
+            //    到 `该砖块 entryTimeAfterExtraBeats − 4 拍`，然后直接
+            //    ChangeState(States.Checkpoint)(:1613)。倒计时画面（GET READY / 3 2 1 / GO）
+            //    与那 4 拍提示音**全在 Checkpoint 状态里放完**，状态机从不经过 Countdown，
+            //    由 Checkpoint_Update 等到 songposition 追上该砖块 entryTime 才进 PlayerControl。
+            //    所以用「等 Countdown」当闸门，在中间起播时永远等不到，只能退到
+            //    PlayerControl 才放行 —— 那正好是倒计时结束的瞬间，成片开头必然没有倒计时。
+            //    上游 Spectre 就是按 hasSongStarted 放行的（VideoRenderJob.cs:416），
+            //    这里必须同样处理，否则「从中间渲染」必定丢倒计时。
+            //    锚点在放行后仍取 conductor.songposition_minusi（见下方 audioAnchor 的计算），
+            //    即 Scrub 之后的权威位置，所以放行点提前不会把时间轴拉歪。
+            //    与最后一道兜底的差别只在「状态」：② 认 Checkpoint 和开局首秒，
+            //    不认「歌已开始但位置还是上一轮残留值」这种假就绪。
+            bool freshStartPosition = songNow >= 0.0 && songNow < 1.0;
+            if (conductor != null && conductor.hasSongStarted
+                && (checkpointing || inPlay || freshStartPosition))
+            {
+                Debug.Log("[SpectreReplay] render starts at song live: songposition=" + songNow.ToString("0.000")
+                    + "s state=" + (controller != null ? controller.state.ToString() : "<无控制器>")
+                    + (checkpointing ? " (检查点前导倒计时，非 Countdown 状态)" : ""));
                 playbackLive = true;
                 yield break;
             }
@@ -831,6 +940,31 @@ internal sealed class VideoRenderJob : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 渲染中「提前结束键」是否在本帧被按下。
+    ///
+    /// 键值来自配置（<see cref="Settings.RenderStopKey"/>），可能被手改成任意整数，
+    /// 所以**先 <see cref="Enum.IsDefined"/> 再转换**：裸 <c>(KeyCode)int</c> 转出来的
+    /// 越界枚举喂进 <c>Input.GetKeyDown</c> 会抛 <c>ArgumentException</c>，而这里在捕获
+    /// 协程里——异常会被 Drive() 接住转成 NotifyFailed，用户看到一句与键位毫无关系的
+    /// 报错，整场渲染白跑。宁可当「没按」处理（返回 false），设置页里也能重新选一次。
+    ///
+    /// 不额外排除 Escape：它根本走不到这里。游戏按 Esc 会走 <c>scnEditor.SwitchToEditMode</c>，
+    /// 被 <see cref="SpectreReplay.Features.Replay.Patch_SwitchToEditMode"/> 转成
+    /// <see cref="CancelForSceneExit"/> 置上 <c>cancelRequested</c>，而捕获循环在轮询本方法
+    /// **之前**（:334）就按取消跳出了。也就是说 Esc 永远是「中止、不留成品」。
+    /// 改绑界面同样绑不上它：<c>OnGui.RowHotkey</c> 在等待按键期间把 Esc 当「取消」吃掉。
+    /// </summary>
+    private static bool StopRequestedByHotkey()
+    {
+        if (!Settings.RenderStopOn)
+            return false;
+        int key = Settings.RenderStopKey;
+        if (!Enum.IsDefined(typeof(KeyCode), key))
+            return false;
+        return Input.GetKeyDown((KeyCode)key);
+    }
+
     private int EstimateFrames(int fps, float tailSeconds)
     {
         double songEnd = 60.0;
@@ -838,7 +972,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
         if (floors != null && floors.Count > 1)
         {
             int end = floors.Count - 1;
-            if (SpectreState.data.ints.TryGetValue(EndTile, out int et) && et >= 0 && et < floors.Count)
+            if (SpectreState.data.EndTile is int et && et >= 0 && et < floors.Count)
                 end = et;
             songEnd = floors[end].entryTime;
         }
@@ -864,7 +998,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
                 + ex.GetType().Name + ": " + ex.Message
                 + "（请检查 设置→视频渲染 的输出目录是否可写、路径是否合法）");
         }
-        string song = SpectreState.data.strings.TryGetValue(SongName, out string s) && !string.IsNullOrEmpty(s)
+        string song = SpectreState.data.SongName is string s && !string.IsNullOrEmpty(s)
             ? s : "Replay";
         // 谱面作者常用 TMP 富文本做渐变歌名（逐字母 <color=#…>）——必须先剥标签再消毒：
         // 否则标签括号被逐字符替换成下划线，文件名膨胀数百字符，超出 MAX_PATH 后 ffmpeg

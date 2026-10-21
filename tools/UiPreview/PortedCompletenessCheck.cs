@@ -179,7 +179,7 @@ namespace UiPreview
             //    原先这里只显示一句"官方关卡没有可打开的谱面文件"，看着有道理，
             //    其实是**把"没有文件"错当成了"没有关卡"**——官方关卡的数据烤在
             //    游戏里，靠 `GCS.internalLevelName`（形如 "0-0"/"AR-X"）选。
-            //    回放录制时已把这个名字写进 `data.strings[InternalLevelName]`，
+            //    回放录制时已把这个名字写进 `data.InternalLevelName`，
             //    所以完全能直达：清 customLevelPaths → 写 internalLevelName →
             //    重载 scnGame，`scnGame.Update` 第三帧就会 LoadAndPlayLevel。
             //

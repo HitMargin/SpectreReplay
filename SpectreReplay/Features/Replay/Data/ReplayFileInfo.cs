@@ -9,9 +9,9 @@ namespace SpectreReplay.Features.Replay;
 /// <summary>
 /// 一份回放的「只读摘要」，给回放列表点开时展示用。
 ///
-/// <para><b>为什么单独一个类型，而不是把 <see cref="LegacyReplayData"/> 直接交给界面。</b>
-/// 界面要的是**已经算好、可以直接摆的文字**，不是一棵字典。让界面去
-/// <c>strings["song_name"]</c> 里掏，会把「字段缺失怎么办」「BPM 是 0 怎么办」
+/// <para><b>为什么单独一个类型，而不是把 <see cref="ReplayData"/> 直接交给界面。</b>
+/// 界面要的是**已经算好、可以直接摆的文字**，不是一堆可空字段。让界面去
+/// 直接读 <c>SongName</c>／<c>Bpm</c> 这类属性，会把「字段缺失怎么办」「BPM 是 0 怎么办」
 /// 这类判断散到 UI 层——而 UI 层每加一行都在 OnGUI 里，抛异常就等于整个设置
 /// 面板被 UMM 收掉（见 <see cref="Pages.Pages"/> 的规矩）。所以这里把
 /// 取值、缺省、格式化一次做完，界面只负责排版。</para>
@@ -97,7 +97,7 @@ internal sealed class ReplayFileInfo
             return info;
         }
 
-        LegacyReplayData data;
+        ReplayData data;
         try
         {
             if (!ReplayManager.ReadReplayData(out data, path))
@@ -118,41 +118,42 @@ internal sealed class ReplayFileInfo
             return info;
         }
 
-        info.SongName = Str(data, K.SongName);
-        info.ArtistName = Str(data, K.ArtistName);
-        info.JudgeMode = Str(data, K.JudgeMode);
-        info.LevelPath = Str(data, K.LevelPath);
-        info.InternalLevelName = Str(data, K.InternalLevelName);
-        info.IsOfficialLevel = Bool(data, K.IsOfficialLevel);
-        info.HitMarginLimit = Str(data, K.HitMarginLimitKey);
-        info.ModVersionText = Str(data, K.ModVersion);
-        info.StartTileIndex = Int(data, K.StartTile);
-        info.EndTileIndex = Int(data, K.EndTile);
-        info.BpmValue = Dbl(data, K.Bpm);
-        info.PitchValue = Int(data, K.Pitch);
-        info.PlaybackSpeed = Dbl(data, K.PlaybackSpeed);
-        info.QuickPitched = Bool(data, K.QuickPitched);
-        info.PercentXacc = Dbl(data, K.PercentXacc);
+        // 缺省值与旧版 Str/Bool/Int/Dbl 四个辅助方法逐字一致：缺字符串记空串，缺数值记 0。
+        info.SongName = data.SongName ?? "";
+        info.ArtistName = data.ArtistName ?? "";
+        info.JudgeMode = data.JudgeMode ?? "";
+        info.LevelPath = data.LevelPath ?? "";
+        info.InternalLevelName = data.InternalLevelName ?? "";
+        info.IsOfficialLevel = data.IsOfficialLevel == true;
+        info.HitMarginLimit = data.HitMarginLimit ?? "";
+        info.ModVersionText = data.ModVersion ?? "";
+        info.StartTileIndex = data.StartTile ?? 0;
+        info.EndTileIndex = data.EndTile ?? 0;
+        info.BpmValue = data.Bpm ?? 0.0;
+        info.PitchValue = data.Pitch ?? 0;
+        info.PlaybackSpeed = data.PlaybackSpeed ?? 0.0;
+        info.QuickPitched = data.QuickPitched == true;
+        info.PercentXacc = data.PercentXacc ?? 0.0;
 
-        info.KeyCount = data.KeyEvent_list != null ? data.KeyEvent_list.Count : 0;
-        info.HitCount = data.HitContext_list != null ? data.HitContext_list.Count : 0;
+        info.KeyCount = data.KeyEvents != null ? data.KeyEvents.Count : 0;
+        info.HitCount = data.HitSnapshots != null ? data.HitSnapshots.Count : 0;
         info.DurationSeconds = LastKeyPosition(data);
-        info.JudgmentCounts = ParseJudgments(Str(data, K.JudgmentList));
+        info.JudgmentCounts = ParseJudgments(data.JudgmentList ?? "");
         info.Accuracy = SpectreReplay.Features.Compat.HitMarginCompat.Accuracy(info.JudgmentCounts);
         return info;
     }
 
     /// <summary>按键流里最晚的那个时间点。没有按键就是 0。</summary>
-    private static double LastKeyPosition(LegacyReplayData data)
+    private static double LastKeyPosition(ReplayData data)
     {
-        if (data.KeyEvent_list == null || data.KeyEvent_list.Count == 0)
+        if (data.KeyEvents == null || data.KeyEvents.Count == 0)
             return 0.0;
         double max = 0.0;
         // 线性扫：文件本来就已经全读进内存了，这点开销可以忽略，
         // 而排序会改变列表顺序——将来若有人拿它干别的，会踩到意外副作用。
-        for (int i = 0; i < data.KeyEvent_list.Count; i++)
+        for (int i = 0; i < data.KeyEvents.Count; i++)
         {
-            double p = data.KeyEvent_list[i].SongPosition;
+            double p = data.KeyEvents[i].SongPosition;
             if (p > max) max = p;
         }
         return max;
@@ -255,15 +256,4 @@ internal sealed class ReplayFileInfo
         return true;
     }
 
-    private static string Str(LegacyReplayData d, string key)
-        => d.strings != null && d.strings.TryGetValue(key, out string v) ? v ?? "" : "";
-
-    private static bool Bool(LegacyReplayData d, string key)
-        => d.bools != null && d.bools.TryGetValue(key, out bool v) && v;
-
-    private static int Int(LegacyReplayData d, string key)
-        => d.ints != null && d.ints.TryGetValue(key, out int v) ? v : 0;
-
-    private static double Dbl(LegacyReplayData d, string key)
-        => d.doubles != null && d.doubles.TryGetValue(key, out double v) ? v : 0.0;
 }

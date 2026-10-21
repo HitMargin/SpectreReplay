@@ -148,8 +148,13 @@ namespace UiPreview
             int i = parenIndex - 1;
             while (i >= 0 && char.IsWhiteSpace(s[i])) i--;
             int end = i + 1;
-            while (i >= 0 && (char.IsLetterOrDigit(s[i]) || s[i] == '.')) i--;
-            string word = s.Substring(i + 1, end - i - 1);
+            // `?` / `!` 必须一起跨过去：`Main.mod?.Logger?.Log("…")` 这种空条件
+            // 调用一旦在 `?` 处停下，取到的就不是标识符后缀，于是整条**只写日志**
+            // 的诊断串被误判成界面文案。取完整段后再把这两个修饰符摘掉，
+            // 后缀比较才仍然落在 Logger.Log / Debug.Log 上。
+            while (i >= 0 && (char.IsLetterOrDigit(s[i]) || s[i] == '.'
+                || s[i] == '?' || s[i] == '!')) i--;
+            string word = s.Substring(i + 1, end - i - 1).Replace("?", "").Replace("!", "");
             // 代码里常写全限定名 UnityEngine.Debug.LogWarning(，取的是整段，
             // 所以要比后缀而不是全等。
             return word.EndsWith("Debug.Log") || word.EndsWith("Debug.LogWarning")

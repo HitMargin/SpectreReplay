@@ -7,7 +7,7 @@
 //     scrFloor.LightUp 与判定路径都读它（影响实跑）
 // 回放文件是**玩家可编辑的文本**，"JudgeMode": "99" 完全可能出现。
 //
-// 判据：源码里每个从 `data.strings[...]` 取值的 Enum.TryParse，其后必须紧跟
+// 判据：源码里每个从回放数据取难度字符串的 Enum.TryParse，其后必须紧跟
 // `Enum.IsDefined` 校验。已修的三处 + 本来就对的 HitMarginCompat 一起纳入。
 using System;
 using System.IO;

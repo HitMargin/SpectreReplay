@@ -134,6 +134,11 @@ public static class ConfigManager
         // 是否把鼠标指针画进成片（见 Settings.RenderCursorOn）。缺键时跟随字段默认值（false），
         // 保持升级前行为——此前模组从不往画面里画指针，旧配置里也没有这个键。
         public bool render_cursor_on { get; set; }
+        // 渲染中按快捷键提前结束（见 Settings.RenderStopOn / RenderStopKey）。
+        // 缺键时跟随字段默认值（false / 292 = F11），保持升级前行为——
+        // 此前渲染只能录完整份回放，旧配置里也没有这两个键。
+        public bool render_stop_on { get; set; }
+        public int render_stop_key { get; set; }
         public float judgebar_anim_duration { get; set; }
         public float judgebar_sensitivity { get; set; }
         public float judgebar_life { get; set; }
@@ -306,6 +311,8 @@ public static class ConfigManager
                 render_on = Settings.RenderOn,
                 render_clock_on = Settings.RenderClockOn,
                 render_cursor_on = Settings.RenderCursorOn,
+                render_stop_on = Settings.RenderStopOn,
+                render_stop_key = Settings.RenderStopKey,
                 judgebar_anim_duration = Settings.JudgeBarAnimationDuration,
                 judgebar_sensitivity = Settings.JudgeBarSensitivity,
                 judgebar_life = Settings.JudgeBarTickLife,
@@ -556,6 +563,11 @@ public static class ConfigManager
                     Settings.FailSave = sets.Value<bool?>("FailSave") ?? Settings.FailSave;
                     Settings.Backup = sets.Value<bool?>("Backup") ?? Settings.Backup;
                     Settings.ManualSave = sets.Value<bool?>("ManualSave") ?? Settings.ManualSave;
+                    // CancelSave 与 ManualSave 同属「快捷键补丁挂不挂」的开关，
+                    // 写盘侧一直有它（本文件 Sets.CancelSave），读盘侧此前漏了：
+                    // 手改成 false 后重启会被静默读回默认值 true，
+                    // 玩家看到的是「这个开关自己又开了」。
+                    Settings.CancelSave = sets.Value<bool?>("CancelSave") ?? Settings.CancelSave;
                     Settings.LegacyEngine = sets.Value<bool?>("LegacyEngine") ?? Settings.LegacyEngine;
                     Settings.KeybdSoundRecordActive = sets.Value<bool?>("KeybdSoundRecordActive") ?? Settings.KeybdSoundRecordActive;
                     Settings.KeyConvertEnabled = sets.Value<bool?>("KeyConvertEnabled") ?? Settings.KeyConvertEnabled;
@@ -670,6 +682,11 @@ public static class ConfigManager
                     Settings.RenderOn = ints.Value<bool?>("render_on") ?? Settings.RenderOn;
                     Settings.RenderClockOn = ints.Value<bool?>("render_clock_on") ?? Settings.RenderClockOn;
                     Settings.RenderCursorOn = ints.Value<bool?>("render_cursor_on") ?? Settings.RenderCursorOn;
+                    Settings.RenderStopOn = ints.Value<bool?>("render_stop_on") ?? Settings.RenderStopOn;
+                    // 键值不 Clamp：它是 KeyCode 数值域，合法集合由 Enum.IsDefined
+                    // 在轮询处把关（见 VideoRenderJob.StopRequestedByHotkey）。
+                    // Clamp 到某个区间反而会把手改配置里的怪值悄悄改成另一个**看似正常**的键。
+                    Settings.RenderStopKey = ints.Value<int?>("render_stop_key") ?? Settings.RenderStopKey;
                     Settings.JudgeBarAnimationDuration = Mathf.Clamp(ints.Value<float?>("judgebar_anim_duration") ?? Settings.JudgeBarAnimationDuration, 0f, 1f);
                     Settings.JudgeBarSensitivity = Mathf.Clamp(ints.Value<float?>("judgebar_sensitivity") ?? Settings.JudgeBarSensitivity, 0f, 1f);
                     Settings.JudgeBarTickLife = Mathf.Clamp(ints.Value<float?>("judgebar_life") ?? Settings.JudgeBarTickLife, 0f, 10f);

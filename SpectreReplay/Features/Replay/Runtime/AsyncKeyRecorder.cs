@@ -77,7 +77,7 @@ internal static class AsyncKeyRecorder
             double dsp = ((long)ev.GetTimeInTicks() + dspNowTicks - nowTicks) / 10000000.0;
             double songPos = conductor.song.pitch * (dsp - conductor.dspTimeSong - scrConductor.calibration_i)
                             - conductor.addoffset;
-            data.KeyEvent_list.Add(new KeyEvent
+            data.KeyEvents.Add(new KeyEvent
             {
                 KeyCode = ev.Key,
                 IsPressed = ev.Type == SkyHook.EventType.KeyPressed,

@@ -567,32 +567,61 @@ namespace SpectreReplay.Ui
         /// 「按任意键改键」的行。三段状态：已绑定 / 等待按键 / 未绑定。
         /// 点一次进入等待，再点退出；等待期间 Esc 取消**并独占 Esc**——
         /// 否则玩家想绑 Esc，窗口却先被 UMM 关掉，一来一回永远绑不上。
+        ///
+        /// <paramref name="enabled"/> 为 false 时整行压暗、不再接受点击，
+        /// 也不再进入按键扫描——用于「上一项没开，这个快捷键就没有意义」那种
+        /// 情形。**默认 true**，既有调用点一行都不用改。
         /// </summary>
-        internal static void RowHotkey(string labelKey, Func<int> get, Action<int> set)
+        internal static void RowHotkey(string labelKey, Func<int> get, Action<int> set,
+            bool enabled = true)
         {
-            GUILayout.BeginHorizontal();
-            GUILayout.Label(Loc.T(labelKey), Gui.LabelStyle, GUILayout.Width(LabelW));
-            int cur = get();
-            bool waiting = _capturing == GetCaptureId(labelKey);
-            string text = waiting
-                ? Loc.T("ui.presskey")
-                : (cur > 0 ? KeyName((KeyCode)cur) : Loc.T("ui.nokey"));
-            // 等待按键时换成强调色按钮：这是"现在轮到你按键"的唯一提示。
-            // 同页签那处：用专门样式而不是 GUI.backgroundColor（乘算会双重变暗）。
-            Rect hk = GUILayoutUtility.GetRect(Gui.CtrlW, 24f,
-                GUILayout.Width(Gui.CtrlW), GUILayout.Height(24f));
-            Gui.Tip(new Rect(hk.x - LabelW, hk.y, LabelW + hk.width, hk.height), labelKey);
-            if (GUI.Button(hk, text,
-                    waiting ? Gui.AccentButtonStyle : Gui.ButtonStyle))
+            // 捕获 id 只取决于 labelKey，循环内每次重算是一样的值；
+            // 提到闭包外面是为了让「画」和「扫键」两段读同一个 id。
+            int id = GetCaptureId(labelKey);
+            // 门控走 Gui.Dim 包住**整段绘制**：Tip / RowGap 必须留在本方法体内，
+            // 判据 ⑬d/⑬f 正是按「行助手自己体内有没有 Tip( / RowGap(」判的。
+            Gui.Dim(!enabled, () =>
             {
-                int id = GetCaptureId(labelKey);
-                _capturing = _capturing == id ? 0 : id;
-            }
-            GUILayout.FlexibleSpace();
-            GUILayout.EndHorizontal();
-            RowGap();
+                GUILayout.BeginHorizontal();
+                GUILayout.Label(Loc.T(labelKey), Gui.LabelStyle, GUILayout.Width(LabelW));
+                int cur = get();
+                bool waiting = _capturing == id;
+                string text = waiting
+                    ? Loc.T("ui.presskey")
+                    : (cur > 0 ? KeyName((KeyCode)cur) : Loc.T("ui.nokey"));
+                // 等待按键时换成强调色按钮：这是"现在轮到你按键"的唯一提示。
+                // 同页签那处：用专门样式而不是 GUI.backgroundColor（乘算会双重变暗）。
+                Rect hk = GUILayoutUtility.GetRect(Gui.CtrlW, 24f,
+                    GUILayout.Width(Gui.CtrlW), GUILayout.Height(24f));
+                Gui.Tip(new Rect(hk.x - LabelW, hk.y, LabelW + hk.width, hk.height), labelKey);
+                // **始终调 GUI.Button，只丢弃结果**，与 OnGui.Button 同一套理由：
+                // 短路跳过会让置灰行整块消失，玩家看到的是空洞而不是灰按钮。
+                bool hit = GUI.Button(hk, text,
+                    waiting ? Gui.AccentButtonStyle : Gui.ButtonStyle);
+                if (!enabled || Gui.IsDim)
+                {
+                    hit = false;
+                }
+                if (hit)
+                {
+                    _capturing = _capturing == id ? 0 : id;
+                }
+                GUILayout.FlexibleSpace();
+                GUILayout.EndHorizontal();
+                RowGap();
+            });
 
-            if (Event.current == null || _capturing != GetCaptureId(labelKey))
+            if (!enabled)
+            {
+                // 行在等待按键期间被关掉（总开关拨回去）：顺手退出等待态，
+                // 否则它会继续占着 _capturing，下一次点别处才被顶掉。
+                if (_capturing == id)
+                {
+                    _capturing = 0;
+                }
+                return;
+            }
+            if (Event.current == null || _capturing != id)
             {
                 return;
             }

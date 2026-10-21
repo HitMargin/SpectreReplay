@@ -32,7 +32,7 @@ namespace SpectreReplay.Pages
         /// <summary>
         /// 当前载入的回放文件。
         ///
-        /// 自己记而**不去问回放引擎**：LegacyReplayData 只装数据，
+        /// 自己记而**不去问回放引擎**：ReplayData 只装数据，
         /// 不记得自己来自哪个文件。列表里那个"● 已载入"标记要靠它，
         /// 否则玩家放了哪一个只能靠猜。
         /// </summary>
@@ -89,15 +89,27 @@ namespace SpectreReplay.Pages
                 //   `!LimitKey ||` 前置条件，而那个函数的末态由末尾兜底循环决定，
                 //   开关真假只改中间态、末态逐字节相同。留着一个拨了没反应、说明还
                 //   在编功能的开关，比没有这个开关更糟——玩家会以为回放文件被它撑大。）
-                // 这两项都是**真的行为开关**（不是摆设）：ManualSave 管 F9 手动保存
-                // 那条补丁挂不挂（Main.cs + Patch_Misc.cs）、GetDataFromAsyncInput
-                // 管按键从异步输入还是轮询取（Main.cs + AsyncKeyRecorder.cs）。
+                // 这几项都是**真的行为开关**（不是摆设）：ManualSave 管 F9 手动保存
+                // 那条补丁挂不挂（Main.cs + Patch_Misc.cs）、CancelSave 管另一条
+                // 「按快捷键放弃本局存档」的补丁（Main.cs + Patch_Misc.cs:66）、
+                // GetDataFromAsyncInput 管按键从异步输入还是轮询取
+                // （Main.cs + AsyncKeyRecorder.cs）。
                 // 之前界面上一个都没有，改它们只能手改 Configs.json——
                 // 而 ManualSave 关掉后 F9 直接失效，玩家会以为按键没绑上。
                 // （原先这里还有第三个「界面语言跟随游戏」，2026-10-17 已删除：
                 //   面板语言由 Ui.Loc.RefreshLanguage 始终跟随游戏，那个开关只影响
                 //   14 语言大表里的通知文案，留着只会让人以为界面语言能单独设。）
                 OnGui.Row("record.manualsave", ManualSave, v => { ManualSave = v; Commit(); }, ReplayOn);
+                // 取消保存：与上一项同类——它管的是「按快捷键放弃本局待存数据」
+                // 那条补丁挂不挂（Patch_Misc.cs:66 的 scrConductor.Update Postfix）。
+                // 关掉后按这个键毫无反应，而界面上此前根本没有这一项。
+                // **必须写限定名 Settings.CancelSave**：本文件顶部 `using static` 同时
+                // 引入了 Settings 与 SpectreState，后者有个 `CancelSave()` 方法。
+                // 方法组与字段同名时简单名解析到方法组，`v => { CancelSave = v; }`
+                // 会报 CS1656「无法为方法组赋值」。（ManualSave 没这个冲突，
+                // SpectreState 里没有同名方法。）
+                OnGui.Row("record.cancelsave", Settings.CancelSave,
+                    v => { Settings.CancelSave = v; Commit(); }, ReplayOn);
                 // 异步输入：**开关前先看游戏侧有没有开。** 这条设置只在游戏的
                 // "使用异步输入"打开时才有意义——`AsyncKeyRecorder.FlushFrame`
                 // 里那个 `AsyncInputManager.isActive` 守卫就是它：游戏侧没开时
@@ -127,7 +139,15 @@ namespace SpectreReplay.Pages
                 // 按任意键改键：等待期间 Esc 取消并独占 Esc（见 OnGui.RowHotkey）。
                 // 这两个键是**手动存这一局**的入口——没有它，练到一半的短局
                 // 只能等通关自动保存，等于存不下来。
-                OnGui.RowHotkey("record.savekey", () => SaveButton, k => { SaveButton = k; Commit(); }); OnGui.RowHotkey("record.cancelsavekey", () => CancelSaveButton, k => { CancelSaveButton = k; Commit(); });
+                //
+                // 各自跟着上面那两项开关压暗：ManualSave / CancelSave 关掉时，
+                // 对应的补丁整个不挂，这两个键按下去不会有任何反应。留着可点的
+                // 改键行，玩家会以为是自己绑错了键。压暗后 RowHotkey 内部同时
+                // 拦掉点击与扫键（Gui.Dim 只染色，拦不住内建 GUI.Button）。
+                OnGui.RowHotkey("record.savekey", () => SaveButton, k => { SaveButton = k; Commit(); },
+                    ReplayOn && ManualSave);
+                OnGui.RowHotkey("record.cancelsavekey", () => CancelSaveButton, k => { CancelSaveButton = k; Commit(); },
+                    ReplayOn && Settings.CancelSave);
                 OnGui.Note("record.note");
             });
 
@@ -310,7 +330,7 @@ namespace SpectreReplay.Pages
             try
             {
                 if (!Features.Replay.ReplayManager.LoadReplayAuto(
-                        out LegacyReplayData loaded, path))
+                        out ReplayData loaded, path))
                 {
                     Status.Warn("playback.idle_err", Path.GetFileNameWithoutExtension(path));
                     return;
@@ -434,7 +454,7 @@ namespace SpectreReplay.Pages
             if (is_playing)
             {
                 string song = "?";
-                if (data != null && data.strings.TryGetValue(SongName, out string sn)
+                if (data != null && data.SongName is string sn
                     && !string.IsNullOrEmpty(sn))
                 {
                     song = sn;
@@ -528,7 +548,7 @@ namespace SpectreReplay.Pages
             {
                 return;
             }
-            if (!data.strings.TryGetValue(LevelPath, out string levelPath)
+            if (data.LevelPath is not string levelPath
                 || string.IsNullOrEmpty(levelPath))
             {
                 return;
@@ -538,13 +558,13 @@ namespace SpectreReplay.Pages
             // 官方关卡：以前只显示一句提示就收尾，但那是个**错误结论**——
             // 官方关卡不是"没有关卡"，而是关卡数据烤在游戏里、靠
             // GCS.internalLevelName 选（形如 "0-0"/"AR-X"），不靠文件路径。
-            // 回放录制时已把那个名字存进 data.strings[InternalLevelName]，
+            // 回放录制时已把那个名字存进 data.InternalLevelName，
             // 所以这里能直达（见 OpenReplayLevel.GoOfficial）。
             bool official = levelPath.StartsWith("OfficialLevel", StringComparison.Ordinal)
-                || (data.bools.TryGetValue(IsOfficialLevel, out bool iso) && iso);
+                || (data.IsOfficialLevel is bool iso && iso);
             if (official)
             {
-                string internalName = data.strings.TryGetValue(InternalLevelName, out string nm) ? nm : "";
+                string internalName = data.InternalLevelName is string nm ? nm : "";
                 // 老回放没有内部关卡名：给提示而不是一颗点了没反应的按钮。
                 if (string.IsNullOrEmpty(internalName))
                 {
@@ -584,7 +604,7 @@ namespace SpectreReplay.Pages
             }
 
             // 录自编辑器就回编辑器、录自关卡就回关卡——两边起跳逻辑不同
-            string recScene = data.strings.TryGetValue(SceneName, out string sc) ? sc : "";
+            string recScene = data.SceneName is string sc ? sc : "";
             bool editorReplay = recScene == "scnEditor";
             string captured = levelPath;
             if (GUILayout.Button(Loc.T(editorReplay ? "playback.openlevel.editor" : "playback.openlevel"),
@@ -617,7 +637,7 @@ namespace SpectreReplay.Pages
         {
             if (!PlayMode || data == null)
                 return;
-            string song = data.strings.TryGetValue(SongName, out string sn) && !string.IsNullOrEmpty(sn)
+            string song = data.SongName is string sn && !string.IsNullOrEmpty(sn)
                 ? sn : "?";
             GUILayout.Space(2f);
             GUILayout.Label(Loc.F("playback.ready", song), Gui.NoteStyle, GUILayout.ExpandWidth(true));
@@ -861,6 +881,18 @@ namespace SpectreReplay.Pages
                 v => ((int)v) + " fps", v => { RenderFps = (int)v; Commit(); });
             OnGui.RowSlider("render.tail", RenderTailSeconds, 0f, 15f,
                 v => v.ToString("0.#") + " s", v => { RenderTailSeconds = v; Commit(); });
+            // 渲染途中按快捷键提前结束：对应 **Settings.RenderStopOn / RenderStopKey**。
+            // 紧跟在「结尾秒数」之后：这两项描述的是同一件事——这段渲染到哪儿为止。
+            // 快捷键那一行跟着上一项置灰：关掉之后那个键整个不被消费（补丁不挂），
+            // 还让玩家去改一个永远不生效的键没有意义。RowHotkey 内部会按
+            // `!enabled || Gui.IsDim` 拦掉点击与扫键——Gui.Dim 本身只染色，
+            // 拦不住内建 GUI.Button，所以这里不能只靠外层包一层。
+            OnGui.Row("render.stop.enable", RenderStopOn,
+                v => { RenderStopOn = v; Commit(); });
+            OnGui.RowHotkey("render.stop.key", () => RenderStopKey,
+                k => { RenderStopKey = k; Commit(); }, RenderStopOn);
+            if (RenderStopOn)
+                OnGui.Note("render.stop.hint");
             OnGui.RowDropdown("render.surface", new[]
             {
                 Loc.T("render.surface.clean"), Loc.T("render.surface.screen"),
