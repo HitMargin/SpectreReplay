@@ -304,6 +304,24 @@
   "render.start.tip": "Startet einen Render mit den aktuellen Einstellungen. Lade zuerst ein Replay und betrete dessen Level.",
   "render.cancel.tip": "Bricht den aktuellen Render ab. Was bereits geschrieben wurde, bleibt erhalten.",
   "convert.button.tip": "Startet die Stapelkonvertierung der Videos im Ausgabeordner.",
-  "record.changedir.tip": "Ändert den Replay-Ordner. Während der Aufnahme nicht erlaubt, sonst ginge der Tastaturklang dieses Durchlaufs verloren."
- }
+  "record.changedir.tip": "Ändert den Replay-Ordner. Während der Aufnahme nicht erlaubt, sonst ginge der Tastaturklang dieses Durchlaufs verloren.",
+  "record.keymap": "Tastenbelegung",
+  "record.keymap.tip": "Ordnet den Code einer Taste einer anderen zu. Nützlich für Controller, Makro-Tastaturen oder Umbelegungstools, deren Codes von den vom Spiel erwarteten Standardtasten abweichen.",
+  "record.keymap.on": "Tastenbelegung aktivieren",
+  "record.keymap.on.tip": "Hauptschalter. Ausgeschaltet werden Tasten unverändert aufgezeichnet und wiedergegeben und die Tabelle unten hat keine Wirkung.",
+  "record.keymap.off": "Die Umbelegung ist aus; Tasten werden unverändert verwendet.",
+  "record.keymap.off.tip": "Erklärt den aktuellen Zustand: die Tabelle wird ignoriert.",
+  "record.keymap.note": "Links der Code, den die Taste tatsächlich sendet, rechts die Taste, die das Spiel sehen soll. Klicke auf ein Feld und drücke eine beliebige Taste zum Belegen; Esc bricht ab.",
+  "record.keymap.note.tip": "Erklärt die Verwendung dieser Tabelle.",
+  "record.keymap.empty": "Noch keine Einträge. Nutze die Schaltfläche unten, um einen hinzuzufügen.",
+  "record.keymap.empty.tip": "Erklärt, dass die Tabelle leer ist.",
+  "record.keymap.add": "Eintrag hinzufügen",
+  "record.keymap.add.tip": "Fügt eine leere Zeile hinzu; belege danach beide Seiten durch Anklicken.",
+  "ui.keymap.none": "Nicht belegt",
+  "ui.keymap.none.tip": "Diesem Feld ist noch keine Taste zugewiesen.",
+  "ui.keymap.clear": "Leeren",
+  "ui.keymap.clear.tip": "Leert die Zieltaste: diese Zeile hat keine Wirkung, der Quelleintrag bleibt aber erhalten.",
+  "ui.keymap.delete": "Löschen",
+  "ui.keymap.delete.tip": "Entfernt diese Zeile aus der Tabelle."
+}
 }

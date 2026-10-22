@@ -668,6 +668,153 @@ namespace SpectreReplay.Ui
         }
 
         /// <summary>
+        /// 原生虚拟键码（VK）→ 可读名字。KeyCode 的枚举名在字母区是错的
+        /// （<c>KeyCode.A</c> = 97 而 VK_A = 65），所以**不能**直接把 VK 强转成
+        /// <see cref="KeyCode"/> 再取名字——那正是键位显示变成「按 A 亮 R」的成因。
+        /// </summary>
+        internal static string VkName(ushort vk)
+        {
+            if (vk == 0) return Loc.T("ui.keymap.none");
+            switch (vk)
+            {
+                case 8: return "Backspace";
+                case 9: return "Tab";
+                case 13: return "Enter";
+                case 16: return "Shift";
+                case 17: return "Ctrl";
+                case 18: return "Alt";
+                case 19: return "Pause";
+                case 20: return "CapsLock";
+                case 27: return "Esc";
+                case 32: return "Space";
+                case 33: return "PageUp";
+                case 34: return "PageDown";
+                case 35: return "End";
+                case 36: return "Home";
+                case 37: return "←";
+                case 38: return "↑";
+                case 39: return "→";
+                case 40: return "↓";
+                case 44: return "PrintScreen";
+                case 45: return "Insert";
+                case 46: return "Delete";
+                case 91: return "Win";
+                case 92: return "Win";
+                case 93: return "Menu";
+                case 144: return "NumLock";
+                case 145: return "ScrollLock";
+                case 160: return "LShift";
+                case 161: return "RShift";
+                case 162: return "LCtrl";
+                case 163: return "RCtrl";
+                case 164: return "LAlt";
+                case 165: return "RAlt";
+                case 186: return ";";
+                case 187: return "=";
+                case 188: return ",";
+                case 189: return "-";
+                case 190: return ".";
+                case 191: return "/";
+                case 192: return "`";
+                case 219: return "[";
+                case 220: return "\\";
+                case 221: return "]";
+                case 222: return "'";
+            }
+            // 主键区字母/数字：VK 0x30-0x39 = '0'-'9'，0x41-0x5A = 'A'-'Z'
+            if (vk >= 0x30 && vk <= 0x39) return ((char)vk).ToString();
+            if (vk >= 0x41 && vk <= 0x5A) return ((char)vk).ToString();
+            // 小键盘 0x60-0x69
+            if (vk >= 0x60 && vk <= 0x69) return "Num" + (vk - 0x60);
+            // F1-F24：0x70-0x87
+            if (vk >= 0x70 && vk <= 0x87) return "F" + (vk - 0x6F);
+            return "VK" + vk;
+        }
+
+        /// <summary>
+        /// 按键重映射的一行：左键 → 右键，两半都是「点一下再按任意键」的捕获按钮。
+        ///
+        /// **为什么不用 <see cref="RowHotkey"/>。** 那一行绑的是 Unity
+        /// <see cref="KeyCode"/>（保存键那种用途），而重映射表存的是**原生 VK**
+        /// （<see cref="Settings.key_code_convert"/> 的下标与值）。两者的取值域不同，
+        /// 混用会让所有字母键错位。这里用同一个采样入口
+        /// （<see cref="SpectreState.GetKeyboardState"/>）扫原生 VK。
+        /// </summary>
+        /// <param name="onStartCapture">
+        /// 点某一格开始等按键，参数表示改的是<b>哪一半</b>：true = 左（源键），
+        /// false = 右（目标键）。**必须带这个参数**——早先两格共用一个无参回调，
+        /// 点右边会把左边改掉，而界面上看不出是哪一处出的错。
+        /// </param>
+        /// <param name="capturingFrom">等的是左半；<paramref name="capturing"/> 为假时忽略。</param>
+        /// <param name="onCapture">收到一个原生 VK（0 = 取消）。</param>
+        internal static void RowKeyRemap(ushort from, ushort to, bool capturing, bool capturingFrom,
+            Action<bool> onStartCapture, Action<ushort> onCapture, Action onClear, Action onDelete)
+        {
+            GUILayout.BeginHorizontal();
+            bool waitingFrom = capturing && capturingFrom;
+            bool waitingTo = capturing && !capturingFrom;
+            Rect f = GUILayoutUtility.GetRect(74f, 24f, GUILayout.Width(74f), GUILayout.Height(24f));
+            if (GUI.Button(f, waitingFrom ? Loc.T("ui.presskey") : VkName(from),
+                    waitingFrom ? Gui.AccentButtonStyle : Gui.ButtonStyle))
+            {
+                onStartCapture(true);
+            }
+            GUILayout.Label("→", Gui.LabelStyle, GUILayout.Width(20f));
+            Rect t = GUILayoutUtility.GetRect(74f, 24f, GUILayout.Width(74f), GUILayout.Height(24f));
+            if (GUI.Button(t, waitingTo ? Loc.T("ui.presskey") : VkName(to),
+                    waitingTo ? Gui.AccentButtonStyle : Gui.ButtonStyle))
+            {
+                onStartCapture(false);
+            }
+            if (GUILayout.Button(Loc.T("ui.keymap.clear"), Gui.QuietButtonStyle,
+                    GUILayout.Width(56f), GUILayout.Height(22f)))
+            {
+                onClear();
+            }
+            if (GUILayout.Button(Loc.T("ui.keymap.delete"), Gui.QuietButtonStyle,
+                    GUILayout.Width(56f), GUILayout.Height(22f)))
+            {
+                onDelete();
+            }
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
+            RowGap();
+
+            if (!capturing || Event.current == null) return;
+            if (Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyCode.Escape)
+            {
+                Event.current.Use();
+                onCapture(0);   // Esc 取消：写回「未绑定」由调用方忽略
+                return;
+            }
+            if (Event.current.type != EventType.Repaint) return;
+
+            // **采样前必须再次确认还在等按键。** 上面那串按钮在 Layout 趟与
+            // Repaint 趟都会跑，而 `capturing` 是调用方在按钮回调里改的：
+            // 本趟已取消、状态还没落到下一次绘制时，这里会继续吃按键。
+            // 用与录制侧完全相同的采样入口扫原生 VK。
+            SpectreState.GetKeyboardState(_remapCurr);
+            for (ushort k = 1; k < 256; k++)
+            {
+                if ((_remapPrev[k] & 0x80) == 0 && (_remapCurr[k] & 0x80) != 0)
+                {
+                    onCapture(k);
+                    break;
+                }
+            }
+            Array.Copy(_remapCurr, _remapPrev, 256);
+        }
+
+        private static readonly byte[] _remapPrev = new byte[256];
+        private static readonly byte[] _remapCurr = new byte[256];
+
+        /// <summary>开始等按键前先拍一张当前键盘状态，否则「已经按住的键」会被当成新按下。</summary>
+        internal static void PrimeKeyRemapCapture()
+        {
+            SpectreState.GetKeyboardState(_remapPrev);
+        }
+
+        /// <summary>
         /// 一段说明文字。**换行**（Gui.NoteStyle 设了 wordWrap）：UMM 把
         /// GUI.skin.label.clipping 改成了 Overflow，照抄默认样式的话长句会一路
         /// 画出窗口外而不是折行，玩家看到半句话被硬生生截断。

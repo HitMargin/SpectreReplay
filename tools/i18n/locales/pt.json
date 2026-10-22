@@ -304,6 +304,24 @@
   "render.start.tip": "Inicia uma renderização com as configurações atuais. Primeiro carregue um replay e entre na fase dele.",
   "render.cancel.tip": "Aborta a renderização atual. O que já foi gravado é mantido.",
   "convert.button.tip": "Inicia a conversão em lote dos vídeos na pasta de saída.",
-  "record.changedir.tip": "Altera a pasta de replays. Não é permitido durante a gravação, ou o som de teclado desta tentativa seria perdido."
- }
+  "record.changedir.tip": "Altera a pasta de replays. Não é permitido durante a gravação, ou o som de teclado desta tentativa seria perdido.",
+  "record.keymap": "Remapeamento de teclas",
+  "record.keymap.tip": "Mapeia o código de uma tecla para outra. Útil para controles, teclados com macro ou ferramentas de remapeamento cujos códigos diferem das teclas padrão que o jogo espera.",
+  "record.keymap.on": "Ativar remapeamento de teclas",
+  "record.keymap.on.tip": "Interruptor principal. Quando desligado, as teclas são gravadas e reproduzidas como estão e a tabela abaixo não tem efeito.",
+  "record.keymap.off": "O remapeamento está desligado; as teclas são usadas como estão.",
+  "record.keymap.off.tip": "Explica o estado atual: a tabela é ignorada.",
+  "record.keymap.note": "A esquerda é o código que a tecla realmente envia, a direita é a tecla que o jogo deve ver. Clique numa caixa e pressione qualquer tecla para vincular; Esc cancela.",
+  "record.keymap.note.tip": "Explica como usar esta tabela.",
+  "record.keymap.empty": "Ainda não há entradas. Use o botão abaixo para adicionar uma.",
+  "record.keymap.empty.tip": "Explica que a tabela está vazia.",
+  "record.keymap.add": "Adicionar entrada",
+  "record.keymap.add.tip": "Adiciona uma linha vazia; depois vincule cada lado clicando nele.",
+  "ui.keymap.none": "Não vinculado",
+  "ui.keymap.none.tip": "Esta caixa ainda não tem nenhuma tecla vinculada.",
+  "ui.keymap.clear": "Limpar",
+  "ui.keymap.clear.tip": "Limpa a tecla de destino: esta linha não faz nada, mas a entrada de origem permanece.",
+  "ui.keymap.delete": "Excluir",
+  "ui.keymap.delete.tip": "Remove esta linha da tabela."
+}
 }

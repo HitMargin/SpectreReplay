@@ -304,6 +304,24 @@
   "render.start.tip": "Rozpoczyna renderowanie z bieżącymi ustawieniami. Najpierw wczytaj powtórkę i wejdź na jej poziom.",
   "render.cancel.tip": "Przerywa bieżące renderowanie. To, co już zapisano, zostaje.",
   "convert.button.tip": "Rozpoczyna wsadową konwersję filmów w folderze wyjściowym.",
-  "record.changedir.tip": "Zmień folder powtórek. Niedozwolone podczas nagrywania, bo dźwięk klawiatury z tej próby zostałby utracony."
- }
+  "record.changedir.tip": "Zmień folder powtórek. Niedozwolone podczas nagrywania, bo dźwięk klawiatury z tej próby zostałby utracony.",
+  "record.keymap": "Remapowanie klawiszy",
+  "record.keymap.tip": "Przypisuje kod jednego klawisza do innego. Przydatne dla padów, klawiatur z makrami lub narzędzi do remapowania, których kody różnią się od standardowych klawiszy oczekiwanych przez grę.",
+  "record.keymap.on": "Włącz remapowanie klawiszy",
+  "record.keymap.on.tip": "Przełącznik główny. Po wyłączeniu klawisze są nagrywane i odtwarzane bez zmian, a tabela poniżej nie działa.",
+  "record.keymap.off": "Remapowanie jest wyłączone; klawisze są używane bez zmian.",
+  "record.keymap.off.tip": "Wyjaśnia bieżący stan: tabela jest ignorowana.",
+  "record.keymap.note": "Po lewej kod, który klawisz faktycznie wysyła, po prawej klawisz, który ma widzieć gra. Kliknij pole i naciśnij dowolny klawisz, aby przypisać; Esc anuluje.",
+  "record.keymap.note.tip": "Wyjaśnia, jak korzystać z tej tabeli.",
+  "record.keymap.empty": "Brak wpisów. Użyj przycisku poniżej, aby dodać.",
+  "record.keymap.empty.tip": "Wyjaśnia, że tabela jest pusta.",
+  "record.keymap.add": "Dodaj wpis",
+  "record.keymap.add.tip": "Dodaje pusty wiersz; następnie przypisz obie strony, klikając je.",
+  "ui.keymap.none": "Nieprzypisany",
+  "ui.keymap.none.tip": "Do tego pola nie przypisano jeszcze żadnego klawisza.",
+  "ui.keymap.clear": "Wyczyść",
+  "ui.keymap.clear.tip": "Czyści klawisz docelowy: ten wiersz nic nie robi, ale wpis źródłowy pozostaje.",
+  "ui.keymap.delete": "Usuń",
+  "ui.keymap.delete.tip": "Usuwa ten wiersz z tabeli."
+}
 }

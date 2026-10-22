@@ -304,6 +304,24 @@
   "render.start.tip": "Pornește o randare cu setările curente. Încarcă mai întâi o reluare și intră în nivelul ei.",
   "render.cancel.tip": "Oprește randarea curentă. Ce a fost deja scris este păstrat.",
   "convert.button.tip": "Pornește conversia în lot a videoclipurilor din folderul de ieșire.",
-  "record.changedir.tip": "Schimbă folderul reluărilor. Nu este permis în timpul înregistrării, altfel sunetul de tastatură al acestei încercări s-ar pierde."
- }
+  "record.changedir.tip": "Schimbă folderul reluărilor. Nu este permis în timpul înregistrării, altfel sunetul de tastatură al acestei încercări s-ar pierde.",
+  "record.keymap": "Remapare taste",
+  "record.keymap.tip": "Asociază codul unei taste altuia. Util pentru controllere, tastaturi cu macrocomenzi sau unelte de remapare ale căror coduri diferă de tastele standard așteptate de joc.",
+  "record.keymap.on": "Activează remaparea tastelor",
+  "record.keymap.on.tip": "Comutator principal. Când este oprit, tastele sunt înregistrate și redate ca atare, iar tabelul de mai jos nu are efect.",
+  "record.keymap.off": "Remaparea este oprită; tastele sunt folosite ca atare.",
+  "record.keymap.off.tip": "Explică starea curentă: tabelul este ignorat.",
+  "record.keymap.note": "În stânga este codul pe care tasta îl trimite de fapt, în dreapta tasta pe care jocul ar trebui să o vadă. Fă clic pe o casetă și apasă orice tastă pentru a o atribui; Esc anulează.",
+  "record.keymap.note.tip": "Explică modul de utilizare a acestui tabel.",
+  "record.keymap.empty": "Încă nu există intrări. Folosește butonul de mai jos pentru a adăuga una.",
+  "record.keymap.empty.tip": "Explică faptul că tabelul este gol.",
+  "record.keymap.add": "Adaugă o intrare",
+  "record.keymap.add.tip": "Adaugă un rând gol; apoi atribuie fiecare parte făcând clic pe ea.",
+  "ui.keymap.none": "Neatribuit",
+  "ui.keymap.none.tip": "Acestei casete nu i-a fost atribuită încă nicio tastă.",
+  "ui.keymap.clear": "Golește",
+  "ui.keymap.clear.tip": "Golește tasta țintă: acest rând nu face nimic, dar intrarea sursă rămâne.",
+  "ui.keymap.delete": "Șterge",
+  "ui.keymap.delete.tip": "Elimină acest rând din tabel."
+}
 }

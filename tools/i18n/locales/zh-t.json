@@ -304,6 +304,24 @@
   "render.start.tip": "依目前參數開始渲染。需要先載入回放並進入那一關。",
   "render.cancel.tip": "中止目前的渲染。已經寫入的部分會保留。",
   "convert.button.tip": "開始批次轉換輸出目錄裡的影片。",
-  "record.changedir.tip": "更換回放保存目錄。錄製中不能改，否則本局的鍵盤音會找不到。"
- }
+  "record.changedir.tip": "更換回放保存目錄。錄製中不能改，否則本局的鍵盤音會找不到。",
+  "record.keymap": "鍵位重映射",
+  "record.keymap.tip": "把某個按鍵的碼位換成另一個。多用於手柄、巨集鍵盤或改鍵工具：它們發出的碼位與遊戲認定的標準鍵不同，不改就會被記成別的鍵甚至完全不記。",
+  "record.keymap.on": "啟用鍵位重映射",
+  "record.keymap.on.tip": "總開關。關掉時所有按鍵按原樣記錄與回放，下面的對照表整塊不生效。",
+  "record.keymap.off": "重映射未啟用，按鍵按原樣使用。",
+  "record.keymap.off.tip": "說明目前狀態：「對照表不會生效」。",
+  "record.keymap.note": "左邊是按鍵實際發出的碼位，右邊是希望遊戲認定的按鍵。點一格再按鍵盤上任意一個鍵即可綁定；Esc 取消。",
+  "record.keymap.note.tip": "說明這張對照表怎麼用。",
+  "record.keymap.empty": "還沒有任何條目。點下面的「新增一條」開始。",
+  "record.keymap.empty.tip": "說明目前是空表。",
+  "record.keymap.add": "新增一條",
+  "record.keymap.add.tip": "新增一行空的對照，然後分別點左右兩格綁定。",
+  "ui.keymap.none": "未綁定",
+  "ui.keymap.none.tip": "這一格還沒有綁定按鍵。",
+  "ui.keymap.clear": "清空",
+  "ui.keymap.clear.tip": "把右邊的目標鍵清空：這一條不生效，但源鍵仍然保留在表裡。",
+  "ui.keymap.delete": "刪除",
+  "ui.keymap.delete.tip": "把整條對照從表裡刪掉。"
+}
 }

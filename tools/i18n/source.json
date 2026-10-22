@@ -1518,5 +1518,95 @@
   "key": "record.changedir.tip",
   "zh": "更换回放保存目录。录制中不能改，否则本局的键盘音会找不到。",
   "en": "Change the replay folder. Not allowed while recording, or this run's keyboard sound would be lost."
+ },
+ {
+  "key": "record.keymap",
+  "zh": "键位重映射",
+  "en": "Key Remapping"
+ },
+ {
+  "key": "record.keymap.tip",
+  "zh": "把某个按键的码位换成另一个。多用于手柄、宏键盘或改键工具：它们发出的码位与游戏认定的标准键不同，不改就会被记成别的键甚至完全不记。",
+  "en": "Map one key code to another. Useful for controllers, macro keyboards or remapping tools whose codes differ from the standard keys the game expects."
+ },
+ {
+  "key": "record.keymap.on",
+  "zh": "启用键位重映射",
+  "en": "Enable key remapping"
+ },
+ {
+  "key": "record.keymap.on.tip",
+  "zh": "总开关。关掉时所有按键按原样记录与回放，下面的对照表整块不生效。",
+  "en": "Master switch. When off, keys are recorded and replayed as-is and the table below has no effect."
+ },
+ {
+  "key": "record.keymap.off",
+  "zh": "重映射未启用，按键按原样使用。",
+  "en": "Remapping is off; keys are used as-is."
+ },
+ {
+  "key": "record.keymap.off.tip",
+  "zh": "说明当前状态：「对照表不会生效」。",
+  "en": "Explains the current state: the table is ignored."
+ },
+ {
+  "key": "record.keymap.note",
+  "zh": "左边是按键实际发出的码位，右边是希望游戏认定的按键。点一格再按键盘上任意一个键即可绑定；Esc 取消。",
+  "en": "Left is the code the key actually sends, right is the key the game should see. Click a slot and press any key to bind; Esc cancels."
+ },
+ {
+  "key": "record.keymap.note.tip",
+  "zh": "说明这张对照表怎么用。",
+  "en": "Explains how to use this table."
+ },
+ {
+  "key": "record.keymap.empty",
+  "zh": "还没有任何条目。点下面的「添加一条」开始。",
+  "en": "No entries yet. Use the button below to add one."
+ },
+ {
+  "key": "record.keymap.empty.tip",
+  "zh": "说明当前是空表。",
+  "en": "Explains that the table is currently empty."
+ },
+ {
+  "key": "record.keymap.add",
+  "zh": "添加一条",
+  "en": "Add entry"
+ },
+ {
+  "key": "record.keymap.add.tip",
+  "zh": "新增一行空的对照，然后分别点左右两格绑定。",
+  "en": "Adds an empty row; then bind each side by clicking it."
+ },
+ {
+  "key": "ui.keymap.none",
+  "zh": "未绑定",
+  "en": "Not bound"
+ },
+ {
+  "key": "ui.keymap.none.tip",
+  "zh": "这一格还没有绑定按键。",
+  "en": "This slot has no key bound yet."
+ },
+ {
+  "key": "ui.keymap.clear",
+  "zh": "清空",
+  "en": "Clear"
+ },
+ {
+  "key": "ui.keymap.clear.tip",
+  "zh": "把右边的目标键清空：这一条不生效，但源键仍然保留在表里。",
+  "en": "Clears the target key: this row does nothing, but the source entry stays."
+ },
+ {
+  "key": "ui.keymap.delete",
+  "zh": "删除",
+  "en": "Delete"
+ },
+ {
+  "key": "ui.keymap.delete.tip",
+  "zh": "把整条对照从表里删掉。",
+  "en": "Removes this row from the table."
  }
 ]

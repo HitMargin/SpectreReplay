@@ -214,6 +214,110 @@ namespace SpectreReplay.Pages
                     OnGui.Note("record.specialkeys.async.off");
                 }
             });
+
+            // ── 键位重映射 ──────────────────────────────────────
+            //
+            // `KeyConvertEnabled` / `KeyCodeConvert` 有字段、有落盘、有真消费点
+            // （Settings.key_convert_list2array 建表，回放/录制两侧按它换算 VK），
+            // 但设置页里此前**一行都没有**——`settings-ui-audit.ps1` 把
+            // KeyConvertEnabled / KeyCodeConvert 判为「无界面」，而它们不是
+            // 自动探测项：玩家想把手柄/宏键盘的自定义键码对回标准键，只能手改
+            // Configs.json 里的 JSON 数组，从界面上完全看不出有这个功能。
+            //
+            // 与「键盘音三项」「保存目录」是同一类病：数据在、链路通、界面缺。
+            Gui.Section("record.keymap", Gui.Accent, () =>
+            {
+                OnGui.Row("record.keymap.on", KeyConvertEnabled, v =>
+                {
+                    KeyConvertEnabled = v;
+                    Commit();
+                    // 建表是**启动时**做的（Settings.check），关掉/打开后必须
+                    // 立刻重建，否则开关看着变了、实际映射还是旧的。
+                    Settings.key_convert_list2array();
+                });
+                if (!KeyConvertEnabled)
+                {
+                    OnGui.Note("record.keymap.off");
+                    return;
+                }
+                OnGui.Note("record.keymap.note");
+                DrawKeyRemapList();
+            });
+        }
+
+        // 正在等按键的那一行（-1 = 没有）。_remapFrom 表示改左半还是右半。
+        private static int _remapRow = -1;
+        private static bool _remapFrom;
+
+        private static void DrawKeyRemapList()
+        {
+            var list = Settings.key_code_convert_list;
+            for (int i = 0; i < list.Count; i++)
+            {
+                int idx = i;
+                KeyValuePair<ushort, ushort> pair = list[idx];
+                bool capturing = _remapRow == idx;
+                OnGui.RowKeyRemap(pair.Key, pair.Value, capturing, _remapFrom,
+                    from =>
+                    {
+                        // 再点同一格 = 取消等待
+                        bool same = _remapRow == idx && _remapFrom == from;
+                        _remapRow = same ? -1 : idx;
+                        _remapFrom = from;
+                        if (!same) OnGui.PrimeKeyRemapCapture();
+                    },
+                    vk =>
+                    {
+                        if (_remapRow != idx) return;
+                        if (vk == 0) { _remapRow = -1; return; }
+                        KeyValuePair<ushort, ushort> cur = list[idx];
+                        list[idx] = _remapFrom
+                            ? new KeyValuePair<ushort, ushort>(vk, cur.Value)
+                            : new KeyValuePair<ushort, ushort>(cur.Key, vk);
+                        _remapRow = -1;
+                        ApplyKeyRemap();
+                    },
+                    () =>
+                    {
+                        KeyValuePair<ushort, ushort> cur = list[idx];
+                        list[idx] = new KeyValuePair<ushort, ushort>(cur.Key, 0);
+                        _remapRow = -1;
+                        ApplyKeyRemap();
+                    },
+                    () =>
+                    {
+                        list.RemoveAt(idx);
+                        _remapRow = -1;
+                        ApplyKeyRemap();
+                    });
+            }
+            if (list.Count == 0)
+            {
+                OnGui.Note("record.keymap.empty");
+            }
+            OnGui.Button("record.keymap.add", () =>
+            {
+                Settings.key_code_convert_list.Add(new KeyValuePair<ushort, ushort>(0, 0));
+                ApplyKeyRemap();
+            }, false);
+        }
+
+        /// <summary>
+        /// 把 list 序列化回 <see cref="Settings"/>.<see cref="KeyCodeConvert"/> 并重建运行时映射表。
+        ///
+        /// 对应 <c>Settings.KeyCodeConvert</c>（持久化 JSON 源）与 <c>Settings.key_code_convert</c>
+        /// （运行时表）——`settings-ui-audit.ps1` 按字段名判界面入口，这里显式点名。
+        ///
+        /// **两步都不能省**：只序列化不建表 ⇒ 界面显示变了、实际映射还是旧的；
+        /// 只建表不序列化 ⇒ 当场生效、下次启动全部丢失。
+        /// 与上游 ApplyRemapChange 的顺序一致（先写 JSON 再 key_convert_list2array）。
+        /// </summary>
+        private static void ApplyKeyRemap()
+        {
+            KeyCodeConvert = Newtonsoft.Json.JsonConvert.SerializeObject(
+                Settings.key_code_convert_list, Newtonsoft.Json.Formatting.Indented);
+            Settings.key_convert_list2array();   // 这一步不能省：只写 JSON 不重建表，本次会话内映射仍是旧的
+            Commit();
         }
 
         /// <summary>

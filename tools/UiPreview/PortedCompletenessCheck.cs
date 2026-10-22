@@ -160,6 +160,35 @@ namespace UiPreview
             fail += Check(projectRoot, "⑪b 录制页要有「更改保存目录」的控件（不能只是只读展示）",
                 new[] { "Pages\\Pages.cs" },
                 new[] { "record.changedir" });
+            // ⑪c 键位重映射必须有界面入口。**与 ⑨/⑪ 同族，且是最严重的一例**：
+            //   Settings 有 KeyConvertEnabled / KeyCodeConvert 两个字段、ConfigManager
+            //   落盘、key_convert_list2array 真的在建映射表、回放与录制两侧都按它
+            //   换算 VK——链路完全通，而设置页里**一行都没有**。
+            //   settings-ui-audit.ps1 把这两项判为「无界面但被消费」。
+            //
+            //   玩家想把手柄/宏键盘/改键工具发出的自定义码位对回标准键时，只能手改
+            //   Configs.json 里的 JSON 数组，而从界面上完全看不出有这个功能。
+            //   上游有完整面板（SpectreUiPages.More.cs:301-361 BuildKeyRemapList）。
+            //
+            //   拆两条：⑪c 管"数据与运行时建表存在"，⑪d 管"界面真的给了入口"。
+            //   合成一条会把界面键往 Settings.cs 上套，永远红。
+            fail += Check(projectRoot, "⑪c 键位重映射有定义、有运行时建表",
+                new[] { "State\\Settings.cs" },
+                new[] { "KeyConvertEnabled", "KeyCodeConvert", "key_convert_list2array" });
+            // ⑪d 界面必须真的画了这张表，而不是只放一个总开关。
+            //
+            // **不能用 Check(...) 查子串**：`DrawKeyRemapList` 既是方法名也是
+            // 调用名，方法定义本身就让子串成立——把调用行整个删掉、只留定义，
+            // 判据照样绿（MUT-KM1 实测过）。必须断言**调用形状** `名字();`。
+            // 同理 total 开关行要查实际控件调用，不是文案键出现。
+            fail += CheckPredicate(projectRoot, "⑪d 键位重映射要有总开关 + 对照表调用 + 写回调用",
+                "Pages\\Pages.cs", RemapUiWired);
+            // ⑪e **写回必须是三步齐全**：序列化 JSON、重建运行时表、落盘。
+            //   只序列化不建表 ⇒ 界面显示变了、实际映射还是旧的；
+            //   只建表不序列化 ⇒ 当场生效、下次启动全部丢失。
+            //   这条钉的是 ApplyKeyRemap 的方法体形状（不是 Pages 里有没有这个名字）。
+            fail += CheckPredicate(projectRoot, "⑪e ApplyKeyRemap 必须序列化 + 重建映射表 + 落盘",
+                "Pages\\Pages.cs", RemapAppliesAllThree);
             // ⑫ 回放页要有「打开这一关」——从已载入回放直达它录自的那一关。
             //    2026-10-12 用户报「为什么缺少打开定位关卡的按钮」。
             //    **为什么它必需**：回放只在"重开/换关/进关"时才启动
@@ -743,6 +772,54 @@ namespace UiPreview
             return true;
         }
 
+
+        /// <summary>
+        /// <c>ApplyKeyRemap</c> 必须把三件事都做完。
+        ///
+        /// 这条钉的是**方法体形状**，不是"Pages.cs 里出现过这个函数名"：
+        ///   · 只序列化不建表 ⇒ 界面显示变了、实际映射还是旧的（当场不生效）；
+        ///   · 只建表不序列化 ⇒ 当场生效、下次启动全部丢失（玩家会以为设置没保存）；
+        ///   · 不落盘 ⇒ 同上。
+        ///
+        /// 三者的顺序不重要（先建表后写 JSON 也能工作），但**一个都不能少**。
+        /// </summary>
+        /// <summary>
+        /// 键位重映射的界面是否**真的接线**（不是只有方法定义 / 只有文案键）。
+        ///
+        /// 三样缺一都会退化成「能拨但改不了对照」：
+        ///   · 总开关：必须是 <c>OnGui.Row("record.keymap.on"</c> 这个控件调用；
+        ///   · 对照表：必须是 <c>DrawKeyRemapList();</c> 这个**调用**
+        ///     （方法定义本身会让裸名字匹配成立，MUT-KM1 就是这么被抓出来的）；
+        ///   · 写回：必须是 <c>ApplyKeyRemap();</c> 调用。
+        /// </summary>
+        private static bool RemapUiWired(string code)
+        {
+            bool hasToggle = code.Contains("OnGui.Row(\"record.keymap.on\"", StringComparison.Ordinal);
+            bool hasList = HasCall(code, "DrawKeyRemapList");
+            bool hasApply = HasCall(code, "ApplyKeyRemap");
+            return hasToggle && hasList && hasApply;
+        }
+
+        /// <summary>
+        /// 源码里是否有 `<paramref name="method"/>();` 这种**调用**（不含方法定义）。
+        /// 定义形如 `... DrawKeyRemapList()`，它后面不是分号而是 `{` 或换行，所以
+        /// 只认「名字 + () + 分号」即可把定义排除掉。
+        /// </summary>
+        private static bool HasCall(string code, string method)
+        {
+            // 定义行形如 `private static void DrawKeyRemapList()`——后面不是分号，
+            // 因此「名字 + () + ;」只可能命中真正的调用点。
+            return code.Contains(method + "();", StringComparison.Ordinal);
+        }
+
+        private static bool RemapAppliesAllThree(string code)
+        {
+            string body = MethodBody(code, "ApplyKeyRemap");
+            if (body == null) return false;
+            return body.Contains("KeyCodeConvert = ", StringComparison.Ordinal)
+                && body.Contains("key_convert_list2array", StringComparison.Ordinal)
+                && body.Contains("Commit(", StringComparison.Ordinal);
+        }
 
         private static bool HasOpenLevelButton(string code)
         {

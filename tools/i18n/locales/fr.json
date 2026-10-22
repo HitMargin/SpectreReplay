@@ -304,6 +304,24 @@
   "render.start.tip": "Lance un rendu avec les réglages actuels. Chargez d'abord un replay et entrez dans son niveau.",
   "render.cancel.tip": "Interrompt le rendu en cours. Ce qui a déjà été écrit est conservé.",
   "convert.button.tip": "Lance la conversion par lots des vidéos du dossier de sortie.",
-  "record.changedir.tip": "Change le dossier des replays. Non autorisé pendant l'enregistrement, sinon le son du clavier de cette partie serait perdu."
- }
+  "record.changedir.tip": "Change le dossier des replays. Non autorisé pendant l'enregistrement, sinon le son du clavier de cette partie serait perdu.",
+  "record.keymap": "Remappage des touches",
+  "record.keymap.tip": "Associe le code d'une touche à une autre. Utile pour les manettes, les claviers à macros ou les outils de remappage dont les codes diffèrent des touches standard attendues par le jeu.",
+  "record.keymap.on": "Activer le remappage des touches",
+  "record.keymap.on.tip": "Interrupteur principal. Désactivé, les touches sont enregistrées et rejouées telles quelles et le tableau ci-dessous n'a aucun effet.",
+  "record.keymap.off": "Le remappage est désactivé ; les touches sont utilisées telles quelles.",
+  "record.keymap.off.tip": "Explique l'état actuel : le tableau est ignoré.",
+  "record.keymap.note": "À gauche le code réellement envoyé par la touche, à droite la touche que le jeu doit voir. Cliquez sur une case puis appuyez sur n'importe quelle touche pour l'assigner ; Échap annule.",
+  "record.keymap.note.tip": "Explique comment utiliser ce tableau.",
+  "record.keymap.empty": "Aucune entrée pour l'instant. Utilisez le bouton ci-dessous pour en ajouter une.",
+  "record.keymap.empty.tip": "Explique que le tableau est vide.",
+  "record.keymap.add": "Ajouter une entrée",
+  "record.keymap.add.tip": "Ajoute une ligne vide ; assignez ensuite chaque côté en cliquant dessus.",
+  "ui.keymap.none": "Non assigné",
+  "ui.keymap.none.tip": "Aucune touche n'est encore assignée à cette case.",
+  "ui.keymap.clear": "Effacer",
+  "ui.keymap.clear.tip": "Efface la touche cible : cette ligne n'a aucun effet, mais l'entrée source reste.",
+  "ui.keymap.delete": "Supprimer",
+  "ui.keymap.delete.tip": "Supprime cette ligne du tableau."
+}
 }

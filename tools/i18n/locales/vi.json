@@ -304,6 +304,24 @@
   "render.start.tip": "Bắt đầu kết xuất với cài đặt hiện tại. Trước hết hãy tải một bản phát lại và vào màn của nó.",
   "render.cancel.tip": "Dừng lần kết xuất hiện tại. Phần đã ghi vẫn được giữ.",
   "convert.button.tip": "Bắt đầu chuyển đổi hàng loạt video trong thư mục đầu ra.",
-  "record.changedir.tip": "Đổi thư mục phát lại. Không được phép khi đang ghi, nếu không âm thanh bàn phím của lượt này sẽ mất."
- }
+  "record.changedir.tip": "Đổi thư mục phát lại. Không được phép khi đang ghi, nếu không âm thanh bàn phím của lượt này sẽ mất.",
+  "record.keymap": "Gán lại phím",
+  "record.keymap.tip": "Gán mã của một phím cho một phím khác. Hữu ích cho tay cầm, bàn phím macro hoặc công cụ gán lại phím có mã khác với các phím chuẩn mà trò chơi mong đợi.",
+  "record.keymap.on": "Bật gán lại phím",
+  "record.keymap.on.tip": "Công tắc chính. Khi tắt, các phím được ghi và phát lại như cũ và bảng bên dưới không có tác dụng.",
+  "record.keymap.off": "Gán lại phím đang tắt; các phím được dùng như cũ.",
+  "record.keymap.off.tip": "Giải thích trạng thái hiện tại: bảng bị bỏ qua.",
+  "record.keymap.note": "Bên trái là mã phím thực sự gửi, bên phải là phím mà trò chơi nên thấy. Nhấp vào một ô và nhấn phím bất kỳ để gán; Esc để huỷ.",
+  "record.keymap.note.tip": "Giải thích cách dùng bảng này.",
+  "record.keymap.empty": "Chưa có mục nào. Dùng nút bên dưới để thêm.",
+  "record.keymap.empty.tip": "Giải thích rằng bảng đang trống.",
+  "record.keymap.add": "Thêm mục",
+  "record.keymap.add.tip": "Thêm một dòng trống; sau đó gán từng bên bằng cách nhấp vào nó.",
+  "ui.keymap.none": "Chưa gán",
+  "ui.keymap.none.tip": "Ô này chưa được gán phím nào.",
+  "ui.keymap.clear": "Xoá",
+  "ui.keymap.clear.tip": "Xoá phím đích: dòng này không làm gì, nhưng mục nguồn vẫn còn.",
+  "ui.keymap.delete": "Xoá bỏ",
+  "ui.keymap.delete.tip": "Xoá dòng này khỏi bảng."
+}
 }

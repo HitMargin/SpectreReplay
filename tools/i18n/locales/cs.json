@@ -304,6 +304,24 @@
   "render.start.tip": "Spustí vykreslování s aktuálním nastavením. Nejprve načtěte záznam a vstupte do jeho úrovně.",
   "render.cancel.tip": "Přeruší aktuální vykreslování. Co už bylo zapsáno, zůstane.",
   "convert.button.tip": "Spustí dávkový převod videí ve výstupní složce.",
-  "record.changedir.tip": "Změnit složku záznamů. Během nahrávání není povoleno, jinak by se zvuk klávesnice tohoto běhu ztratil."
- }
+  "record.changedir.tip": "Změnit složku záznamů. Během nahrávání není povoleno, jinak by se zvuk klávesnice tohoto běhu ztratil.",
+  "record.keymap": "Přemapování kláves",
+  "record.keymap.tip": "Přiřadí kód jedné klávesy jiné. Hodí se pro ovladače, makro klávesnice nebo nástroje pro přemapování, jejichž kódy se liší od standardních kláves, které hra očekává.",
+  "record.keymap.on": "Zapnout přemapování kláves",
+  "record.keymap.on.tip": "Hlavní přepínač. Po vypnutí se klávesy nahrávají a přehrávají beze změny a tabulka níže neplatí.",
+  "record.keymap.off": "Přemapování je vypnuté; klávesy se používají beze změny.",
+  "record.keymap.off.tip": "Vysvětluje aktuální stav: tabulka se ignoruje.",
+  "record.keymap.note": "Vlevo je kód, který klávesa skutečně odesílá, vpravo klávesa, kterou má hra vidět. Klikněte na políčko a stiskněte libovolnou klávesu pro přiřazení; Esc zruší.",
+  "record.keymap.note.tip": "Vysvětluje, jak tuto tabulku používat.",
+  "record.keymap.empty": "Zatím žádné položky. Přidejte ji tlačítkem níže.",
+  "record.keymap.empty.tip": "Vysvětluje, že tabulka je prázdná.",
+  "record.keymap.add": "Přidat položku",
+  "record.keymap.add.tip": "Přidá prázdný řádek; potom obě strany přiřaďte kliknutím.",
+  "ui.keymap.none": "Nepřiřazeno",
+  "ui.keymap.none.tip": "Tomuto políčku ještě není přiřazena žádná klávesa.",
+  "ui.keymap.clear": "Vymazat",
+  "ui.keymap.clear.tip": "Vymaže cílovou klávesu: tento řádek nic nedělá, ale zdrojová položka zůstává.",
+  "ui.keymap.delete": "Odstranit",
+  "ui.keymap.delete.tip": "Odstraní tento řádek z tabulky."
+}
 }

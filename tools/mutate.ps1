@@ -1736,6 +1736,20 @@ switch ($Which) {
         Backup 'Features\Replay\Runtime\ReplayRecorder.cs'
         ReplaceExact 'Features\Replay\Runtime\ReplayRecorder.cs' 'KeyboardSimulation.SampleKeyState(CurrKeyState);' 'KeyboardSimulation.GetKeyboardState(CurrKeyState);'
     }
+    'MUT-KM1' {
+        # ⑪d 键位重映射界面回归：删掉对照表绘制入口，只留总开关。
+        # 后果是玩家能拨开关、却一行对照都加不了——「有开关但改不了」，
+        # 正是 settings-ui-audit 那条「无界面但被消费」的翻版。
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' '                DrawKeyRemapList();' ''
+    }
+    'MUT-KM2' {
+        # ⑪e 写回只序列化、不重建运行时表。
+        # 界面显示改了、JSON 也写了，但本次会话内 key_code_convert 仍是旧值——
+        # 现象是「改完当场不生效，重启才生效」，玩家会以为是自己没保存。
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' '            Settings.key_convert_list2array();   // 这一步不能省：只写 JSON 不重建表，本次会话内映射仍是旧的' '            // （变异：故意不重建运行时映射表）'
+    }
     'MUT-CI10' {
         # ⑪b 广播判据回归：asyncInject 从 Injectable 退回 Usable。
         #

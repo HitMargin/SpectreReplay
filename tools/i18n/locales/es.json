@@ -304,6 +304,24 @@
   "render.start.tip": "Inicia un renderizado con los ajustes actuales. Primero carga una repetición y entra en su nivel.",
   "render.cancel.tip": "Aborta el renderizado actual. Lo ya escrito se conserva.",
   "convert.button.tip": "Inicia la conversión por lotes de los vídeos de la carpeta de salida.",
-  "record.changedir.tip": "Cambia la carpeta de repeticiones. No se permite durante la grabación, o se perdería el sonido de teclado de esta partida."
- }
+  "record.changedir.tip": "Cambia la carpeta de repeticiones. No se permite durante la grabación, o se perdería el sonido de teclado de esta partida.",
+  "record.keymap": "Reasignación de teclas",
+  "record.keymap.tip": "Asigna el código de una tecla a otra. Útil para mandos, teclados con macros o herramientas de reasignación cuyos códigos difieren de las teclas estándar que espera el juego.",
+  "record.keymap.on": "Activar la reasignación de teclas",
+  "record.keymap.on.tip": "Interruptor principal. Si está desactivado, las teclas se graban y reproducen tal cual y la tabla de abajo no tiene efecto.",
+  "record.keymap.off": "La reasignación está desactivada; las teclas se usan tal cual.",
+  "record.keymap.off.tip": "Explica el estado actual: la tabla se ignora.",
+  "record.keymap.note": "La izquierda es el código que envía la tecla, la derecha es la tecla que el juego debe ver. Haz clic en una casilla y pulsa cualquier tecla para asignarla; Esc cancela.",
+  "record.keymap.note.tip": "Explica cómo usar esta tabla.",
+  "record.keymap.empty": "Aún no hay entradas. Usa el botón de abajo para añadir una.",
+  "record.keymap.empty.tip": "Explica que la tabla está vacía.",
+  "record.keymap.add": "Añadir entrada",
+  "record.keymap.add.tip": "Añade una fila vacía; luego asigna cada lado haciendo clic en él.",
+  "ui.keymap.none": "Sin asignar",
+  "ui.keymap.none.tip": "Esta casilla aún no tiene ninguna tecla asignada.",
+  "ui.keymap.clear": "Borrar",
+  "ui.keymap.clear.tip": "Borra la tecla de destino: esta fila no hace nada, pero la entrada de origen permanece.",
+  "ui.keymap.delete": "Eliminar",
+  "ui.keymap.delete.tip": "Elimina esta fila de la tabla."
+}
 }
