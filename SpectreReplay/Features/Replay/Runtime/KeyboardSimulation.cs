@@ -11,6 +11,14 @@ internal static class KeyboardSimulation
     private const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
     private const uint KEYEVENTF_KEYUP = 0x0002;
 
+    // user32 是否确实不存在（非 Windows）。
+    //
+    // **只在 DllNotFoundException / EntryPointNotFoundException 时才置位**——
+    // 也就是"这个导出真的没有"，而不是"我猜这个平台不该有"。
+    // 早先这里用 Application.platform 猜，一旦猜错，SendInput 整条静默失效，
+    // 而那是玩家唯一在用的注入路径。判据必须建立在**真实调用结果**上，不是前提假设。
+    private static volatile bool _dllMissing;
+
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
@@ -82,19 +90,76 @@ internal static class KeyboardSimulation
         };
     }
 
+    /// <summary>
+    /// 把当前键盘状态采样进 <paramref name="pbKeyState"/>
+    /// （高位 = 按下，与 Win32 GetKeyboardState 同布局）。
+    ///
+    /// 先直接调 user32；只有它**确实不存在**（DllNotFoundException）才退回
+    /// Unity 的 <c>Input.GetKey</c> 逐键查询——那正是游戏自己 RDInputType_Keyboard
+    /// 用的同一份数据源，语义一致。
+    /// </summary>
+    internal static void SampleKeyState(byte[] pbKeyState)
+    {
+        if (pbKeyState == null) return;
+        if (!_dllMissing)
+        {
+            try
+            {
+                GetKeyboardState(pbKeyState);
+                return;
+            }
+            catch (DllNotFoundException)
+            {
+                _dllMissing = true;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                _dllMissing = true;
+            }
+        }
+        for (int i = 0; i < pbKeyState.Length; i++)
+        {
+            bool down;
+            try { down = Input.GetKey((KeyCode)i); }
+            catch { down = false; }
+            pbKeyState[i] = (byte)(down ? 0x80 : 0x00);
+        }
+    }
+
     internal static void SendInputs(List<INPUT> inputs)
         => SendInputs(inputs.ToArray());
 
     internal static void SendInputs(INPUT[] inputs)
     {
         if (inputs.Length == 0) return;
-        uint result = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+        // 非 Windows 上 user32 不存在。**不要用平台判断提前返回**：
+        // 那个判断一旦出错，SendInput 会整条静默失效，而这是玩家唯一在用的路径。
+        // 只认真实异常，且 latch 起来避免每次按键都抛。
+        if (_dllMissing) return;
+        uint result;
+        try
+        {
+            result = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+        }
+        catch (DllNotFoundException)
+        {
+            _dllMissing = true;
+            return;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            _dllMissing = true;
+            return;
+        }
         if (result != inputs.Length)
         {
             // 必须带出 Win32 错误码：P/Invoke 已声明 SetLastError = true，但只说
             // "部分失败"对排查毫无帮助。回放按键没打出去最常见的原因是 UIPI 权限
             // 隔离（游戏以管理员身份运行、注入方不是，反之亦然）——此时
             // GetLastError 返回 5 (ERROR_ACCESS_DENIED)，一眼可辨。
+            //
+            // 注意：UIPI 失败**不**关闭 SendInput。它可能只是这一批被拒；
+            // 关掉它等于让"原本能用的"也失效，损失远大于收益。
             int err = Marshal.GetLastWin32Error();
             Debug.LogWarning($"[SpectreReplay] SendInput 部分失败：已处理 {result}/{inputs.Length} 个按键"
                 + $"（Win32 错误码 {err}"

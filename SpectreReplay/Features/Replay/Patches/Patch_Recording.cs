@@ -58,7 +58,9 @@ internal static class Patch_Hit
             if (__instance != controller.playerOne) return true;
 
             var player = controller.playerOne;
-            float angle = GetAngle();
+            // 显式传 controller（第 58 行已保证它与 __instance 同源）而不是无参重载：
+            // 无参版本读静态 scrController.instance，读代码时无法一眼确认两者是同一个。
+            float angle = GetAngle(controller);
             var nextfloor = controller.chosenPlanet.currfloor.nextfloor;
             var item = new HitSnapshot
             {

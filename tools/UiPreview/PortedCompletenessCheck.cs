@@ -128,20 +128,24 @@ namespace UiPreview
             fail += Check(projectRoot, "⑨b 键盘音三项要有界面入口（不能再数据在、链路通、界面缺）",
                 new[] { "Pages\\Pages.cs" },
                 new[] { "record.keybd.record", "record.keybd.volume", "record.keybd.offset" });
-            // ⑩ 回放驱动开关（Settings.LegacyEngine）必须有界面入口。
-            //   **名字骗人的典型**：叫 LegacyEngine，听着像"已废弃的自研引擎开关"，
-            //   实际它控制整个按键模拟回放链路——ReplayPlayer.cs:38 关掉后停止回放
-            //   不会释放已按住的键（键卡住）、:133 关掉后回放一个键都不注入（画面
-            //   毫无反应）。上游 Spectre 把它当一等公民摆在回放设置首页，标签就是
-            //   「模拟按键 / Simulate Key Press」（SpectreUiPages.More.cs:160）。
-            //   移植时丢了 UI ⇒ 只剩下 Configs.json 一条路，而它恰是"回放没反应"时
-            //   最该查的一项。round 53 补上；这条防退回。
-            fail += Check(projectRoot, "⑩ 回放驱动开关要有界面入口（LegacyEngine 不是废弃项）",
-                new[] { "State\\Settings.cs", "Features\\Replay\\Runtime\\ReplayPlayer.cs" },
-                new[] { "LegacyEngine" });
-            fail += Check(projectRoot, "⑩b 回放页要有该开关的控件",
-                new[] { "Pages\\Pages.cs" },
-                new[] { "playback.simulate" });
+            // ⑩ 「模拟按键」开关（原 Settings.LegacyEngine）**已删除**，这里转为防退回。
+            //
+            //   上游 Spectre 把它摆在回放设置首页，叫「模拟按键 / Simulate Key Press」。
+            //   但它关掉后并非「只播不注入」：ManagedInput.Active 变假 → 判定覆盖停、
+            //   HoldStateInjection 直接 return（长条被判松手）、KeyViewer 桥接变暗。
+            //   也就是一个「关掉就坏」的假开关——玩家查不出来，因为画面看起来正常。
+            //
+            //   真要停止注入用 ReplayOn 总开关（连补丁一起卸，语义干净）。
+            //   这条判据防的是「哪天有人又把它加回来」。
+            fail += CheckAbsent(projectRoot,
+                "⑩ 回放页不许再出现「模拟按键」开关控件（关掉会让长条判定失效）",
+                "Pages\\Pages.cs", new[] { "playback.simulate" });
+            fail += CheckAbsent(projectRoot,
+                "⑩ Settings 里不许再出现 LegacyEngine（该字段随开关一并删除）",
+                "State\\Settings.cs", new[] { "LegacyEngine" });
+            fail += CheckAbsent(projectRoot,
+                "⑩ 托管输入不许再按 LegacyEngine 分叉",
+                "Features\\Replay\\Runtime\\ManagedInput.cs", new[] { "LegacyEngine" });
             // ⑪ 保存目录（Settings.SavePath）必须有界面入口。**与 ⑨/⑩ 同族，
             //   而且是最容易被忽略的一个**：它只有一个只读的 Gui.KeyValue 把
             //   路径显示出来，看着"界面上有这一项"，但没有任何控件能改它。

@@ -1,4 +1,4 @@
-{
+﻿{
  "lang": "ro",
  "entries": {
   "page.record": "Înregistrare",
@@ -45,9 +45,6 @@
   "playback.idle": "Nicio reluare încărcată. Apasă „Redă” la un fișier mai jos.",
   "playback.idle_err": "Ultima încărcare a eșuat: {0}",
   "playback.empty": "Încă nu există reluări. Joacă un nivel și una se salvează automat.",
-  "playback.drive": "Driver de redare",
-  "playback.simulate": "Simulează apăsările de taste",
-  "playback.drive.note": "Cu aceasta oprită, redarea rulează în continuare, dar nu se trimit taste către joc, deci planeta nu se va mișca. Tastele ținute nu sunt nici eliberate la oprirea redării, așa că las-o pornită dacă nu depanezi un conflict de taste.",
   "playback.stop": "Oprește",
   "playback.unload": "Descarcă reluarea",
   "playback.note": "Redarea este condusă de fluxul de taste înregistrat.",
@@ -291,7 +288,6 @@
   "record.keybd.offset.tip": "Calibrează sunetul de tastatură în ansamblu: negativ dacă e devreme, pozitiv dacă e târziu, în milisecunde.",
   "record.savekey.tip": "Scurtătură pentru salvarea acestei încercări, implicit F9. Clic pe ea, apoi apasă orice tastă pentru realocare.",
   "record.cancelsavekey.tip": "Scurtătură care renunță la salvarea în așteptare a acestei încercări.",
-  "playback.simulate.tip": "Comutator principal pentru injectarea tastelor. Cu el oprit, redarea rulează dar planeta nu se mișcă, iar tastele ținute nu sunt eliberate la oprire. Oprește-l doar pentru a depana conflicte de taste.",
   "render.on.tip": "Comutator principal pentru randarea video. Când e oprit, nu poate fi pornită o randare nouă.",
   "render.width.tip": "Lățimea de ieșire. Folosită doar de camera curată; ecranul jocului urmează dimensiunea ferestrei.",
   "render.height.tip": "Înălțimea de ieșire. Folosită doar de camera curată.",

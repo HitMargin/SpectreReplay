@@ -60,9 +60,14 @@ namespace UiPreview
             // 鼠标指针合成：没有异常的那类缺陷——指针不出现、画反、上下颠倒，
             // 只有翻成片才发现，所以拿真源码往 byte[] 上真画一遍再验像素。
             int cursorFail = CursorOverlayCheck.Run();
+            // 跨平台回放输入：非 Windows / 未聚焦时 SendInput 完全没有用，
+            // 而这条链最弱的环（holdKeys 里是不是真实键、去重条件对不对）
+            // 只会在实机上暴露。离线钉住它的接线形状。
+            int crossInputFail = CrossPlatformInputCheck.Run(
+                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
             int orphanFail = PortedCompletenessCheck.NoOrphanChecks(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
-            int total = locFail + hardFail + replayFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + locLangFail + pinStateFail + injectFail + logPrefixFail + scatterFail + cursorFail + orphanFail;
+            int total = locFail + hardFail + replayFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + locLangFail + pinStateFail + injectFail + logPrefixFail + scatterFail + cursorFail + crossInputFail + orphanFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"

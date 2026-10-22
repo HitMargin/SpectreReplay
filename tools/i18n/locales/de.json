@@ -1,4 +1,4 @@
-{
+﻿{
  "lang": "de",
  "entries": {
   "page.record": "Aufnahme",
@@ -45,9 +45,6 @@
   "playback.idle": "Kein Replay geladen. Drücke unten bei einer Datei auf „Wiedergabe“.",
   "playback.idle_err": "Der letzte Ladevorgang ist fehlgeschlagen: {0}",
   "playback.empty": "Noch keine Replays. Spiele ein Level, dann wird automatisch eines gespeichert.",
-  "playback.drive": "Wiedergabetreiber",
-  "playback.simulate": "Tastendrücke simulieren",
-  "playback.drive.note": "Wenn dies aus ist, läuft die Wiedergabe weiter, aber es werden keine Tasten an das Spiel gesendet, sodass sich der Planet nicht bewegt. Gehaltene Tasten werden beim Stoppen der Wiedergabe auch nicht losgelassen; lass es daher eingeschaltet, außer du debugst einen Tastenkonflikt.",
   "playback.stop": "Stoppen",
   "playback.unload": "Replay entladen",
   "playback.note": "Die Wiedergabe wird durch den aufgezeichneten Tastenstrom gesteuert.",
@@ -291,7 +288,6 @@
   "record.keybd.offset.tip": "Kalibriert den Tastaturklang als Ganzes: negativ, wenn er zu früh kommt, positiv, wenn er zu spät kommt, in Millisekunden.",
   "record.savekey.tip": "Tastenkürzel zum Speichern dieses Durchlaufs, standardmäßig F9. Klicke darauf und drücke eine beliebige Taste, um es neu zu belegen.",
   "record.cancelsavekey.tip": "Tastenkürzel, das die ausstehende Speicherung dieses Durchlaufs verwirft.",
-  "playback.simulate.tip": "Hauptschalter für die Tasteneingabe. Wenn aus, läuft die Wiedergabe, aber der Planet bewegt sich nicht, und gehaltene Tasten werden beim Stoppen nicht losgelassen. Schalte es nur zum Debuggen von Tastenkonflikten aus.",
   "render.on.tip": "Hauptschalter für das Videorendern. Wenn aus, kann kein neuer Render gestartet werden.",
   "render.width.tip": "Ausgabebreite. Wird nur von der sauberen Kamera verwendet; der Spielbildschirm folgt der Fenstergröße.",
   "render.height.tip": "Ausgabehöhe. Wird nur von der sauberen Kamera verwendet.",

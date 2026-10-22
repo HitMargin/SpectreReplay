@@ -6,8 +6,12 @@
 tools/i18n/
 ├── source.json            键清单 + 中文原文 + 英文原文（唯一事实源）
 ├── locales/<lang>.json    各语言译文（zh-t/ja/ko/es/pt/fr/de/pl/cs/ro/ru/vi）
-└── gen-locdata.py         生成 SpectreReplay/Ui/LocData.cs
+├── gen-locdata.py         生成 SpectreReplay/Ui/LocData.cs
+└── gen-locdata.ps1        同上，PowerShell 移植版（本机没有 Python 时用）
 ```
+
+> 两个生成器**逻辑等价**，产物逐字节相同（UTF-8 BOM + LF）。
+> 没有 Python 的那台机器上跑 `.ps1`，有 Python 时跑 `.py` 更省事。
 
 ## 改文案的流程
 

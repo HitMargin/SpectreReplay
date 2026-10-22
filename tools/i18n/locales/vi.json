@@ -1,4 +1,4 @@
-{
+﻿{
  "lang": "vi",
  "entries": {
   "page.record": "Ghi lại",
@@ -45,9 +45,6 @@
   "playback.idle": "Chưa tải bản phát lại. Nhấn \"Phát lại\" ở một tệp bên dưới.",
   "playback.idle_err": "Lần tải trước thất bại: {0}",
   "playback.empty": "Chưa có bản phát lại. Hãy chơi một màn, bản ghi sẽ tự động được lưu.",
-  "playback.drive": "Trình điều khiển phát lại",
-  "playback.simulate": "Mô phỏng nhấn phím",
-  "playback.drive.note": "Khi tắt, việc phát lại vẫn chạy nhưng không gửi phím nào vào game nên hành tinh sẽ không di chuyển. Phím đang giữ cũng không được nhả khi dừng, vì vậy hãy để bật trừ khi bạn đang gỡ lỗi xung đột phím.",
   "playback.stop": "Dừng",
   "playback.unload": "Gỡ bản phát lại",
   "playback.note": "Việc phát lại do luồng phím đã ghi điều khiển.",
@@ -291,7 +288,6 @@
   "record.keybd.offset.tip": "Hiệu chỉnh âm thanh bàn phím toàn bộ: âm nếu sớm, dương nếu muộn, tính bằng mili giây.",
   "record.savekey.tip": "Phím tắt để lưu lượt này, mặc định là F9. Nhấn vào nó rồi nhấn phím bất kỳ để gán lại.",
   "record.cancelsavekey.tip": "Phím tắt hủy việc lưu đang chờ của lượt này.",
-  "playback.simulate.tip": "Công tắc chính cho việc chèn phím. Khi tắt, phát lại vẫn chạy nhưng hành tinh không di chuyển, và phím đang giữ không được nhả khi dừng. Chỉ tắt khi gỡ lỗi xung đột phím.",
   "render.on.tip": "Công tắc chính cho kết xuất video. Khi tắt, không thể bắt đầu kết xuất mới.",
   "render.width.tip": "Chiều rộng đầu ra. Chỉ camera sạch dùng; màn hình game theo kích thước cửa sổ.",
   "render.height.tip": "Chiều cao đầu ra. Chỉ camera sạch dùng.",

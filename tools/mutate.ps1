@@ -1303,30 +1303,15 @@ switch ($Which) {
         SetLines $LMMGR ($out3.ToArray())
     }
     'MUT-D2' {
-        # ⑩b：把回放驱动开关那段整段删掉 = 回到 round 53 之前的原样。
-        # Settings.LegacyEngine 名字骗人（听着像"废弃的自研引擎"），实际它控制
-        # 整个按键模拟回放链路：ReplayPlayer.cs:38 关掉后不回松开已按住的键、
-        # :133 关掉后一个键都不注入。上游 Spectre 把它摆在回放设置首页
-        # （标签「模拟按键」），我们移植时丢了 UI ⇒ 只剩 Configs.json 一条路。
-        Backup 'Pages\Pages.cs'
-        $ls = Lines 'Pages\Pages.cs'
-        $start = -1
-        for ($i = 0; $i -lt $ls.Count; $i++) {
-            if ($ls[$i] -match 'Gui\.Section\("playback\.drive"') { $start = $i; break }
-        }
-        if ($start -lt 0) { throw "MUT-D2：找不到 playback.drive 段起点" }
-        $end = -1
-        for ($j = $start; $j -lt $ls.Count -and $j -lt $start + 24; $j++) {
-            # 收尾是 }); 之后紧跟另一行 Gui.Section，所以取第一个独立 });
-            if ($ls[$j].Trim() -eq '});') { $end = $j; break }
-        }
-        if ($end -lt 0) { throw "MUT-D2：找不到该段收尾（起点行 $($start+1)）" }
-        $out2 = New-Object System.Collections.Generic.List[string]
-        for ($i = 0; $i -lt $ls.Count; $i++) {
-            if ($i -ge $start -and $i -le $end) { continue }
-            $out2.Add($ls[$i])
-        }
-        SetLines 'Pages\Pages.cs' ($out2.ToArray())
+        # （2026-10-22 随「模拟按键」开关一同删除。）
+        #
+        # 原变异测试：把回放页的 playback.drive 段整段删掉，验证 ⑩b 判据会变红。
+        # 那个开关现已从产品中移除——它关掉后并非「只播不注入」，而是让长条判定
+        # 失效、键位显示变暗，属于「关掉就坏」的假开关。
+        #
+        # 判据本身保留（见 PortedCompletenessCheck ⑩ 的三条 CheckAbsent），
+        # 防的是「哪天有人又把它加回来」；而这个变异没有对应的"必须变红"对象了。
+        Write-Output "MUT-D2: skipped（播放驱动开关已删除，判据转为防退回）"
     }
     # ── 2026-10-18 保存按钮实时刷新(用户报：拨「允许覆盖关卡」不实时生效)──
     'MUT-U40' {
@@ -1675,6 +1660,92 @@ switch ($Which) {
         # 而且玩家不会想到是新装的模组干的（同 ⑯ 去特效总开关那条的理由）。
         Backup 'State\Settings.cs'
         ReplaceExact 'State\Settings.cs' 'public static bool RenderCursorOn = false;' 'public static bool RenderCursorOn = true;'
+    }
+
+    # ══════════════════════════════════════════════════════════════════
+    # 跨平台回放输入（2026-10-22 用户报「跨平台的按键模拟就是屁用没有」）
+    # ══════════════════════════════════════════════════════════════════
+    'MUT-CI1' {
+        # ① 只补 GetMain，不补 GetStateKeys（RDInput 的三入口缺一）。
+        #    MUT-CI1 守第一条判据。
+        # 这是最容易犯的"部分修复"：mainPressCount 有数了、keyTimes 也灌了，
+        # 看起来回车就能动，但 holdKeys 依旧空 ⇒ 长按地板照样被判松手。
+        # 单独摘掉一条才能证明三条判据各自独立生效，而不是一条命中就全绿。
+        Backup 'Features\Replay\Patches\Patch_InputInjection.cs'
+        $ls = Lines 'Features\Replay\Patches\Patch_InputInjection.cs'
+        $out = New-Object System.Collections.Generic.List[string]
+        foreach ($l in $ls) { if ($l -notmatch 'GetStateKeys') { $out.Add($l) } }
+        SetLines 'Features\Replay\Patches\Patch_InputInjection.cs' $out.ToArray()
+    }
+    'MUT-CI2' {
+        # ③ 去重条件回归：Active 绑上窗口聚焦这个**能力探针**。
+        # 后果是失焦时托管注入整个关掉，而玩家看到的只是「回放不动」，
+        # 没有任何线索指向判断条件——这是本项目反复踩过的那类坑。
+        # （原变异针对 Settings.LegacyEngine，该开关已删除，改打同一判据的下一个软条件。）
+        Backup 'Features\Replay\Runtime\ManagedInput.cs'
+        ReplaceExact 'Features\Replay\Runtime\ManagedInput.cs' 'internal static bool Active => is_playing;' 'internal static bool Active => is_playing && Application.isFocused;'
+    }
+    'MUT-CI8' {
+        # ③b Active 绑上「SendInput 是否可用」这类能力判断。
+        # 一旦平台探针判错，回放输入会整个关掉，而玩家只看到「回放不动」。
+        # （原变异针对 Settings.LegacyEngine，该开关已删除。）
+        Backup 'Features\Replay\Runtime\ManagedInput.cs'
+        ReplaceExact 'Features\Replay\Runtime\ManagedInput.cs' 'internal static bool Active => is_playing;' 'internal static bool Active => is_playing && !KeyboardSimulation.Broken;'
+    }
+    'MUT-CI3' {
+        # ④ 退回 AnyKeyCode(null) 占位：这不是注入按键，只是骗过 CheckPreHoldFail。
+        # 占位项会被 ValidInputWasReleased 静默 RemoveAt，holdKeys 里从来没有真实键。
+        Backup 'Features\Replay\Patches\Patch_InputInjection.cs'
+        ReplaceExact 'Features\Replay\Patches\Patch_InputInjection.cs' 'ManagedInput.Append(keys, ButtonState.IsDown);' 'keys.Add(new AnyKeyCode(null));'
+    }
+    'MUT-CI4' {
+        # ⑤ **注入时机回归（用户 2026-10-22 实测「仍然没用」的真因之一）**：
+        # 把记账从 PlayerControl_Update 的 Prefix 退回 Won_Update 的 Postfix。
+        # 游戏在 PlayerControl_Update 内部就调 Simulated_PlayerControl_Update 读输入
+        # （scrController.cs:552，读取点在 scrPlayer.cs:417/430/433/434），
+        # 记在它之后 = 每帧先读后写，事件永远晚一帧，现象就是"注入了但游戏没反应"。
+        # 只删 Prefix 的那两行（方法体只剩调用 PumpInput），保留 UpdateInput 那条。
+        Backup 'Features\Replay\Patches\Patch_InputInjection.cs'
+        ReplaceExact 'Features\Replay\Patches\Patch_InputInjection.cs' 'typeof(scrController), "PlayerControl_Update", PatchType.Prefix' 'typeof(scrController), "PlayerControl_Update", PatchType.Postfix'
+        ReplaceExact 'Features\Replay\Patches\Patch_InputInjection.cs' 'typeof(scrController), "UpdateInput", PatchType.Prefix' 'typeof(scrController), "UpdateInput", PatchType.Postfix'
+    }
+    'MUT-CI9' {
+        # ⑤b 帧戳语义回归：WentDown 从"帧戳相等"退回"集合里有这个键"。
+        # 按下集合靠清空实现时，无待办事件的那一帧走不到清空，按下会一直挂着，
+        # mainPressCount 每帧都为真——连续命中段会被灌入多余的 keyTimes。
+        Backup 'Features\Replay\Runtime\ManagedInput.cs'
+        ReplaceExact 'Features\Replay\Runtime\ManagedInput.cs' 'case ButtonState.WentDown: return PressedFrame[vk] == frame;' 'case ButtonState.WentDown: return Held[vk];'
+    }
+    'MUT-CI5' {
+        # ⑦ 平台守卫失效：SendInputs 在非 Windows 上不再提前返回。
+        # user32 不存在时这里是 DllNotFoundException（不是 return 0），而调用点
+        # 在回放每帧的路径上——一次异常就打断整帧的输入与命中推进。
+        Backup 'Features\Replay\Runtime\KeyboardSimulation.cs'
+        ReplaceExact 'Features\Replay\Runtime\KeyboardSimulation.cs' 'if (!Available) return;' ''
+    }
+    'MUT-CI7' {
+        # ⑧ 注入层下沉回归：把 GetMain 的补丁从 RDInput 静态入口挪到 RDInputType 层。
+        # 同步模式照常能跑，异步模式整条不动——AsyncInputManager 在玩家操作期间
+        # 把 keyboardInput.isActive 置 false，那一层根本不参与汇总。
+        Backup 'Features\Replay\Patches\Patch_InputInjection.cs'
+        ReplaceExact 'Features\Replay\Patches\Patch_InputInjection.cs' '[SpectrePatch(typeof(RDInput), "GetMain"' '[SpectrePatch(typeof(RDInputType), "GetMain"'
+    }
+    'MUT-CI6' {
+        # ⑦b 录制侧绕过平台探针：直接调 user32 的 GetKeyboardState。
+        # 非 Windows 上录制一开局就每帧抛异常，回放文件里一个按键事件都没有。
+        Backup 'Features\Replay\Runtime\ReplayRecorder.cs'
+        ReplaceExact 'Features\Replay\Runtime\ReplayRecorder.cs' 'KeyboardSimulation.SampleKeyState(CurrKeyState);' 'KeyboardSimulation.GetKeyboardState(CurrKeyState);'
+    }
+    'MUT-CI10' {
+        # ⑪b 广播判据回归：asyncInject 从 Injectable 退回 Usable。
+        #
+        # Usable 要求 asyncKeyboard.isActive，而那个值只在 PlayerControl 为真
+        # （AsyncInputManager.cs:156）。退回去的后果是：非 PlayerControl 状态下
+        # Inject 根本不被调用、KeyUpdated.Invoke 不发生 —— 直接订阅 SkyHook 事件流的
+        # 键位显示模组（JipperResourcePack 的 KeyViewer.cs:2216）整段失明，
+        # 而游戏判定与 RDInput 系模组都还正常，极难定位。
+        Backup 'Features\Replay\Runtime\ReplayPlayer.cs'
+        ReplaceExact 'Features\Replay\Runtime\ReplayPlayer.cs' 'AsyncInputInjector.Injectable' 'AsyncInputInjector.Usable'
     }
 
 

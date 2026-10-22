@@ -1,4 +1,4 @@
-{
+﻿{
  "lang": "ko",
  "entries": {
   "page.record": "녹화",
@@ -45,9 +45,6 @@
   "playback.idle": "불러온 리플레이가 없습니다. 아래 목록에서 “재생”을 누르세요.",
   "playback.idle_err": "지난 불러오기에 실패했습니다: {0}",
   "playback.empty": "아직 리플레이가 없습니다. 레벨을 플레이하면 자동으로 저장됩니다.",
-  "playback.drive": "재생 드라이버",
-  "playback.simulate": "키 입력 시뮬레이션",
-  "playback.drive.note": "이 옵션을 끄면 재생은 계속되지만 게임에 키가 전달되지 않아 행성이 움직이지 않습니다. 재생을 멈출 때 눌린 키도 해제되지 않으므로 키 충돌을 디버깅할 때만 끄세요.",
   "playback.stop": "중지",
   "playback.unload": "리플레이 내리기",
   "playback.note": "재생은 기록된 키 스트림으로 구동됩니다.",
@@ -291,7 +288,6 @@
   "record.keybd.offset.tip": "키보드 소리 전체의 어긋남을 보정합니다. 빠르면 음수, 늦으면 양수, 단위는 밀리초입니다.",
   "record.savekey.tip": "이번 런을 저장하는 단축키로 기본값은 F9입니다. 클릭한 뒤 아무 키나 누르면 다시 지정됩니다.",
   "record.cancelsavekey.tip": "이번 런의 대기 중인 저장을 버리는 단축키입니다.",
-  "playback.simulate.tip": "키 주입 마스터 스위치. 끄면 재생은 되지만 행성이 움직이지 않고, 멈출 때 눌린 키도 해제되지 않습니다. 키 충돌을 디버깅할 때만 끄세요.",
   "render.on.tip": "동영상 렌더링 마스터 스위치. 끄면 새 렌더링을 시작할 수 없습니다.",
   "render.width.tip": "출력 너비. 클린 카메라에서만 사용되며 게임 화면은 창 크기를 따릅니다.",
   "render.height.tip": "출력 높이. 클린 카메라에서만 사용됩니다.",

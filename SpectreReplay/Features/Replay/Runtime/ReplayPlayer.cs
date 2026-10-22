@@ -11,19 +11,34 @@ internal static class ReplayPlayer
 {
     // 复用列表，避免 PlayKeyboardEvent 每帧分配 List<INPUT>
     private static readonly List<KeyboardSimulation.INPUT> _inputBuffer = new List<KeyboardSimulation.INPUT>(256);
+
     internal static void Start()
     {
         if (!is_playing && !ApiBlockPlaying)
         {
             Stop();
             CurrKeyState = new byte[256];
+            ManagedInput.Clear();
             PlayIndex = 0;
+            // **这里必须从 0 开始，不能按 songposition_minusi 对齐。**
+            // 那一刻 songposition_minusi 还是上一局遗留的陈旧值（Rewind() 只重置
+            // dspTimeSong / crotchetAtStart，不碰 _songposition_minusi，
+            // 见 scrConductor.cs:352-376），用曲中位置去对齐等于直接跳到文件末尾。
+            // 检查点/中途开局的对齐由 Patch_Lifecycle 调 FastForward 负责。
             KeyEventIndex = 0;
             is_playing = true;
             is_recording = false;
             HitLocked = true;
             LateSaveMode = false;
             IgnoreMarkFail = true;
+
+            // 把回放按键桥接给 KeyViewer 系显示模组。
+            // 这些模组只读 Unity Input 或**它们自己被补丁过的** KeyInput.GetKey，
+            // 而回放走的是托管覆盖 + SkyHook 合成事件，两条都不经过 Unity Input——
+            // 不桥接的话键位显示器永远是黑的，即使游戏判定完全正常。
+            // 在这里而不是 Main.OnToggle：模组加载顺序不保证 KeyViewer 先就绪，
+            // 而回放开始时它一定已经在 AppDomain 里了。
+            KeyViewerBridge.TryInstall();
         }
     }
 
@@ -35,7 +50,9 @@ internal static class ReplayPlayer
         }
         GCS.hitMarginLimit = Persistence.hitMarginLimit;
         is_playing = false;
-        if (PlayMode && Settings.LegacyEngine)
+        // 回放结束：清掉托管输入状态，避免残留的按住键继续被 RDInput 报出来
+        ManagedInput.Clear();
+        if (PlayMode && ManagedInput.Mirror)
         {
             var releases = new List<KeyboardSimulation.INPUT>();
             for (int i = 1; i < 256; i++)
@@ -105,6 +122,8 @@ internal static class ReplayPlayer
         }
 
         CurrKeyState = new byte[256];
+        // 跳转后按键状态未知（与 CurrKeyState 同一处理方式）：清空，等后续事件重新建立
+        ManagedInput.Clear();
         AllAutoHits = false;
     }
 
@@ -128,33 +147,12 @@ internal static class ReplayPlayer
         {
             return;
         }
-        double songPosition = conductor.songposition_minusi;
-        // 无待办事件时提前返回，避免空 List 分配
-        if (songPosition < data.KeyEvents[KeyEventIndex].SongPosition)
-            return;
+        // 与 PumpInput() 同因：songposition_minusi 在同一帧的 Update 末尾才重算，
+        // 这里读到的是上一帧的值。按游戏自己的公式现场算。
+        double songPosition = CurrentSongPosition(conductor, out bool ready);
+        if (!ready) return;
 
-        var inputs = _inputBuffer;
-        inputs.Clear();
-        while (KeyEventIndex < data.KeyEvents.Count
-            && songPosition >= data.KeyEvents[KeyEventIndex].SongPosition)
-        {
-            var ev = data.KeyEvents[KeyEventIndex];
-            if (Settings.LegacyEngine && Application.isFocused)
-            {
-                // 回放文件里的键码是 ushort，损坏/伪造文件可能越界；映射表恒为 256 长度，
-                // 直接索引会在每帧回放里抛 IndexOutOfRange。越界键按被屏蔽键（0）处理跳过
-                ushort num = ev.KeyCode < Settings.key_code_convert.Length
-                    ? Settings.key_code_convert[ev.KeyCode]
-                    : (ushort)0;
-                if (num != 0 && num != 27 && !IsBlockedKey(num))
-                {
-                    inputs.Add(KeyboardSimulation.MakeInput((byte)num, ev.IsPressed, IsExtendedKey(num)));
-                    CurrKeyState[num] = (byte)(ev.IsPressed ? 128u : 0u);
-                }
-            }
-            KeyEventIndex++;
-        }
-        KeyboardSimulation.SendInputs(inputs);
+        PumpInput(songPosition, conductor);
         if (KeyEventIndex >= data.KeyEvents.Count)
         {
             if (flag)
@@ -165,6 +163,173 @@ internal static class ReplayPlayer
                 TriggerMessage(LocalizationManager.GetLocalizedText("note.stop_playing"));
             }
         }
+    }
+
+    /// <summary>
+    /// 把已经到时的按键事件灌进托管输入状态（以及 SendInput 缓冲）。
+    ///
+    /// **必须在游戏读输入之前调用。** 游戏读输入的时序是
+    /// <c>PlayerControl_Update → Simulated_PlayerControl_Update</c>（scrController.cs:552），
+    /// 后者内部按 :417 → :430 → :433 → :434 依次读 <c>ValidInputWasReleased</c> /
+    /// <c>ValidInputWasTriggered</c>（含 mainPressCount）/ <c>holding</c> / <c>keyTimes</c>。
+    /// 所以注入挂在两条驱动链的入口 Prefix 上（见 Patch_RDInput），
+    /// 而 <see cref="PlayKeyboardEvent"/>（Won_Update 的 Postfix）只是结算阶段的兜底——
+    /// 它跑在读取之后，只补 SendInput，不能作为主路径。
+    /// </summary>
+    internal static void PumpInput()
+    {
+        if (!is_playing) return;
+        if (data == null || data.KeyEvents == null) return;
+        if (KeyEventIndex < 0 || KeyEventIndex >= data.KeyEvents.Count) return;
+        scrConductor conductor = ADOBase.conductor;
+        if (conductor == null) return;
+        // **不能读 conductor.songposition_minusi。**
+        //
+        // 这个属性在 scrConductor.Update 的**末尾**（:852）才被重算，而
+        // scrController.UpdateInput 在同一方法的 :799 就被调用——也就是说
+        // 这里读到的永远是**上一帧**的值，开局第一帧甚至还是上一局遗留的。
+        //
+        // 实测（诊断日志）：第一帧读到 15.262（上一局的曲中位置），而按当时的
+        // dspTimeSong/dspTime 现场算出来是 -1.526（倒计时阶段，正确）。那个假值
+        // 让游标一次性推进了 64 个事件——前 8 秒的按键在同一帧被全部按下。
+        //
+        // 所以按游戏自己的公式现场算（scrConductor.cs:852 / :856），它和
+        // dspTimeSong、dspTime 出自同一时刻，不存在跨帧陈旧。
+        double songPosition = CurrentSongPosition(conductor, out bool ready);
+        if (!ready) return;
+        PumpInput(songPosition, conductor);
+    }
+
+    /// <summary>
+    /// 按 scrConductor 自己的公式现场求歌曲位置（scrConductor.cs:850-857）。
+    ///
+    /// <paramref name="ready"/> 为 false 表示时钟还没建立：此时返回值的量级
+    /// 是"音频系统启动以来的秒数"，拿它去比事件时间会把整局按键一次灌完。
+    /// 这是「播放一瞬间全部模拟完」的成因。
+    /// </summary>
+    private static double CurrentSongPosition(scrConductor conductor, out bool ready)
+    {
+        ready = false;
+        if (conductor == null || conductor.song == null) return 0.0;
+
+        if (!GCS.d_oldConductor && !GCS.d_webglConductor)
+        {
+            // dspTimeSong 只在歌曲真正排定播放时被赋值（:668/:675）。
+            // 为 0 时下面的式子退化成 (dspTime - 0) * pitch，是几万秒量级的伪值。
+            if (conductor.dspTimeSong <= 0.0) return 0.0;
+            ready = true;
+            return (conductor.dspTime - conductor.dspTimeSong - (double)scrConductor.calibration_i)
+                   * (double)conductor.song.pitch - conductor.addoffset;
+        }
+
+        ready = true;
+        return (double)(conductor.song.time - scrConductor.calibration_i)
+               - conductor.addoffset / (double)conductor.song.pitch;
+    }
+
+    private static void PumpInput(double songPosition, scrConductor conductor)
+    {
+        if (!is_playing) return;
+        if (data == null || data.KeyEvents == null) return;
+        if (KeyEventIndex < 0 || KeyEventIndex >= data.KeyEvents.Count) return;
+
+        if (conductor == null || conductor.song == null) return;
+
+        // 时钟是否就绪由调用方的 CurrentSongPosition 判定（ready=false 已在上层返回），
+        // 这里拿到的一定是同一时刻算出的真实歌曲位置。
+
+        // 无待办事件时提前返回，避免空 List 分配
+        if (songPosition < data.KeyEvents[KeyEventIndex].SongPosition)
+            return;
+
+        // 单帧事件上限，**只做限速、绝不丢弃**。正常情况下每帧只有个位数事件
+        // （16ms 内最多几次按键）；一帧里出现成百上千个"待办"只可能是这一帧来得
+        // 太晚（掉帧、暂停恢复、或时钟刚就绪）。闷头灌完的后果是判定链在同一帧里
+        // 被调几十次，玩家看到"一瞬间全部模拟完"——所以限速；但剩下的必须留到
+        // 下一帧继续，游标只能前进、不能跳过（曾经在这里跳游标，直接把整局按键
+        // 跳没了，表现是按键模拟完全失效）。
+        const int MaxEventsPerFrame = 64;
+        int pumped = 0;
+
+        var inputs = _inputBuffer;
+        inputs.Clear();
+        // ── 注入方式选择 ──────────────────────────────────────
+        //
+        // **首选合成事件入队**（<see cref="AsyncInputInjector"/>）：它不经过
+        // 操作系统，失焦可用、不受 UIPI 拦截、时间戳是亚帧精度。
+        // 事件走 SkyHookManager.KeyUpdated.Invoke —— 与真实键盘回调同一个入口，
+        // 游戏自己的监听器会把它送进 keyQueue，随后 keyMask / keyDownMask /
+        // ProcessKeyInputs(tick) 全部按真实按键的路径走。
+        //
+        // 不可用时（未开异步输入、反射解析失败、实际入队失败）退回托管覆盖
+        // + SendInput。**两条路互斥**：同时开会把同一颗键算两次
+        // （SendInput 的事件会被 SkyHook 钩子再捕一次，正是 ADOFAIMacro 里
+        // 要专门做"回声配额"丢弃的那种重复）。
+        //
+        // 判据用 Healthy 而不只是 Usable：Usable 是"看起来能用"，而一旦它
+        // 判错、托管覆盖又已经放行，游戏那条链读到的就是永远空的 keyMask——
+        // 两条路一起失效。
+        // **广播判据与「游戏是否出队」是两件事，不能混用。**
+        //
+        // 这里用 Injectable（只看钩子活着、字段拿得到），而不是 Usable
+        // （额外要求 asyncKeyboard.isActive，即只在 PlayerControl 为真）。
+        //
+        // 原因：KeyUpdated 的订阅者不只是游戏。JipperResourcePack 直接监听
+        // `SkyHookManager.KeyUpdated`（KeyViewer.cs:2216），完全不读 RDInput /
+        // keyMask / UnityEngine.Input。用 Usable 当判据的话，非 PlayerControl
+        // 状态下 Inject 不被调用、Invoke 不发生，这类模组整段看不到按键。
+        //
+        // 广播到非 PlayerControl 不会污染判定：游戏监听器只把它写进 keyQueue，
+        // 而 UpdateInput 在 asyncKeyboard.isActive 为假时开头早退（scrController.cs:2900），
+        // 没人出队；AsyncInputManager.Update 又在 !flag 时每帧 ClearKeys()
+        // （AsyncInputManager.cs:159-162 → :110-116 含 keyQueue.Clear）。
+        bool asyncInject = AsyncInputInjector.Injectable && AsyncInputInjector.Healthy;
+        // SendInput 与**真正在灌**的那条互斥：只要异步广播在走就不发 OS 级按键
+        // （SkyHook 会把 SendInput 的键再捕一次，同一颗键算两遍）。
+        bool sendInput = ManagedInput.Mirror && !asyncInject;
+        while (KeyEventIndex < data.KeyEvents.Count
+            && pumped < MaxEventsPerFrame
+            && songPosition >= data.KeyEvents[KeyEventIndex].SongPosition)
+        {
+            var ev = data.KeyEvents[KeyEventIndex];
+            // 回放文件里的键码是 ushort，损坏/伪造文件可能越界；映射表恒为 256 长度，
+            // 直接索引会在每帧回放里抛 IndexOutOfRange。越界键按被屏蔽键（0）处理跳过
+            ushort num = ev.KeyCode < Settings.key_code_convert.Length
+                ? Settings.key_code_convert[ev.KeyCode]
+                : (ushort)0;
+            if (num != 0 && num != 27)
+            {
+                // 托管输入侧：把回放状态并进 RDInput 的查询结果（见 Patch_RDInput）。
+                // 与平台/聚焦无关，也【不】受 IsBlockedKey 影响——那个表是给
+                // SendInput 用的（OS 级注入修饰键会干扰系统），托管路径没有这个问题。
+                // 不过滤修饰键：原版 holdKeys 由 RDInput.GetMainHeldKeys 填充，
+                // Shift/Ctrl/Alt 同样算「按住」；若在此滤掉，录音里只按住修饰键的长条
+                // 会在回放时被判成松手。Esc(27) 与 0（未映射/无效）仍排除。
+                ManagedInput.Note(num, ev.IsPressed);
+                // 真路径：把事件按**它自己的** SongPosition 换算成绝对 tick 入队。
+                // 用 ev.SongPosition 而不是外层 songPosition：外层是"现在"，事件可能
+                // 是这几帧里漏掉的早先按键，用现在的时间戳会把它整体后移，时间戳一偏
+                // ProcessKeyInputs 算出来的角度就偏，判定跟着偏。
+                // 不套 IsBlockedKey：那个表是给 OS 级 SendInput 用的（修饰键会干扰系统），
+                // 合成事件不经过 OS，没有这个问题。
+                // 同一个事件循环里再问一次 Healthy：这一帧的第一个事件就可能已经
+                // 入队失败（conductor 还没建好之类），后面的事件再往同一条断掉的
+                // 管子里塞只会重复告警。失败后交给托管覆盖层兜底。
+                if (asyncInject && AsyncInputInjector.Healthy)
+                {
+                    try { AsyncInputInjector.Inject(num, ev.IsPressed, ev.SongPosition); }
+                    catch (Exception ex) { Debug.LogException(ex); }
+                }
+            }
+            if (sendInput && num != 0 && num != 27 && !IsBlockedKey(num))
+            {
+                inputs.Add(KeyboardSimulation.MakeInput((byte)num, ev.IsPressed, IsExtendedKey(num)));
+                CurrKeyState[num] = (byte)(ev.IsPressed ? 128u : 0u);
+            }
+            KeyEventIndex++;
+            pumped++;
+        }
+        KeyboardSimulation.SendInputs(inputs);
     }
 
     internal static bool ReplayHitOld(scrPlayer player, HitSnapshot hitdata)

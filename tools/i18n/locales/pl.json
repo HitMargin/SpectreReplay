@@ -1,4 +1,4 @@
-{
+﻿{
  "lang": "pl",
  "entries": {
   "page.record": "Nagrywanie",
@@ -45,9 +45,6 @@
   "playback.idle": "Nie wczytano powtórki. Naciśnij „Odtwórz” przy pliku poniżej.",
   "playback.idle_err": "Ostatnie wczytanie nie powiodło się: {0}",
   "playback.empty": "Nie ma jeszcze powtórek. Zagraj poziom, a powtórka zapisze się automatycznie.",
-  "playback.drive": "Sterownik odtwarzania",
-  "playback.simulate": "Symuluj naciśnięcia klawiszy",
-  "playback.drive.note": "Po wyłączeniu odtwarzanie nadal trwa, ale do gry nie są wysyłane żadne klawisze, więc planeta się nie poruszy. Przytrzymane klawisze nie są też zwalniane przy zatrzymaniu, więc zostaw to włączone, chyba że diagnozujesz konflikt klawiszy.",
   "playback.stop": "Zatrzymaj",
   "playback.unload": "Wyładuj powtórkę",
   "playback.note": "Odtwarzanie jest sterowane nagranym strumieniem klawiszy.",
@@ -291,7 +288,6 @@
   "record.keybd.offset.tip": "Kalibruje dźwięk klawiatury całościowo: ujemne, jeśli jest za wczesny, dodatnie, jeśli za późny, w milisekundach.",
   "record.savekey.tip": "Skrót do zapisania tej próby, domyślnie F9. Kliknij go, a potem naciśnij dowolny klawisz, aby przypisać na nowo.",
   "record.cancelsavekey.tip": "Skrót, który odrzuca oczekujący zapis tej próby.",
-  "playback.simulate.tip": "Główny przełącznik wstrzykiwania klawiszy. Po wyłączeniu odtwarzanie trwa, ale planeta się nie porusza, a przytrzymane klawisze nie są zwalniane przy zatrzymaniu. Wyłączaj tylko do diagnozowania konfliktów klawiszy.",
   "render.on.tip": "Główny przełącznik renderowania wideo. Po wyłączeniu nie można rozpocząć nowego renderowania.",
   "render.width.tip": "Szerokość wyjściowa. Używana tylko przez czystą kamerę; ekran gry zależy od rozmiaru okna.",
   "render.height.tip": "Wysokość wyjściowa. Używana tylko przez czystą kamerę.",

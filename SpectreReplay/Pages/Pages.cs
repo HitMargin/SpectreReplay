@@ -256,19 +256,15 @@ namespace SpectreReplay.Pages
         // ── 回放 ────────────────────────────────────────────────
         internal static void DrawPlayback()
         {
-            // **回放驱动开关必须放在回放页第一屏。** Settings.LegacyEngine 名字骗人——
-            // 它管的不是"旧引擎"，而是**整个按键模拟回放链路**：
-            //   ReplayPlayer.cs:38  关掉后停止回放时**不会释放已按住的键**（键会卡住）
-            //   ReplayPlayer.cs:133 关掉后回放时**一个键都不注入**（画面毫无反应）
-            // 它必须有一等公民的位置摆在"回放设置"首页，标签就叫
-            // 「模拟按键 / Simulate Key Press」——而它恰好是"回放没反应"时
-            // 最该被检查的一项，只剩 Configs.json 一条路等于没人找得到。
-            Gui.Section("playback.drive", Gui.Accent, () =>
-            {
-                OnGui.Row("playback.simulate", LegacyEngine, v => { LegacyEngine = v; Commit(); });
-                OnGui.Note("playback.drive.note");
-            });
-
+            // **「模拟按键」开关（原 Settings.LegacyEngine）已删除。**
+            //
+            // 它看起来是「要不要注入按键」，实际关掉后并非「只播不注入」：
+            // 判定覆盖、长条 holdKeys 同步、键位显示桥接全都会跟着停，
+            // 于是长条关卡莫名失败、KeyViewer 变黑，而画面上看不出原因。
+            // 一个「关掉就坏」的开关摆在回放页第一屏，等于给所有用户
+            // 准备了一个查不出来的坑。
+            //
+            // 真要停止注入，用 ReplayOn 总开关——它连补丁一起卸，语义干净。
             Gui.Section("playback.current", Gui.OkCol, () => DrawPlaybackState());
 
             var files = ReplayList();

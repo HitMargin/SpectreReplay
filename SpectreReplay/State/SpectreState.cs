@@ -456,9 +456,23 @@ public static class SpectreState
         => Array.IndexOf(BlockedKeys, keyCode) >= 0;
 
     internal static float GetAngle()
+        => scrController.instance == null ? float.NaN : GetAngle(scrController.instance);
+
+    /// <summary>
+    /// 用**调用方持有的那个** controller 取角度。
+    ///
+    /// 一定要有这个重载：回放推进循环用补丁入参 <c>__instance</c> 判定当前砖块
+    /// （那里注释说明了为什么不能用静态 instance——场景卸载/重载的中间态它会指向
+    /// 另一个实例），却用无参 <see cref="GetAngle()"/> 取角度。两个 controller 不是
+    /// 同一个对象时，砖块取自 A、角度取自 B，而 B 的星球角度可以任意大，
+    /// <c>angle &gt;= CurrAngle</c> 一路恒真——整份命中快照在一帧内被吃完。
+    /// </summary>
+    internal static float GetAngle(scrController controller)
     {
-        float num = (float)(scrController.instance.chosenPlanet.angle - scrController.instance.chosenPlanet.targetExitAngle);
-        if (!scrController.instance.playerOne.planetarySystem.isCW)
+        if (controller == null) return float.NaN;
+        if (controller.chosenPlanet == null) return float.NaN;
+        float num = (float)(controller.chosenPlanet.angle - controller.chosenPlanet.targetExitAngle);
+        if (controller.playerOne != null && !controller.playerOne.planetarySystem.isCW)
         {
             num *= -1f;
         }

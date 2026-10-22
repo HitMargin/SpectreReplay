@@ -1,4 +1,4 @@
-{
+﻿{
  "lang": "cs",
  "entries": {
   "page.record": "Nahrávání",
@@ -45,9 +45,6 @@
   "playback.idle": "Není načten žádný záznam. Stiskněte „Přehrát“ u souboru níže.",
   "playback.idle_err": "Poslední načtení selhalo: {0}",
   "playback.empty": "Zatím žádné záznamy. Zahrajte úroveň a záznam se uloží automaticky.",
-  "playback.drive": "Ovladač přehrávání",
-  "playback.simulate": "Simulovat stisky kláves",
-  "playback.drive.note": "Když je vypnuto, přehrávání stále běží, ale do hry se neposílají žádné klávesy, takže se planeta nepohne. Držené klávesy se při zastavení také neuvolní, takže to nechte zapnuté, pokud neřešíte konflikt kláves.",
   "playback.stop": "Zastavit",
   "playback.unload": "Odhlásit záznam",
   "playback.note": "Přehrávání je řízeno nahraným proudem kláves.",
@@ -291,7 +288,6 @@
   "record.keybd.offset.tip": "Kalibruje zvuk klávesnice jako celek: záporné, pokud je brzy, kladné, pokud pozdě, v milisekundách.",
   "record.savekey.tip": "Zkratka pro uložení tohoto běhu, ve výchozím stavu F9. Klikněte na ni a stiskněte libovolnou klávesu pro nové přiřazení.",
   "record.cancelsavekey.tip": "Zkratka, která zahodí čekající uložení tohoto běhu.",
-  "playback.simulate.tip": "Hlavní přepínač vkládání kláves. Když je vypnutý, přehrávání běží, ale planeta se nepohybuje a držené klávesy se při zastavení neuvolní. Vypínejte jen při ladění konfliktů kláves.",
   "render.on.tip": "Hlavní přepínač vykreslování videa. Když je vypnutý, nelze spustit nové vykreslování.",
   "render.width.tip": "Výstupní šířka. Používá ji jen čistá kamera; obrazovka hry sleduje velikost okna.",
   "render.height.tip": "Výstupní výška. Používá ji jen čistá kamera.",

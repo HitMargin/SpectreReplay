@@ -34,7 +34,6 @@ public static class ConfigManager
         public bool Backup { get; set; }
         public bool ManualSave { get; set; }
         public bool CancelSave { get; set; }
-        public bool LegacyEngine { get; set; }
         public bool KeybdSoundRecordActive { get; set; }
         public bool KeyConvertEnabled { get; set; }
         public bool GetDataFromAsyncInput { get; set; }
@@ -218,7 +217,6 @@ public static class ConfigManager
                 Backup = Settings.Backup,
                 ManualSave = Settings.ManualSave,
                 CancelSave = Settings.CancelSave,
-                LegacyEngine = Settings.LegacyEngine,
                 KeybdSoundRecordActive = Settings.KeybdSoundRecordActive,
                 KeyConvertEnabled = Settings.KeyConvertEnabled,
                 GetDataFromAsyncInput = Settings.GetDataFromAsyncInput,
@@ -568,7 +566,6 @@ public static class ConfigManager
                     // 手改成 false 后重启会被静默读回默认值 true，
                     // 玩家看到的是「这个开关自己又开了」。
                     Settings.CancelSave = sets.Value<bool?>("CancelSave") ?? Settings.CancelSave;
-                    Settings.LegacyEngine = sets.Value<bool?>("LegacyEngine") ?? Settings.LegacyEngine;
                     Settings.KeybdSoundRecordActive = sets.Value<bool?>("KeybdSoundRecordActive") ?? Settings.KeybdSoundRecordActive;
                     Settings.KeyConvertEnabled = sets.Value<bool?>("KeyConvertEnabled") ?? Settings.KeyConvertEnabled;
                     Settings.GetDataFromAsyncInput = sets.Value<bool?>("GetDataFromAsyncInput") ?? Settings.GetDataFromAsyncInput;

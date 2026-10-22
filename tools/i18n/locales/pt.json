@@ -1,4 +1,4 @@
-{
+﻿{
  "lang": "pt",
  "entries": {
   "page.record": "Gravação",
@@ -45,9 +45,6 @@
   "playback.idle": "Nenhum replay carregado. Pressione \"Reproduzir\" em um arquivo abaixo.",
   "playback.idle_err": "A última carga falhou: {0}",
   "playback.empty": "Ainda não há replays. Jogue uma fase e um será salvo automaticamente.",
-  "playback.drive": "Driver de reprodução",
-  "playback.simulate": "Simular pressionamentos de tecla",
-  "playback.drive.note": "Com isto desativado, a reprodução continua, mas nenhuma tecla é enviada ao jogo, então o planeta não se moverá. Teclas mantidas também não são liberadas quando a reprodução para, então deixe ativado a menos que esteja depurando um conflito de teclas.",
   "playback.stop": "Parar",
   "playback.unload": "Descarregar replay",
   "playback.note": "A reprodução é conduzida pelo fluxo de teclas gravado.",
@@ -291,7 +288,6 @@
   "record.keybd.offset.tip": "Calibra o som de teclado como um todo: negativo se estiver adiantado, positivo se atrasado, em milissegundos.",
   "record.savekey.tip": "Atalho para salvar esta tentativa, F9 por padrão. Clique nele e pressione qualquer tecla para reatribuir.",
   "record.cancelsavekey.tip": "Atalho que descarta o salvamento pendente desta tentativa.",
-  "playback.simulate.tip": "Chave mestra da injeção de teclas. Com ela desativada, a reprodução roda mas o planeta não se move, e as teclas mantidas não são liberadas ao parar. Desative-a apenas para depurar conflitos de teclas.",
   "render.on.tip": "Chave mestra da renderização de vídeo. Quando desativada, nenhuma nova renderização pode ser iniciada.",
   "render.width.tip": "Largura de saída. Só é usada pela câmera limpa; a tela do jogo segue o tamanho da janela.",
   "render.height.tip": "Altura de saída. Só é usada pela câmera limpa.",

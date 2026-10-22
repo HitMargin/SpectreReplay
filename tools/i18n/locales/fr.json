@@ -1,4 +1,4 @@
-{
+﻿{
  "lang": "fr",
  "entries": {
   "page.record": "Enregistrement",
@@ -45,9 +45,6 @@
   "playback.idle": "Aucun replay chargé. Appuyez sur « Lecture » sur un fichier ci-dessous.",
   "playback.idle_err": "Le dernier chargement a échoué : {0}",
   "playback.empty": "Aucun replay pour l'instant. Jouez un niveau et il sera sauvegardé automatiquement.",
-  "playback.drive": "Pilote de lecture",
-  "playback.simulate": "Simuler les appuis de touches",
-  "playback.drive.note": "Désactivé, la lecture continue mais aucune touche n'est envoyée au jeu, donc la planète ne bougera pas. Les touches maintenues ne sont pas non plus relâchées à l'arrêt de la lecture ; laissez donc cette option active sauf si vous déboguez un conflit de touches.",
   "playback.stop": "Arrêter",
   "playback.unload": "Décharger le replay",
   "playback.note": "La lecture est pilotée par le flux de touches enregistré.",
@@ -291,7 +288,6 @@
   "record.keybd.offset.tip": "Calibre le son du clavier dans son ensemble : négatif s'il est en avance, positif s'il est en retard, en millisecondes.",
   "record.savekey.tip": "Raccourci pour sauvegarder cette partie, F9 par défaut. Cliquez dessus puis appuyez sur n'importe quelle touche pour le réassigner.",
   "record.cancelsavekey.tip": "Raccourci qui abandonne la sauvegarde en attente pour cette partie.",
-  "playback.simulate.tip": "Interrupteur principal de l'injection de touches. Désactivé, la lecture tourne mais la planète ne bouge pas, et les touches maintenues ne sont pas relâchées à l'arrêt. Ne le désactivez que pour déboguer des conflits de touches.",
   "render.on.tip": "Interrupteur principal du rendu vidéo. Désactivé, aucun nouveau rendu ne peut être lancé.",
   "render.width.tip": "Largeur de sortie. Utilisée uniquement par la caméra propre ; l'écran de jeu suit la taille de la fenêtre.",
   "render.height.tip": "Hauteur de sortie. Utilisée uniquement par la caméra propre.",

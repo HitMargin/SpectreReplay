@@ -24,6 +24,21 @@ internal class Patch_Won_Update
     }
 }
 
+// ——— 命中推进的角度健全性 ————————————————————————————————
+//
+// `GetAngle()` 来自 SpectreState，算的是 `chosenPlanet.angle - targetExitAngle`。
+// 它依赖 conductor 的 crotchetAtStart：`scrPlanet.Update_RefreshAngles` /
+// `AsyncRefreshAngles` 在 crotchetAtStart 为 0 时会产出 ±Infinity。
+//
+// **为什么不只是「判 NaN」**：NaN 在 `angle >= CurrAngle` 里恒假，本来就不会吞数据；
+// 真正危险的是 ±Infinity——它在比较里恒真，会让单帧 while 把整份快照吃完。
+// 所以判据是 IsFinite（非 NaN 且非 ±Inf）。
+internal static class ReplayAngleGuard
+{
+    internal static bool IsSane(float angle)
+        => !float.IsNaN(angle) && !float.IsInfinity(angle);
+}
+
 // ——— scrPlayer.UpdateHoldKeys ———————————————————————————————
 // 游戏此处有个潜伏 bug：命中 midspin 时 Hit() 尾部会向 keyTimes 自补一个待处理
 // 按键，函数末段 midspin 分支的第二次 RemoveAt(0) 假定这个补充一定还在。若中途
@@ -132,10 +147,29 @@ internal class Patch_PlayerControlUpdate
                 hc = hitSnapshots[PlayIndex];
             }
 
-            float angle = GetAngle();
+            // **必须传 __instance**，不能用无参 GetAngle()：后者读静态 scrController.instance，
+            // 与这里判定砖块的 __instance 在编辑器/场景切换中间态可能不是同一个对象。
+            float angle = GetAngle(__instance);
+            // ── 单帧命中上限 + 角度健全性检查 ─────────────────────────
+            // 这个 while 是**不可逆**的：每轮 PlayIndex++，一旦某一帧角度算坏
+            // （Infinity 会让 `angle >= CurrAngle` 恒真），整份命中快照会在**一帧内**
+            // 被吃完——玩家看到的就是「播放时一瞬间模拟完」，而且回不来。
+            //
+            // 角度算坏的入口不止一个：conductor.Rewind() 会把 crotchetAtStart 置 0
+            // （scrConductor.cs:355），下一次 Update 才由 60/bpm 补回；这中间的
+            // `(songpos - lastHit) / crotchetAtStart` 就是 ±Infinity。
+            //
+            // 所以两道闸都要有：
+            //   ① 非有限角度 → 本帧一次都不许吃（NaN 虽然不会被 >= 命中，但别依赖这点）；
+            //   ② 单帧上限 → 即使角度合法地很大（极小 bpm / 极端倍速），也只推进
+            //      有限步，宁可慢一帧也不要把整份数据吞掉。
+            const int MaxHitsPerFrame = 256;
+            int drainedThisFrame = 0;
             while (__instance.currFloor.seqID == hc.CurrentFloorID
                 && (double)angle >= hc.CurrAngle
-                && __instance.curFreeRoamSection == hc.curFreeRoamSection)
+                && __instance.curFreeRoamSection == hc.curFreeRoamSection
+                && ReplayAngleGuard.IsSane(angle)
+                && drainedThisFrame < MaxHitsPerFrame)
             {
                 // 用补丁入参 __instance 而不是 scrController.instance：入参由 Harmony 传入、
                 // 必然是正在执行该方法的实例，而静态 instance 在场景卸载/重载的中间态
@@ -161,8 +195,9 @@ internal class Patch_PlayerControlUpdate
                     }
                 }
                 PlayIndex++;
+                drainedThisFrame++;
                 if (PlayIndex >= hitSnapshots.Count) break;
-                angle = GetAngle();
+                angle = GetAngle(__instance);
                 hc = hitSnapshots[PlayIndex];
                 if (__instance.currFloor.seqID != hc.CurrentFloorID
                     || __instance.curFreeRoamSection > hc.curFreeRoamSection)

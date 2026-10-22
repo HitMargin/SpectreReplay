@@ -1,4 +1,4 @@
-[
+﻿[
  {
   "key": "page.record",
   "zh": "录制",
@@ -218,21 +218,6 @@
   "key": "playback.empty",
   "zh": "还没有回放文件。打一局关卡就会自动保存。",
   "en": "No replays yet. Play a level and one is saved automatically."
- },
- {
-  "key": "playback.drive",
-  "zh": "回放驱动",
-  "en": "Playback driver"
- },
- {
-  "key": "playback.simulate",
-  "zh": "模拟按键",
-  "en": "Simulate key presses"
- },
- {
-  "key": "playback.drive.note",
-  "zh": "关掉后回放仍然会播放、但不再往游戏里送按键——星球不会动。停止回放时也不会松开已按住的键，所以只在排查「按键冲突」时关它。",
-  "en": "With this off, playback still runs but no keys are sent to the game, so the planet will not move. Held keys are also not released when playback stops, so keep it on unless you are debugging a key conflict."
  },
  {
   "key": "playback.stop",
@@ -1448,11 +1433,6 @@
   "key": "record.cancelsavekey.tip",
   "zh": "放弃保存本局的快捷键。按下后这一局就不会再写文件。",
   "en": "Hotkey that discards the pending save for this run."
- },
- {
-  "key": "playback.simulate.tip",
-  "zh": "回放的按键注入主开关。关掉后回放会播放但星球不动，停止时也不会松开已按住的键——只在排查按键冲突时才关它。",
-  "en": "Master switch for key injection. With it off, playback runs but the planet does not move, and held keys are not released on stop. Only turn it off to debug key conflicts."
  },
  {
   "key": "render.on.tip",

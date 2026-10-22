@@ -1,4 +1,4 @@
-{
+﻿{
  "lang": "es",
  "entries": {
   "page.record": "Grabación",
@@ -45,9 +45,6 @@
   "playback.idle": "No hay ninguna repetición cargada. Pulsa «Repetición» en un archivo de abajo.",
   "playback.idle_err": "La última carga falló: {0}",
   "playback.empty": "Aún no hay repeticiones. Juega un nivel y se guardará una automáticamente.",
-  "playback.drive": "Controlador de reproducción",
-  "playback.simulate": "Simular pulsaciones",
-  "playback.drive.note": "Con esto desactivado, la reproducción sigue, pero no se envían teclas al juego, así que el planeta no se moverá. Tampoco se sueltan las teclas mantenidas al detener la reproducción, así que déjalo activado salvo que estés depurando un conflicto de teclas.",
   "playback.stop": "Detener",
   "playback.unload": "Descargar repetición",
   "playback.note": "La reproducción se basa en la secuencia de teclas grabada.",
@@ -291,7 +288,6 @@
   "record.keybd.offset.tip": "Calibra el sonido de teclado en conjunto: negativo si suena pronto, positivo si suena tarde, en milisegundos.",
   "record.savekey.tip": "Atajo para guardar esta partida; F9 por defecto. Haz clic en él y pulsa cualquier tecla para reasignarlo.",
   "record.cancelsavekey.tip": "Atajo que descarta el guardado pendiente de esta partida.",
-  "playback.simulate.tip": "Interruptor maestro de la inyección de teclas. Con él desactivado, la reproducción sigue pero el planeta no se mueve, y las teclas mantenidas no se sueltan al detenerse. Desactívalo solo para depurar conflictos de teclas.",
   "render.on.tip": "Interruptor maestro del renderizado de vídeo. Desactivado, no se puede iniciar un nuevo renderizado.",
   "render.width.tip": "Ancho de salida. Solo lo usa la cámara limpia; la pantalla del juego sigue el tamaño de la ventana.",
   "render.height.tip": "Altura de salida. Solo lo usa la cámara limpia.",

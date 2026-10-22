@@ -91,7 +91,7 @@ internal static class ReplayRecorder
         // 异步输入开启时按键由 AsyncKeyRecorder 记录，轮询路径只兜 forceSync（结算画面）
         if (!forceSync && UseAsyncInput)
             return;
-        KeyboardSimulation.GetKeyboardState(CurrKeyState);
+        KeyboardSimulation.SampleKeyState(CurrKeyState);
         // **必须自己确认导体可用。** 本方法由 Won_Update / UpdateInput 的补丁
         // 直接调用，而那两个补丁**没有 try**（Patch_Won_Update.Postfix 只对
         // __instance 判了空）：conductor 在结算转场/场景卸载期间会被销毁，

@@ -20,7 +20,6 @@ public static class Settings
     public static bool Backup = true;
     public static bool ManualSave = true;
     public static bool CancelSave = true;
-    public static bool LegacyEngine = true;
     public static bool KeybdSoundRecordActive = true;
 
     public static bool KeyConvertEnabled = false;

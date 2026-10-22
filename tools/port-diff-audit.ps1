@@ -764,7 +764,57 @@ $knownDeviations = @(
     # 在交付像素时按 premultiplied alpha 合成（句柄无效则回退手绘箭头）。
     @{ Pat = 'SystemCursor.TryAcquire'; File = 'VideoFrameSource.cs'; Why = '2026-10-21 系统光标：抓真实 Windows 光标位图（上游没有这个功能，手绘箭头只是兜底）' }
     @{ Pat = 'flight.Cursor'; File = 'VideoFrameSource.cs'; Why = '同上：光标图在 Grab 那一刻随 Flight 排队，交付时再取会与帧错位' }
-    @{ Pat = 'head.Cursor'; File = 'VideoFrameSource.cs'; Why = '同上：出队后按这一帧自己记下的光标图合成' })
+    @{ Pat = 'head.Cursor'; File = 'VideoFrameSource.cs'; Why = '同上：出队后按这一帧自己记下的光标图合成' }
+    # -- 2026-10-22 回放输入改成跨平台（用户报「跨平台的按键模拟就是屁用没有」）----
+    # 上游只有 SendInput 一条路（Windows user32 + 要求窗口聚焦）。非 Windows / 未聚焦时
+    # RDInput 收不到任何东西：mainPressCount 恒 0 ⇒ keyTimes 永不灌入 ⇒ 一次 Hit 都不发生；
+    # GetMainHeldKeys 恒空 ⇒ holdKeys 恒空 ⇒ holding 恒假 ⇒ CheckPreHoldFail 把长按判死。
+    # 现在把回放状态并进 RDInput 自己的查询结果（Patch_RDInput），游戏原有判定链自然成立。
+    @{ Pat = 'ManagedInput.Clear';      File = 'ReplayPlayer.cs'; Why = '同上：开始/停止/跳转时清空托管按键状态，避免上一段的按住残留' }
+    @{ Pat = 'ManagedInput.BeginFrame'; File = 'ReplayPlayer.cs'; Why = '同上：按下/抬起只在该事件到达的那一帧可见（同帧幂等，PlayKeyboardEvent 一帧被调两次）' }
+    @{ Pat = 'ManagedInput.Note';       File = 'ReplayPlayer.cs'; Why = '同上：把回放按键记进托管状态，由 Patch_RDInput 并进 RDInput 的查询结果' }
+    @{ Pat = 'ManagedInput.Enabled';    File = 'ReplayPlayer.cs'; Why = '同上：只在 SendInput 走不通（非 Windows / 未聚焦 / 关掉模拟按键）时启用托管注入，两条路同开会把一次按键数成两次' }
+    @{ Pat = 'KeyboardSimulation.Available'; File = 'ReplayPlayer.cs'; Why = '同上：SendInput 是 user32 导出，非 Windows 上调用会抛 DllNotFoundException 而不是失败返回；先问平台' }
+    @{ Pat = 'KeyboardSimulation.Available'; File = 'KeyboardSimulation.cs'; Why = '同上：平台探针本体（Application.platform 判 Windows），非 Windows 上 SendInputs 直接返回、SampleKeyState 退回 Unity Input' }
+    @{ Pat = 'Application.platform';    File = 'KeyboardSimulation.cs'; Why = '同上：判据用运行时平台而不是 #if UNITY_STANDALONE_WIN——本 DLL 在 Unity 之外编译，UNITY_* 符号一个都没定义' }
+    @{ Pat = 'RuntimePlatform.WindowsPlayer'; File = 'KeyboardSimulation.cs'; Why = '同上：平台探针的两个正面取值（Windows 播放器 / 编辑器）' }
+    @{ Pat = 'RuntimePlatform.WindowsEditor'; File = 'KeyboardSimulation.cs'; Why = '同上' }
+    @{ Pat = 'pbKeyState.Length';       File = 'KeyboardSimulation.cs'; Why = '同上：非 Windows 回退路上按缓冲区长度逐键采样' }
+    @{ Pat = 'Application.isFocused';   File = 'ReplayPlayer.cs'; Why = '上游就是这一句（SendInput 需要窗口焦点）；现在额外用它决定托管注入是否让位' }
+    @{ Pat = 'ManagedInput.Active';     File = 'ReplayPlayer.cs'; Why = '2026-10-22：「模拟按键」开关（原 Settings.LegacyEngine）已删除——它关掉后会让长条判定失效、键位显示变暗，是「关掉就坏」的假开关。判据回到只看 is_playing' }
+    @{ Pat = 'ev.IsPressed';            File = 'ReplayPlayer.cs'; Why = '同上：托管状态按事件的按下/抬起更新' }
+    @{ Pat = 'ManagedInput.Mirror';   File = 'ReplayPlayer.cs'; Why = '2026-10-22 三轮反馈后重构：SendInput 降级为纯镜像（只影响别的模组的按键显示），游戏输入由 ManagedInput 覆盖。镜像成败不改变任何判定，所以它的条件可以软（开关+聚焦）' }
+    @{ Pat = 'ManagedInput.Mirror';   File = 'ManagedInput.cs'; Why = '同上：镜像开关本体。绝不能再参与「注不注入」的判断——前两版就是让它决定注入，判错导致两条路一起死' }
+    @{ Pat = 'SampleKeyState';          File = 'KeyboardSimulation.cs'; Why = '同上：采样键盘状态的跨平台入口（Windows 用 GetKeyboardState，其余平台用 Input.GetKey 逐键）' }
+    @{ Pat = 'Input.GetKey';            File = 'KeyboardSimulation.cs'; Why = '同上：非 Windows 的采样回退，与游戏自身 RDInputType_Keyboard 用同一份数据源' }
+    @{ Pat = 'KeyboardSimulation.SampleKeyState'; File = 'ReplayRecorder.cs'; Why = '同上：录制侧改走 SampleKeyState，非 Windows 上不再直接调 user32' }
+    # ══════════════════════════════════════════════════════════════════
+    # -- 2026-10-22 跨平台回放输入（用户：「跨平台的按键模拟就是屁用没有」）--
+    # 游戏读键盘的唯一入口 RDInput 两条实现都落在物理输入上（Input.GetKey* /
+    # AsyncInput.GetKey*），回放数据一条也写不进去。这一整块是上游没有的能力：
+    #   · 托管输入覆盖 RDInput 的三个查询点（Patch_InputInjection.cs 是新文件）；
+    #   · 合成 SkyHook 事件让游戏异步链与订阅 KeyUpdated 的模组都看到按键，
+    #     并在 KeyViewer 的 KeyInput.GetKey 上补一层桥接（都是新文件）。
+    # 新文件本身不在比对清单里，这里登记的是**被它们牵连的既有文件**。
+    @{ Pat = 'AsyncInputInjector';      File = 'ReplayPlayer.cs'; Why = '2026-10-22 跨平台回放输入：PumpInput 把事件经合成 SkyHook 事件送进异步链；判据用 Injectable（能否广播）而不是 Usable（游戏是否出队），否则非 PlayerControl 状态下订阅 KeyUpdated 的键位显示模组整段失明' }
+    @{ Pat = 'AsyncInputInjector.Injectable'; File = 'ReplayPlayer.cs'; Why = '同上：广播判据本体' }
+    @{ Pat = 'AsyncInputInjector.Healthy'; File = 'ReplayPlayer.cs'; Why = '同上：只有实际入队过才算能用（Usable 只是看起来能用），失败时交回托管覆盖兜底' }
+    @{ Pat = 'AsyncInputInjector.Inject'; File = 'ReplayPlayer.cs'; Why = '同上：真正入队的入口' }
+    @{ Pat = 'ev.SongPosition';        File = 'ReplayPlayer.cs'; Why = '同上：事件按它自己的歌曲位置换算 tick，不能用外层「现在」——否则漏帧补发的早先按键会被整体后移，判定角度跟着偏' }
+    @{ Pat = 'GCS.d_oldConductor';     File = 'ReplayPlayer.cs'; Why = '同上：歌曲位置要按 conductor 的两套公式分别求（老 conductor 与 dsp 计时器的基准不同），照抄 scrConductor.cs:850-857' }
+    @{ Pat = 'GCS.d_webglConductor';   File = 'ReplayPlayer.cs'; Why = '同上：WebGL 走老 conductor 分支' }
+    @{ Pat = 'scrConductor.calibration_i'; File = 'ReplayPlayer.cs'; Why = '同上：歌曲位置的校准量，不做这一步回放会整体偏移' }
+    @{ Pat = 'song.time';              File = 'ReplayPlayer.cs'; Why = '同上：老 conductor 分支的位置来源' }
+    @{ Pat = 'KeyViewerBridge.TryInstall'; File = 'ReplayPlayer.cs'; Why = '2026-10-22 键位显示：回放开始时补挂 KeyViewer 的 KeyInput.GetKey 桥接（这些模组只读 Unity Input 或它们自己被补丁过的入口，而回放走托管覆盖 + SkyHook 合成事件，两条都不经过 Unity Input）' }
+    @{ Pat = 'ReplayAngleGuard.IsSane'; File = 'Patch_Playback.cs'; Why = '2026-10-22 命中推进角度健全性：conductor.Rewind() 会把 crotchetAtStart 置 0（scrConductor.cs:355），下一次 Update 才补回，中间算出的角度是 ±Infinity，而 Infinity 让 `angle >= CurrAngle` 恒真，整份命中快照会在一帧内被吃完（现象是「播放一瞬间全部模拟完」且回不来）' }
+    @{ Pat = 'float.IsInfinity';       File = 'Patch_Playback.cs'; Why = '同上：判据必须是 IsFinite。只判 NaN 不够——NaN 在 >= 里恒假本来就不吃数据，真正危险的是 ±Infinity' }
+    @{ Pat = 'float.IsNaN';            File = 'Patch_Playback.cs'; Why = '同上：IsFinite 的另一半' }
+    @{ Pat = 'hc.curFreeRoamSection';  File = 'Patch_Playback.cs'; Why = '同上：自由漫游段切换时命中快照要同步跳过，否则同一段会反复取到不属于当前段的快照' }
+    @{ Pat = 'GetAngle(scrController controller)'; File = 'SpectreState.cs'; Why = '2026-10-22 同上：回放推进循环用补丁入参 __instance 判定砖块，却用无参 GetAngle() 取角度；两个 controller 不是同一个对象时砖块取自 A、角度取自 B，B 的星球角度可以任意大 ⇒ 恒真。必须支持传入调用方持有的那个实例' }
+    @{ Pat = 'controller.chosenPlanet'; File = 'SpectreState.cs'; Why = '同上：具名 controller 后的连带引用' }
+    @{ Pat = 'controller.playerOne';   File = 'SpectreState.cs'; Why = '同上：反向旋转判定' }
+    @{ Pat = 'planetarySystem.isCW';   File = 'SpectreState.cs'; Why = '同上：反向旋转的判据（isCW 为假时角度取反，上游没有这个重载）' }
+    @{ Pat = 'float.NaN';              File = 'SpectreState.cs'; Why = '同上：取不到 controller / 星球时返回 NaN，让上层 IsSane 拦下而不是拿 0 去比较（0 会误判成「还没到」）' })
 
 
 Write-Output ""

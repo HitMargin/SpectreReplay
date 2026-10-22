@@ -1,4 +1,4 @@
-{
+﻿{
  "lang": "zh-t",
  "entries": {
   "page.record": "錄製",
@@ -45,9 +45,6 @@
   "playback.idle": "還沒載入回放。在下面的列表裡點「回放」即可。",
   "playback.idle_err": "上一次的載入失敗了：{0}",
   "playback.empty": "還沒有回放檔案。打一局關卡就會自動保存。",
-  "playback.drive": "回放驅動",
-  "playback.simulate": "模擬按鍵",
-  "playback.drive.note": "關掉後回放仍會播放，但不再往遊戲裡送按鍵——星球不會動。停止回放時也不會鬆開已按住的鍵，所以只在排查「按鍵衝突」時關它。",
   "playback.stop": "停止回放",
   "playback.unload": "卸載回放",
   "playback.note": "回放由錄製時的按鍵序列驅動。",
@@ -291,7 +288,6 @@
   "record.keybd.offset.tip": "校準鍵盤音整體的早晚偏移：偏早就往負調，偏晚往正調，單位毫秒。",
   "record.savekey.tip": "手動保存本局的快捷鍵，預設 F9。點一下它再按任意鍵即可改綁。",
   "record.cancelsavekey.tip": "放棄保存本局的快捷鍵。按下後這一局就不會再寫檔案。",
-  "playback.simulate.tip": "回放的按鍵注入主開關。關掉後回放會播放但星球不動，停止時也不會鬆開已按住的鍵——只在排查按鍵衝突時才關它。",
   "render.on.tip": "影片渲染總開關。關掉後無法開始新的渲染。",
   "render.width.tip": "輸出寬度。只在「純淨相機」下有效；「遊戲畫面」的解析度跟隨遊戲視窗。",
   "render.height.tip": "輸出高度。只在「純淨相機」下有效。",
