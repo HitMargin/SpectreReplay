@@ -14,3 +14,6 @@ mutate-regression-last.log
 _msg*.txt
 _commitmsg*.txt
 .zcode/
+
+# 渲染调试抽帧（曾把样帧误提交入库）
+_frames/

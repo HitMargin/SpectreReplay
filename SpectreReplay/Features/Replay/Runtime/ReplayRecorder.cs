@@ -38,13 +38,31 @@ internal static class ReplayRecorder
         // 与 Patch_Recording 同理：两个数组按 Max(HitMargin)+1 分配，正常等长。
         // 这里更不能抛——本方法负责**保存回放**，越界异常会连带丢掉整段录制。
         // 用较短者收敛，最多少统计末尾几个桶，回放仍能存下来。
-        var marginCounts = scrController.instance.playerOne.marginTracker.hitMarginsCount;
-        int count = Math.Min(HitMarginCounts.Length, marginCounts.Length);
-        for (int i = 0; i < count; i++)
+        //
+        // **统计刷新整段 try 兜底。** is_recording 已在上面翻假，此后任何异常被
+        // SpectrePatchHub 的 Guard 吞掉后，这份数据就**再也没人来保存了**。而
+        // controller / playerOne 在场景拆解与转场窗口里可能不可用——playerOne
+        // 是 `ADOBase.playerManager.players[0]` 的转发，失败形态有三种（instance
+        // 为 null 的 NRE、已销毁对象的 MissingReferenceException、players 被清空
+        // 的越界），判空覆盖不全，只能整体兜住。取不到就带着已有统计继续走：
+        // HitMarginCounts 由 Patch_Hit 逐命中同步，已是最后一条命中时刻的值；
+        // EndTile 留空只影响文件名后缀与 IsFullRun（它不在必需字段清单里），
+        // 不影响回放本体。
+        try
         {
-            HitMarginCounts[i] = marginCounts[i];
+            var marginCounts = scrController.instance.playerOne.marginTracker.hitMarginsCount;
+            int count = Math.Min(HitMarginCounts.Length, marginCounts.Length);
+            for (int i = 0; i < count; i++)
+            {
+                HitMarginCounts[i] = marginCounts[i];
+            }
+            data.EndTile = scrController.instance.currentSeqID;
         }
-        data.EndTile = scrController.instance.currentSeqID;
+        catch (Exception ex)
+        {
+            Debug.Log("[SpectreReplay] 停止录制时读不到结算统计（场景拆解途中？），按已有数据保存: "
+                + ex.GetType().Name + " " + ex.Message);
+        }
         data.JudgmentList = "[" + string.Join(",", HitMarginCounts) + "]";
         data.PercentXacc = ComputePercentXacc();
         int peak = data.MaximumUsedKeys ?? 0;

@@ -147,18 +147,18 @@ internal static class VideoConverter
                 break;
         }
 
-        // 与渲染管线一致：movenc 系目标补 faststart（moov 前置，秒开/拖动不整段下载）；
-        // mkv/webm 无此旗标
-        string faststart = target == VideoEncoder.OutContainer.Mp4 || target == VideoEncoder.OutContainer.Mov
-            ? " -movflags +faststart" : "";
-        string args = "-y -i " + Quote(path) + " " + videoArgs + " " + audioArgs + faststart
+        // 与渲染收尾（VideoEncoder.MuxWith）同策略：**不带 -movflags +faststart**。
+        // faststart 要求 moov 前置，而编码时它在文件末尾——ffmpeg 只能把整个成片
+        // 重写一遍搬过去。对本地文件它毫无收益（那是「边下边播」的 HTTP 场景的
+        // 优化），代价是几百 MB 的成片多一趟全量读写。mkv/webm 本就无此旗标。
+        string args = "-y -i " + Quote(path) + " " + videoArgs + " " + audioArgs
             + " " + Quote(targetPath);
         bool ok = TryRun(exePath, args);
         // 二次尝试仅用于同族 copy 被个别流卡住的情形（如 PCM 音频）；非同族分支已是 AAC，无需重试
         if (!ok && audioArgs == "-c:a copy")
         {
             string retryArgs = "-y -i " + Quote(path) + " " + videoArgs + " -c:a aac -b:a 320k"
-                + faststart + " " + Quote(targetPath);
+                + " " + Quote(targetPath);
             ok = TryRun(exePath, retryArgs);
         }
         if (!ok)

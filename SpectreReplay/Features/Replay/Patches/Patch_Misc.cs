@@ -43,7 +43,12 @@ internal class Patch_ConductorUpdate
     internal static void Postfix()
     {
         if (!Input.GetKeyDown(save_button)) return;
-        int state = (int)(States)scrController.instance.stateMachine.GetState();
+        // scrConductor.Update 每帧都跑、本补丁拦在它后面：转场/拆场景窗口里
+        // instance 可能为 null，此时谈不上"在可保存的状态"，直接早退——比让
+        // Guard 吞 NRE（功能退化 + 日志刷屏）干净。
+        var controller = scrController.instance;
+        if (controller == null) return;
+        int state = (int)(States)controller.stateMachine.GetState();
         if (state != StateFail && state != StateFail2 && state != StateWon) return;
         if (!PendingSave) return;
 
@@ -59,7 +64,10 @@ internal class Patch_CancelSaveKey
     internal static void Postfix()
     {
         if (!Input.GetKeyDown(cancel_save_button)) return;
-        int state = (int)(States)scrController.instance.stateMachine.GetState();
+        // 同 Patch_ConductorUpdate：转场窗口里 instance 可能为 null，早退而非 NRE
+        var controller = scrController.instance;
+        if (controller == null) return;
+        int state = (int)(States)controller.stateMachine.GetState();
         // 与 Patch_ConductorUpdate 同一组状态：Fail/Fail2/Won（数字含义见上）
         if (state != Patch_ConductorUpdate.StateFail
             && state != Patch_ConductorUpdate.StateFail2

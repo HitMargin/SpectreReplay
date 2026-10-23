@@ -200,36 +200,6 @@ internal class Patch_StartRewind
                         + " 现=" + scnGame.instance.levelData.pitch + "/" + scnGame.instance.levelData.bpm);
                     return;
                 }
-                // **判定模式不一致时自动套用录像的设置，而不是拒绝播放。**
-                // 录制时是什么难度（严格/标准/宽松），回放就按什么难度判——
-                // 否则同一份按键数据在「标准」下是 Perfect、在「严格」下就变成
-                // Early/Late，判定与录制时对不上。
-                //
-                // 玩家自己的默认难度存在 Persistence 里**不动**：这里只改本次
-                // 会话的 GCS.difficulty，回放结束（ReplayPlayer.Stop）时还原。
-                //
-                // 用 Enum.TryParse + IsDefined 而不是直接赋值：回放文件是玩家
-                // 可编辑的文本，写个 "99" 进去会让判定窗口按不存在的档位走，
-                // 且不抛异常、回放照常开始。解析失败就保持当前难度（退回旧行为）。
-                if (GCS.difficulty.ToString() != data.JudgeMode)
-                {
-                    if (Enum.TryParse(data.JudgeMode, out Difficulty storedDifficulty)
-                        && Enum.IsDefined(typeof(Difficulty), storedDifficulty))
-                    {
-                        CachedDifficulty = GCS.difficulty;
-                        GCS.difficulty = storedDifficulty;
-                        Debug.Log("[SpectreReplay] 判定模式自动对齐: " + CachedDifficulty
-                            + " → " + storedDifficulty + "（回放结束后还原）");
-                        SyncDifficultyLabel();
-                    }
-                    else
-                    {
-                        // 解析不出合法难度：保持当前难度继续播放。判定可能与该录像
-                        // 录制时不一致，但拒绝播放会让玩家什么都做不了。
-                        Debug.Log("[SpectreReplay] 判定模式无法解析: \"" + data.JudgeMode
-                            + "\"，保持当前难度 " + GCS.difficulty);
-                    }
-                }
                 if (!IsFullRun && data.EndTile is int endTileVal)
                 {
                     if (GCS.checkpointNum < data.StartTile || GCS.checkpointNum > endTileVal)
@@ -276,6 +246,46 @@ internal class Patch_StartRewind
                     Reject(LocalizationManager.GetLocalizedText("note.play_error5") + expectedSpeed,
                         "actual=" + actualSpeed);
                     return;
+                }
+
+                // **判定模式不一致时自动套用录像的设置，而不是拒绝播放。**
+                // 录制时是什么难度（严格/标准/宽松），回放就按什么难度判——
+                // 否则同一份按键数据在「标准」下是 Perfect、在「严格」下就变成
+                // Early/Late，判定与录制时对不上。
+                //
+                // **必须放在全部校验通过之后。** 曾经排在校验流程中间（起点砖/
+                // 倍速校验之前）：那三道校验被拒时，GCS.difficulty 已经被改成
+                // 回放值而 CachedDifficulty 里锁着玩家原值——回放没开始，
+                // ReplayPlayer.Stop 的还原因 is_playing=false 直接跳过，玩家的
+                // 难度就被泄漏成回放的难度；下次回放另一难度的录像时这里会把
+                // 泄漏值当成「玩家原设置」重新存进 CachedDifficulty，真正的
+                // 偏好从此永久丢失。挪到末尾后，走到这里 = 必然开播，还原链
+                // 必然有机会执行。
+                //
+                // 玩家自己的默认难度存在 Persistence 里**不动**：这里只改本次
+                // 会话的 GCS.difficulty，回放结束（ReplayPlayer.Stop）时还原。
+                //
+                // 用 Enum.TryParse + IsDefined 而不是直接赋值：回放文件是玩家
+                // 可编辑的文本，写个 "99" 进去会让判定窗口按不存在的档位走，
+                // 且不抛异常、回放照常开始。解析失败就保持当前难度（退回旧行为）。
+                if (GCS.difficulty.ToString() != data.JudgeMode)
+                {
+                    if (Enum.TryParse(data.JudgeMode, out Difficulty storedDifficulty)
+                        && Enum.IsDefined(typeof(Difficulty), storedDifficulty))
+                    {
+                        CachedDifficulty = GCS.difficulty;
+                        GCS.difficulty = storedDifficulty;
+                        Debug.Log("[SpectreReplay] 判定模式自动对齐: " + CachedDifficulty
+                            + " → " + storedDifficulty + "（回放结束后还原）");
+                        SyncDifficultyLabel();
+                    }
+                    else
+                    {
+                        // 解析不出合法难度：保持当前难度继续播放。判定可能与该录像
+                        // 录制时不一致，但拒绝播放会让玩家什么都做不了。
+                        Debug.Log("[SpectreReplay] 判定模式无法解析: \"" + data.JudgeMode
+                            + "\"，保持当前难度 " + GCS.difficulty);
+                    }
                 }
             }
             else Debug.Log("Debug模式跳过校验");

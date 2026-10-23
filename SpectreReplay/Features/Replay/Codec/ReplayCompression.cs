@@ -73,7 +73,14 @@ internal static class ReplayCompression
         using Stream decoder = algo == ReplayConstants.CompressionBrotli
             ? new BrotliStream(input, CompressionMode.Decompress)
             : new GZipStream(input, CompressionMode.Decompress);
-        return ReadWithLimit(decoder, expected);
+        // **预分配提示必须与压缩比挂钩。** expected 已按 512MB 上界校验，但那是
+        // 「解出来不超过」的上限，不是「值得预分配」的依据：一个几字节的畸形
+        // 文件声称 512MB，就会在验证任何内容之前让我们白拿 512MB 托管内存
+        // （MemoryStream(capacity) 立即分配整块）。真实回放的压缩比在几十倍
+        // 以内，给 200 倍余量；声称超出它的按 0 处理，MemoryStream 自行增长
+        // ——ReadWithLimit 本来就边读边限量，正确性不受影响，只是放弃预分配。
+        int hint = expected <= (long)data.Length * 200 ? expected : 0;
+        return ReadWithLimit(decoder, hint);
     }
 
     private static bool TryBrotli(byte[] data, out byte[] body)
