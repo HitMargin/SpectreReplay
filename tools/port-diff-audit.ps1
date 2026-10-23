@@ -419,6 +419,17 @@ $knownDeviations = @(
     # 玩家多是从设置页装弹后点渲染（本来就是回放态）。强行切录制态后 data 仍是
     # 那份回放，界面同时显示「正在录制」与「已载入」，且下次进关会自动开录。
     @{ Pat = 'SpectreState.PlayActions.UnloadReplay';   File = 'VideoRenderJob.cs'; Why = '2026-10-24 渲染收尾彻底卸载回放（与设置页「卸载回放」同一路径）：PlayMode 留真会让关卡退出时 Start_Rewind 重启回放、卡住退出流程；且清掉 data 才不会出现「已载入」与「正在录制」并存' }
+    # -- 2026-10-24 渲染收尾把 winTime 拉回真实时间线（VideoRenderJob.ReleaseGameControl）--
+    # OnLandOnPortal 在渲染期读的是 UnscaledDeltaPin 的虚拟 unscaledTime，渲染快于实时时
+    # 它超前真实墙钟几十秒；卸 pin 后 Won_Update 的退出闸 unscaledTime-winTime>1 要等真实
+    # 时间追平才开，结算画面按键长时间无响应（非渲染路径不复现：winTime 记在真实线上）。
+    @{ Pat = 'System.Reflection.BindingFlags.NonPublic'; File = 'VideoRenderJob.cs'; Why = '2026-10-24 渲染收尾把 winTime 反射写回真实时间线（scrController 私有字段）：渲染期虚拟 unscaledTime 超前真实墙钟，卸 pin 后 Won 退出闸长时间不开，按键退不了关卡' }
+    @{ Pat = 'System.Reflection.BindingFlags.Instance';  File = 'VideoRenderJob.cs'; Why = '同上：winTime 反射写入' }
+    @{ Pat = 'System.Reflection.FieldInfo';              File = 'VideoRenderJob.cs'; Why = '同上：winTime 反射写入' }
+    @{ Pat = 'winTime.SetValue';                         File = 'VideoRenderJob.cs'; Why = '同上：winTime 反射写入本体' }
+    @{ Pat = 'rewound.ToString';                         File = 'VideoRenderJob.cs'; Why = '同上：收尾诊断日志' }
+    @{ Pat = 'Time.unscaledTime.ToString';               File = 'VideoRenderJob.cs'; Why = '同上：收尾诊断日志' }
+    @{ Pat = 'Time.unscaledTime';                        File = 'VideoRenderJob.cs'; Why = '同上：读卸 pin 后的真实 unscaledTime 作改写基准' }
     @{ Pat = 'note.stop_playing';                        Why = '2026-10-24 回放结束判定挪到「已耗尽」早退之前：结算态下 Won_Update 是唯一还在跑的入口，否则 is_playing 永远为真、键盘被回放覆盖，只能手动卸载回放才能退出' }
     # -- 2026-10-23 渲染后真实键盘失灵（用户报「只能靠鼠标退出关卡」）--------
     # 游戏在 AsyncInputManager.Update 里按 state==PlayerControl 切换输入源：

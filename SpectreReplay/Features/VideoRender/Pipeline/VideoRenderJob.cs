@@ -1167,6 +1167,40 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // UnscaledDeltaPin.Uninstall 与 captureFramerate / vSync / targetFrameRate /
         // runInBackground / audioPause / checkpointNum 的恢复都在这里，它自带逐项兜底。
         RestoreGlobalState();
+
+        // **把游戏的「通关时刻」拉回真实时间线。**
+        //
+        // Won_Update 的退出闸是 `Time.unscaledTime - winTime > 1f`，而 winTime 是
+        // OnLandOnPortal 在渲染途中读 Time.unscaledTime 记下的——那时
+        // UnscaledDeltaPin 正把 unscaled 时钟虚拟化成「安装基值 + 每输出帧 1/fps」。
+        // 渲染快于实时时（15fps 档在核显本上约 2~4 倍速），虚拟读数会跑到真实墙钟
+        // 前面几十秒；上面 Uninstall 之后 unscaledTime 跳回真实值，这道闸要等真实
+        // 时间追平虚拟值才开——最长可达一分多钟，期间结算画面按任何键都不退出，
+        // 用户看到的正是「渲染完按键退不了关卡」（鼠标不受影响，非渲染路径不复现：
+        // 那条路径的 winTime 记在真实时间线上，闸门 1 秒后自然打开）。
+        //
+        // 渲染是对这份时间线的一次性消费，直接把 winTime 改写到真实时间线
+        // （now − 5s，闸门立即常开）。winTime 是 scrController 的私有字段，反射写入；
+        // 控制器为空（场景切换途中收尾）就跳过——那时没有结算画面可退。
+        // 即便个别 detour 卸载失败（pin 仍在），这里的读数与 winTime 同在虚拟线
+        // 上，闸门同样成立，不会引入新的错位。
+        try
+        {
+            scrController controller = scrController.instance;
+            if (controller != null)
+            {
+                System.Reflection.FieldInfo winTime = typeof(scrController).GetField("winTime",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (winTime != null)
+                {
+                    float rewound = Time.unscaledTime - 5f;
+                    winTime.SetValue(controller, rewound);
+                    Debug.Log("[SpectreReplay] render teardown: winTime rewound to real timeline ("
+                        + rewound.ToString("0.0") + "s, unscaled now " + Time.unscaledTime.ToString("0.0") + "s)");
+                }
+            }
+        }
+        catch (Exception ex) { Debug.LogException(ex); }
         ExitPlaytest();
     }
 
