@@ -1117,6 +1117,21 @@ internal sealed class VideoRenderJob : MonoBehaviour
         try { SpectreState.PlayActions.StopPlaying(); }
         catch (Exception ex) { Debug.LogException(ex); }
 
+        // **还要把游戏的输入源切回真实键盘。** 这一步与上面的 StopPlaying 是两件事：
+        // 前者让我们的 RDInput 覆盖失效，后者恢复游戏自己的输入源标志。
+        //
+        // 游戏在 <c>AsyncInputManager.Update</c> 里按状态切换：
+        //     bool flag = scrController.instance.state == States.PlayerControl;
+        //     keyboardInput.isActive = !flag;      // PlayControl 时【关掉】真实键盘
+        //     asyncKeyboard.isActive = flag;       // 同时打开异步键盘
+        // 渲染全程都处于 PlayerControl，所以真实键盘被置成 isActive=false。
+        // 收尾时若那条 Update 没能把标志改回来（场景切换中 scrController.instance
+        // 短暂为空、或异步钩子已停），真实键盘就一直是关的——**而 mouseInput
+        // 的 isActive 不在那套切换里，所以鼠标照常可用**。
+        // 2026-10-23 实测正是这个组合：鼠标能退出关卡，键盘完全无反应。
+        try { RestoreNativeInputSource(); }
+        catch (Exception ex) { Debug.LogException(ex); }
+
         try { frames?.RestoreTargets(); } catch (Exception ex) { Debug.LogException(ex); }
         try { RenderClockSource.ActiveClock = null; } catch (Exception ex) { Debug.LogException(ex); }
         try { UnpinVideoPlayers(); } catch (Exception ex) { Debug.LogException(ex); }
@@ -1126,6 +1141,38 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // runInBackground / audioPause / checkpointNum 的恢复都在这里，它自带逐项兜底。
         RestoreGlobalState();
         ExitPlaytest();
+    }
+
+    /// <summary>
+    /// 把游戏的输入源切回真实键盘，并清掉异步层里残留的按住状态。
+    ///
+    /// <para><b>为什么必须显式做。</b>游戏在 <c>AsyncInputManager.Update</c> 里
+    /// 按 <c>state == States.PlayerControl</c> 切换输入源：进入玩法时把
+    /// <c>keyboardInput.isActive</c> 置假、<c>asyncKeyboard.isActive</c> 置真；
+    /// 离开玩法时反过来。渲染全程钉在玩法态，收尾又发生在场景切换途中
+    /// （此时 <c>scrController.instance</c> 可能已为空，那条 Update 直接跳过），
+    /// 于是开关会停在「真实键盘关闭、异步键盘开启」这一侧。</para>
+    ///
+    /// <para><b>外观上的症状很具迷惑性</b>：<c>mouseInput.isActive</c> 不在那套
+    /// 切换里，所以鼠标完全正常，只有键盘失灵——玩家会以为「键盘卡了」，
+    /// 而不是「输入源没切回来」。2026-10-23 实测：只能靠鼠标退出关卡。</para>
+    ///
+    /// <para>同时要清 <c>keyMask / keyDownMask / keyUpMask</c>：那是回放期间
+    /// 合成事件的落脚点，渲染最后一帧按住的键会留在里面。只切 isActive 的话，
+    /// 那些键在异步层看来仍「按着」，下一次进入玩法会被当成一直按住。</para>
+    /// </summary>
+    private static void RestoreNativeInputSource()
+    {
+        if (RDInput.keyboardInput != null) RDInput.keyboardInput.isActive = true;
+        if (RDInput.keyboardLeft != null) RDInput.keyboardLeft.isActive = true;
+        if (RDInput.keyboardRight != null) RDInput.keyboardRight.isActive = true;
+        if (RDInput.asyncKeyboard != null) RDInput.asyncKeyboard.isActive = false;
+        if (RDInput.asyncKeyboardLeft != null) RDInput.asyncKeyboardLeft.isActive = false;
+        if (RDInput.asyncKeyboardRight != null) RDInput.asyncKeyboardRight.isActive = false;
+        // 残留的合成按键（含只按下没抬起的孤立事件）必须清掉，否则下次进玩法
+        // 会被当成「一直按住」
+        try { AsyncInputManager.ClearKeys(); }
+        catch (Exception ex) { Debug.LogException(ex); }
     }
 
     /// <summary>

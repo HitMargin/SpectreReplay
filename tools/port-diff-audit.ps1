@@ -414,6 +414,26 @@ $knownDeviations = @(
     @{ Pat = 'stillHeld.Count';                       Why = '同上：停止时遍历仍按住的键逐个补发抬起' }
     @{ Pat = 'ev.Key';                                Why = '同上：异步录制路径也按热键表过滤' }
     @{ Pat = 'SpectreState.PlayActions.StopPlaying';  File = 'VideoRenderJob.cs'; Why = '2026-10-23 渲染结束必须停回放：否则 is_playing 恒真，RDInput 所有查询都由回放数据回答，真实键盘被屏蔽，通关后卡在关卡里出不去' }
+    # -- 2026-10-23 渲染后真实键盘失灵（用户报「只能靠鼠标退出关卡」）--------
+    # 游戏在 AsyncInputManager.Update 里按 state==PlayerControl 切换输入源：
+    # 玩法态关真实键盘、开异步键盘。渲染全程钉在玩法态，收尾又常在场景切换
+    # 途中（scrController.instance 已空，那条 Update 跳过），开关停在
+    # 「真实键盘关闭」一侧。mouseInput 不参与该切换 ⇒ 鼠标正常、键盘全哑。
+    # 收尾时显式切回并清空异步层残留（含只按下没抬起的孤立事件）。
+    # 注意顺序：长名在前，短的才不会被截断留下残余标识符。
+    @{ Pat = 'RDInput.keyboardInput.isActive';         File = 'VideoRenderJob.cs'; Why = '2026-10-23 渲染收尾把输入源切回真实键盘（游戏只在离开玩法态时才切，而收尾发生在场景切换途中，那条 Update 已跳过）' }
+    @{ Pat = 'RDInput.keyboardLeft.isActive';          File = 'VideoRenderJob.cs'; Why = '同上：左键盘通道' }
+    @{ Pat = 'RDInput.keyboardRight.isActive';         File = 'VideoRenderJob.cs'; Why = '同上：右键盘通道' }
+    @{ Pat = 'RDInput.asyncKeyboard.isActive';         File = 'VideoRenderJob.cs'; Why = '同上：关掉异步键盘（回放期间的输入源）' }
+    @{ Pat = 'RDInput.asyncKeyboardLeft.isActive';     File = 'VideoRenderJob.cs'; Why = '同上：异步左通道' }
+    @{ Pat = 'RDInput.asyncKeyboardRight.isActive';    File = 'VideoRenderJob.cs'; Why = '同上：异步右通道' }
+    @{ Pat = 'RDInput.asyncKeyboardLeft';              File = 'VideoRenderJob.cs'; Why = '同上：空值守卫' }
+    @{ Pat = 'RDInput.asyncKeyboardRight';             File = 'VideoRenderJob.cs'; Why = '同上：空值守卫' }
+    @{ Pat = 'RDInput.asyncKeyboard';                  File = 'VideoRenderJob.cs'; Why = '同上：空值守卫' }
+    @{ Pat = 'RDInput.keyboardInput';                  File = 'VideoRenderJob.cs'; Why = '同上：空值守卫' }
+    @{ Pat = 'RDInput.keyboardLeft';                   File = 'VideoRenderJob.cs'; Why = '同上：空值守卫' }
+    @{ Pat = 'RDInput.keyboardRight';                  File = 'VideoRenderJob.cs'; Why = '同上：空值守卫' }
+    @{ Pat = 'AsyncInputManager.ClearKeys';            File = 'VideoRenderJob.cs'; Why = '同上：清掉异步层残留的按住状态（keyMask/keyDown/keyUp），否则下次进玩法会被当成一直按住' }
     @{ Pat = 'VideoRender.TryReadPinnedPosition';     File = 'ReplayPlayer.cs'; Why = '同上：钉扎时间轴的读取入口（两段合起来才是完整名字）' }
     # -- 2026-10-20 回放没开始时的可诊断性（用户报「等待回放开始超时」）--------
     # 上游每处拒绝都是 TriggerMessage(...); return;：通知几秒后消失、**不进日志**，
