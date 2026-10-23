@@ -144,12 +144,14 @@ internal static class AsyncInputInjector
             double pitch = conductor.song.pitch;
             if (Math.Abs(pitch) < 1e-6) return Fail();
 
-            // dspTimeSong 只在歌曲真正排定播放后才被赋值（scrConductor.cs:668/938/956）。
-            // 倒计时 / 检查点 / 转场阶段它仍是 0：此时 dsp 退化成一个近似"音频系统
-            // 启动时刻"的常量，evTicks 落在遥远的过去。而 scrController.UpdateInput
-            // 会按 tick 逐个 ProcessKeyInputs（scrController.cs:2929-2935），于是这批
-            // 陈旧事件在同一帧里把整段历史重新模拟一遍——就是"播放一瞬间全部模拟完"。
-            if (conductor.dspTimeSong <= 0.0) return Fail();
+            // dspTimeSong 未排定时恰好是 0（Rewind 里显式置 0）：此时 dsp 退化成一个
+            // 近似"音频系统启动时刻"的常量，evTicks 落在遥远的过去，整段历史会在同一帧
+            // 被重新模拟一遍。
+            //
+            // 判据必须是 `== 0`，**不能用 `<= 0`**：从检查点起跑时 ScrubMusicToTime 会把
+            // dspTimeSong 设成大负数（29 - 214 = -184.9），那是「歌曲从 214 秒开始」的
+            // 正常表达，挡掉它会让检查点起的回放一个按键都发不出去。
+            if (conductor.dspTimeSong == 0.0) return Fail();
 
             // 与录制侧严格互逆（见类注释）
             double dsp = (songPosition + conductor.addoffset) / pitch

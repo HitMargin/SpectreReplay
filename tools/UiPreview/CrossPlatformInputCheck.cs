@@ -195,8 +195,10 @@ namespace UiPreview
             //         所有早于此刻的按键都算待办，PumpInput 的 while 第一帧就灌爆。
             //         另需单帧上限：积压时闷头灌完 = 同一帧重放整段。
             string injector = SrcUtil.Source(projectRoot, "Features/Replay/Runtime/AsyncInputInjector.cs");
-            Expect(injector.Contains("conductor.dspTimeSong <= 0.0"),
-                "⑫a Inject 没有校验 dspTimeSong —— 歌曲未排定时事件 tick 落在过去，整段会在一帧内重放");
+            Expect(injector.Contains("conductor.dspTimeSong == 0.0"),
+                "⑫a Inject 的 dspTimeSong 判据必须是 == 0 —— 歌曲未排定时是 0，但检查点起跑时是大负数（正常）");
+            Expect(!injector.Contains("conductor.dspTimeSong <= 0.0"),
+                "⑫a Inject 出现了 `dspTimeSong <= 0.0` —— 检查点起跑时该值为负，异步注入会被整段拒绝");
             Expect(Has(injector, @"Math\.Abs\(evTicks - nowTicks\)"),
                 "⑫a Inject 没有 evTicks 相对 nowTicks 的窗口兜底 —— 任何基准错乱都会灌进陈旧 tick");
             Expect(player.Contains("MaxEventsPerFrame"),
@@ -218,10 +220,17 @@ namespace UiPreview
                 "⑫b 没有按游戏公式现场算歌曲位置 —— 读 songposition_minusi 会拿到上一帧/上一局的陈旧值");
             Expect(!Has(player, @"PumpInput\(conductor\.songposition_minusi"),
                 "⑫b 仍在把 conductor.songposition_minusi 喂给 PumpInput —— 该值是上一帧的");
-            // 现场算还不够：dspTimeSong 为 0 时公式退化成 (dspTime - 0) * pitch，
-            // 是几万秒量级的伪值，会在一帧内灌完整局。
-            Expect(player.Contains("if (conductor.dspTimeSong <= 0.0) return 0.0;"),
-                "⑫b CurrentSongPosition 没有挡 dspTimeSong 未就绪 —— 会算出几万秒的伪值");
+            // 现场算还不够：dspTimeSong 未排定时恰好是 0，公式退化成
+            // (dspTime - 0) * pitch，是几万秒量级的伪值，会在一帧内灌完整局。
+            //
+            // **判据只能是 `== 0`，不能是 `<= 0`。** 从检查点起跑时游戏会执行
+            // ScrubMusicToTime，把 dspTimeSong 设成 dspTime - entryTime，即一个大负数
+            // （实测 29.315 - 214.412 = -184.915）。那是「歌曲从第 214 秒开始」的正常
+            // 表达；用 `<= 0` 会把它当成未就绪，导致检查点起的回放整段无按键。
+            Expect(player.Contains("if (conductor.dspTimeSong == 0.0) return 0.0;"),
+                "⑫b CurrentSongPosition 的 dspTimeSong 判据必须是 == 0 —— `<= 0` 会把检查点起跑的大负数误判为未就绪，整段无按键");
+            Expect(!player.Contains("conductor.dspTimeSong <= 0.0"),
+                "⑫b 出现了 `dspTimeSong <= 0.0` —— 检查点起跑时该值为负，会把整段回放的按键全部挡掉");
             Expect(player.Contains("if (!ready) return;"),
                 "⑫b 调用方没有检查 ready —— 时钟未就绪时仍会拿伪值去灌事件");
             Expect(!Has(player, @"internal static void Start\(\)[\s\S]*?SeekKeyEvents"),
@@ -247,8 +256,13 @@ namespace UiPreview
             int fastAt = lifecycle.IndexOf("ReplayPlayer.FastForward(", StringComparison.Ordinal);
             Expect(startAt >= 0 && fastAt >= 0 && startAt < fastAt,
                 "⑫d 先 FastForward 再 StartPlaying —— Start() 会把游标清零，跳转等于没做");
-            Expect(Has(player, @"PlayIndex = data\.HitSnapshots\.Count;"),
-                "⑫d FastForward 没把 PlayIndex 兜底到末尾 —— 找不到目标时留在 0 会从头重灌");
+            // PlayIndex 兜底必须是 0 而不是 Count：Count 会让 Patch_Playback 的完成判定
+            // `PlayIndex >= Count && KeyEventIndex >= Count` 在开始那一帧成立，回放
+            // 立即自我 StopPlaying——玩家看到的就是「跳转后完全没有回放」。
+            Expect(player.Contains("PlayIndex = 0;"),
+                "⑫d FastForward 的 PlayIndex 兜底必须是 0 —— 落到 Count 会让回放在开始那一帧就自我终止");
+            Expect(!Has(player, @"PlayIndex = data\.HitSnapshots\.Count;"),
+                "⑫d FastForward 把 PlayIndex 兜底到了 Count —— 会触发完成判定，回放立刻结束");
             Expect(Has(player, @"KeyEventIndex = data\.KeyEvents\.Count;"),
                 "⑫d FastForward 没把 KeyEventIndex 兜底到末尾 —— 跳到最后一砖时游标停在 0");
             Expect(player.Contains("ManagedInput.Restore("),
@@ -274,8 +288,6 @@ namespace UiPreview
             Expect(playback.Contains("ReplayAngleGuard.IsSane("),
                 "⑬ 命中推进没有挡 ±Infinity —— Infinity 让 `angle >= CurrAngle` 恒真");
             // ⑫a 的就绪判据现在在 CurrentSongPosition 里（PumpInput 已不再自行算时钟）。
-            Expect(player.Contains("if (conductor.dspTimeSong <= 0.0) return 0.0;"),
-                "⑫a CurrentSongPosition 没有挡 dspTimeSong 未就绪 —— 会算出几万秒的伪值");
 
             if (fail == 0)
                 Console.WriteLine("    ✓ 跨平台输入的 14 组判据都成立");

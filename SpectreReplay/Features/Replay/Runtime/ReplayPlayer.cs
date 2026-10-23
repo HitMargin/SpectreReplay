@@ -95,12 +95,12 @@ internal static class ReplayPlayer
     {
         if (data == null) return;
 
-        // 找不到目标时游标必须落到**末尾**，不能留在 0。
-        // 跳到最后一砖时，目标时间之后往往已经没有事件，两个查找循环都跑完不命中；
-        // 初值留在 0 就等于从文件开头重灌整局按键——大关卡里上万条事件要几百帧才能
-        // 追平（每帧最多 64 条），而追平那一刻 Patch_Playback 会判定 "两份数据都到
-        // 尾部" 直接 StopPlaying，表现就是跳转后按键模拟整个消失。
-        PlayIndex = data.HitSnapshots.Count;
+        // 兜底保持 0（从头播），不要落到 Count。
+        // PlayIndex = Count 会让 Patch_Playback 的完成判定
+        // `PlayIndex >= Count && KeyEventIndex >= Count` 在**开始那一帧**成立，
+        // 于是回放立即自我 StopPlaying——玩家看到的就是「跳转后按键完全没有反应」。
+        // 从头播最多是错位，落在末尾是直接结束，后者严重得多。
+        PlayIndex = 0;
         for (int i = 0; i < data.HitSnapshots.Count; i++)
         {
             if (data.HitSnapshots[i].CurrentFloorID >= targetFloor)
@@ -109,17 +109,17 @@ internal static class ReplayPlayer
                 break;
             }
         }
-
-        // 末尾兜底放在边界检查**外面**：targetFloor 越界时（跳到最后一砖、
-        // listFloors 索引恰好出界）连目标时间都取不到，此时没有「从哪条事件继续」
-        // 的依据，只能认定后面没有事件。若放在里面，越界分支会把游标留在旧值。
-        KeyEventIndex = data.KeyEvents.Count;
-
         // 边界检查要含下界：只判上界时负的 targetFloor 会通过检查，
-        // 紧接着 listFloors[targetFloor] 抛 IndexOutOfRangeException
+        // 紧接着 listFloors[targetFloor] 抛 IndexOutOfRangeException。
+        //
+        // 取不到目标时间时（lm 未就绪、索引越界）**不要动 KeyEventIndex**，
+        // 保持 Start() 给的 0 继续走。此时无法判断该从哪条事件接上，把游标
+        // 推到末尾等于把整局按键全部丢掉；从当前位置继续虽然可能重复前几个事件，
+        // 但按键至少还在。
         if (ADOBase.lm != null && targetFloor >= 0 && targetFloor < ADOBase.lm.listFloors.Count)
         {
             double targetTime = ADOBase.lm.listFloors[targetFloor].entryTime;
+            KeyEventIndex = data.KeyEvents.Count;
             for (int i = 0; i < data.KeyEvents.Count; i++)
             {
                 if (data.KeyEvents[i].SongPosition >= targetTime)
@@ -230,9 +230,14 @@ internal static class ReplayPlayer
 
         if (!GCS.d_oldConductor && !GCS.d_webglConductor)
         {
-            // dspTimeSong 只在歌曲真正排定播放时被赋值（:668/:675）。
-            // 为 0 时下面的式子退化成 (dspTime - 0) * pitch，是几万秒量级的伪值。
-            if (conductor.dspTimeSong <= 0.0) return 0.0;
+            // dspTimeSong 未排定时恰好是 0（Rewind 里显式置 0），此时下面的式子
+            // 退化成 (dspTime - 0) * pitch，是几万秒量级的伪值，必须挡掉。
+            //
+            // 判据必须是 `== 0`，**不能用 `<= 0`**：从检查点起跑时游戏会执行
+            // ScrubMusicToTime，把 dspTimeSong 设成 dspTime - entryTime，也就是一个
+            // 大负数（例：29 - 214 = -184.9）。那个负数正是「歌曲从第 214 秒开始」的
+            // 表达方式，挡掉它会让整段回放一个按键都灌不进去。
+            if (conductor.dspTimeSong == 0.0) return 0.0;
             ready = true;
             return (conductor.dspTime - conductor.dspTimeSong - (double)scrConductor.calibration_i)
                    * (double)conductor.song.pitch - conductor.addoffset;
