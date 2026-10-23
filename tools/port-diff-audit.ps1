@@ -413,6 +413,7 @@ $knownDeviations = @(
     @{ Pat = 'ManagedInput.SnapshotHeld';             Why = '2026-10-23 回放停止时补发抬起：回放数据常有只按下没抬起的孤立事件，按住状态会泄漏到结算画面' }
     @{ Pat = 'stillHeld.Count';                       Why = '同上：停止时遍历仍按住的键逐个补发抬起' }
     @{ Pat = 'ev.Key';                                Why = '同上：异步录制路径也按热键表过滤' }
+    @{ Pat = 'SpectreState.PlayActions.StopPlaying';  File = 'VideoRenderJob.cs'; Why = '2026-10-23 渲染结束必须停回放：否则 is_playing 恒真，RDInput 所有查询都由回放数据回答，真实键盘被屏蔽，通关后卡在关卡里出不去' }
     @{ Pat = 'VideoRender.TryReadPinnedPosition';     File = 'ReplayPlayer.cs'; Why = '同上：钉扎时间轴的读取入口（两段合起来才是完整名字）' }
     # -- 2026-10-20 回放没开始时的可诊断性（用户报「等待回放开始超时」）--------
     # 上游每处拒绝都是 TriggerMessage(...); return;：通知几秒后消失、**不进日志**，

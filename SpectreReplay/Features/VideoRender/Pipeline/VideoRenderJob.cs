@@ -1100,6 +1100,23 @@ internal sealed class VideoRenderJob : MonoBehaviour
     {
         if (controlReleased) return;
         controlReleased = true;
+
+        // **必须停掉回放，否则游戏收不到任何真实键盘输入。**
+        //
+        // 渲染是走既有回放链启动的（<see cref="SpectreState.PlayActions.SwitchToPlayMode"/>）
+        // ——那一开始 is_playing=true，而本作业此前**从不**把它关回去。
+        //
+        // 后果不是「回放还在跑」这么轻：<c>ManagedInput.Active => is_playing</c>，
+        // 而 Patch_RDInput 的 GetMain Postfix 只要 Active 就返回回放数据、
+        // 直接改写 __result。于是游戏读到的永远是「回放里最后那一刻的按键」，
+        // 真实键盘被完全屏蔽——玩家按什么都没反应，连结算画面「按任意键继续」
+        // 都触发不了，只能强退。2026-10-23 实测：渲染成功后卡在关卡里出不去。
+        //
+        // 位置也必须在这里：要在 ExitPlaytest 之前，因为退编辑器本身
+        // 也要读输入。顺序错了照样卡住。
+        try { SpectreState.PlayActions.StopPlaying(); }
+        catch (Exception ex) { Debug.LogException(ex); }
+
         try { frames?.RestoreTargets(); } catch (Exception ex) { Debug.LogException(ex); }
         try { RenderClockSource.ActiveClock = null; } catch (Exception ex) { Debug.LogException(ex); }
         try { UnpinVideoPlayers(); } catch (Exception ex) { Debug.LogException(ex); }
