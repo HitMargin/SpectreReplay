@@ -93,6 +93,12 @@ public sealed class ReplayData
     public List<HitSnapshot> HitSnapshots { get; set; } = [];
 
     /// <summary>
+    /// 指针轨迹（可选数据，旧回放没有这一轨）。渲染时按歌曲时间插值出
+    /// 「当时指针在哪」，与画面同源；不参与必需字段完整性检查。
+    /// </summary>
+    public List<CursorSample> CursorTrack { get; set; } = [];
+
+    /// <summary>
     /// 回放元数据是否齐全。等价于旧版对四张必需键字典逐个 ContainsKey，
     /// 供保存前的完整性检查使用（判定指标见 <see cref="FirstMissingRequiredKey"/>）。
     /// </summary>
@@ -160,5 +166,6 @@ public sealed class ReplayData
         KeybdSoundStartTick = null;
         KeyEvents.Clear();
         HitSnapshots.Clear();
+        CursorTrack.Clear();
     }
 }

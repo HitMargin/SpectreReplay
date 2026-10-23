@@ -13,3 +13,4 @@ mutate-regression-last.log
 # 临时提交信息文件
 _msg*.txt
 _commitmsg*.txt
+.zcode/

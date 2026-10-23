@@ -19,6 +19,8 @@ internal static class ReplayEncoder
             WriteStr(writer, replay.EndTime?.ToString("O") ?? "");
             WriteKeyEvents(writer, replay.KeyEvents);
             WriteHitSnapshots(writer, replay.HitSnapshots);
+            // 尾部可选段：空轨迹也写（count=0），布局恒定；旧构建读到即止、不受影响
+            WriteCursorTrack(writer, replay.CursorTrack);
         }
 
         var compressed = ReplayCompression.Compress(ms.ToArray());
@@ -104,6 +106,19 @@ internal static class ReplayEncoder
             w.Write(h.HitTick.HasValue);
             if (h.HitTick.HasValue)
                 w.Write(h.HitTick.Value);
+        }
+    }
+
+    private static void WriteCursorTrack(BinaryWriter w, List<CursorSample> track)
+    {
+        w.Write(ReplayConstants.MagicCursorTrack);
+        w.Write(ReplayConstants.CursorTrackVersion);
+        w.Write(track.Count);
+        foreach (var s in track)
+        {
+            w.Write(s.SongPosition);
+            w.Write(s.X);
+            w.Write(s.Y);
         }
     }
 }

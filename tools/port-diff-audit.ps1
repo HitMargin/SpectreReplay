@@ -433,6 +433,39 @@ $knownDeviations = @(
     @{ Pat = 'rewound.ToString';                         File = 'VideoRenderJob.cs'; Why = '同上：收尾诊断日志' }
     @{ Pat = 'Time.unscaledTime.ToString';               File = 'VideoRenderJob.cs'; Why = '同上：收尾诊断日志' }
     @{ Pat = 'Time.unscaledTime';                        File = 'VideoRenderJob.cs'; Why = '同上：读卸 pin 后的真实 unscaledTime 作改写基准' }
+    # -- 2026-10-24 指针轨迹：录制按歌曲时间进回放容器，渲染按钉扎时间轴回放（与画面同源）--
+    # 新增尾部可选段 MousePts（零版本升位：旧构建无视尾部、新构建探测读取）；
+    # 旧回放无轨迹时渲染回落活体捕获。
+    @{ Pat = 'replay.CursorTrack';                       File = 'ReplayEncoder.cs'; Why = '2026-10-24 指针轨迹段写入（尾部可选段，空轨迹也写 count=0 保持布局恒定）' }
+    @{ Pat = 'ReplayConstants.CursorTrackVersion';       File = 'ReplayEncoder.cs'; Why = '同上：轨迹段版本号' }
+    @{ Pat = 's.SongPosition';                           File = 'ReplayEncoder.cs'; Why = '同上：逐样本序列化' }
+    @{ Pat = 's.X';                                      File = 'ReplayEncoder.cs'; Why = '同上：逐样本序列化' }
+    @{ Pat = 's.Y';                                      File = 'ReplayEncoder.cs'; Why = '同上：逐样本序列化' }
+    @{ Pat = 'track.Count';                              File = 'ReplayEncoder.cs'; Why = '同上：样本计数' }
+    @{ Pat = 'w.Write';                                  File = 'ReplayEncoder.cs'; Why = '同上：BinaryWriter 写段头与样本' }
+    @{ Pat = 'replay.CursorTrack';                       File = 'ReplayDecoder.cs'; Why = '2026-10-24 轨迹段探测读取：魔数不符/流不足即空轨迹（旧文件兼容），ver>1 显式拒绝防错位' }
+    @{ Pat = 'ReplayConstants.CursorTrackVersion';       File = 'ReplayDecoder.cs'; Why = '同上：段版本上界' }
+    @{ Pat = 'r.BaseStream.Length';                      File = 'ReplayDecoder.cs'; Why = '同上：尾部探测需查剩余字节' }
+    @{ Pat = 'r.BaseStream.Position';                    File = 'ReplayDecoder.cs'; Why = '同上：尾部探测需查剩余字节' }
+    @{ Pat = 'r.ReadSingle';                             File = 'ReplayDecoder.cs'; Why = '同上：逐样本读归一化坐标' }
+    @{ Pat = 'r.ReadDouble';                             File = 'ReplayDecoder.cs'; Why = '同上：逐样本读歌曲时间' }
+    @{ Pat = 'r.ReadInt32';                              File = 'ReplayDecoder.cs'; Why = '同上：段版本/count' }
+    @{ Pat = 'r.ReadUInt64';                             File = 'ReplayDecoder.cs'; Why = '同上：段魔数探测' }
+    @{ Pat = 'track.Add';                                File = 'ReplayDecoder.cs'; Why = '同上：构建轨迹列表' }
+    @{ Pat = 'data.CursorTrack';                         File = 'ReplayRecorder.cs'; Why = '2026-10-24 录制期逐帧记指针位置（RecordKeyboardState 顶部、异步早退之前，同步/异步两条路径都覆盖）' }
+    @{ Pat = 'Input.mousePosition';                      File = 'ReplayRecorder.cs'; Why = '同上：指针位置来源' }
+    @{ Pat = 'Math.Abs';                                 File = 'ReplayRecorder.cs'; Why = '同上：静止去重的位移阈值' }
+    @{ Pat = 'mp.x';                                     File = 'ReplayRecorder.cs'; Why = '同上：归一化坐标' }
+    @{ Pat = 'mp.y';                                     File = 'ReplayRecorder.cs'; Why = '同上：归一化坐标' }
+    @{ Pat = 'Screen.';                                  File = 'ReplayRecorder.cs'; Why = '同上：归一化分母（录制时窗口尺寸）' }
+    @{ Pat = 'track.Add';                                File = 'ReplayRecorder.cs'; Why = '同上：追加轨迹样本' }
+    @{ Pat = 'track.Count';                              File = 'ReplayRecorder.cs'; Why = '同上：静止去重查上一条' }
+    @{ Pat = 'last.X';                                   File = 'ReplayRecorder.cs'; Why = '同上：静止去重查上一条' }
+    @{ Pat = 'last.Y';                                   File = 'ReplayRecorder.cs'; Why = '同上：静止去重查上一条' }
+    @{ Pat = 'CursorTrackSampler.Sample';                File = 'VideoFrameSource.cs'; Why = '2026-10-24 渲染帧按钉扎歌曲时间插值指针轨迹（与画面同源）；轨迹空回落活体捕获' }
+    @{ Pat = 'VideoRender.TryReadPinnedPosition';        File = 'VideoFrameSource.cs'; Why = '同上：Grab 时读本帧钉扎位置' }
+    @{ Pat = 'SystemCursor.CursorAcquire.Hidden';        File = 'VideoFrameSource.cs'; Why = '2026-10-24 幻影箭头修复：指针被系统隐藏（无 CURSOR_SHOWING）与抓取失败分开——活体模式下隐藏不画，只有失败才回落手绘箭头' }
+    @{ Pat = 'frames.CursorTrack';                       File = 'VideoRenderJob.cs'; Why = '2026-10-24 把回放里的指针轨迹交给帧源（有轨迹=确定性时间轴；旧回放回落活体捕获）' }
     @{ Pat = 'note.stop_playing';                        Why = '2026-10-24 回放结束判定挪到「已耗尽」早退之前：结算态下 Won_Update 是唯一还在跑的入口，否则 is_playing 永远为真、键盘被回放覆盖，只能手动卸载回放才能退出' }
     # -- 2026-10-23 渲染后真实键盘失灵（用户报「只能靠鼠标退出关卡」）--------
     # 游戏在 AsyncInputManager.Update 里按 state==PlayerControl 切换输入源：

@@ -60,6 +60,10 @@ namespace UiPreview
             // 鼠标指针合成：没有异常的那类缺陷——指针不出现、画反、上下颠倒，
             // 只有翻成片才发现，所以拿真源码往 byte[] 上真画一遍再验像素。
             int cursorFail = CursorOverlayCheck.Run();
+            // 指针轨迹：尾部可选段的兼容矩阵（无段/未知尾部/版本上界/count 防护）
+            // 与按歌曲时间取样（插值/夹取/倒计时负区间）——兼容路径断了在游戏里
+            // 毫无症状，只有成片里指针消失/跳回才看得到，必须离线钉住。
+            int cursorTrackFail = CursorTrackCheck.Run();
             // 跨平台回放输入：非 Windows / 未聚焦时 SendInput 完全没有用，
             // 而这条链最弱的环（holdKeys 里是不是真实键、去重条件对不对）
             // 只会在实机上暴露。离线钉住它的接线形状。
@@ -67,7 +71,7 @@ namespace UiPreview
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
             int orphanFail = PortedCompletenessCheck.NoOrphanChecks(
                 System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
-            int total = locFail + hardFail + replayFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + locLangFail + pinStateFail + injectFail + logPrefixFail + scatterFail + cursorFail + crossInputFail + orphanFail;
+            int total = locFail + hardFail + replayFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + locLangFail + pinStateFail + injectFail + logPrefixFail + scatterFail + cursorFail + cursorTrackFail + crossInputFail + orphanFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"

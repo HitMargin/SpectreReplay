@@ -42,6 +42,9 @@
     
     <Compile Include="..\..\SpectreReplay\Features\Replay\Data\keyEvent.cs" Link="Real\keyEvent.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\Data\HitSnapshot.cs" Link="Real\HitSnapshot.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\Data\CursorSample.cs" Link="Real\CursorSample.cs" />
+    <!-- 指针轨迹按时间取样：纯 System，离线闸门直接验插值/夹取/倒计时负区间 -->
+    <Compile Include="..\..\SpectreReplay\Features\Replay\Runtime\CursorTrackSampler.cs" Link="Real\CursorTrackSampler.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\Codec\ReplayCompression.cs" Link="Real\ReplayCompression.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\Codec\ReplayEncoder.cs" Link="Real\ReplayEncoder.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\Codec\ReplayDecoder.cs" Link="Real\ReplayDecoder.cs" />

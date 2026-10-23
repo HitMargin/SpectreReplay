@@ -26,6 +26,19 @@ namespace SpectreReplay.Features.VideoRender;
 /// </summary>
 internal static class SystemCursor
 {
+    /// <summary>
+    /// 抓取结果三态。调用方据此决定回退策略：
+    /// <see cref="Acquired"/> 用位图；<see cref="Hidden"/> **什么都不画**
+    /// （屏幕上没有指针，画一个是凭空多出来的幻影箭头）；<see cref="Failed"/>
+    /// 回退手绘箭头（外观兜底）。
+    /// </summary>
+    internal enum CursorAcquire
+    {
+        Acquired,
+        Hidden,
+        Failed
+    }
+
     private static IntPtr cachedHandle;
     private static SystemCursorImage cached;
     private static bool loggedOnce;
@@ -42,31 +55,34 @@ internal static class SystemCursor
     }
 
     /// <summary>
-    /// 取当前系统指针位图。返回 false 表示取不到（非 Windows、无鼠标、单色光标、
-    /// GDI 失败），调用方应回退到手绘箭头。
-    /// **必须主线程调用**：GDI 句柄与 <c>GetCursorInfo</c> 都绑定窗口站。
+    /// 取当前系统指针位图。**必须主线程调用**：GDI 句柄与 <c>GetCursorInfo</c>
+    /// 都绑定窗口站。
     /// </summary>
-    internal static bool TryAcquire(out SystemCursorImage image)
+    internal static CursorAcquire TryAcquire(out SystemCursorImage image)
     {
         image = null;
-        if (!IsWindowsPlatform()) return false;
+        if (!IsWindowsPlatform()) return CursorAcquire.Failed;
 
         CURSORINFO info = default;
         info.cbSize = Marshal.SizeOf(typeof(CURSORINFO));
-        if (!GetCursorInfo(ref info)) return false;
-        // flags 的 CURSOR_SHOWING 位为 0 说明指针被隐藏（全屏视频、游戏自绘光标），
-        // 这时候画上去反而是凭空多一个箭头
-        if (info.hCursor == IntPtr.Zero) return false;
-        if ((info.flags & CURSOR_SHOWING) == 0) return false;
+        // GetCursorInfo 失败极罕见（窗口站问题），按失败处理交给外观兜底
+        if (!GetCursorInfo(ref info)) return CursorAcquire.Failed;
+        // 指针被隐藏（全屏视频、游戏自绘光标、"游玩时隐藏指针"设置）：
+        // 系统明确说此刻没有可见指针。这与"抓取失败"是两回事——
+        // 调用方必须分开处理，否则隐藏的指针会以手绘箭头的样子复活。
+        if (info.hCursor == IntPtr.Zero) return CursorAcquire.Hidden;
+        if ((info.flags & CURSOR_SHOWING) == 0) return CursorAcquire.Hidden;
 
         if (info.hCursor == cachedHandle && cached != null)
         {
             image = cached;
-            return true;
+            return CursorAcquire.Acquired;
         }
 
         SystemCursorImage built = Build(info.hCursor);
-        if (built == null) return false;
+        // 单色光标 / 坏主题 / GDI 失败：位图拿不到，但指针**看得见**——
+        // 这是失败不是隐藏，调用方应回退手绘箭头
+        if (built == null) return CursorAcquire.Failed;
 
         cachedHandle = info.hCursor;
         cached = built;
@@ -78,7 +94,7 @@ internal static class SystemCursor
                 + built.Width + "x" + built.Height
                 + " hotspot=(" + built.HotspotX + "," + built.HotspotY + ")");
         }
-        return true;
+        return CursorAcquire.Acquired;
     }
 
     private static SystemCursorImage Build(IntPtr hCursor)

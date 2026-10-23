@@ -337,6 +337,9 @@ internal sealed class VideoRenderJob : MonoBehaviour
         frames = new VideoFrameSource((VideoSurface)Settings.RenderCaptureMode, Settings.RenderWidth, Settings.RenderHeight);
         // 指针是否进成片，由设置决定；具体在哪一层画见 CursorOverlay 与 VideoFrameSource.Flight。
         frames.DrawCursor = Settings.RenderCursorOn;
+        // 指针轨迹随回放数据一起进来：有轨迹 = 位置走确定性时间轴（与画面同源，
+        // 渲染快慢/管线波动都影响不到）；没有（旧回放）= 帧源回落到活体捕获。
+        frames.CursorTrack = data?.CursorTrack;
         mixdown = new VideoAudioTrack(wavPath, fps);
         if (mixdown.Dead)
         {

@@ -21,6 +21,13 @@ internal static class ReplayConstants
     // 解码端按版本分支读取，v1 旧谱 HitTick 保持 null
     public const int HitSnapshotVersion = 2;
 
+    // 指针轨迹段：追加在 HitSnapshots 之后、永远是负载的最后一段。
+    // 解码器读完 HitSnapshots 不查 EOF，旧构建对新尾部字节天然无视——
+    // 本段的存在性就是版本判定，FormatVersion 与各旧段版本都不用动。
+    // 魔数按流内小端字节拼出 "MousePts"（与 KeyEvent/HitCtext 同一套惯例）。
+    public const ulong MagicCursorTrack = 0x7374_5065_7375_6F4D;
+    public const int CursorTrackVersion = 1;
+
     public const string Extension = ".sprp";
     public const string ExtensionNoEncrypt = ".psprp";
 }

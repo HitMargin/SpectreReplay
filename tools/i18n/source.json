@@ -225,6 +225,11 @@
   "en": "Stop"
  },
  {
+  "key": "playback.fullrun",
+  "zh": "整局回放（从头到尾）",
+  "en": "Full run (start to finish)"
+ },
+ {
   "key": "playback.unload",
   "zh": "卸载回放",
   "en": "Unload replay"
@@ -1466,8 +1471,8 @@
  },
  {
   "key": "render.cursor.tip",
-  "zh": "把鼠标指针画进成片。游戏本身不把指针画进画面，这一项由模组在帧上补画，纯净相机模式下尤其明显。关掉后成片里不会出现指针。",
-  "en": "Draw the mouse cursor into the video. The game does not put the cursor into the frame, so the mod paints it on top; most visible with the clean camera. Turn off to keep the cursor out of the video."
+  "zh": "把鼠标指针画进成片。新录制的回放会一并记下指针轨迹，渲染时按歌曲时间回放——与画面同源，不受渲染速度与波动影响；旧回放没有轨迹，回落到渲染时的活体指针（快慢随渲染速度波动）。指针被系统隐藏时不画。",
+  "en": "Draw the mouse cursor into the video. Newly recorded replays also store a cursor track, replayed along the song timeline on render — in sync with the picture and unaffected by render speed. Older replays have no track and fall back to the live cursor at render time, whose pacing follows render speed. A hidden cursor is not drawn."
  },
  {
   "key": "render.codec.tip",

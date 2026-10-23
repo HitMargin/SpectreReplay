@@ -8,6 +8,8 @@ public class Replay
     public ReplayMetadata Metadata { get; set; } = new();
     public List<KeyEvent> KeyEvents { get; set; } = [];
     public List<HitSnapshot> HitSnapshots { get; set; } = [];
+    /// <summary>指针轨迹（容器尾部的可选段；旧文件没有 → 空表）。</summary>
+    public List<CursorSample> CursorTrack { get; set; } = [];
     /// <summary>
     /// When this replay ended (UTC). Must be serialized in <see cref="ReplayEncoder"/> and <see cref="ReplayDecoder"/>
     /// to persist across save/load. Written as an ISO 8601 string in metadata.

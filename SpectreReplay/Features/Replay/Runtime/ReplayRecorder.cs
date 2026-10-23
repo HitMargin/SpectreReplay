@@ -88,6 +88,10 @@ internal static class ReplayRecorder
                 data.MaximumUsedKeys = cur;
         }
 
+        // 指针轨迹与按键共用这个逐帧入口，但必须在异步早退**之前**采样：
+        // 异步输入只接管按键事件的记账，指针两条路径都要每帧跑。
+        RecordCursor();
+
         // 异步输入开启时按键由 AsyncKeyRecorder 记录，轮询路径只兜 forceSync（结算画面）
         if (!forceSync && UseAsyncInput)
             return;
@@ -136,5 +140,39 @@ internal static class ReplayRecorder
             }
             PrevKeyState[i] = CurrKeyState[i];
         }
+    }
+
+    /// <summary>
+    /// 把本帧的指针位置按歌曲时间记进轨迹。
+    ///
+    /// 坐标除以当时的 Screen 尺寸归一化后再存——成片分辨率、CleanCamera 的任意
+    /// 输出尺寸都只是乘回各自的尺度，录制分辨率不进格式。静止去重：位置没变
+    /// 就不占字节，渲染端两个相邻样本之间的线性插值天然复现静止段。
+    /// songposition 为负（倒计时）照录，与按键同一语义。
+    /// </summary>
+    private static void RecordCursor()
+    {
+        // 与键盘路径同一理由：结算转场/场景卸载途中导体可能已销毁，直接返回
+        var conductor = ADOBase.conductor;
+        if (conductor == null) return;
+        if (Screen.width <= 0 || Screen.height <= 0) return;
+
+        Vector3 mp = Input.mousePosition;
+        float nx = mp.x / Screen.width;
+        float ny = mp.y / Screen.height;
+
+        var track = data.CursorTrack;
+        if (track.Count > 0)
+        {
+            var last = track[^1];
+            if (Math.Abs(nx - last.X) < 1e-4f && Math.Abs(ny - last.Y) < 1e-4f)
+                return;
+        }
+        track.Add(new CursorSample
+        {
+            SongPosition = conductor.songposition_minusi,
+            X = nx,
+            Y = ny
+        });
     }
 }

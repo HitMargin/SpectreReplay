@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using SpectreReplay.Features.Replay;
 using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -29,8 +30,14 @@ internal sealed class VideoFrameSource
         // Input.mousePosition 会把「两三帧之后」的位置画进这一帧，快速移动会甩尾。
         // 见 CursorOverlay 的类注释。
         public bool CursorDrawn;
-        // 系统指针位图在 Grab 那一帧抓，随帧排队。null 表示抓不到（非 Windows、
-        // 句柄无效等），交付时回退到 CursorOverlay 的手绘箭头。
+        // 位置来自录制轨迹（按钉扎歌曲时间插值），与画面同源——TryTake 据此
+        // **总是**画（开关是明确意图，指针在录制时被隐藏也照画）。
+        public bool CursorFromTrack;
+        // 系统指针被隐藏（GetCursorInfo 无 CURSOR_SHOWING）：活体模式下不画，
+        // 否则就是幻影箭头。轨迹模式不看这个标志（见上）。
+        public bool CursorHidden;
+        // 系统指针位图在 Grab 那一帧抓，随帧排队。null 表示抓不到位图
+        // （非 Windows、单色光标、GDI 失败），交付时按 Hidden/Failed 决定回退。
         public SystemCursorImage Cursor;
         public float MouseX;
         public float MouseY;
@@ -157,6 +164,11 @@ internal sealed class VideoFrameSource
     // 放在这里而不是每帧传参：Grab 与 TryTake 分处两段代码，开关只该读一次。
     internal bool DrawCursor { get; set; }
 
+    // 录制下的指针轨迹（回放数据的一部分）。非空 = 指针位置走确定性时间轴；
+    // null/空 = 旧回放没有轨迹，活体捕获当回落（位置跑在墙钟上）。
+    // 由渲染作业在创建帧源处赋一次；帧源自己不反向依赖 SpectreState。
+    internal IReadOnlyList<CursorSample> CursorTrack { get; set; }
+
     internal void Grab(int index)
     {
         if (surface == VideoSurface.WholeScreen)
@@ -165,17 +177,38 @@ internal sealed class VideoFrameSource
             texture, 0, TextureFormat.RGBA32, _ => { });
         Flight flight = new Flight { Index = index, Request = request };
         // 指针位置在**这一帧**采样：见 Flight 里 CursorDrawn 的注释。
-        // mousePresent 为假（无鼠标/被断开）时不画，免得画在 (0,0) 上。
-        if (DrawCursor && Input.mousePresent)
+        // 两条来源：
+        //   · 录制轨迹——按钉扎歌曲时间插值，与画面同源，渲染速度/管线波动
+        //     都影响不到它。有轨迹（新录制的回放）一律走这条。
+        //   · 活体捕获——旧回放没有轨迹时的回落，位置跑在墙钟上。
+        if (DrawCursor)
         {
-            flight.CursorDrawn = true;
-            // 系统指针位图也在这里抓：GDI 只能在有窗口站的主线程调，而且位图
-            // 会随指针形状变化（I 型/手型/自定义 .cur），必须每帧对一次
-            SystemCursor.TryAcquire(out flight.Cursor);
-            flight.MouseX = Input.mousePosition.x;
-            flight.MouseY = Input.mousePosition.y;
-            flight.ScreenW = Screen.width;
-            flight.ScreenH = Screen.height;
+            if (CursorTrack is { Count: > 0 }
+                && VideoRender.TryReadPinnedPosition(out double songPos)
+                && CursorTrackSampler.Sample(CursorTrack, songPos, out float nx, out float ny))
+            {
+                flight.CursorFromTrack = true;
+                flight.CursorDrawn = true;
+                // 外观仍是现役系统指针（当前主题/大小/热区），每帧对一次；
+                // Hidden/Failed 在交付端不区分——轨迹模式画就是意图
+                SystemCursor.TryAcquire(out flight.Cursor);
+                // 归一化坐标乘回**渲染时**的窗口尺寸，CursorOverlay 的
+                // mouseX*(width/screenWidth) 数学原样复用
+                flight.MouseX = nx * Screen.width;
+                flight.MouseY = ny * Screen.height;
+                flight.ScreenW = Screen.width;
+                flight.ScreenH = Screen.height;
+            }
+            else if (Input.mousePresent)
+            {
+                flight.CursorDrawn = true;
+                var look = SystemCursor.TryAcquire(out flight.Cursor);
+                flight.CursorHidden = look == SystemCursor.CursorAcquire.Hidden;
+                flight.MouseX = Input.mousePosition.x;
+                flight.MouseY = Input.mousePosition.y;
+                flight.ScreenW = Screen.width;
+                flight.ScreenH = Screen.height;
+            }
         }
         flights.Enqueue(flight);
     }
@@ -209,14 +242,16 @@ internal sealed class VideoFrameSource
         // rowsBottomUp 照 NeedsRowFlip——编码器只对 CleanCamera 做 vflip。
         if (head.CursorDrawn)
         {
-            // 抓到系统位图就用真的（热点、箭头/手型/I 型都对），抓不到回退手绘
             if (head.Cursor != null)
             {
                 CursorOverlay.Draw(pixels, Width, Height, NeedsRowFlip, head.Cursor,
                     head.MouseX, head.MouseY, head.ScreenW, head.ScreenH);
             }
-            else
+            else if (head.CursorFromTrack || !head.CursorHidden)
             {
+                // 轨迹模式：画即意图（用户开了开关、位置是确定性的），外观走手绘箭头兜底。
+                // 活体模式：只在「抓取失败」时回落手绘箭头；「被隐藏」什么都不画——
+                // 屏幕上没有指针却画一个，就是凭空多出来的幻影箭头。
                 CursorOverlay.Draw(pixels, Width, Height, NeedsRowFlip,
                     head.MouseX, head.MouseY, head.ScreenW, head.ScreenH);
             }

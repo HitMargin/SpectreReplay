@@ -34,6 +34,7 @@ internal static class ReplayDecoder
         }
         replay.KeyEvents = ReadKeyEvents(r);
         replay.HitSnapshots = ReadHitSnapshots(r);
+        replay.CursorTrack = ReadCursorTrackIfPresent(r);
         return replay;
     }
 
@@ -51,6 +52,7 @@ internal static class ReplayDecoder
     // 避免损坏/截断文件把 count 读成垃圾值后直接拿去做 List 容量
     private const int MinKeyEventBytes = 8 + 2 + 1;      // double + ushort + bool
     private const int MinHitSnapshotBytes = 4 + 8 + 4 + 1 + 1 + 1 + 8 + 8 + 1 + 1 + 4 + 1; // 含末尾 HitTick 最小 1B
+    private const int MinCursorSampleBytes = 8 + 4 + 4;  // double + float + float
 
     // count 来自文件内容，不是可信输入：负数（最高位置 1）会让 List 容量抛
     // ArgumentOutOfRangeException，巨大值会在读到数据前就 OutOfMemoryException。
@@ -198,6 +200,36 @@ internal static class ReplayDecoder
         return contexts;
     }
 
+    /// <summary>
+    /// 尾部可选段：指针轨迹。旧文件在此处已到结尾（或带未知尾部数据）——
+    /// 探测到本模组的魔数才读，否则连同其余字节一并忽略，返回空轨迹。
+    /// 旧构建读新文件也是同一条路（读完 HitSnapshots 即止），双向兼容
+    /// 不动任何版本号。读到了就按 HitSnapshots 同一套规则校验段版本与 count。
+    /// </summary>
+    private static List<CursorSample> ReadCursorTrackIfPresent(BinaryReader r)
+    {
+        long remaining = r.BaseStream.Length - r.BaseStream.Position;
+        if (remaining < sizeof(ulong) + sizeof(int))
+            return [];
+        var magic = r.ReadUInt64();
+        if (magic != ReplayConstants.MagicCursorTrack)
+            return [];   // 未知尾部：可能是未来版本的新段，按"旧构建读新文件"语义无视
+        var ver = r.ReadInt32();
+        if (ver > ReplayConstants.CursorTrackVersion)
+            throw new InvalidDataException(
+                $"CursorTrack version {ver} too new (known: {ReplayConstants.CursorTrackVersion})");
+        var count = ReadCount(r, MinCursorSampleBytes);
+        var track = new List<CursorSample>(count);
+        for (int i = 0; i < count; i++)
+            track.Add(new CursorSample
+            {
+                SongPosition = r.ReadDouble(),
+                X = r.ReadSingle(),
+                Y = r.ReadSingle()
+            });
+        return track;
+    }
+
     public static Replay FromReplayData(ReplayData replayData)
     {
         if (replayData == null) return null;
@@ -253,6 +285,7 @@ internal static class ReplayDecoder
         });
 
         replay.HitSnapshots = replayData.HitSnapshots;
+        replay.CursorTrack = replayData.CursorTrack;
         return replay;
     }
 
@@ -309,6 +342,7 @@ internal static class ReplayDecoder
             });
 
         replayData.HitSnapshots = replay.HitSnapshots;
+        replayData.CursorTrack = replay.CursorTrack;
         return replayData;
     }
 }
