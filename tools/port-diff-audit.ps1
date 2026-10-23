@@ -419,6 +419,9 @@ $knownDeviations = @(
     # 玩家多是从设置页装弹后点渲染（本来就是回放态）。强行切录制态后 data 仍是
     # 那份回放，界面同时显示「正在录制」与「已载入」，且下次进关会自动开录。
     @{ Pat = 'SpectreState.PlayActions.UnloadReplay';   File = 'VideoRenderJob.cs'; Why = '2026-10-24 渲染收尾彻底卸载回放（与设置页「卸载回放」同一路径）：PlayMode 留真会让关卡退出时 Start_Rewind 重启回放、卡住退出流程；且清掉 data 才不会出现「已载入」与「正在录制」并存' }
+    # -- 2026-10-24 收尾按终态分支：成功才卸载，取消/失败保留装弹还原渲染前模式 --
+    @{ Pat = 'SpectreState.PlayActions.SwitchToPlayMode'; File = 'VideoRenderJob.cs'; Why = '2026-10-24 用户裁定取消/失败渲染不卸载回放：还原渲染前的装弹态（wasPlayModeBeforeRender），与「非渲染播放结束」状态一致；成功路径仍走 UnloadReplay（一次性消费）' }
+    @{ Pat = 'Machine.GetState';                          File = 'VideoRenderJob.cs'; Why = '2026-10-24 winTime 改写只在结算态(Won)执行：中途取消时改写非零 winTime 会毒化 OnLandOnPortal 的 if(winTime!=0f) return 幂等闸，之后这局再通关时胜流程整段跳过' }
     # -- 2026-10-24 渲染收尾把 winTime 拉回真实时间线（VideoRenderJob.ReleaseGameControl）--
     # OnLandOnPortal 在渲染期读的是 UnscaledDeltaPin 的虚拟 unscaledTime，渲染快于实时时
     # 它超前真实墙钟几十秒；卸 pin 后 Won_Update 的退出闸 unscaledTime-winTime>1 要等真实

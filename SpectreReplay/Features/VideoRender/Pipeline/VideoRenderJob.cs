@@ -151,6 +151,14 @@ internal sealed class VideoRenderJob : MonoBehaviour
     // AwaitReplayAlive 用：上一帧是否已看到正的 songposition（连续两帧才算稳）
     private bool sawPositivePosition;
 
+    // 渲染开始前玩家是否处于回放态。收尾按终态分支时用：
+    // 成功=卸载（一次性消费）；取消/失败=还原到这里的模式，装弹原样保留
+    // （2026-10-24 用户裁定：取消渲染不要卸载回放文件）。
+    private bool wasPlayModeBeforeRender;
+    // 只有「捕获与混音正常跑完」的成功路径才置位。ReleaseGameControl 据此分支：
+    // 置位=这份回放已被完整消费，卸载；默认假=取消/失败/紧急兜底，保留装弹。
+    private bool consumeReplay;
+
     // 渲染起点：玩家点「渲染」时所在砖块。必须在重启/切模式之前抓取。
     private int requestedStartFloor;
 
@@ -251,6 +259,10 @@ internal sealed class VideoRenderJob : MonoBehaviour
         SetPhase(VideoRender.Phase.Restarting, "rendervideo.stage.restarting", "");
         PrepareWorkspace(container);
         SaveGlobalState(fps);
+
+        // 记住渲染前的模式，供取消/失败收尾还原（成功路径不走还原，直接卸载）。
+        // 渲染本身必须临时进回放态（SwitchToPlayMode），但不覆盖玩家的原始选择。
+        wasPlayModeBeforeRender = SpectreState.PlayMode;
 
         // 走既有回放启动链：重启关卡后 Start_Rewind 补丁会做完整性校验并自动开始回放
         SpectreState.PlayActions.SwitchToPlayMode();
@@ -616,6 +628,11 @@ internal sealed class VideoRenderJob : MonoBehaviour
             yield break;
         }
 
+        // 走到这里 = 捕获与混音已正常跑完：这份回放被完整消费，收尾时卸载。
+        // （合成随后在后台线程做；万一 mux 失败，回放已随成功路径卸载，需重新
+        // 装弹重试——不为此把卸载推迟到合成之后，那会把「已载入」状态拖过整个
+        // 合成窗口，期间进关会被回放重新接管。）
+        consumeReplay = true;
         ReleaseGameControl();
 
         StartFinalizeOnWorker();
@@ -1117,32 +1134,42 @@ internal sealed class VideoRenderJob : MonoBehaviour
         try { SpectreState.PlayActions.StopPlaying(); }
         catch (Exception ex) { Debug.LogException(ex); }
 
-        // **渲染结束后必须彻底卸载回放。**
+        // **终态分支：只有成功才算消费掉这份回放（2026-10-24 用户裁定）。**
         //
-        // 只停回放（is_playing=false）不够，只切模式也不够——两种都试过：
+        //   · 成功（consumeReplay）——渲染是对这份回放数据的**一次性消费**：
+        //     彻底卸载（与设置页「卸载回放」完全同一条路径：StopPlaying +
+        //     StopRecording + 清 data + 切回录制态），不留「已载入」的半吊子状态。
+        //     PlayMode 留真 + data 留存的话，之后每次进关都会自动开演回放、接管
+        //     输入（2026-10-23 实测「关卡自己跑完并跳场景」）。代价是再次渲染需
+        //     重新点「回放」载入一次。
         //
-        //   · `PlayMode` 留在 true ⇒ 关卡退出时 Start_Rewind 会再次命中
-        //     Patch_Lifecycle 里那句 `if (PlayMode) TryStartPlayback()`：在场景
-        //     卸载途中尝试重启回放，把整个退出流程卡死。2026-10-24 实测：渲染完
-        //     停在 scnGame 不退出，`replay video complete` 之后再无任何场景卸载
-        //     记录；而同一份回放走「非渲染播放」时能正常退出到 scnCLS。
-        //   · `RecordMode` 留在 true 且 data 还在 ⇒ 界面同时显示「正在录制本局
-        //     按键」与「已载入那份回放」，两边打架（用户反馈的「卸载回放不干净」），
-        //     下次进关还会自动开录，顶掉装弹中的回放。
-        //
-        // 渲染是对这份回放数据的**一次性消费**：跑完就该回到干净状态。
-        // <see cref="SpectreState.PlayActions.UnloadReplay"/> 正是这个语义
-        // ——StopPlaying + StopRecording + 清 data + 切回录制态，与设置页
-        // 「卸载回放」按钮**完全同一条路径**，不会留下半吊子状态。
-        //
-        // 代价是再次渲染需重新点「回放」载入一次；相对「渲染完整局卡死退不出去」，
-        // 这一步成本可以忽略。
-        try { SpectreState.PlayActions.UnloadReplay(); }
-        catch (Exception ex) { Debug.LogException(ex); }
-        Debug.Log("[SpectreReplay] render teardown: replay unloaded "
-            + "(PlayMode=" + SpectreState.PlayMode + " RecordMode=" + SpectreState.RecordMode
-            + " is_playing=" + SpectreState.is_playing
-            + " data=" + (SpectreState.data == null ? "null" : "kept") + ")");
+        //   · 取消/失败/紧急兜底——回放**没有被消费**，原样保留装弹，只把模式
+        //     还原到渲染前。取消的语义是「把游戏还给我」，不是「把装好的回放也
+        //     扔掉」。还原后的状态与「非渲染播放结束」完全一致：PlayMode 照旧 +
+        //     data 在 + is_playing=false，退出关卡、再次进关自动接管回放，都是
+        //     装弹回放的正常行为。
+        if (consumeReplay)
+        {
+            try { SpectreState.PlayActions.UnloadReplay(); }
+            catch (Exception ex) { Debug.LogException(ex); }
+            Debug.Log("[SpectreReplay] render teardown: replay consumed and unloaded "
+                + "(PlayMode=" + SpectreState.PlayMode + " RecordMode=" + SpectreState.RecordMode
+                + " is_playing=" + SpectreState.is_playing
+                + " data=" + (SpectreState.data == null ? "null" : "kept") + ")");
+        }
+        else
+        {
+            try
+            {
+                if (wasPlayModeBeforeRender) SpectreState.PlayActions.SwitchToPlayMode();
+                else SpectreState.PlayActions.SwitchToRecordMode();
+            }
+            catch (Exception ex) { Debug.LogException(ex); }
+            Debug.Log("[SpectreReplay] render teardown: replay kept, mode restored to pre-render "
+                + "(PlayMode=" + SpectreState.PlayMode + " RecordMode=" + SpectreState.RecordMode
+                + " is_playing=" + SpectreState.is_playing
+                + " data=" + (SpectreState.data == null ? "null" : "kept") + ")");
+        }
 
         // **还要把游戏的输入源切回真实键盘。** 这一步与上面的 StopPlaying 是两件事：
         // 前者让我们的 RDInput 覆盖失效，后者恢复游戏自己的输入源标志。
@@ -1184,10 +1211,14 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // 控制器为空（场景切换途中收尾）就跳过——那时没有结算画面可退。
         // 即便个别 detour 卸载失败（pin 仍在），这里的读数与 winTime 同在虚拟线
         // 上，闸门同样成立，不会引入新的错位。
+        // 只在结算态（Won）做。中途取消时关卡还在玩，winTime 一旦被写成非零，
+        // OnLandOnPortal 的幂等闸 `if (winTime != 0f) return;` 会把之后这局再
+        // 通关时的整个胜流程跳过——宁可少做，不能毒化游戏自己的状态机。
         try
         {
             scrController controller = scrController.instance;
-            if (controller != null)
+            if (controller != null
+                && (int)(States)controller.stateMachine.GetState() == Patch_ConductorUpdate.StateWon)
             {
                 System.Reflection.FieldInfo winTime = typeof(scrController).GetField("winTime",
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
