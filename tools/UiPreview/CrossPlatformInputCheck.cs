@@ -234,6 +234,26 @@ namespace UiPreview
             Expect(!Has(input, @"(?<![$@])""[^""]*帧 \{frame\}"),
                 "⑫c 首键日志的 {frame} 没进插值 —— 玩家报障时最关键的帧号恒为字面量");
 
+            // ⑫d 跳转（FastForward）的游标必须真的生效。两处缺陷叠在一起，症状都是
+            //     「跳到最后之后按键模拟消失」：
+            //       1. Patch_Lifecycle 先 FastForward 再 StartPlaying，而 Start() 无条件把
+            //          PlayIndex / KeyEventIndex 清零，FastForward 的成果当场作废；
+            //       2. FastForward 的两个查找循环「找不到就保留初值 0」，跳到最后一砖时
+            //          目标时间之后往往没有事件，游标停在 0。
+            //     大关卡上万条事件要几百帧才追平（每帧上限 64），而追平瞬间
+            //     Patch_Playback 判定两份数据都到尾部，直接 StopPlaying。
+            string lifecycle = SrcUtil.Source(projectRoot, "Features/Replay/Patches/Patch_Lifecycle.cs");
+            int startAt = lifecycle.IndexOf("PlayActions.StartPlaying()", StringComparison.Ordinal);
+            int fastAt = lifecycle.IndexOf("ReplayPlayer.FastForward(", StringComparison.Ordinal);
+            Expect(startAt >= 0 && fastAt >= 0 && startAt < fastAt,
+                "⑫d 先 FastForward 再 StartPlaying —— Start() 会把游标清零，跳转等于没做");
+            Expect(Has(player, @"PlayIndex = data\.HitSnapshots\.Count;"),
+                "⑫d FastForward 没把 PlayIndex 兜底到末尾 —— 找不到目标时留在 0 会从头重灌");
+            Expect(Has(player, @"KeyEventIndex = data\.KeyEvents\.Count;"),
+                "⑫d FastForward 没把 KeyEventIndex 兜底到末尾 —— 跳到最后一砖时游标停在 0");
+            Expect(player.Contains("ManagedInput.Restore("),
+                "⑫d 跳转后没有重建仍按住的键 —— 长条中间跳转会漏判");
+
             // ⑬ 「瞬间全部模拟完」的**命中推进**成因（与 ⑫ 的按键成因是两回事）。
             //
             //     Patch_PlayerControlUpdate 里的 while 是单向不可逆的：每轮 PlayIndex++，

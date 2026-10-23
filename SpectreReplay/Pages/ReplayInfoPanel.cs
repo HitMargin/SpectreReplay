@@ -171,7 +171,7 @@ namespace SpectreReplay.Pages
 
             GUILayout.BeginHorizontal();
             Gui.KeyValueNarrow("playback.info.duration", DurationText(info), Gui.TextCol);
-            Gui.KeyValueNarrow("playback.info.acc", AccText(info), Gui.TextCol);
+            
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();

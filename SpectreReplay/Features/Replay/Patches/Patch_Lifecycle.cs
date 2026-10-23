@@ -300,10 +300,14 @@ internal class Patch_StartRewind
                 && data.StartTile == 0
                 && data.EndTile == ADOBase.lm.listFloors.Count - 1;
 
-            if (GCS.checkpointNum != data.StartTile)
-                ReplayPlayer.FastForward(GCS.checkpointNum);
-
+            // **必须先 StartPlaying 再 FastForward。**
+            // ReplayPlayer.Start() 会把 PlayIndex / KeyEventIndex 清零；反过来调的话，
+            // FastForward 算好的游标会被紧接着清零，等于每次跳转都从文件开头重灌
+            // 整局事件——大关卡里追平过程长达数百帧，追平瞬间还会被判定为"已到尾部"
+            // 直接停止回放。
             PlayActions.StartPlaying();
+            if (is_playing && GCS.checkpointNum != data.StartTile)
+                ReplayPlayer.FastForward(GCS.checkpointNum);
             if (is_playing)
                 ResetRejectLog();
             TriggerMessage(LocalizationManager.GetLocalizedText("note.start_playing"));

@@ -113,6 +113,22 @@ internal static class ManagedInput
         }
     }
 
+    /// <summary>
+    /// 只恢复「此刻是否按住」，**不写帧戳**。
+    ///
+    /// 供跳转后重建状态用：被跳过的事件里那些按下后还没抬起的键，此刻仍是按住。
+    /// 不能复用 <see cref="Note"/>——它会写 PressedFrame，导致所有重建的键在跳转
+    /// 那一帧同时被判成 "WentDown"，凭空多出一次按下沿。
+    /// </summary>
+    internal static void Restore(ushort vk, bool pressed)
+    {
+        if (vk >= Held.Length) return;
+        if (Held[vk] == pressed) return;
+        Held[vk] = pressed;
+        _heldCount += pressed ? 1 : -1;
+        if (_heldCount < 0) _heldCount = 0;
+    }
+
     /// <summary>清空状态。开始 / 停止 / 快进（跳转）时调用，避免上一段的按住状态残留。</summary>
     internal static void Clear()
     {

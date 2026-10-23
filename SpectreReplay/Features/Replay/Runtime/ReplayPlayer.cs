@@ -95,7 +95,12 @@ internal static class ReplayPlayer
     {
         if (data == null) return;
 
-        PlayIndex = 0;
+        // 找不到目标时游标必须落到**末尾**，不能留在 0。
+        // 跳到最后一砖时，目标时间之后往往已经没有事件，两个查找循环都跑完不命中；
+        // 初值留在 0 就等于从文件开头重灌整局按键——大关卡里上万条事件要几百帧才能
+        // 追平（每帧最多 64 条），而追平那一刻 Patch_Playback 会判定 "两份数据都到
+        // 尾部" 直接 StopPlaying，表现就是跳转后按键模拟整个消失。
+        PlayIndex = data.HitSnapshots.Count;
         for (int i = 0; i < data.HitSnapshots.Count; i++)
         {
             if (data.HitSnapshots[i].CurrentFloorID >= targetFloor)
@@ -105,12 +110,16 @@ internal static class ReplayPlayer
             }
         }
 
-        // 边界检查要含**下界**：只判上界时负的 targetFloor 会通过检查，
+        // 末尾兜底放在边界检查**外面**：targetFloor 越界时（跳到最后一砖、
+        // listFloors 索引恰好出界）连目标时间都取不到，此时没有「从哪条事件继续」
+        // 的依据，只能认定后面没有事件。若放在里面，越界分支会把游标留在旧值。
+        KeyEventIndex = data.KeyEvents.Count;
+
+        // 边界检查要含下界：只判上界时负的 targetFloor 会通过检查，
         // 紧接着 listFloors[targetFloor] 抛 IndexOutOfRangeException
         if (ADOBase.lm != null && targetFloor >= 0 && targetFloor < ADOBase.lm.listFloors.Count)
         {
             double targetTime = ADOBase.lm.listFloors[targetFloor].entryTime;
-            KeyEventIndex = 0;
             for (int i = 0; i < data.KeyEvents.Count; i++)
             {
                 if (data.KeyEvents[i].SongPosition >= targetTime)
@@ -122,8 +131,27 @@ internal static class ReplayPlayer
         }
 
         CurrKeyState = new byte[256];
-        // 跳转后按键状态未知（与 CurrKeyState 同一处理方式）：清空，等后续事件重新建立
         ManagedInput.Clear();
+
+        // 重建跳转点仍然按住的键。
+        // 被跳过的事件里「按下但还没抬起」的键，在跳转之后仍是按住状态；只清空不重建，
+        // 那颗键就永远等不到按下事件，后面的抬起事件打在空状态上是幂等空操作。
+        // 长按地板（hold）正是靠这个状态判定的，所以在长条中间跳转会直接漏判。
+        for (int i = 0; i < KeyEventIndex; i++)
+        {
+            var ev = data.KeyEvents[i];
+            ushort num = ev.KeyCode < Settings.key_code_convert.Length
+                ? Settings.key_code_convert[ev.KeyCode]
+                : (ushort)0;
+            if (num == 0 || num == 27) continue;
+            ManagedInput.Restore(num, ev.IsPressed);
+        }
+        // 托管状态已就位，同步一份给 SendInput 路径，Stop() 才知道该发哪些抬起
+        for (int vk = 1; vk < CurrKeyState.Length; vk++)
+        {
+            if (ManagedInput.IsHeldVk((ushort)vk)) CurrKeyState[vk] = 128;
+        }
+
         AllAutoHits = false;
     }
 

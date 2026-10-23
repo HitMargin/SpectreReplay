@@ -465,6 +465,20 @@ $knownDeviations = @(
     @{ Pat = 'TimeSpan.FromSeconds';    File = 'VideoRenderJob.cs'; Why = '同上：TearDown 的有界等待时长' }
     @{ Pat = 'System.Runtime.ExceptionServices.ExceptionDispatchInfo'; File = 'VideoRenderJob.cs'; Why = '同上：保留工作线程异常的原始堆栈（直接 throw 会把堆栈重置到重抛那一行）' }
     @{ Pat = 'movflags';                File = 'VideoEncoder.cs'; Why = '2026-10-19 去掉 +faststart：它要求 moov 前置，ffmpeg 只能把整个成片重写一遍搬过去；本地文件播放不需要它' }
+    # -- 2026-10-23 跳转到关卡后段后按键模拟消失 ----------------------------
+    # 上游 FastForward 的游标会被紧随其后的 Start() 清零（Start 里无条件
+    # PlayIndex/KeyEventIndex = 0），且两个查找循环「找不到目标就保留初值 0」。
+    # 大关卡事件上万，追平要几百帧（每帧上限 64），追平瞬间又被判定为已到尾部直接
+    # StopPlaying。修法：先 StartPlaying 再 FastForward；游标兜底到末尾；跳转后重建
+    # 仍按住的键。
+    @{ Pat = 'HitSnapshots.Count;';     File = 'ReplayPlayer.cs'; Why = '2026-10-23 跳转游标兜底到末尾（找不到目标时留在 0 会从头重灌整局）' }
+    @{ Pat = 'KeyEvents.Count;';        File = 'ReplayPlayer.cs'; Why = '同上：按键游标兜底到末尾，且放在边界检查外面（targetFloor 越界时也要兜底）' }
+    @{ Pat = 'ManagedInput.Restore';    File = 'ReplayPlayer.cs'; Why = '同上：跳转后重建仍按住的键（只恢复状态不写帧戳，避免凭空多出按下沿）' }
+    @{ Pat = 'Restore';                 File = 'ManagedInput.cs'; Why = '同上：只恢复按住状态、不写 PressedFrame 的入口' }
+    @{ Pat = 'CurrKeyState.Length';     File = 'ReplayPlayer.cs'; Why = '同上：跳转后把重建出的按住状态同步给 SendInput 路径' }
+    @{ Pat = 'ev.KeyCode';              File = 'ReplayPlayer.cs'; Why = '同上：重建跳转点时按录制数据里的键码还原' }
+    @{ Pat = 'ManagedInput.IsHeldVk';   File = 'ReplayPlayer.cs'; Why = '同上：读回重建后的按住状态' }
+    @{ Pat = 'Settings.key_code_convert'; File = 'ReplayPlayer.cs'; Why = '同上：重建时必须走同一张映射表，与 PumpInput 保持一致' }
     # -- 2026-10-19 时间钉扎的跨作业状态安全（用户报「取消渲染后下一次时钟全炸」）--
     # 上游两处都更脆：Uninstall 把撤不掉的 detour 连同列表一起丢掉（detour 仍挂在
     # Time.* 上但已无人知晓），且 PinnedDelta 用 Time.captureFramerate 做除数
