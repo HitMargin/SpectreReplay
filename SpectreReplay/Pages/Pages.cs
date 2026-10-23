@@ -508,6 +508,8 @@ namespace SpectreReplay.Pages
                     song = sn;
                 }
                 GUILayout.Label(Loc.F("playback.armed", song), Gui.LabelStyle);
+                // 这条提示只有在关卡加载后（Start_Rewind）才算得准，见 DrawFullRunBadge。
+                DrawFullRunBadge();
                 GUILayout.BeginHorizontal();
                 if (GUILayout.Button(Loc.T("playback.stop"), Gui.ButtonStyle,
                         GUILayout.Width(140f), GUILayout.Height(26f)))
@@ -674,16 +676,29 @@ namespace SpectreReplay.Pages
                 ? sn : "?";
             GUILayout.Space(2f);
             GUILayout.Label(Loc.F("playback.ready", song), Gui.NoteStyle, GUILayout.ExpandWidth(true));
-            // 全量回放（第 0 块录到本关最后一块）才能从任意位置起跑；
-            // 半截回放提前进关会被拒绝，玩家需要提前知道这一点。
-            // 和「已装好」那行同属状态描述，用同样的绿色强调。
-            if (IsFullRun)
-            {
-                Color prev = GUI.contentColor;
-                GUI.contentColor = Gui.OkCol;
-                GUILayout.Label(Loc.T("playback.fullrun"), Gui.LabelStyle, GUILayout.ExpandWidth(true));
-                GUI.contentColor = prev;
-            }
+            DrawFullRunBadge();
+        }
+
+        /// <summary>
+        /// 「全量回放 — 可任意位置开始」这一行。
+        ///
+        /// <para><b>为什么状态行（播放中）也要画。</b>这个标志要靠
+        /// <c>ADOBase.lm.listFloors.Count</c> 才能算出来，而设置页在关卡选择界面
+        /// 打开时 <c>lm</c> 是 null——从设置里点「打开关卡」进关的那一刻算不出来，
+        /// 于是装弹状态那行永远是空白。真正算准的时机是 <c>Start_Rewind</c> 之后的
+        /// <see cref="Features.Replay.Patch_Lifecycle"/>（那时关卡已加载），
+        /// 所以播放中必须也显示一次，否则玩家永远看不到这条提示。</para>
+        ///
+        /// <para>用 <see cref="Gui.OkCol"/> 与「已装好」同档：都是状态描述，不是警告。</para>
+        /// </summary>
+        private static void DrawFullRunBadge()
+        {
+            if (!IsFullRun)
+                return;
+            Color prev = GUI.contentColor;
+            GUI.contentColor = Gui.OkCol;
+            GUILayout.Label(Loc.T("playback.fullrun"), Gui.LabelStyle, GUILayout.ExpandWidth(true));
+            GUI.contentColor = prev;
         }
 
         /// <summary>

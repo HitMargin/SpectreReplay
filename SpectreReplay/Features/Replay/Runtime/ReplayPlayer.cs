@@ -226,6 +226,23 @@ internal static class ReplayPlayer
     private static double CurrentSongPosition(scrConductor conductor, out bool ready)
     {
         ready = false;
+
+        // **渲染期以钉扎时间轴为唯一时间源。**
+        //
+        // 渲染时画面侧（songposition_minusi 的 getter 被替换）与命中侧
+        // （Patch_PlayerControlUpdate 读同一个钉扎值）都按 VideoRender.PinnedSongPosition
+        // 推进，而这里原本按 dspTime 现场重算——那是**另一条时钟**。两条时钟的速率
+        // 只在渲染恰好等于实时时才一致；离线渲染慢于实时（编码/回读是瓶颈）时
+        // 二者越走越开，按键于是整体早于或晚于画面，听起来就是「回放慢拍子」。
+        //
+        // 三处（画面 / 命中 / 按键）必须同源，所以渲染期直接取钉扎值。
+        // 非渲染期 TimePinned 恒为假，原样走下面的游戏公式，行为不变。
+        if (Features.VideoRender.VideoRender.TryReadPinnedPosition(out double pinned))
+        {
+            ready = true;
+            return pinned;
+        }
+
         if (conductor == null || conductor.song == null) return 0.0;
 
         if (!GCS.d_oldConductor && !GCS.d_webglConductor)

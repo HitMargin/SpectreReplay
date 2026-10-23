@@ -382,6 +382,14 @@ $knownDeviations = @(
     @{ Pat = 'scrUIController.instance';             Why = '同上：scnGame 场景的难度选择器也要刷(上游只刷编辑器)' }
     @{ Pat = 'ui.difficultyText';                    Why = '同上：scrUIController.difficultyText(scrUIController.cs:427 同一套赋值)' }
     @{ Pat = 'ui.difficultyImage';                   Why = '同上：scrUIController.difficultyImage(scrUIController.cs:428)' }
+    # -- 2026-10-23 渲染时按键慢拍（用户报）------------------------------------
+    # 渲染期画面侧（songposition_minusi getter 被钉扎）与命中侧都按
+    # VideoRender.PinnedSongPosition 推进，而 ReplayPlayer.CurrentSongPosition
+    # 仍按 dspTime 现场重算——那是另一条时钟。离线渲染慢于实时时二者越走越开，
+    # 按键整体偏移，听起来就是「回放慢拍子」。三处必须同源，故渲染期直接取钉扎值。
+    # 上游没有视频渲染，不存在这条时钟，属于我们自己的机制。
+    @{ Pat = 'Features.VideoRender';                  File = 'ReplayPlayer.cs'; Why = '2026-10-23 渲染期按键注入改用钉扎时间轴，与画面/命中同源（原先按 dspTime 重算，慢渲染时整体偏移）。名字被 Compare-Object 切在点号处，故按文件限定的两段登记' }
+    @{ Pat = 'VideoRender.TryReadPinnedPosition';     File = 'ReplayPlayer.cs'; Why = '同上：钉扎时间轴的读取入口（两段合起来才是完整名字）' }
     # -- 2026-10-20 回放没开始时的可诊断性（用户报「等待回放开始超时」）--------
     # 上游每处拒绝都是 TriggerMessage(...); return;：通知几秒后消失、**不进日志**，
     # 于是「回放没开始」在 Player.log 里表现为什么都没发生。九条校验全这样，
