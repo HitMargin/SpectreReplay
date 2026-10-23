@@ -42,11 +42,9 @@ internal static class KeyViewerBridge
     ///
     /// **只有「程序集确实存在」时才会记下「本次会话已尝试」。**
     ///
-    /// 这一点很关键：本方法在每次回放开始时调用（ReplayPlayer.Start），而不是在
-    /// 模组初始化时。玩家可能先开一局回放、再让 KeyViewer 加载（模组管理器的手动
-    /// 启用、或加载顺序靠后）。若在「程序集还没出现」时就把会话标记置真，那之后
-    /// 的每一次回放都会直接 return，键位显示器永久失联且没有任何日志——
-    /// 表现就是「以前能用，现在怎么都不亮」。
+    /// 本方法在每次回放开始时调用（ReplayPlayer.Start），不是在模组初始化时。
+    /// KeyViewer 可能后加载，若在「程序集还没出现」时就把会话标记置真，
+    /// 之后的每次回放都会直接 return，键位显示器永久失联且没有日志。
     ///
     /// 反过来，程序集已在但类型/方法对不上（版本不兼容）就记下：那种情况重试
     /// 也不会变，只是每帧重复反射。
@@ -120,23 +118,10 @@ internal static class KeyViewerBridge
         if (__result) return;                       // 物理键已为真，无需覆盖
         if (!ManagedInput.Active) return;           // 只在回放期间生效
 
-        // **不能把 KeyCode 直接当虚拟键码用。**
-        // Unity 的字母键 Code 是小写 ASCII（KeyCode.A = 97），而 Win32 的 VK_A = 65；
-        // 两者只对空格、方向键等少数键恰好相同，字母键全部错位——
-        // 显示层会变成「按 A 亮 R」这种随机效果。
-        //
-        // 只需要做 **KeyCode → 原生 VK** 这一步：
-        //   KeyCode →(UnityKeyToSkyHookKey)→ KeyLabel
-        //           →(KeyLabelToNativeKeyCode)→ 原生 VK
-        //
-        // **绝不能在这里再过一次 Settings.key_code_convert。**
-        // `ManagedInput.Held[]` 存的是**已经过映射**的键码（ReplayPlayer 里
-        // `num = key_code_convert[ev.KeyCode]` 之后才 Note），显示层问的是
-        // 「这颗物理键此刻亮不亮」，如果再查一次同一张表，就是把正向表当反向表用：
-        // 映射 R→Space 时，问 R 得到 map[82]=32、`Held[32]` 为真 ⇒ **R 亮**；
-        // 问 Space 得到 map[32]=32（未限制时）或 0（限制时）⇒ Space 反而按表外被吞。
-        // 现象正是「我明明映射成了空格，回放却亮 R」；打开「只模拟列表中的键」后
-        // 表外全填 0，错的这一颗成了唯一还亮的，看起来就像映射根本没生效。
+        // Unity KeyCode 与 Win32 VK 只在少数键上同值（Space/Esc/Enter），
+        // 字母键与方向键全部错位，所以必须先换算。
+        // Held[] 存的是映射后的键码，这里不能再查 Settings.key_code_convert，
+        // 否则同一张表被当成反向表用，映射过的那颗键会顶着原键码亮。
         ushort index = ToNativeVk(code);
         if (index != 0 && ManagedInput.IsHeldVk(index)) __result = true;
     }

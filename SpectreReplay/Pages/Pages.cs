@@ -112,12 +112,8 @@ namespace SpectreReplay.Pages
                 OnGui.Note("record.note");
             });
 
-            // **键盘音三项：原版 Settings 有字段、ConfigManager 也落盘、
-            // Patch_Playback 也真的在消费，却没有任何一行界面能改。**
-            // 配置文件里那三项只可能是默认值——尤其 MicrophoneOffset 是**校准值**
-            // （毫秒）：键盘声整体偏早/偏晚时它是唯一的修正手段，玩家没得调，
-            // 只能去手改 Configs.json，而他从界面上看不出有这一项。
-            // 与 DrawRenderOptions 那次是同一个病：数据在、链路通、界面缺。
+            // 键盘音三项必须有界面：MicrophoneOffset 是毫秒级校准值，键盘声整体
+            // 偏早或偏晚时它是唯一的修正手段，不能让玩家去手改 Configs.json。
             Gui.Section("record.keybd", Gui.Accent, () =>
             {
                 OnGui.Row("record.keybd.record", KeybdSoundRecordActive,
@@ -506,9 +502,8 @@ namespace SpectreReplay.Pages
                 {
                     PlayActions.StopPlaying();
                 }
-                // 「停止」与「卸载」是两件事：停止只是不再注入按键，回放仍装着
-                // （可以随时重开这关再放）；卸载才是回到"什么都没装弹"。
-                // 以前只有停止、没有卸载，玩家想换回"直接打一局录制"只能重启游戏。
+                // 「停止」与「卸载」是两件事：停止只是不再注入按键，回放仍装着；
+                // 卸载才是完全退回未装弹状态。
                 DrawUnloadButton();
                 GUILayout.FlexibleSpace();
                 GUILayout.EndHorizontal();
@@ -517,11 +512,7 @@ namespace SpectreReplay.Pages
             if (is_recording)
             {
                 GUILayout.Label(Loc.T("status.recording"), Gui.LabelStyle);
-                // **这个按钮以前绑的是 record.cancelsavekey「取消保存」。**
-                // 那是另一个动作（CancelSave：丢掉这一局待存的数据），绑在这里的
-                // 后果是玩家想"停止录制"，看到的是"取消保存"——点了之后录制
-                // 确实也停了，但本局数据被标成不再保存，玩家以为自己只是停了
-                // 一下，回放却永远不出现。两个动作必须分开：这里是停止录制。
+                // 停止录制，不是取消保存。CancelSave 会丢掉本局待存数据，两者必须分开。
                 if (GUILayout.Button(Loc.T("record.stop"), Gui.ButtonStyle,
                         GUILayout.Width(140f), GUILayout.Height(26f)))
                 {
@@ -595,11 +586,8 @@ namespace SpectreReplay.Pages
             }
 
             GUILayout.Space(4f);
-            // 官方关卡：以前只显示一句提示就收尾，但那是个**错误结论**——
-            // 官方关卡不是"没有关卡"，而是关卡数据烤在游戏里、靠
-            // GCS.internalLevelName 选（形如 "0-0"/"AR-X"），不靠文件路径。
-            // 回放录制时已把那个名字存进 data.InternalLevelName，
-            // 所以这里能直达（见 OpenReplayLevel.GoOfficial）。
+            // 官方关卡没有谱面文件，关卡数据烤在游戏里，靠 GCS.internalLevelName
+            // 选（形如 "0-0"/"AR-X"）。录制时已把名字存进 data.InternalLevelName。
             bool official = levelPath.StartsWith("OfficialLevel", StringComparison.Ordinal)
                 || (data.IsOfficialLevel is bool iso && iso);
             if (official)
@@ -771,9 +759,7 @@ namespace SpectreReplay.Pages
         {
             Gui.Section("render.enable", Gui.Accent, () =>
             {
-                // **这一行以前绑的是 ReplayOn**（录制总开关）。后果有两层：
-                // 关掉"视频渲染"会把录制/回放一起关掉，而这一页又没有任何
-                // 能真正关掉渲染的开关。现在绑 RenderOn，与录制页彻底分开。
+                // 绑 RenderOn（视频渲染开关）。不能用 ReplayOn：那是录制/回放总开关。
                 OnGui.Row("render.on", RenderOn, v => { RenderOn = v; Commit(); });
                 Gui.Divider();
                 DrawRenderState();

@@ -250,9 +250,7 @@ internal static class HitMarginCompat
 
     /// <summary>
     /// 判定分档流水线（GetHitMargin 记录 / AddHit 落账）关心的命中集合。
-    /// 旧版等价于 <c>{VeryEarly, EarlyPerfect, Perfect, LatePerfect, VeryLate, Auto}</c>：
-    /// 旧游戏把中旋命中洗成 Perfect，因此中旋天然在内；r150 起中旋有独立成员，
-    /// 必须显式纳入，否则中旋命中不再进账。
+    /// r150 起中旋有独立成员，必须显式纳入，否则中旋命中不再进账。
     /// </summary>
     internal static bool IsJudgeTracked(HitMargin margin)
         => In(margin, TierCountedFamily) || margin == Auto || margin == Midspin;

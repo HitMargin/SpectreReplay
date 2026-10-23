@@ -16,8 +16,7 @@ internal static class ReplayDecoder
         using var r = new BinaryReader(ms);
 
         var magic = r.ReadUInt64();
-        // 只认一个魔数。旧容器（pre-Spectre 的 "CRPrcplp"）已不再支持——
-        // 认它等于把「用旧文件头解出新结构」这种半解析留着，坏了比不支持更难查。
+        // 只认一个魔数，其它文件头一律拒绝。
         if (magic != ReplayConstants.Magic)
             throw new InvalidDataException($"Unknown magic: 0x{magic:X}");
 

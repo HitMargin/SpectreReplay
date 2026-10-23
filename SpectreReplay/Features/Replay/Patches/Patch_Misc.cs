@@ -66,10 +66,8 @@ internal class Patch_CancelSaveKey
             && state != Patch_ConductorUpdate.StateWon) return;
         if (!PendingSave)
         {
-            // 原来这里直接 return：用户按下取消键却毫无反应，会以为按键没绑上或
-            // 功能坏了。提示放在这里而不是 CancelSave() 里——只有这一个调用方，
-            // 而它在调用前就判了 !PendingSave，CancelSave 里加提示永远走不到。
-            // 与"保存已取消"区分开：什么都没取消时不能说已取消。
+            // 提示放在这里而不是 CancelSave() 里：那个方法只在 PendingSave 为真时
+            // 才被调用，什么都没取消时不能说"已取消"。
             TriggerMessage(LocalizationManager.GetLocalizedText("note.cancel_save_none"), 3f, NotifType.Warning);
             return;
         }

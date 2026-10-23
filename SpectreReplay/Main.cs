@@ -32,8 +32,7 @@ namespace SpectreReplay
                 modEntry.OnHideGUI = Ui.OnGui.OnHide;
                 modEntry.OnSaveGUI = Ui.OnGui.OnSave;
                 // 退出时补上拖动滑条期间被推迟的落盘（见 Pages.Commit）。
-                // 没有这一下，"拖完滑条直接退游戏"= 这次改动白改，而现象是
-                // "设置保存会丢"——正是这一轮要摁死的第三个毛病，不能自己再开一个口子。
+                // 少了这一步，拖完滑条直接退游戏会丢掉这次改动。
                 Application.quitting -= OnQuitting;
                 Application.quitting += OnQuitting;
                 modEntry.OnToggle = OnToggle;

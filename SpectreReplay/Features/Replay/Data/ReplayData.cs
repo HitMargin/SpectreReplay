@@ -4,9 +4,7 @@ namespace SpectreReplay.Features.Replay;
 
 /// <summary>
 /// 回放运行时数据容器（录制 / 播放 / 保存共用）。
-/// 旧实现用 strings / bools / ints / doubles 四张字典按字符串键存字段：每次读写都要算字符串哈希，键名写错只能在运行时炸。
-/// 现在改为强类型自动属性——值类型用可空类型（int? / bool? / double?）等价表达旧版 ContainsKey 的"是否有值"语义，
-/// 字符串用 null 表示缺失；访问变成直接的属性读取，不再有哈希、装箱与键名拼写风险。
+/// 值类型字段用可空类型表示"是否有值"，字符串用 null 表示缺失。
 /// </summary>
 public sealed class ReplayData
 {

@@ -25,9 +25,8 @@ public static class SpectreState
     internal static class DataIntegrity
     {
         /// <summary>
-        /// 回放数据缺字段就返回 true（名字沿用旧版“Check 为真即有问题”的语义，调用点在 Patch_Lifecycle）。
-        /// 必需字段清单现在集中定义在 <see cref="ReplayData.FirstMissingRequiredKey"/>，
-        /// 不再用四张字符串键列表 + 字典 ContainsKey 逐项比对——键名写错在旧实现里是静默漏检。
+        /// 回放数据缺字段就返回 true（调用点在 Patch_Lifecycle）。
+        /// 必需字段清单见 <see cref="ReplayData.FirstMissingRequiredKey"/>。
         /// </summary>
         internal static bool Check()
         {
@@ -124,11 +123,8 @@ public static class SpectreState
         /// <summary>
         /// 跳到回放录自的**官方关卡**。
         ///
-        /// **为什么官方关卡能跳、而以前不能。** 以前这里只显示一句"官方关卡没有
-        /// 可打开的谱面文件"就收尾——理由是对的（官方关卡确实没有 .adofai 文件），
-        /// 但结论下错了：官方关卡不是"没有关卡"，而是**关卡数据烤在游戏里**，
-        /// 靠 <c>GCS.internalLevelName</c> 这个字符串（形如 "0-0"、"AR-X"）选，
-        /// 而不是靠文件路径。
+        /// 官方关卡没有 .adofai 文件，关卡数据烤在游戏里，靠
+        /// <c>GCS.internalLevelName</c>（形如 "0-0"、"AR-X"）选，不靠文件路径。
         ///
         /// **游戏自己的加载链**（反编译 Assembly-CSharp 核实）：
         ///  ① <c>GCS.internalLevelName</c> 非 null ⇒ <c>ADOBase.isInternalLevel</c> 为真；
@@ -251,16 +247,9 @@ public static class SpectreState
         }
 
         /// <summary>
-        /// 卸载当前回放，回到"什么都没装弹"的录制态。
+        /// 卸载当前回放，回到未装弹的录制态。
         ///
-        /// **为什么需要它。** <c>ReplayManager.UnLoadReplay</c> 一直在库里，
-        /// 但**零调用点**——界面上只有「回放」没有「卸载」，于是载入一份回放后
-        /// 就再也回不到未装弹状态：那颗「回放」按钮会一直高亮，
-        /// 玩家想换成"直接打一局录制"必须先重启游戏。
-        /// 这与"键盘音三项 / 回放驱动开关 / 保存目录"是同一族缺陷
-        /// （数据在、链路通、界面缺），只是这次连界面行都没有。
-        ///
-        /// **顺序不能改**（照上游 <c>SpectreUiPages.More.cs:40-44</c>）：
+        /// 顺序不能改（照上游 <c>SpectreUiPages.More.cs:40-44</c>）：
         /// ① 先 StopPlaying/StopRecording——回放/录制协程还在跑时清 data，
         ///    它们下一帧会去读已清空的 data，轻则报错重则卡死；
         /// ② 再 UnLoadReplay 换出 data 并清掉键盘音（<c>WavLoader.loaded_clip</c>

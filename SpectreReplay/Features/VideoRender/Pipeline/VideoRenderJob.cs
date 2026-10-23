@@ -244,9 +244,9 @@ internal sealed class VideoRenderJob : MonoBehaviour
             : 1f;
         VideoRender.SpeedOverrideArmed = true;
 
-        // **起点由玩家决定，不再强制跳到录像的 data.StartTile。**
-        // 需求是「从任意位置开始渲染」，所以起点取玩家点渲染时所在的砖块
-        // （requestedStartFloor，已在重启前抓取）。回放侧本来就支持任意起点：
+        // 起点由玩家决定，不强制跳到录像的 data.StartTile。
+        // 起点取玩家点渲染时所在的砖块（requestedStartFloor，已在重启前抓取）。
+        // 回放侧支持任意起点：
         // Patch_Lifecycle 用 GCS.checkpointNum 调 ReplayPlayer.FastForward
         // 对齐按键游标，并且已放开对应的区间校验。
         //
@@ -297,9 +297,8 @@ internal sealed class VideoRenderJob : MonoBehaviour
         mixdown = new VideoAudioTrack(wavPath, fps);
         if (mixdown.Dead)
         {
-            // 与本文件其余两处音频失败（L328/L352）保持同一写法：本地化标签 + 括号里的技术细节。
-            // 原来这里直接拼 "AudioRenderer: " 前缀，而 DeathReason 本身多数以 "AudioRenderer." 开头，
-            // 用户会看到 "AudioRenderer: AudioRenderer.Start returned false" 这样的重复英文。
+            // 本地化标签 + 括号里的技术细节，与本文件其余两处音频失败一致。
+            // DeathReason 本身多数以 "AudioRenderer." 开头，不能再拼同样的前缀。
             NotifyFailed(LocalizationManager.GetLocalizedText("rendervideo.audio_failed")
                 + " (" + mixdown.DeathReason + ")");
             yield break;

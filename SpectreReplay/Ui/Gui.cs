@@ -62,15 +62,14 @@ namespace SpectreReplay.Ui
         internal static Color Tint { get { return _dimDepth > 0 ? DimTint : Color.white; } }
 
         /// <summary>
-        /// 在禁用态里画一段内容：视觉压暗 + 内部控件不再响应。
+        /// 在禁用态里画一段内容：视觉压暗 + 内部控件不响应。
         ///
-        /// 压暗用 <c>GUI.color</c> 而不是逐控件改色：它会被之后画的**每一个**
-        /// 控件继承（含 GUILayout.Button 那类内建控件，它们的底色烘在贴图里，
-        /// 没有别的地方可以调），而自绘控件因为会覆盖 GUI.color，另由
-        /// <see cref="Tint"/> 显式补偿一次——两边各管一半，才不会一半灰一半亮。
+        /// 压暗用 <c>GUI.color</c>：它会被之后画的每个控件继承（含
+        /// GUILayout.Button 那类底色烘在贴图里的内建控件）。自绘控件会覆盖
+        /// GUI.color，另由 <see cref="Tint"/> 补偿一次。
         ///
-        /// **嵌套不再叠加**（depth 从 0 变 1 时才设色）：两处嵌套各乘一次
-        /// 0.62，第二层会黑到看不清。
+        /// 嵌套不叠加：只在 depth 从 0 变 1 时设色，否则两处各乘一次 0.62
+        /// 会黑到看不清。
         /// </summary>
         internal static void Dim(bool when, Action body)
         {
@@ -259,20 +258,12 @@ namespace SpectreReplay.Ui
             Fill(new Rect(head.x, head.y, 3f, head.height), accent);
             Text(new Rect(head.x + 11f, head.y, head.width - 18f, head.height), Loc.T(titleKey), TextCol, _bold);
 
-            // 卡片体的边框/左侧色条。**量法上的两个坑**（这条最难查：不报错，
-            // 只是描边画错位置，而"偏一点"很难联想到是 IMGUI 语义）：
-            //
-            //  坑 1：GetLastRect() 返回的是"最后一个**控件**的布局矩形"，
-            //        不是外层组的矩形，也不含组的 padding。原来的写法在
-            //        EndVertical() 之后调它，拿到的是 body 里最后一个子控件——
-            //        于是卡片边框画在那个子控件的位置上，卡片矮一截。
-            //  坑 2：紧跟在 Begin* 之后调 GetLastRect() 会直接抛
-            //        "You cannot call GetLast immediately after beginning a group"。
-            //
-            // 这里改成：进组前取一次全宽标尺记 y，body 跑完后再取一次。
-            // 两次都在**已经被布局过**的位置上调用，语义确定。
-            // 只取 y 不做额外 Space：GetRect 本身不吃布局高度（height=1 的标尺
-            // 是原有代码就在用的手法）。
+            // 卡片体边框/左侧色条。两个约束：
+            //   · GetLastRect() 返回最后一个**控件**的布局矩形，不是外层组的矩形，
+            //     也不含组的 padding；
+            //   · 紧跟 Begin* 之后调它会抛 "You cannot call GetLast immediately
+            //     after beginning a group"。
+            // 因此进组前取一次全宽标尺记 y，body 跑完后再取一次。
             float top = GUILayoutUtility.GetRect(1f, 1f, GUILayout.ExpandWidth(true)).y;
             float bottom = float.NaN;
 
@@ -284,8 +275,8 @@ namespace SpectreReplay.Ui
                 // 一整块死掉的区域，看不出层级。
                 Dim(!enabled, body);
 
-                // 这一行必须在 EndVertical 之前：此时整个组的高度已经定下来了。
-                // 放在 End 之后读到的会是最后一个子控件（坑 1）。
+                // 必须在 EndVertical 之前：此时整个组的高度已经定下来了。
+                // 放在 End 之后读到的会是最后一个子控件。
                 bottom = GUILayoutUtility.GetRect(1f, 1f, GUILayout.ExpandWidth(true)).yMax;
 
                 if (Event.current != null && Event.current.type == EventType.Repaint

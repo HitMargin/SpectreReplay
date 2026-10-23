@@ -166,9 +166,7 @@ internal static class ReplayManager
     }
 
     /// <summary>
-    /// 读回放的历史入口名。现在与 <see cref="LoadReplay"/> 完全同义——
-    /// 旧实现在这里先试 CRP2、再试新格式、最后回落到旧 JSON，三条路已合并成一条。
-    /// 保留这个名字是因为界面层（`Pages.cs`）与离屏套件都按它调用。
+    /// 与 <see cref="LoadReplay"/> 同义。保留此名是因为界面层与离屏套件按它调用。
     /// </summary>
     internal static bool LoadReplayAuto(out ReplayData replayData, string filePath, bool no_encryption = false)
         => LoadReplay(out replayData, filePath, no_encryption);

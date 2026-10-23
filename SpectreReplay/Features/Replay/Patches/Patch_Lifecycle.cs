@@ -122,8 +122,7 @@ internal class Patch_StartRewind
 
     private static void Reject(string userMessage, string detail = null)
     {
-        // 同一份原因既进日志、也留给渲染的等待阶段快速失败用。
-        // 只留最后一条：渲染只关心「这一轮为什么没起来」，历史没有意义。
+        // 同一份原因既进日志，也留给渲染的等待阶段快速失败用。只留最后一条。
         LastReject = userMessage + (string.IsNullOrEmpty(detail) ? "" : " (" + detail + ")");
         Debug.Log("[SpectreReplay] TryStartPlayback 拒绝: " + userMessage
             + (string.IsNullOrEmpty(detail) ? "" : " | " + detail));
@@ -241,12 +240,9 @@ internal class Patch_StartRewind
                         return;
                     }
                 }
-                // **不再要求与录像起点完全相等。** 回放按 GCS.checkpointNum 调
-                // ReplayPlayer.FastForward 对齐按键游标，本来就能从区间内任意砖块起跑；
-                // 强制相等等于禁止「从当前位置开始回放/渲染」。
-                //
-                // 唯一仍需拒绝的是**早于录像起点**：录像在 StartTile 之前没有任何
-                // 按键数据，从那里起跑只会空转到起点才接上，音画对不上。
+                // 不要求与录像起点相等：回放按 GCS.checkpointNum 调
+                // ReplayPlayer.FastForward 对齐按键游标，能从区间内任意砖块起跑。
+                // 只需拒绝**早于录像起点**：那之前没有按键数据，音画对不上。
                 else if (!IsFullRun && GCS.checkpointNum < data.StartTile)
                 {
                     // detail 只进日志（见 Reject 注释），所以用 ASCII 与其余几处

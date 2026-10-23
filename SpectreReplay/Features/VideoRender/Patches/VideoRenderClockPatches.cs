@@ -11,7 +11,7 @@ namespace SpectreReplay.Features.VideoRender;
 
 // ── 时间源替换 ─────────────────────────────────────────────────────────
 //
-// 不再拦截 songposition_minusi 的读写（输出端），而是把 scrConductor.Update /
+// 不拦截 songposition_minusi 的读写（输出端），而是把 scrConductor.Update /
 // scrCountdown.Update 方法体里的时间源调用整体替换：
 //   AudioSettings.dspTime       → RenderDspTime()    ← 确定性 DSP 时钟
 //   Time.unscaledTimeAsDouble   → RenderTimeD()      ← 确定性帧时间

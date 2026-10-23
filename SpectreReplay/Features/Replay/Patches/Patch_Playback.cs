@@ -66,9 +66,9 @@ internal class Patch_PlayerControlUpdate
             && !data.KeybdSoundStartTick.HasValue)
         {
             string filePath = Path.Combine(Settings.SavePath, "tmp.wav");
-            // 清掉上一次遗留的 tmp.wav：上次录音若因崩溃/强退而异常结束，tmp.wav 会留在
-            // 磁盘上（SaveFile 才会把它改名挂到回放上）。不清理的话，这次录到的声音会
-            // 被**上一次**的残留文件覆盖 —— 回放挂错键盘音，且用户极难察觉。
+            // 清掉遗留的 tmp.wav：若上次录音因崩溃或强退而异常结束，tmp.wav 会留在
+            // 磁盘上（SaveFile 才会把它改名挂到回放上）。不清理的话，这次录到的声音
+            // 会被残留文件覆盖，回放挂错键盘音且极难察觉。
             try
             {
                 if (File.Exists(filePath)) File.Delete(filePath);

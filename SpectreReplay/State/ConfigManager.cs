@@ -808,9 +808,7 @@ public static class ConfigManager
     private static string ToHex(Color c) => "#" + ColorUtility.ToHtmlStringRGBA(c); private static string[] ToHexArray(Color[] colors)
     {
         // null 兜底：调用方传 null 时返回 null，而不是在这里抛 NRE。
-        // 传 null 曾让整份设置写不下去（PlanetColorBase 那次）；这类"助手函数被
-        // null 打穿"的崩溃一律就地堵死。返回 null 对 JSON 是合法值，读回来仍是
-        // null，而各调用点本来就有 (x != null) 判断。
+        // 返回 null 对 JSON 是合法值，读回来仍是 null，各调用点本来就有判空。
         if (colors == null) return null;
         var arr = new string[colors.Length];
         for (int i = 0; i < colors.Length; i++)

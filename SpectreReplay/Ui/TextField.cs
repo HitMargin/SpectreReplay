@@ -175,11 +175,10 @@ namespace SpectreReplay.Ui
             Gui.Fill(box, hot && !Editing ? Gui.FieldBgHover : Gui.FieldBg);
             Gui.Frame(box, Editing ? Gui.FieldFocus : (hot ? Gui.FieldBorderHover : Gui.FieldBorder));
 
-            // 占位文案与正文**都要在裁剪里**。调用方传进来的是 Gui.LabelStyle，
-            // 它克隆自 GUI.skin.label，而 UMM 把 skin.label.clipping 改成了
-            // Overflow（decompiled :3509）——不剪的话，文案一长就一路画出框外，
-            // 盖住右边那一列（下拉与按钮都在那边）。占位文案有整句话，
-            // 恰恰是最容易超宽的那个，所以它也必须进来。
+            // 占位文案与正文都要在裁剪里。Gui.LabelStyle 克隆自 GUI.skin.label，
+            // 而 UMM 把 skin.label.clipping 改成了 Overflow（decompiled :3509），
+            // 不剪的话长文案会画出框外，盖住右边那一列。占位文案是整句话，
+            // 最容易超宽。
             if (Event.current == null || Event.current.type != EventType.Repaint)
             {
                 return;
@@ -398,8 +397,8 @@ namespace SpectreReplay.Ui
                 case KeyCode.V: if (ctrl) { Paste(); return true; } break;
             }
 
-            // 可打印字符。**必须排除 Ctrl 组合**（坑 2）：Ctrl+A 的 character
-            // 是 '\x01'，>= ' ' 不成立才挡得住，所以这个比较不能省。
+            // 可打印字符。必须排除 Ctrl 组合：Ctrl+A 的 character 是 '\x01'，
+            // 只有 >= ' ' 不成立才能挡住。
             char c = e.character;
             if (!ctrl && c >= ' ' && c != (char)127)
             {

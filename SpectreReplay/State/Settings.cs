@@ -361,10 +361,9 @@ public static class Settings
         }
         checklang();
         key_convert_list2array();
-        // **这里不能再有 `== 0xFFFF → num` 的兜底。**
-        // key_convert_list2array 已经保证末态没有 0xFFFF（限制模式填 0、
-        // 否则填恒等），多这一道会把限制模式的「0 = 不模拟」整个盖成恒等映射，
-        // 开关再次变成假的。历史上 LimitKey 就是被这两道兜底一起废掉的。
+        // 这里不能有 `== 0xFFFF → num` 的兜底：key_convert_list2array 已保证末态
+        // 没有 0xFFFF（限制模式填 0、否则填恒等），多一道会把「0 = 不模拟」
+        // 整个盖成恒等映射。
         SpectreState.save_button = (KeyCode)SaveButton;
         SpectreState.cancel_save_button = (KeyCode)CancelSaveButton;
     }

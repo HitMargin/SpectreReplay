@@ -38,9 +38,8 @@ internal static class ReplayCrypto
     private const int MinIterations = 1000;
     private const int MaxIterations = 1000000;
 
-    // 口令材料。**不是密钥本身**：它要经 PBKDF2 + 每文件随机盐才变成密钥。
-    // 分两段拼接是为了不再出现旧格式那种"一个短单词直接当种子"的形态。
-    // 串里的 "v2" 是历史命名，**不要改**：改了 v2 存量的密钥就全变了。
+    // 口令材料，不是密钥本身：要经 PBKDF2 + 每文件随机盐才变成密钥。
+    // 串里的 "v2" 不能改：改了已有文件的密钥就全变了。
     private const string Passphrase =
         "SpectreReplay/replay-container/v2|7f3a91c2d8e04b6a|9c5e17d3ab28f064|replay";
 

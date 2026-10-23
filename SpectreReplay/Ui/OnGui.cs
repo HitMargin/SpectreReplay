@@ -70,8 +70,8 @@ namespace SpectreReplay.Ui
             // 关窗口时提交文本框里还没回车的内容——窗口一关，玩家看不到任何
             // "未保存"的提示，不提交就等于白打。顺手落一次盘，与 Save 同语义。
             CommitText();
-            // 拖动滑条时落盘被推迟了（见 Pages.Commit）。FlushConfig 是统一收口，
-            // 它会强制补上——否则"松手前就关窗"= 这次拖动白改。
+            // 拖动滑条时落盘被推迟了（见 Pages.Commit）。FlushConfig 统一收口，
+            // 它会强制补上，否则松手前关窗会丢掉这次修改。
             FlushConfig();
         }
 
@@ -726,8 +726,8 @@ namespace SpectreReplay.Ui
         internal static void Button(string labelKey, Action onClick, bool wide, bool enabled = true)
         {
             GUILayout.BeginHorizontal();
-            // 同上：wide 用专门的强调样式，不再靠 GUI.backgroundColor 染色
-            // （乘算会把贴图里烘好的底色再压一遍）。
+            // wide 用专门的强调样式：GUI.backgroundColor 是乘算，会把贴图里
+            // 烘好的底色再压一遍。
             Rect bt = GUILayoutUtility.GetRect(wide ? 220f : 140f, 28f,
                 GUILayout.Width(wide ? 220f : 140f), GUILayout.Height(28f));
             Gui.Tip(bt, labelKey);
