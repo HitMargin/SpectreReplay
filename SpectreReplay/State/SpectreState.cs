@@ -323,28 +323,50 @@ public static class SpectreState
     internal static Difficulty? CachedDifficulty;
 
     /// <summary>
-    /// 把编辑器里的难度标签刷新成当前 <see cref="GCS.difficulty"/>。
+    /// 把界面上的难度显示刷新成当前 <see cref="GCS.difficulty"/>。
     ///
-    /// 游戏自己的 <c>EditorDifficultySelector.UpdateDifficultyDisplay</c> 是 private，
-    /// 但它的两个显示字段（<c>editorDifficultyText</c> / <c>bullseyeImage</c>）是 public，
-    /// 照同样的写法刷一遍即可。不刷的话：难度已经被我们改了，界面上还显示旧值，
-    /// 玩家会以为「判定模式没对齐」。
+    /// <para><b>两个场景各有一份显示，都要刷。</b>编辑器里是
+    /// <c>EditorDifficultySelector</c>（<c>editorDifficultyText</c> / <c>bullseyeImage</c>），
+    /// 而 <c>scnGame</c> 开局前那颗难度选择器是 <c>scrUIController</c> 上的
+    /// <c>difficultyText</c> / <c>difficultyImage</c>。只刷编辑器那一份的话，
+    /// 回放结束把难度还原之后，关卡选择界面上显示的还是回放时的难度——
+    /// 玩家会以为自己的判定模式没还原。</para>
+    ///
+    /// <para><b>为什么不直接调 <c>ShowDifficultyContainer</c>。</b>它内部会走
+    /// <c>UpdateDifficultyUI</c>，而那个方法在 <c>ShowNormalAndStrict</c> /
+    /// <c>ShowLenientAndNormal</c> 两种 UI 模式下会把 Lenient/Strict **改写**成别的档位，
+    /// 并回写 <see cref="GCS.difficulty"/>——我们刚还原的值会被它当场改掉。
+    /// 所以只抄它的赋值方式刷显示，不碰状态机。</para>
     /// </summary>
-    internal static void SyncEditorDifficultyLabel()
+    internal static void SyncDifficultyLabel()
     {
-        var selector = scnEditor.instance != null ? scnEditor.instance.editorDifficultySelector : null;
-        if (selector == null) return;
         try
         {
-            if (selector.editorDifficultyText != null)
-                selector.editorDifficultyText.text = RDString.Get("enum.Difficulty." + GCS.difficulty);
-            if (selector.bullseyeImage != null)
-                selector.bullseyeImage.sprite = RDConstants.data.bullseyeSprites[(int)GCS.difficulty];
+            // 编辑器：难度标签 + 靶心图
+            var editorSelector = scnEditor.instance != null
+                ? scnEditor.instance.editorDifficultySelector : null;
+            if (editorSelector != null)
+            {
+                if (editorSelector.editorDifficultyText != null)
+                    editorSelector.editorDifficultyText.text = RDString.Get("enum.Difficulty." + GCS.difficulty);
+                if (editorSelector.bullseyeImage != null)
+                    editorSelector.bullseyeImage.sprite = RDConstants.data.bullseyeSprites[(int)GCS.difficulty];
+            }
+
+            // scnGame：开局前那颗难度选择器（scrUIController.cs:427-428 同一套赋值）
+            var ui = scrUIController.instance;
+            if (ui != null)
+            {
+                if (ui.difficultyText != null)
+                    ui.difficultyText.text = RDString.Get("enum.Difficulty." + GCS.difficulty);
+                if (ui.difficultyImage != null)
+                    ui.difficultyImage.sprite = RDConstants.data.bullseyeSprites[(int)GCS.difficulty];
+            }
         }
         catch (System.Exception ex)
         {
             // 纯显示：刷不上不该影响回放本身
-            Debug.Log("[SpectreReplay] 难度标签刷新失败: " + ex.Message);
+            Debug.Log("[SpectreReplay] 难度显示刷新失败: " + ex.Message);
         }
     }
 
@@ -686,11 +708,13 @@ public static class SpectreState
         var tracker = scrController.instance?.playerOne?.marginTracker;
         if (tracker == null || tracker.hitMargins == null || tracker.hitMargins.Count == 0)
             return 0.0;
-        // 权重表按名解析、逐版本复刻（旧版下标与 r150 重排后的下标由兼容层各自持有）：
+        // 分子与分母都交给兼容层：权重按名解析、逐版本复刻
         //   旧版：1.0×{Perfect,Auto} + 0.75×{Early,LatePerfect} + 0.4×{VeryEarly,VeryLate} + 0.2×{TooEarly,TooLate}
         //   r150：1.0×{XPerfect,PerfectMinus,PerfectPlus} + … + 0.2×{TooEarly,TooLate,FailedFloor}，Auto 不计入
-        double numerator = HitMarginCompat.XAccNumerator(HitMarginCounts);
-        return numerator / (double)tracker.hitMargins.Count;
+        //
+        // **分母不是 hitMargins.Count。** 后者含中旋 / 多压 / Auto 等无权重档位，
+        // 拿它做分母会把全完美局算成 96%。官方式子是 playerHitMarginCount + FailedFloor。
+        return HitMarginCompat.XAcc(HitMarginCounts);
     }
 
     public static double ComputePercentComplete(int curr_floor)

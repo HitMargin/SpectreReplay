@@ -391,6 +391,18 @@ namespace SpectreReplay.Pages
                 }
                 data = loaded;
                 _loadedPath = path;
+                // 全量回放 = 从第 0 块录到本关最后一块。**必须现算**：这个标志
+                // 原本只在关卡启动时（Patch_Lifecycle）赋值，而设置页载入回放时
+                // 还没进关，读到的永远是上一次的残留值。
+                //
+                // 关卡没加载时 ADOBase.lm 为 null，此时算不出来 → 保持 false，
+                // 宁可少显示一条提示，也不要对半截回放谎称"可任意位置开始"。
+                IsFullRun = data.StartTile.HasValue && data.EndTile.HasValue
+                    && data.StartTile == 0
+                    && ADOBase.lm != null
+                    && ADOBase.lm.listFloors != null
+                    && ADOBase.lm.listFloors.Count > 0
+                    && data.EndTile == ADOBase.lm.listFloors.Count - 1;
                 PlayActions.SwitchToPlayMode();
                 Status.Say(PlayMode && !is_playing ? "status.pending_replay" : "status.loaded",
                     Path.GetFileNameWithoutExtension(path));
@@ -654,6 +666,16 @@ namespace SpectreReplay.Pages
                 ? sn : "?";
             GUILayout.Space(2f);
             GUILayout.Label(Loc.F("playback.ready", song), Gui.NoteStyle, GUILayout.ExpandWidth(true));
+            // 全量回放（第 0 块录到本关最后一块）才能从任意位置起跑；
+            // 半截回放提前进关会被拒绝，玩家需要提前知道这一点。
+            // 和「已装好」那行同属状态描述，用同样的绿色强调。
+            if (IsFullRun)
+            {
+                Color prev = GUI.contentColor;
+                GUI.contentColor = Gui.OkCol;
+                GUILayout.Label(Loc.T("playback.fullrun"), Gui.LabelStyle, GUILayout.ExpandWidth(true));
+                GUI.contentColor = prev;
+            }
         }
 
         /// <summary>

@@ -49,6 +49,15 @@ internal sealed class ReplayFileInfo
     /// <summary>普通 Accuracy（由判定分布按官方公式还原；无判定数据时为 -1）。</summary>
     internal double Accuracy;
 
+    /// <summary>
+    /// X-Accuracy。**优先由判定分布按官方公式还原**，取不到才退回文件里存的那个值。
+    ///
+    /// <para>文件里存的值是录制时算的，早期版本的分母用了 <c>hitMargins.Count</c>，
+    /// 把中旋 / 多压这类无权重档位也算了进去——一局全完美会被显示成 96%。
+    /// 判定分布在文件里，本地重算即可纠正，不用让玩家重录。</para>
+    /// </summary>
+    internal double Xacc;
+
     internal int KeyCount;
     internal int HitCount;
     /// <summary>回放时长（秒，按键事件的最后时刻）。取不到就是 0。</summary>
@@ -140,6 +149,10 @@ internal sealed class ReplayFileInfo
         info.DurationSeconds = LastKeyPosition(data);
         info.JudgmentCounts = ParseJudgments(data.JudgmentList ?? "");
         info.Accuracy = SpectreReplay.Features.Compat.HitMarginCompat.Accuracy(info.JudgmentCounts);
+        // 判定分布缺失（老文件）时才信文件里存的那个数：它是录制时的口径，
+        // 早期版本分母错、全完美局会显示成 96%。能重算就重算。
+        double recomputed = SpectreReplay.Features.Compat.HitMarginCompat.XAcc(info.JudgmentCounts);
+        info.Xacc = recomputed >= 0.0 ? recomputed : info.PercentXacc;
         return info;
     }
 

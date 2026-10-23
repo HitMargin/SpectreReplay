@@ -77,7 +77,7 @@ internal static class ReplayPlayer
         {
             GCS.difficulty = CachedDifficulty.Value;
             CachedDifficulty = null;
-            SyncEditorDifficultyLabel();
+            SyncDifficultyLabel();
         }
         IgnoreMarkFail = false;
         SyncEditorNoFailButton();

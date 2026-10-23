@@ -360,6 +360,28 @@ $knownDeviations = @(
     @{ Pat = 'SumSet';                               Why = '同上：按名解析的判定集合求和助手' }
     @{ Pat = 'FailedFloorFamily';                    Why = '同上：官方从 Accuracy 里扣 FailedFloor 的 1e-4/个' }
     @{ Pat = 'counts.Length';                        Why = '同上：判定桶数组的长度(越界保护)' }
+    # -- 2026-10-23 修 X-ACC 分母（用户报「完美无瑕却显示 96.23%」）------------
+    # 上游 ComputePercentXaccVanilla 用 tracker.hitMargins.Count 做分母，那是「全部
+    # 判定条数」，含中旋/多压/Auto 这些无 xacc 权重的档位；而游戏自己的结算公式
+    # （scrMarginTracker.CalculatePercentAcc）用的是 playerHitMarginCount + FailedFloor。
+    # 上游那个写法在回放详情里会把「1200 完美 + 47 中旋」算成 96.23%。我们按官方
+    # 分母重算，判定分布就在文件里，老回放也能纠正，不用重录。
+    @{ Pat = 'XAccDenominator';                      Why = '2026-10-23 X-ACC 分母改官方口径(playerHitMarginCount + FailedFloor)，不再用 hitMargins.Count' }
+    @{ Pat = 'XAcc(';                                Why = '同上：分子/分母都收进兼容层，回放详情与文件名共用同一口径' }
+    @{ Pat = 'pair.Key';                             Why = '同上：按权重表遍历时取枚举值索引(与上游 GetHitsWithWeights 的 LINQ 等价)' }
+    # -- 2026-10-23 回放结束后 scnGame 难度选择器不还原（用户报）----------------
+    # 上游只有在编辑器里改难度这一条路径，没有「回放临时套用难度再还原」的需求，
+    # 所以它只刷 EditorDifficultySelector。我们必须两个场景都刷：Stop() 还原
+    # GCS.difficulty 之后，scnGame 那颗选择器（scrUIController）上显示的还是
+    # 回放时的难度，玩家会以为判定模式没还原。
+    # **不调 ShowDifficultyContainer**：它内部的 UpdateDifficultyUI 会在
+    # ShowNormalAndStrict / ShowLenientAndNormal 下改写难度并回写 GCS，
+    # 把我们刚还原的值当场改掉。只抄它的赋值方式刷显示。
+    @{ Pat = 'editorSelector.editorDifficultyText';  Why = '2026-10-23 难度显示刷新：编辑器侧沿用上游字段' }
+    @{ Pat = 'editorSelector.bullseyeImage';         Why = '同上：编辑器侧靶心图' }
+    @{ Pat = 'scrUIController.instance';             Why = '同上：scnGame 场景的难度选择器也要刷(上游只刷编辑器)' }
+    @{ Pat = 'ui.difficultyText';                    Why = '同上：scrUIController.difficultyText(scrUIController.cs:427 同一套赋值)' }
+    @{ Pat = 'ui.difficultyImage';                   Why = '同上：scrUIController.difficultyImage(scrUIController.cs:428)' }
     # -- 2026-10-20 回放没开始时的可诊断性（用户报「等待回放开始超时」）--------
     # 上游每处拒绝都是 TriggerMessage(...); return;：通知几秒后消失、**不进日志**，
     # 于是「回放没开始」在 Player.log 里表现为什么都没发生。九条校验全这样，

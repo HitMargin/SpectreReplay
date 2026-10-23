@@ -244,7 +244,7 @@ namespace SpectreReplay.Pages
 
         private static string XaccText(ReplayFileInfo info)
         {
-            double x = info.PercentXacc;
+            double x = info.Xacc;
             return x > 0.0 ? (x * 100.0).ToString("0.00", CultureInfo.InvariantCulture) + "%"
                         : Loc.T("playback.info.na");
         }

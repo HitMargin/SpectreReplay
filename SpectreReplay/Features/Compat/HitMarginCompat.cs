@@ -322,6 +322,46 @@ internal static class HitMarginCompat
     }
 
     /// <summary>
+    /// 原版 xacc 分母：<c>playerHitMarginCount + GetHits(FailedFloor)</c>
+    /// （scrMarginTracker.cs 的 <c>CalculatePercentAcc</c>）。
+    ///
+    /// <para><b>不能用 <c>hitMargins.Count</c>。</b>那是「全部判定条数」，包含
+    /// 中旋 / 多压 / Auto 这些**没有 xacc 权重**的档位。用它会把这些档位算进
+    /// 分母：一局 1200 个完美 + 47 个中旋会算成 1200/1247 = 96.23%，
+    /// 而官方答案是 1200/1200 = 100%。「完美无瑕却显示 96%」就是这么来的。</para>
+    ///
+    /// <para>末尾再 + FailedFloor 是**官方式子本身**的重复计数（FailedFloor 带 0.2
+    /// 权重、已进 playerHitMarginCount，官方仍再加一次）。照抄而不"化简"，
+    /// 否则与游戏结算面板对不上。</para>
+    /// </summary>
+    internal static double XAccDenominator(int[] counts)
+    {
+        if (counts == null)
+            return 0.0;
+        double sum = 0.0;
+        foreach (var pair in XAccWeights)
+        {
+            int index = (int)pair.Key;
+            if ((uint)index < (uint)counts.Length)
+                sum += counts[index];
+        }
+
+        return sum + SumSet(counts, FailedFloorFamily);
+    }
+
+    /// <summary>
+    /// 原版 xacc 百分比。分母为 0 返回 -1（含义是"这份回放没有判定数据"，
+    /// 界面应显示占位符而不是 0.00%）。
+    /// </summary>
+    internal static double XAcc(int[] counts)
+    {
+        double denominator = XAccDenominator(counts);
+        if (denominator <= 0.0)
+            return -1.0;
+        return XAccNumerator(counts) / denominator;
+    }
+
+    /// <summary>
     /// 原版 Accuracy（与 <c>scrMarginTracker.CalculatePercentAcc</c> 同式）。
     ///
     /// <para><b>跟 xacc 不是一回事。</b>xacc 是按判定档位加权的"误差分"；

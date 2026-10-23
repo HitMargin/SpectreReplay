@@ -220,7 +220,7 @@ internal class Patch_StartRewind
                         GCS.difficulty = storedDifficulty;
                         Debug.Log("[SpectreReplay] 判定模式自动对齐: " + CachedDifficulty
                             + " → " + storedDifficulty + "（回放结束后还原）");
-                        SyncEditorDifficultyLabel();
+                        SyncDifficultyLabel();
                     }
                     else
                     {
