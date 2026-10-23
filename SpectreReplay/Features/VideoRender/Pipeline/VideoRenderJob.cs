@@ -1117,6 +1117,26 @@ internal sealed class VideoRenderJob : MonoBehaviour
         try { SpectreState.PlayActions.StopPlaying(); }
         catch (Exception ex) { Debug.LogException(ex); }
 
+        // **还必须退出「回放已装弹」这个模式本身。**
+        //
+        // 渲染期间 `PlayMode` 必须是 true——关卡重开后靠
+        // <see cref="Patch_StartRewind.Postfix"/> 里那句 `if (PlayMode) TryStartPlayback()`
+        // 自动接管回放。但此前收尾只停了回放（is_playing=false），**没有把
+        // PlayMode 复位**，而这个标志唯一的复位点是 SwitchToRecordMode()
+        // （启动流程与「卸载回放」按钮）。
+        //
+        // 后果是渲染结束后仍处于「回放已装弹、进关即自动播放」状态：玩家之后
+        // **每进一个关卡都会立刻被回放接管**——键盘没反应、关卡自己跑完、
+        // 然后跳到别的场景。玩家只有手动卸载回放才能恢复正常，而那是绕过，
+        // 不是正确行为（2026-10-23 实测询问：「必须要把回放卸载掉才能退出？」）。
+        //
+        // 换到录制态（而不是清空 data）：回放文件仍留在界面上，随时可以再渲染
+        // 或手动播放，只是不再「进关即接管」。
+        try { SpectreState.PlayActions.SwitchToRecordMode(); }
+        catch (Exception ex) { Debug.LogException(ex); }
+        Debug.Log("[SpectreReplay] render teardown: playback mode released "
+            + "(PlayMode=" + SpectreState.PlayMode + " RecordMode=" + SpectreState.RecordMode + ")");
+
         // **还要把游戏的输入源切回真实键盘。** 这一步与上面的 StopPlaying 是两件事：
         // 前者让我们的 RDInput 覆盖失效，后者恢复游戏自己的输入源标志。
         //
