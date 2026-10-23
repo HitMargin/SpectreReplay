@@ -296,9 +296,18 @@ internal class Patch_StartRewind
             scrController.instance.noFail = true;
             SyncEditorNoFailButton();
 
+            // 全量回放 = 第 0 块录到本关最后一块。**这里必须打日志**：这个标志
+            // 依赖关卡数据，而它在「先装弹、后进关」与「已在关卡里再装弹」两条
+            // 路径上取到的值可能不同——不打出来就只能靠猜。
+            int fullRunTotal = ADOBase.lm != null && ADOBase.lm.listFloors != null
+                ? ADOBase.lm.listFloors.Count : -1;
             IsFullRun = data.StartTile.HasValue && data.EndTile.HasValue
                 && data.StartTile == 0
-                && data.EndTile == ADOBase.lm.listFloors.Count - 1;
+                && fullRunTotal > 0
+                && data.EndTile == fullRunTotal - 1;
+            Debug.Log("[SpectreReplay] fullrun 判定: StartTile=" + data.StartTile
+                + " EndTile=" + data.EndTile + " listFloors=" + fullRunTotal
+                + " => IsFullRun=" + IsFullRun + " scene=" + SceneManager.GetActiveScene().name);
 
             // **必须先 StartPlaying 再 FastForward。**
             // ReplayPlayer.Start() 会把 PlayIndex / KeyEventIndex 清零；反过来调的话，

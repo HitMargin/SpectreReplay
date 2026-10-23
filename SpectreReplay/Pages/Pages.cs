@@ -680,19 +680,51 @@ namespace SpectreReplay.Pages
         }
 
         /// <summary>
-        /// 「全量回放 — 可任意位置开始」这一行。
+        /// 重算「全量回放」标志。判定 = 从第 0 块起、终点是本关最后一块：
+        /// 起点与终点来自回放文件，**本关总块数只能问当前关卡**。
         ///
-        /// <para><b>为什么状态行（播放中）也要画。</b>这个标志要靠
-        /// <c>ADOBase.lm.listFloors.Count</c> 才能算出来，而设置页在关卡选择界面
-        /// 打开时 <c>lm</c> 是 null——从设置里点「打开关卡」进关的那一刻算不出来，
-        /// 于是装弹状态那行永远是空白。真正算准的时机是 <c>Start_Rewind</c> 之后的
-        /// <see cref="Features.Replay.Patch_Lifecycle"/>（那时关卡已加载），
-        /// 所以播放中必须也显示一次，否则玩家永远看不到这条提示。</para>
+        /// <para><b>为什么每次绘制都重算，而不是只信启动时那一次赋值。</b>
+        /// 这个标志依赖 <c>ADOBase.lm.listFloors</c>，而它只在关卡加载后存在：
+        /// 从设置页「打开关卡」进关的路径上，装弹那一刻 <c>lm</c> 还是 null，
+        /// 算不出来；<see cref="Features.Replay.Patch_Lifecycle"/> 里那次赋值又排在
+        /// 一长串校验之后，任一校验提前返回就漏掉了。所以绘制时按活数据再算一次
+        /// ——只要关卡在，结论就一定正确。</para>
         ///
-        /// <para>用 <see cref="Gui.OkCol"/> 与「已装好」同档：都是状态描述，不是警告。</para>
+        /// <para>关卡没加载（<c>lm</c> 为 null 或还没有地板）时**保持原值**：
+        /// 此时算不出来，硬判 false 会把已经算对的结论擦掉。</para>
         /// </summary>
+        private static void RefreshFullRun()
+        {
+            if (data == null || !data.StartTile.HasValue || !data.EndTile.HasValue)
+            {
+                IsFullRun = false;
+                return;
+            }
+            if (data.StartTile != 0)
+            {
+                IsFullRun = false;
+                return;
+            }
+            int total = 0;
+            try
+            {
+                if (ADOBase.lm != null && ADOBase.lm.listFloors != null)
+                    total = ADOBase.lm.listFloors.Count;
+            }
+            catch
+            {
+                total = 0;
+            }
+            if (total <= 0)
+                return; // 关卡还没加载：算不出来，别把已有结论擦掉
+            IsFullRun = data.EndTile == total - 1;
+        }
+
         private static void DrawFullRunBadge()
         {
+            // 每次画的时候再算一次：这个标志依赖关卡数据，而关卡数据在
+            // 「先装弹、后进关」的流程里，装弹那一刻还不存在。
+            RefreshFullRun();
             if (!IsFullRun)
                 return;
             Color prev = GUI.contentColor;

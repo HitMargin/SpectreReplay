@@ -337,6 +337,10 @@ internal sealed class VideoRenderJob : MonoBehaviour
         clockSeconds = 0.0;
         delivered = 0;
         VideoRender.Current.FramesTotal = EstimateFrames(fps, tailSeconds);
+        // 回放终点的绝对歌曲时间。**结束判定必须同时看它**，不能只等
+        // is_playing 翻假——见循环里 endFrame 的说明。
+        double replayEndSong = ReplayEndSongPosition();
+        if (replayEndSong <= 0.0) replayEndSong = double.MaxValue;
         captureClock = System.Diagnostics.Stopwatch.StartNew();
         VideoRender.Current.Detail = Path.GetFileName(outputPath);
         SetPhase(VideoRender.Phase.Capturing, "rendervideo.stage.rendering", VideoRender.Current.Detail);
@@ -345,7 +349,18 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // （见 Patch_StartRewind → NotifyPlaybackRestarted）。
         VideoRender.CaptureInProgress = true;
         int frameIndex = 0;
-        int hardStop = VideoRender.Current.FramesTotal + 60 * fps;
+        // hardStop 是防死循环的保险丝，**不能比「跑到回放终点 + 60s」更紧**。
+        // 原先只按 FramesTotal 算，而 FramesTotal 是估算值：估短了就会在
+        // 正常收尾前把渲染判成 overrun 失败。时间轴终点是硬事实，以它为准。
+        double endSongForLimit = ReplayEndSongPosition();
+        double anchorForLimit = anchorSongPosition;
+        double pitchForLimit = conductor != null && conductor.song != null
+            ? Math.Abs(conductor.song.pitch) : 1.0;
+        if (pitchForLimit < 0.01) pitchForLimit = 1.0;
+        int timelineStop = endSongForLimit > anchorForLimit
+            ? Mathf.CeilToInt((float)((endSongForLimit - anchorForLimit) / pitchForLimit * fps))
+            : 0;
+        int hardStop = Math.Max(VideoRender.Current.FramesTotal, timelineStop) + 60 * fps;
         int tailFrames = Mathf.CeilToInt(tailSeconds * fps);
         int endFrame = -1;
         bool wasPlaying = SpectreState.is_playing;
@@ -480,6 +495,25 @@ internal sealed class VideoRenderJob : MonoBehaviour
                 Debug.Log("[SpectreReplay] replay exhausted at frame " + frameIndex + ", tail to " + endFrame);
             }
             wasPlaying = playing;
+
+            // ── 时间轴终点兜底（**正常收尾的唯一可靠出口**）────────────────
+            //
+            // 上面那个 is_playing 翻假依赖 PumpInput 把最后一条事件灌完，而
+            // PumpInput 挂在 PlayerControl_Update / UpdateInput 上——关卡**通关后
+            // 这两条链就不再运行**（进结算态）。于是 is_playing 永远不会翻假，
+            // 循环一路跑到 hardStop，用户看到的就是「进度 100% 了一直不结束、
+            // 也不保存」。2026-10-23 实测：预估 19831 帧，实际跑到 23526 帧
+            // 仍未收尾，最后靠手动停止键才保存。
+            //
+            // 所以按**时间轴**判定：钉扎位置越过回放终点（+尾巴）就收尾。
+            // 这个判据不依赖任何 Update 链是否还在跑。
+            if (endFrame < 0 && VideoRender.PinnedSongPosition >= replayEndSong)
+            {
+                endFrame = frameIndex + tailFrames;
+                Debug.Log("[SpectreReplay] replay reached end of timeline at frame " + frameIndex
+                    + " (song=" + VideoRender.PinnedSongPosition.ToString("0.000")
+                    + "s, end=" + replayEndSong.ToString("0.000") + "s), tail to " + endFrame);
+            }
 
             if (endFrame >= 0 && frameIndex >= endFrame)
                 break;
@@ -818,17 +852,43 @@ internal sealed class VideoRenderJob : MonoBehaviour
         return Input.GetKeyDown((KeyCode)key);
     }
 
+    /// <summary>
+    /// 回放终点的歌曲时间（绝对秒）。取两者较大值：
+    ///   ① 谱面终点砖的 <c>entryTime</c>（<c>data.EndTile</c>，缺省用最后一砖）；
+    ///   ② 最后一个按键事件的 <c>SongPosition</c>。
+    ///
+    /// <para><b>② 不能省。</b>长条/间奏的尾巴不在 <c>entryTime</c> 里，而
+    /// <c>EndTile</c> 也可能早于实际最后按键。只按 ① 算会让终点偏早——
+    /// 这正是「进度条 100% 了还在渲染」的成因之一。</para>
+    /// </summary>
+    private static double ReplayEndSongPosition()
+    {
+        double songEnd = 0.0;
+        try
+        {
+            var floors = ADOBase.lm?.listFloors;
+            if (floors != null && floors.Count > 1)
+            {
+                int end = floors.Count - 1;
+                if (SpectreState.data.EndTile is int et && et >= 0 && et < floors.Count)
+                    end = et;
+                songEnd = floors[end].entryTime;
+            }
+            var keys = SpectreState.data?.KeyEvents;
+            if (keys != null && keys.Count > 0)
+                songEnd = Math.Max(songEnd, keys[keys.Count - 1].SongPosition);
+        }
+        catch
+        {
+            // 纯估算：取不到就沿用已有值
+        }
+        return songEnd;
+    }
+
     private int EstimateFrames(int fps, float tailSeconds)
     {
-        double songEnd = 60.0;
-        var floors = ADOBase.lm?.listFloors;
-        if (floors != null && floors.Count > 1)
-        {
-            int end = floors.Count - 1;
-            if (SpectreState.data.EndTile is int et && et >= 0 && et < floors.Count)
-                end = et;
-            songEnd = floors[end].entryTime;
-        }
+        double songEnd = ReplayEndSongPosition();
+        if (songEnd <= 0.0) songEnd = 60.0;
         float pitch = ADOBase.conductor?.song != null ? ADOBase.conductor.song.pitch : 1f;
         double start = ADOBase.conductor != null ? ADOBase.conductor.songposition_minusi : 0.0;
         double gameSeconds = Math.Max(1.0, (songEnd - start) / Math.Max(0.01f, pitch)) + tailSeconds + 0.5;

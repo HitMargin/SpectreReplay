@@ -389,6 +389,21 @@ $knownDeviations = @(
     # 按键整体偏移，听起来就是「回放慢拍子」。三处必须同源，故渲染期直接取钉扎值。
     # 上游没有视频渲染，不存在这条时钟，属于我们自己的机制。
     @{ Pat = 'Features.VideoRender';                  File = 'ReplayPlayer.cs'; Why = '2026-10-23 渲染期按键注入改用钉扎时间轴，与画面/命中同源（原先按 dspTime 重算，慢渲染时整体偏移）。名字被 Compare-Object 切在点号处，故按文件限定的两段登记' }
+    # -- 2026-10-23 全量回放标志改按活数据重算（用户报「提示仍不显示」）--------
+    # 起点/终点来自回放文件，总块数只能问当前关卡；而它只在关卡加载后存在。
+    # 原先只在 TryStartPlayback 里赋值一次，那条路径上有大量校验可能提前
+    # return，从设置页进关时更容易漏掉。改成绘制时按活数据再算一次。
+    @{ Pat = 'ADOBase.lm';                            File = 'Pages.cs'; Why = '2026-10-23 全量回放标志按活数据重算：总块数只能问当前关卡' }
+    @{ Pat = 'listFloors.Count';                      File = 'Pages.cs'; Why = '同上：总块数来源' }
+    @{ Pat = 'isFullRun';                             File = 'SpectreState.cs'; Why = '2026-10-23 全量回放标志：录制/播放两侧共用的判定' }
+    @{ Pat = 'ADOBase.lm';                            File = 'Patch_Lifecycle.cs'; Why = '2026-10-23 全量回放判定补 total>0 守卫，并打日志（listFloors 未就绪时会拿到 0，导致 EndTile == -1 恒假）' }
+    @{ Pat = 'fullrun 判定';                          File = 'Patch_Lifecycle.cs'; Why = '同上：把实测值打进日志，避免只能靠猜' }
+    @{ Pat = 'SceneManager.GetActiveScene';           File = 'Patch_Lifecycle.cs'; Why = '同上：日志里带场景名，区分「关卡选择界面装弹」与「关内装弹」两条路径' }
+    @{ Pat = 'double.MaxValue';                       File = 'VideoRenderJob.cs'; Why = '2026-10-23 回放终点取不到时用 MaxValue 关闭时间轴兜底（宁可不收尾也不能提前截断）' }
+    @{ Pat = 'SpectreState.data';                     File = 'VideoRenderJob.cs'; Why = '同上：终点估算与最后按键位置都取自回放数据' }
+    @{ Pat = 'keys.Count';                            File = 'VideoRenderJob.cs'; Why = '同上：取最后一个按键事件的 SongPosition' }
+    @{ Pat = 'Math.Max';                              File = 'VideoRenderJob.cs'; Why = '同上：终点砖 entryTime 与最后按键位置取较大者' }
+    @{ Pat = 'Mathf.CeilToInt';                       File = 'VideoRenderJob.cs'; Why = '同上：时间轴终点换算成帧数，供 hardStop 使用' }
     @{ Pat = 'VideoRender.TryReadPinnedPosition';     File = 'ReplayPlayer.cs'; Why = '同上：钉扎时间轴的读取入口（两段合起来才是完整名字）' }
     # -- 2026-10-20 回放没开始时的可诊断性（用户报「等待回放开始超时」）--------
     # 上游每处拒绝都是 TriggerMessage(...); return;：通知几秒后消失、**不进日志**，
@@ -487,6 +502,14 @@ $knownDeviations = @(
     @{ Pat = 'finalizeErrorFromMux';    File = 'VideoRenderJob.cs'; Why = '同上：区分 mux 失败（视频流已完整，值得抢救）与排空失败' }
     @{ Pat = 'StartFinalizeOnWorker';   File = 'VideoRenderJob.cs'; Why = '同上：收尾线程的启动入口' }
     @{ Pat = 'enc.FinishVideo';         File = 'VideoRenderJob.cs'; Why = '同上：把排空调用移进闭包（先在主线程抓编码器引用）' }
+    # -- 2026-10-23 渲染自然结束后不收尾（用户报「进度 100% 一直渲染不保存」）--
+    # 上游没有视频渲染。循环原本只靠 is_playing 翻假判定结束，而那条链挂在
+    # PlayerControl_Update 上，通关后不再运行 → 永远不收尾，跑到 hardStop。
+    # 改成按钉扎时间轴越过回放终点即收尾，不依赖任何 Update 链。
+    @{ Pat = 'ReplayEndSongPosition';  File = 'VideoRenderJob.cs'; Why = '2026-10-23 回放终点取「终点砖 entryTime」与「最后按键 SongPosition」的较大者（长条/间奏尾巴不在 entryTime 里）' }
+    @{ Pat = 'replayEndSong';          File = 'VideoRenderJob.cs'; Why = '同上：循环里的终点时间' }
+    @{ Pat = 'timelineStop';           File = 'VideoRenderJob.cs'; Why = '同上：hardStop 不能比时间轴终点更紧，否则估算偏短时正常收尾会被判 overrun' }
+    @{ Pat = 'reached end of timeline'; File = 'VideoRenderJob.cs'; Why = '同上：按时间轴收尾时的日志（与 is_playing 那条区分，便于排查）' }
     @{ Pat = 'enc.MuxWith';             File = 'VideoRenderJob.cs'; Why = '同上：把合成调用移进闭包' }
     @{ Pat = 'finalizeWorker.IsAlive';  File = 'VideoRenderJob.cs'; Why = '同上：TearDown 判断线程是否还在跑（在跑就跳过会冲突的清理）' }
     @{ Pat = 'finalizeWorker.Join';     File = 'VideoRenderJob.cs'; Why = '同上：TearDown 的**有界**等待（5 秒，不是 12 分钟——12 分钟等于把卡顿换成假死）' }
