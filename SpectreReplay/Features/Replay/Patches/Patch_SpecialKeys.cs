@@ -112,10 +112,6 @@ internal static class Patch_KeyboardSpecialKeys
         Feature = FeatureKeys.SpecialKeys)]
     internal static void Postfix(List<KeyCode> __result)
     {
-        // **早退判据必须是解析后的集合，不能是设置里的原始条数。**
-        // 设置里可能只有 "Escape" 或一个已改名的非法名：那时 `_allowedCodes.Count == 0`，
-        // 提前返回与继续跑结果一样；但如果先按**原始条数**早退，就会让
-        // "设置非空、可解析集合为空" 这种情形整段跳过——玩家看到的是"我勾了却没用"。
         EnsureCodes();
         if (_allowedCodes.Count == 0 || __result == null || __result.Count == 0)
             return;
@@ -126,15 +122,6 @@ internal static class Patch_KeyboardSpecialKeys
 
 internal static class Patch_AsyncSpecialKeys
 {
-    // AsyncKeyCode.label 是 SkyHook.KeyLabel。我方已引用 SkyHook.Unity，所以
-    // **可以直接用 KeyLabel 类型**（上游注释说它不可见，是因为它只从 label 字段
-    // 间接暴露；实测 KeyLabel 是 SkyHook 里的公开枚举，见 Assembly-CSharp 的
-    // AsyncKeyCode.label : SkyHook.KeyLabel）。
-    //
-    // 即便如此仍保留"名字集合 + 值→名缓存"两层：设置里存的是**字符串**
-    // （跨版本稳定，游戏加枚举值不会让旧配置失效），而 RemoveAll 的谓词每帧
-    // 对每个元素调用一次——按名字比字符串比按枚举值比整数贵，所以把
-    // 枚举值 → 名字 的转换缓存起来，每个不同 label 只 ToString 一次。
     private static HashSet<string> _allowedNames = new(StringComparer.Ordinal);
     private static int _labelsSig = int.MinValue;
     private static int _labelsCount = -1;

@@ -50,18 +50,9 @@ internal static class ReplayAnalyzer
         double bpm = conductor.bpm;
         float pitch = conductor.song != null ? conductor.song.pitch : 1f;
 
-        // 窗口公式读取全局难度与飙速态（BoundaryRaw 内部消费）：
-        // 临时对齐录制时的上下文再计算，算完恢复，避免拿"现在"的设置误判"当时"
         Difficulty savedDifficulty = GCS.difficulty;
         float savedSpeedTrial = GCS.currentSpeedTrial;
         bool contextChanged = false;
-        // **必须拒掉数字串。** `Enum.TryParse("99", out var v)` 会成功并给出
-        // `(Difficulty)99` 这种越界值——BoundaryRaw 内部是
-        // `== Lenient ? … : == Strict ? … : 默认`，越界值不会抛，只会悄无声息
-        // 落进"Normal"那一支，于是窗口宽度按错误的难度算出来。回放文件是玩家
-        // 可编辑的文本，"JudgeMode": "99" 完全可能出现。
-        // 判据：先 Enum.IsDefined 确认落点合法，再赋值。不合法就跳过（保留"现在"
-        // 的难度）——与下面 SpeedTrail 的保守退化同一思路。
         if (data.JudgeMode is string judgeMode
             && Enum.TryParse(judgeMode, out Difficulty recorded)
             && Enum.IsDefined(typeof(Difficulty), recorded))
@@ -105,19 +96,6 @@ internal static class ReplayAnalyzer
                 if (double.IsNaN(ms) || double.IsInfinity(ms))
                     continue;
                 samples.Add((float)ms);
-                // 窗口宽度直接问游戏自己（r150 的 scrMisc.GetAdjustedAngleBoundaryInDeg）。
-                //
-                // **这里原先是一份本地复刻**（Features\Compat\MarginBoundary.Raw），
-                // 2026-10-18 用户问「不能改成完全用游戏自带的代码？」后删掉。删的理由：
-                // 那份复刻逐字抄的是这个函数，58 行里没有任何自研逻辑，而它当初存在的
-                // 唯一理由是"不许被别的 mod 改写过的原版窗口"——该理由描述的是**旧版**
-                // 上游做法（用 Postfix 改这个函数的返回值）。r150 该函数改成返回结构体，
-                // 结构体没法用 ref __result 注入，上游于是改挂判定入口
-                // （GetHitMarginInDeg / GetHitMarginInSec）——**没有任何 mod 会改它了**。
-                //
-                // 注意它返回的是【度】，须先转回弧度再用与误差相同的逆变换，
-                // 否则窗口会被放大 180/π ≈ 57 倍，散点图全部误绿。
-                // 它一次给全四条边（Counted/Perfect/Pure/XPerfect），我们只要两条。
                 double degToMs = (Math.PI / 180.0) * 60.0
                     / (Math.PI * pitch * bpmTimesSpeed) * 1000.0;
                 var win = scrMisc.GetAdjustedAngleBoundaryInDeg(

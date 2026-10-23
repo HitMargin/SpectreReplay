@@ -30,11 +30,6 @@ namespace SpectreReplay
                 modEntry.OnGUI = Ui.OnGui.OnGUI;
                 modEntry.OnShowGUI = Ui.OnGui.OnShow;
                 modEntry.OnHideGUI = Ui.OnGui.OnHide;
-                // **Save 不能接 OnHide。** UMM 底部的 Save 走 SaveSettingsAndParams()，
-                // 它只调 OnSaveGUI，既不关窗口、也不隐藏我们的设置页
-                // （UnityModManager.decompiled.cs:3706-3709 / :6326-6343）。
-                // 原先接 OnHide，而 OnHide 第一句是 `_visible = false`——
-                // 玩家一点 Save，整块设置内容当场变成空白。
                 modEntry.OnSaveGUI = Ui.OnGui.OnSave;
                 // 退出时补上拖动滑条期间被推迟的落盘（见 Pages.Commit）。
                 // 没有这一下，"拖完滑条直接退游戏"= 这次改动白改，而现象是

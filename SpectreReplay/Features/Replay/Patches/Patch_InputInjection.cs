@@ -5,32 +5,6 @@ using static SpectreReplay.SpectreState;
 
 namespace SpectreReplay.Features.Replay;
 
-// ——— 回放输入注入（跨平台）————————————————————————————————
-//
-// 游戏读键盘只有一个入口：RDInput（RDInput.cs:282-371）。它遍历 inputs 里每个
-// RDInputType，而每个实现最终都落在两条物理输入上：
-//   · RDInputType_Keyboard      → Input.GetKey*（Unity 旧输入，需要 OS 级按键事件）
-//   · RDInputType_AsyncKeyboard → AsyncInput.GetKey* → AsyncInputManager.keyMask
-//                                 （只由 SkyHook 的真实键盘回调写入）
-// 没有任何一条路能被"回放数据"写入。于是非 Windows / 未聚焦时：
-//   · mainPressCount 恒 0 → ValidInputWasTriggered 恒假 → keyTimes 永不灌入
-//     → UpdateHoldKeys 里一次 Hit 都不会发生；
-//   · GetMainHeldKeys 恒空 → scrPlayer.holdKeys 恒空 → holding 恒假
-//     → CheckPreHoldFail 把长按判成松手并 Die()。
-//
-// ── 去重：用「覆盖」而不是「叠加」 ──────────────────────────
-// 第一版把托管状态**加到**游戏读数上，那就必须保证 SendInput 没在同时发键，
-// 于是引入「SendInput 是否可用」这个前提。那个前提是灾难性的：
-//   · 平台探针判错（Application.platform 在某些环境下报的是别的值）
-//   · 一次 UIPI 失败就永久置 Broken
-// 任一发生，SendInput 与托管注入**两条路一起关掉**，回放整场不动。
-//
-// 现在回放期间**直接覆盖**游戏读数：返回值就是回放状态本身。
-//   · 不需要知道 SendInput 在不在跑 → 不可能因此关掉任何一条路
-//   · 不可能重复计数（一次按键永远只算一次）
-//   · SendInput 保持原样，不受任何新判据影响
-// 覆盖只针对**游戏操作类**查询；Cancel/Back/Quit 这类界面控制仍然放行真实键盘，
-// 否则回放期间玩家按 Esc 暂停不了。
 internal static class Patch_RDInput
 {
     // ── 注入时机（**顺序是这套东西的另一半**）──────────────────
@@ -116,25 +90,6 @@ internal static class Patch_RDInput
     }
 }
 
-// ——— scrPlayer.ValidInputWasReleased ————————————————————————
-//
-// 光让 RDInput 报出按住键还不够：scrPlayer.holdKeys 只在 UpdateHoldKeys 里、
-// 且**只有 Hit 返回 true 之后**才会被 IterateValidKeysHeld 重新填充
-// （scrPlayer.cs:718-730）。回放期间真实 Hit 被 Patch_Hit 的前缀拦下
-// （HitLocked = true，判定改由角度驱动的 ReplayHit），所以那条填充路径不会发生，
-// holdKeys 恒空、holding 恒假。
-//
-// 这里在游戏自己的清理逻辑**之后**把 holdKeys 同步成回放此刻的按住集合：
-//   · 时机：ValidInputWasReleased() 在 scrPlayer.cs:417 执行，CheckPreHoldFail
-//     在 :433；后者是唯一读 holding 的死亡判据，所以必须用 Postfix。
-//   · 内容：真实键码，不是 AnyKeyCode(null) 占位。null 项会被
-//     ValidInputWasReleased 静默 RemoveAt（scrPlayer.cs:884-887），那种写法
-//     只是骗过死亡检查，游戏其它读 holdKeys 的地方都拿不到键。
-//   · 来源：**必须与 ValidInputWasReleased 内部用来比对的那份数据同源**
-//     （scrPlayer.cs:880）。原生异步链接管时那是 RDInput.GetMainHeldKeys，
-//     所以这里也要问游戏同一个问题，而不是灌自己的帧粒度状态。
-//   · 触摸端跳过：触摸分支只在 Input.touchCount == 0 && !Input.anyKey 时才清
-//     holdKeys，强行注入会一直留着。桌面端 touchEnabled 恒 false。
 internal static class Patch_HoldStateInjection
 {
     [SpectrePatch(typeof(scrPlayer), "ValidInputWasReleased", PatchType.Postfix, Feature = FeatureKeys.Replay)]

@@ -32,12 +32,6 @@ internal static class RenderClockSource
 
     internal static bool ControlsTime => ActiveClock != null;
 
-    // 启动时 Transpiler 匹配成功 → true；失败（游戏改了 Update）→ false → 渲染走旧 Pin。
-    //
-    // ⚠️ **它是"曾经跑过"的一次性事实，不是"当前是否挂着"的状态。** 全仓只有置 true、
-    // 没有置回 false 的地方——补丁被卸载（含 2026-10-17 起这个开关被拨到关）时它不会清。
-    // 所以任何"现在该不该用确定性时钟"的判断都必须**与开关谓词一起判**，
-    // 不能只看这个字段（否则会出现"开→渲染→关→再渲染"的坏序，见 VideoRenderJob 处注释）。
     internal static bool TranspilerReady;
 
     internal static double DspTime()
@@ -57,16 +51,6 @@ internal static class RenderClockSource
         => UnscaledDeltaPin.Installed ? UnscaledDeltaPin.CurrentDelta : Time.unscaledDeltaTime;
 }
 
-/// <summary>
-/// scrConductor.Update 的时间源 Transpiler。
-/// 用 SpectrePatch 的 Transpiler 模式挂载；找不到目标调用模式时抛异常
-/// → 探针报"解析失败" → VideoRenderJob 感知并降级。
-///
-/// 注意：scrCountdown.Update 的 Transpiler 已移除——倒计时用 dspTime 做调度
-/// 计算，替换后与音频系统的调度不一致导致倒计时异常（实测）。倒计时走
-/// Time.captureFramerate（缩放时间已正确）+ UnscaledDeltaPin（unscaled 时间
-/// 已钉住），无需额外干预。
-/// </summary>
 internal static class Patch_RenderClockConductor
 {
     // 挂在 FeatureKeys.RenderClock 上（**实验性开关，默认关**）。
@@ -108,12 +92,6 @@ internal static class Patch_RenderClockConductor
             body.AddRange(instructions);
         }
 
-        // 已被别的 mod 的同类 transpiler 替换过？（Harmony 的 Calls 是
-        // `object.Equals(operand, method)`——精确比 MethodInfo。所以目标被换成
-        // 别的程序集里同名的 RenderClockSource.DspTime 时，我们的 Calls(dspGetter)
-        // 一个都不命中，而指令里会留着**那个**程序集的调用。）
-        // 判据取"类型同名"而不是比对我们自己的 MethodInfo：对方那份的类型
-        // 来自另一个程序集，拿到这里也只会是 null。
         foreach (CodeInstruction ci in body)
         {
             if (ci.operand is MethodInfo mi
@@ -167,29 +145,6 @@ internal static class Patch_RenderClockConductor
     }
 }
 
-/// <summary>
-/// 异步输入的 GetSongPosition：直接从 RenderClock 算（与 conductor 同一时间轴），
-/// 替代旧方案的 AdjustAngle 跳过（Patch_VideoLockAsyncAngle 可退役）。
-///
-/// **2026-10-06 修掉一个继承自 Spectre 的潜伏缺陷：形参名不能写 `__instance`。**
-/// `AsyncInputUtils.GetSongPosition` 是**静态方法**（真实签名
-/// `GetSongPosition(scrConductor conductor, long nowTick)`），而 Harmony 的
-/// `__instance` 只在"原方法非静态"时注入——它内部是个**合成形参**
-/// （`MethodBodyReader+ThisParameter`，派生自 ParameterInfo），不是按名字匹配的。
-/// 静态方法上声明 `__instance` 的后果是它拿到不到导体，恒为 null。
-///
-/// 具体到这段代码的危害：`__instance == null` 分支会 `__result = 0.0; return false`
-/// ⇒ **GetSongPosition 恒返回 0**。它唯一的调用者是 `AsyncInputUtils.GetAngle`
-/// （AsyncInputUtils.cs:23），而 `GetAngle` 的唯一调用者是
-/// `scrPlanet.AsyncRefreshAngles()`（scrPlanet.cs:555），后者又只被
-/// `AsyncInputUtils.AdjustAngle`（:31）调用——**而 AdjustAngle 正是我们渲染期
-/// 禁用的那个**（Patch_VideoLockAsyncAngle）。所以这条链目前被另一条补丁挡着，
-/// 缺陷暂时不发作；但它是**潜伏**的：哪天有人重开 AdjustAngle、或别处调
-/// GetSongPosition，就会静默拿到 0 而不是报错。
-///
-/// 修法：改用**原方法的真实形参名 `conductor`**（Harmony 按名注入普通参数）。
-/// 这不是风格问题——名字写错时补丁照样挂得上、照样跑，只是永远拿到 null。
-/// </summary>
 internal static class Patch_RenderClockAsyncPosition
 {
     [SpectrePatch(typeof(AsyncInputUtils), "GetSongPosition", PatchType.Prefix)]

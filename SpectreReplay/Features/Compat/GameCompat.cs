@@ -135,12 +135,6 @@ internal static class GameCompat
 
     private static bool? _hitFiresInputEvents;
 
-    /// <summary>
-    /// true = 本版本的 scrPlayer.Hit 内部已自调 HitInputEvent（r150: scrPlayer.cs:754，
-    /// handleAll:false）并自行按 ignoreInput 中止。
-    /// 判据用形状而非版本号：Hit 首参为 long?（音频 tick）即异步输入重构后的新 Hit，
-    /// 该重构同时引入了"Hit 内自触发输入事件"。游戏再改签名时此处自然重新探测。
-    /// </summary>
     internal static bool HitFiresInputEvents
     {
         get

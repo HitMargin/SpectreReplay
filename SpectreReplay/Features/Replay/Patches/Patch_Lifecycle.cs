@@ -28,12 +28,6 @@ internal class Patch_SwitchToEditMode
     [SpectrePatch(typeof(scnEditor), "SwitchToEditMode", PatchType.Prefix)]
     internal static void Prefix(scnEditor __instance)
     {
-        // **渲染作业必须在这里同步收场。** 玩家按 Esc 退出试玩时走的正是这个方法，
-        // 而原先这里只调 StopAll()（停回放/录制），渲染作业完全不知情：
-        // 三台相机还钉在我们的 RenderTexture 上、预览相机还在每帧把旧帧贴回屏幕、
-        // captureFramerate 与各项钉扎也还开着。紧接着 SwitchToEditMode 恢复相机，
-        // 两套动作叠在一起 ⇒ 「镜厅特效 + 卡死」。
-        // 放在 StopAll 之前：要先停掉渲染，再让回放引擎收摊。
         Features.VideoRender.VideoRender.CancelForSceneExit();
         StopAll();
     }
@@ -56,15 +50,6 @@ internal class Patch_QuitToMainMenu
 // ——— scrController.Start_Rewind ————————————————————————————
 internal class Patch_StartRewind
 {
-    /// <summary>
-    /// 最近一次拒绝启动回放的原因（<c>Reject</c> 写入）；成功启动后清空。
-    ///
-    /// 渲染的等待阶段用它**快速失败**并报出真实原因：否则一条被拒的回放
-    /// 会让渲染空转满 10 秒，最后只得到一句「等待回放开始超时」——
-    /// 2026-10-18 用户报的正是这个，而真正的拒绝原因（倍速不符）在日志里
-    /// 明明有，只是没人把它和超时联系起来。
-    /// 主线程读写（Start_Rewind 与渲染协程都在主线程）。
-    /// </summary>
     internal static string LastReject;
 
     internal static void ResetRejectLog() => LastReject = null;
@@ -103,11 +88,6 @@ internal class Patch_StartRewind
         Settings.checklang();
 
         Scene scene = SceneManager.GetActiveScene();
-        // 日志必须带上模式。原先只印场景名，于是"回放没开始"时翻日志只能看到
-        // 一长串裸的 scnEditor，**看不出当时到底是回放态还是录制态**——而这两个
-        // 模式走的是完全不同的分支（PlayMode → TryStartPlayback，
-        // RecordMode → TryStartRecording）。2026-10-18 视频渲染超时就是卡在
-        // 这一步分不出来，只能靠猜。
         Debug.Log(scene.name + " [模式] PlayMode=" + PlayMode + " RecordMode=" + RecordMode
             + " is_playing=" + is_playing + " is_recording=" + is_recording);
 
@@ -140,17 +120,6 @@ internal class Patch_StartRewind
         }
     }
 
-    /// <summary>
-    /// 拒绝启动回放：**必须留日志，不能只弹通知。**
-    ///
-    /// 原先每处拒绝都是 `TriggerMessage(...); return;`——通知几秒后消失、不落日志，
-    /// 于是"回放没开始"在日志里表现成**什么都没发生**。2026-10-18 视频渲染报
-    /// 「等待回放开始超时」，翻遍日志也看不出是被哪条校验拒掉的，只能靠猜——
-    /// 而这一族判据有九条，猜一遍就是半小时。
-    /// </summary>
-    // 通知只给玩家看原本那条本地化文案；诊断细节走日志。
-    // 把「录=x 现=y」这类内部值拼进 TriggerMessage 会让调试信息漏到界面上，
-    // 而且绕开本地化（settings-ui-audit 会直接判红）。
     private static void Reject(string userMessage, string detail = null)
     {
         // 同一份原因既进日志、也留给渲染的等待阶段快速失败用。
@@ -165,10 +134,6 @@ internal class Patch_StartRewind
     {
         try
         {
-            // **每条拒绝路径都必须留痕。** 下面每处 return 都只弹一条通知（几秒后
-            // 消失、不进日志），于是"回放没开始"在日志里表现成**什么都没发生**——
-            // 2026-10-18 的视频渲染超时就是卡在这里，翻遍日志也看不出是被哪条校验
-            // 拒掉的，只能靠猜。这一行 + 各分支的 Reject 把"静默"变成可查。
             Debug.Log("[SpectreReplay] TryStartPlayback 进入（PlayMode=" + PlayMode
                 + " RecordMode=" + RecordMode + " is_playing=" + is_playing + "）");
             if (!DebugMode || !debug_skip_Verification)
@@ -343,8 +308,6 @@ internal class Patch_StartRewind
                 ReplayPlayer.FastForward(GCS.checkpointNum);
 
             PlayActions.StartPlaying();
-            // 成功了就清掉拒绝记录：否则渲染的等待阶段会把上一轮的失败原因
-            // 当成这一轮的（Start_Rewind 会连发多次，前一发被拒、后一发成功是常态）。
             if (is_playing)
                 ResetRejectLog();
             TriggerMessage(LocalizationManager.GetLocalizedText("note.start_playing"));
@@ -409,22 +372,6 @@ internal class Patch_StartRewind
                 data.SongName = songName;
                 data.LevelPath = "OfficialLevel " + songName;
                 data.Pitch = 0;
-                // **BPM 不能硬写 0。** 这里原先两行都是 0，理由是"官方关卡
-                // 不比 Pitch/BPM"——但那是不比，不是不知道。写 0 的直接后果
-                // 是详情面板把它显示成「?」（2026-10-18 用户截图报的就是它），
-                // 而玩家展开一份蓝盘回放，最想看的信息之一恰恰是这关多快。
-                //
-                // 填真值不改变任何校验：TryStartPlayback 里那一句
-                // `!ADOBase.isOfficialLevel && (Pitch/Bpm 比对)` 对官方关卡
-                // 整段跳过，存什么都不会被比。所以这里只是把已知信息记下来。
-                //
-                // **取值走 conductor 而不是 scnGame.instance.levelData。**
-                // 两者是同一个值（scrConductor.SetupConductorWithLevelData 里
-                // `bpm = levelData.bpm`），但 scnGame.instance 在编辑器、
-                // 回放重开等时点可能为 null，取它会把一次空引用变成录制失败；
-                // conductor 的 instance getter 自带 FindAnyObjectByType 兜底。
-                // Pitch 仍留 0：面板不显示它，而数值一旦变成真值就会让"官方
-                // 关卡 Pitch 恒为 0"这个既有约定悄悄失效。
                 data.Bpm = CurrentBpm();
             }
             else

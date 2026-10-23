@@ -119,25 +119,8 @@ public static class Settings
     public static bool EditorUIFloorPanelOn = true;
     public static bool EditorUIHorizontalOn = false;
 
-    // ── Timeline（编辑器时间轴条） ──
-    // 此前这个字段只被写、被存盘，没有任何逻辑读它——UI 上拖了像生效了，实际毫无反应。
-    // 现由 PacLibHost.Activate / SyncPACL2Features 真正驱动 TimelineFeature.Active。
-    // 默认 true：接开关之前 Timeline 是无条件启用的，改默认值会让全新安装丢掉时间轴 UI。
-    // 遗留问题：从旧版本升级的用户，其 Configs.json 里已存在一个从未生效的
-    // "TimelineOn": false，读取后仍会得到"关"——那不是用户的选择，只是当初的默认值。
-    // 判别需要一次性标记位，收益不足以引入，这里如实记录。
     public static bool TimelineOn = true;
 
-    // ── FixChartLoad（谱面加载修复：编辑器增删砖块/事件、Scope 撤销粒度） ──
-    // 同样此前没有开关，只能常开。
-    //
-    // 默认改为 false：这套补丁是**深度改写编辑器行为**的一组 transpiler + Scope，
-    // 不是"修个 bug"级别的增强——用户反馈它在游戏内编辑器里造成难以归因的副作用
-    // （典型：删除事件会连带删掉这块地上同类型的全部事件）。副作用型功能不该
-    // 默认替用户做决定，要用的人自己开。
-    //
-    // 关闭后原版逻辑直接生效：编辑器增删砖块/事件回到游戏原生行为，代价是失去
-    // Scope 的细粒度撤销追踪等增强。开关仍在 UI 上，随时可开。
     public static bool FixChartLoadOn = false;
 
     // ── CustomEvents（自定义事件：变量系统等，PACL2 谱面兼容） ──
@@ -174,12 +157,6 @@ public static class Settings
         "lateperfect", "verylate", "toolate", "multipress",
         "failmiss", "auto"
     };
-    // 必须在 JudgeMarginColorsOn 之前声明。C# 静态字段初始化器按**文本顺序**执行，
-    // 放到文件末尾会让下面那行读到一个 null 数组，抛 NullReferenceException 并被包成
-    // TypeInitializationException —— 整个 Settings 类都不可用（2026-10-11 首次实跑
-    // Load() 就崩在这里，闸门结构上抓不到：Settings.cs 依赖 UnityEngine，没链进离屏套件）。
-    // 原先这里引用的是另一个类 JudgeTextDefaults.DefaultColors（跨类无顺序约束），
-    // 9feee37 删掉那个文件、改成同类字段后踩中。
     internal static readonly Color[] VanillaMarginColors = NewColorArray();
     public static Color[] JudgeMarginColors = NewColorArray();
     public static bool[] JudgeMarginColorsOn = new bool[VanillaMarginColors.Length];
@@ -248,25 +225,10 @@ public static class Settings
     // ── PlanetColors settings ───────────────────────────
     public static bool PlanetColorOn = false;
     public static bool[] PlanetColorPlayerOn = InitPlanetOn();
-    // **不能是 null。** ConfigManager.SaveConfigs 构造 ConfigData 时会把它交给
-    // ToHexArray，而那段构造不在 try 内 —— 抛出的 NRE 会让整份设置都写不下去
-    // （2026-10-11 实测：改任何设置都不落盘，日志只有一行"保存设置失败"）。
-    // 上游此处是 (Color[])PlanetColorApplier.DefaultColors.Clone()；本模组没有
-    // PlanetColors 特性（该目录不存在），故给一个定长 8（= 游戏 PlanetCount）的
-    // 中性数组即可 —— PlanetColorOn 默认 false 且无消费方，这组字段只是持久化载体。
     public static Color[] PlanetColorBase = new Color[8];
     public static Color[][] PlanetColorParts = InitPlanetParts();
     public static bool[][] PlanetColorPartsOn = InitPlanetPartsOn();
 
-    // ── ReplayVideo settings ───────────────────────────
-    /// <summary>
-    /// 视频渲染总开关。
-    ///
-    /// **原先没有这个字段，设置页那行「启用视频渲染」绑的是 ReplayOn。**
-    /// 后果有两层：一是关掉"视频渲染"会把**录制/回放**一起关掉（同一个字段
-    /// 在录制页绑的是同一样东西），二是这一页根本没有能单独关渲染的开关——
-    /// 玩家以为关的是渲染，实际关掉的是整条回放链。
-    /// </summary>
     public static bool RenderOn = true;
     // ── 实验性：确定性渲染时钟 ────────────────────────────────────────
     // 打开 = 挂 scrConductor.Update 的时间源 Transpiler（Patch_RenderClockConductor），
@@ -287,22 +249,8 @@ public static class Settings
     public static int RenderEncoderMode = 0;   // 0 自动 1 最快 2 质量 3 纯 CPU
     public static int RenderQualityMode = 1;   // 0 低 1 标准 2 高 3 极致
     public static int RenderOutputFormat = 0;  // 输出容器：0 mp4 1 mkv 2 webm 3 mov（见 VideoEncoder.OutContainer）
-    // 转换目标容器。**与 RenderOutputFormat 刻意解耦**（用户 2026-10-12 拍板方案 B）：
-    // 两件事的目的不同——渲染格式是"我这局要录成什么"，转换格式是"把已有的一堆
-    // 视频批量转成什么"。复用同一个值会导致"想渲染 mp4、顺手把旧视频转 mkv"
-    // 做不到，只能来回改。
-    //
-    // 上游 Spectre 用的是**不持久化**的 `private static int _videoConvertTarget`
-    // （SpectreUiPages.Features.cs:643）。我们改为持久化：本项目的既有约定是
-    // "凡界面上能选的都落盘"（缺陷①「设置存不下来」就是这条约定被破坏），
-    // 且玩家很可能分几次转同一批文件。
     public static int ConvertTarget = 0;       // 转换目标容器：0 mp4 1 mkv 2 webm 3 mov
     public static float RenderTailSeconds = 3f;
-    // 是否把鼠标指针画进成片。**默认关**（2026-10-20 用户裁决）：这一项不是"录得更全"，
-    // 而是**往画面里加东西**——指针本来就不在游戏画面里（Cursor.visible 只藏/显硬件光标），
-    // 打开后是我们自己画一个上去（见 Features\VideoRender\Pipeline\CursorOverlay.cs）。
-    // 成片的默认语义是"这关本来的样子"，要多出一样东西得玩家自己说要。
-    // 纯净相机模式下尤其明显：三台相机被劫持到自建纹理后，屏幕上连指针都没有。
     public static bool RenderCursorOn = false;
     // 是否允许在渲染途中按一个快捷键**提前结束**，把「从开始渲染到按键那一刻」
     // 的画面导出——也就是渲染不再受回放文件长度限制。
@@ -345,21 +293,6 @@ public static class Settings
 
     // —— 启动归一化 / 键表构建 ————————————————————————
 
-    /// <summary>
-    /// 重建运行时映射表 <see cref="key_code_convert"/>（256 项，下标 = 录像里的键码）。
-    ///
-    /// **三种状态，末态必须真的不同**（这是本方法的历史教训）：
-    ///   · 重映射关（<c>!KeyConvertEnabled</c>）        → 恒等映射，一切键照原样用；
-    ///   · 重映射开 + 只模拟列表（<see cref="LimitKey"/>）→ **表外的键映射成 0**，
-    ///     即回放侧跳过、不产生任何输入；
-    ///   · 重映射开 + 不限制                        → 表内的按表换，表外的恒等。
-    ///
-    /// **上游那版的原罪**：它在末尾有一条 `== 0xFFFF → num` 的兜底循环，把
-    /// 「未映射」与「恒等」抹成同一件事，于是 `LimitKey` 拨不拨末态逐字节相同——
-    /// 一个真开关被实现成了假开关（这也是 2026-10-19 误判它"无实现"并删除的原因）。
-    /// 现在用 **0 表示「不模拟」**，与回放侧 <c>num != 0</c> 的跳过条件对齐
-    /// （ReplayPlayer.cs:300）；0xFFFF 只作内部「尚未赋值」的哨兵。
-    /// </summary>
     internal static void key_convert_list2array()
     {
         key_code_convert = new ushort[256];
@@ -394,10 +327,6 @@ public static class Settings
         }
     }
 
-    // 面板/通知的语言**一律跟随游戏**。原先这里是 if (FollowGameLanguage) 二选一，
-    // 但那个开关实际只影响 14 语言大表（通知文案），而界面语言由
-    // Ui.Loc.RefreshLanguage 独立跟随游戏——两套并存的结果是玩家以为
-    // "界面语言可以单独设"，实际调不动。2026-10-17 按用户要求删掉分叉。
     internal static void checklang()
     {
         LocalizationManager.GetLanguages();

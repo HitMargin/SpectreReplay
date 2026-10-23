@@ -41,36 +41,8 @@ internal static class ManagedInput
     private static int _heldCount;
     private static bool _loggedFirstInjection;
 
-    /// <summary>
-    /// 托管输入是否接管游戏读数。**只看是否在回放。**
-    ///
-    /// 这里绝不能再挂任何「SendInput 是否可用」「平台是不是 Windows」
-    /// 「某个开关开没开」的前提：那些判据一旦判错，就会把回放输入整个关掉，
-    /// 而玩家看到的只是「回放不动」，没有任何线索指向判断条件。
-    /// 去重也不靠它——Patch_RDInput 用覆盖语义，回放期间只认这一份状态。
-    ///
-    /// 曾经这里接过「模拟按键」开关，那个开关现已删除：它关掉后并非
-    /// 「只播不注入」，而是让长条判定失效、键位显示变暗，属于「关掉就坏」的
-    /// 假开关。真要停止注入，用 ReplayOn 总开关（它连补丁一起卸）。
-    /// </summary>
     internal static bool Active => is_playing;
 
-    /// <summary>
-    /// **禁用 SendInput（OS 级按键镜像）。当前为 <c>true</c>。**
-    ///
-    /// 置为 true 时 <see cref="Mirror"/> 恒假，两条 SendInput 调用
-    /// （PumpInput 的按下/抬起、Stop 的释放残留键）都不会执行。
-    /// 托管输入覆盖与异步事件注入**不受影响**——它们才是判定来源。
-    ///
-    /// 关闭它的代价：只读 <c>UnityEngine.Input</c> 的第三方模组看不到回放按键。
-    /// 现在按键显示走两条不碰 OS 的路：
-    ///   · <see cref="KeyViewerBridge"/>：KeyViewer 系模组（读 KeyInput.GetKey）；
-    ///   · <see cref="AsyncInputInjector"/> 的 KeyUpdated 广播：直接订阅 SkyHook 的模组
-    ///     （如 JipperResourcePack）。
-    ///
-    /// 收益：不依赖窗口聚焦、不受 UIPI 拦截、不会把按键泄漏到其它窗口。
-    /// 若要恢复镜像，改回 false 即可（判据见 <see cref="Mirror"/>）。
-    /// </summary>
     internal const bool DisableSendInput = true;
 
     /// <summary>
@@ -96,26 +68,6 @@ internal static class ManagedInput
     private static int _takeoverFrame = -1;
     private static bool _takeover;
 
-    /// <summary>
-    /// **原生异步链是否接管读取层。** 为真时 <see cref="Patch_RDInput"/> 的三个
-    /// Postfix 必须**放行**，让 <see cref="RDInput"/> 走游戏自己的读数。
-    ///
-    /// 为什么必须让位：异步链的粒度是**事件 tick**，不是帧。
-    /// <c>scrController.UpdateInput</c> 按 tick 分组：每遇到新 tick 先
-    /// <c>ProcessKeyInputs(上一组)</c> 再清 <c>keyDownMask</c>/<c>keyUpMask</c>
-    /// （scrController.cs:2929-2938），末尾再把最后一组补一次（:2985）。
-    /// 也就是说一帧内 <c>Simulated_PlayerControl_Update</c> 可能被调用**多次**，
-    /// 每次看到的是**本 tick 组**的掩码。
-    ///
-    /// 而 <see cref="ManagedInput"/> 的按下判据是 <c>PressedFrame[vk] == frame</c>
-    /// ——**帧**粒度。若在原生模式下仍覆盖，同一颗键在这一帧的每个 tick 组里
-    /// 都判「本帧刚按下」，一次按键被重复消费（多灌 keyTimes、重复触发命中）。
-    ///
-    /// 反过来，原生链不可用时（失焦、SkyHook 未开、反射失败）必须由托管状态
-    /// 接管，否则游戏读不到任何回放键。
-    ///
-    /// 缓存到帧：这个判据每帧会被三个 Postfix 各问一次。
-    /// </summary>
     internal static bool NativeTakeover
     {
         get
@@ -124,24 +76,6 @@ internal static class ManagedInput
             if (_takeoverFrame != frame)
             {
                 _takeoverFrame = frame;
-                // **注意：这里用的判据与 ReplayPlayer 的 asyncInject 不是同一个。**
-                //
-                // 两者的分工：
-                //   · asyncInject 用 Injectable —— "事件能不能广播出去"，
-                //     只要 SkyHook 钩子活着就成立，与游戏状态无关。
-                //     广播的消费者不只是游戏（JipperResourcePack 直接订阅 KeyUpdated）。
-                //   · 这里用 Usable —— "游戏会不会来出队"，要求 asyncKeyboard.isActive，
-                //     即只在 PlayerControl 为真。托管覆盖只在游戏真会读原生链时才让位。
-                //
-                // 混用会出事：
-                //   · 若这里改用 Injectable，非 PlayerControl 下（游戏不出队）覆盖层却让位，
-                //     判定改读永远空的 keyMask，回放当场失效；
-                //   · 若 asyncInject 改用 Usable，非 PlayerControl 下事件根本不广播，
-                //     订阅 KeyUpdated 的键位显示器整段失明。
-                //
-                // Healthy 不能省：Usable 只是"看起来能用"。若 Inject 实际在失败
-                // 而这里仍放行，游戏那条链读到的就是永远空的 keyMask，
-                // 而托管覆盖已经让位——两条路一起失效。
                 _takeover = is_playing
                     && AsyncInputInjector.Usable
                     && AsyncInputInjector.Healthy;

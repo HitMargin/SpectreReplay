@@ -78,13 +78,6 @@ internal sealed class VideoAudioTrack : IDisposable
             return;
         }
         SizeBuffers(floats);
-        // Render 的目标长度必须**恰为**本次可用样本数（floats）。Unity 按数组长度推进
-        // 采集环形缓冲的读指针：长度大于实际样本会把读指针推过写指针，此后
-        // GetSampleCountForCaptureFrame() 恒为 0、AudioSettings.dspTime 冻结（音频线程
-        // 再也等不到可读数据）。2026-10-16 实测：9-26 起把长度从 floats(512) 放大到
-        // 4096 后，第 1 帧正常（perChannel=256）、第 2 帧起恒 0、5 秒内 dspTime 纹丝
-        // 不动；每次 Stop/Start 只换回一个缓冲又立刻归零，而 pause/focused/mics/音频
-        // 配置全程正常——这就是「音频捕获归零」的根因。
         NativeArray<float> target = RenderBuffer(floats);
         if (!AudioRenderer.Render(target))
         {

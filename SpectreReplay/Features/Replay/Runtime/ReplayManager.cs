@@ -41,16 +41,6 @@ internal static class ReplayManager
             Directory.CreateDirectory(dir);
     }
 
-    /// <summary>
-    /// 回放文件列表要 glob 的扩展名。
-    ///
-    /// **只有新格式两种**（`.sprp` 加密 / `.psprp` 不解密）。2026-10-18 用户裁定
-    /// 删掉旧回放文件适配后，`.crpl` / `.crpl2` 的读写都不再存在，列表自然也
-    /// 不该再列出它们——否则玩家点一份旧文件，只会得到「不是回放文件」。
-    ///
-    /// 扩展名知识集中在这一处（与 <see cref="SaveReplay"/> 的 ext 同行维护），
-    /// 别处不写死字面量——格式一改，写死的那边会静默失效。
-    /// </summary>
     internal static readonly string[] ReadableExtensions =
     {
         ReplayConstants.Extension,           // .sprp  加密（默认）
@@ -107,23 +97,10 @@ internal static class ReplayManager
         SpectreState.HasKeybdSound = false;
     }
 
-    /// <summary>
-    /// 读回放。**只有新格式一条路**：解密（或 `.psprp` 不解密）→ <see cref="ReplayDecoder"/>。
-    ///
-    /// 旧的 `LoadReplay`（`.crpl` 旧版 JSON / `CompactCreplayfile` 内嵌结构）与
-    /// `LoadReplayAuto` 里的 CRP2 magic 分支已按 2026-10-18 用户裁定删除。
-    /// 那时的兜底是「新格式解不开就当旧 JSON 再试一次」——它把**任何损坏文件**
-    /// 都拖进一条慢路径，且失败后只吐一句笼统的错误，玩家分不清是文件坏了、
-    /// 选错了、还是版本不对。现在一步到位，错误信息更具体。
-    /// </summary>
     internal static bool LoadReplay(out ReplayData replayData, string filePath, bool no_encryption = false)
     {
         if (!ReadReplayData(out replayData, filePath, no_encryption))
             return false;
-        // 只有真正「装载」时才碰键盘音。**这一句有副作用**：它会无条件改写
-        // SpectreState.HasKeybdSound 与 WavLoader.loaded_clip，把此前载入的
-        // 回放的键盘音顶掉。所以「只看文件信息」必须走 ReadReplayData，
-        // 不能图省事复用它。
         TryLoadKeybdSound(filePath, replayData);
         Debug.Log("replay load!");
         return true;
@@ -144,12 +121,6 @@ internal static class ReplayManager
             Debug.LogError("[SpectreReplay] 回放文件不存在: \"" + filePath + "\"");
             return false;
         }
-        // **按扩展名自动判定要不要解密。** 这里曾经只信调用方传的 no_encryption，
-        // 而界面那条路从来没传过它：`.psprp`（不解密变体）照样被列进回放列表、
-        // 也照样点了「回放」，然后走解密分支——首字节不是 SRC2，直接判「文件损坏」。
-        // 也就是说 .psprp 在界面上一直是**看得见、点得着、但永远打不开**。
-        // 扩展名是这条信息唯一的权威来源（保存时由 SaveReplayNew 决定写哪种），
-        // 所以在这里判，而不是要求每个调用点自己记得传。
         if (!no_encryption
             && filePath.EndsWith(ReplayConstants.ExtensionNoEncrypt, StringComparison.OrdinalIgnoreCase))
         {
@@ -170,13 +141,6 @@ internal static class ReplayManager
             decrypted = ReplayCrypto.Decrypt(raw);
             if (decrypted == null)
             {
-                // 用户主动点开的文件解不开：最可能是选错文件、文件损坏，
-                // 或该回放是别的东西加密的。原来只留一行英文日志，
-                // 用户既看不懂也不知道下一步该干什么。
-                // 提示里不要提任何具体密钥材料——2026-10-18 起新文件走
-                // PBKDF2 + 随机 salt；旧上游格式的读侧回落在 2026-10-19 已整体移除，
-                // 因此这里也不再区分「旧文件」这一情形（无法区分，也不该暗示）。
-                // 玩家能做的排查动作没变（换文件/确认没被改），所以只说这些。
                 Debug.LogError("[SpectreReplay] 回放解密失败: \"" + filePath + "\" —— "
                     + "文件可能已损坏、不是回放文件，或是被别的程序的密钥加密过。"
                     + "（本模组的回放不依赖任何外部密钥文件，换机/重装后仍可读）");

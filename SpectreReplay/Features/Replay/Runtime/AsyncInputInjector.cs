@@ -46,20 +46,6 @@ internal static class AsyncInputInjector
     // 最近一次**实际入队失败**的帧号。-1 表示从没失败过。
     private static int _lastFailFrame = -1;
 
-    /// <summary>
-    /// 注入是否**确实在落地**：不仅 <see cref="Usable"/> 看起来可用，还要没有在最近
-    /// 反生过入队失败。
-    ///
-    /// 为什么要这一层：<see cref="Usable"/> 只是在问「反射字段拿得到、窗口聚焦、
-    /// 游戏的出队方开着」，是**看起来**能用。真正的 <see cref="Inject"/> 仍可能失败——
-    /// conductor 还没建好、<c>conductor.song</c> 为 null、pitch 为 0、
-    /// <c>AsyncInputManager.keyQueue</c> 被换掉、反射写入抛异常……
-    /// 一旦这种情况持续发生，而托管覆盖层已经因为 <see cref="Usable"/> 为真而整体放行，
-    /// 游戏这条链读到的就是**永远空**的 keyMask：两条路同时不工作，比不用原生链更糟。
-    ///
-    /// 判据只看「最近一帧有没有失败过」——用帧窗而不是一次性熔断，是因为
-    /// 换歌/转场期间的瞬时失败过去之后应当自动恢复原生链。
-    /// </summary>
     internal static bool Healthy
     {
         get
@@ -91,17 +77,6 @@ internal static class AsyncInputInjector
         }
     }
 
-    /// <summary>
-    /// **事件能否广播出去**：字段都拿得到，SkyHook 钩子开着，且窗口聚焦。
-    ///
-    /// 只要求 <c>SkyHookManager.isHookActive</c>，**不要求 <c>asyncKeyboard.isActive</c>**。
-    /// 判据必须这么定，因为广播的消费者不只是游戏（见下方注释）。
-    ///
-    /// 与 <see cref="Usable"/> 的分工是这套注入的核心：
-    ///   · <see cref="Injectable"/> = 能不能广播 → 决定是否调用 <see cref="Inject"/>；
-    ///   · <see cref="Usable"/> = 游戏会不会出队 → 决定 <see cref="ManagedInput.NativeTakeover"/>。
-    /// 混用会让某一方静默失效。
-    /// </summary>
     internal static bool Injectable
     {
         get
@@ -112,27 +87,6 @@ internal static class AsyncInputInjector
                 return false;
             if (!Application.isFocused) return false;
 
-            // 只要能广播就够了。**不能要求 asyncKeyboard.isActive**——那个值只在
-            // PlayerControl 为真，而广播的消费者不只是游戏：
-            //   · JipperResourcePack 直接订阅 SkyHookManager.KeyUpdated
-            //     （KeyViewer.cs:2216，`SkyHookManager.KeyUpdated.AddListener(OnKeyEvent)`），
-            //     它不读 RDInput、不读 keyMask、也不读 UnityEngine.Input；
-            //   · 若用 Usable 当判据，非 PlayerControl 状态下 Inject 不被调用，
-            //     KeyUpdated.Invoke 不发生，这些模组整段看不到按键。
-            //
-            // 广播到非 PlayerControl 状态**不会**污染判定，理由分两种情形：
-            //
-            //   · 游戏开着异步输入时：UpdateInput 在 asyncKeyboard.isActive 为假时开头早退
-            //     （scrController.cs:2900），没人出队；而 AsyncInputManager.Update 在 !flag
-            //     时每帧 ClearKeys()（AsyncInputManager.cs:159-162，:110-116 含 keyQueue.Clear），
-            //     队列不会堆积。
-            //
-            //   · 游戏关着异步输入时：AsyncInputManager.Update 走 else 分支，那句 ClearKeys()
-            //     不执行。但此时游戏的入队监听器本身被别的模组拦住了——JipperResourcePack
-            //     给每个 SkyHook 监听器都加了 `IsActive()` 前缀（AsyncInputHook.cs:101，
-            //     `return _gameEnabled`），_gameEnabled 为 false 时直接跳过入队。
-            //     它同时会强留钩子开启（Acquire → StartHook），所以事件仍能广播给订阅者。
-            //     这是该模组自己的设计，我们只需保证不停发事件。
             try { return SkyHook.SkyHookManager.Instance.isHookActive; }
             catch { return false; }
         }

@@ -111,9 +111,6 @@ internal sealed class VideoEncoder : IDisposable
         try
         {
             string modDir = Main.mod.Path;
-            // UMM 的布局是 <game>\Mods\<ModName>，向上**两级**才是游戏根目录。
-            // 原先写了三级，取到的是游戏目录的父目录，放在游戏根目录的 ffmpeg.exe
-            // 永远探测不到，静默回退到 PATH。
             string gameRoot = Path.GetFullPath(Path.Combine(modDir, "..", ".."));
             string[] candidates =
             {
@@ -376,9 +373,6 @@ internal sealed class VideoEncoder : IDisposable
         return Codec.X264;
     }
 
-    /// <summary>本次渲染实际会用到的编码器名（不含档位）。纯查询，不改状态：
-    /// UI 用它告诉用户"选 fastest 但其实跑在 CPU 上"这类静默降级——
-    /// 原先 EncoderName 算了却没人读，降级完全无声。</summary>
     internal static string DescribeEncoder(Quality quality, OutContainer container)
     {
         switch (PickCodec(quality, container))

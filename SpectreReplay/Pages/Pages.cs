@@ -64,11 +64,6 @@ namespace SpectreReplay.Pages
                 OnGui.Note("record.howto");
                 Gui.Divider();
                 OnGui.Row("record.recording", ReplayOn, v => { ReplayOn = v; Commit(); });
-                // **录制总开关关掉时，下面这些保存策略一律压暗且不可调。**
-                // ReplayOn 为假时整套回放补丁根本不挂载（Main.cs:95-98 注册的谓词
-                // 全是 `ReplayOn && …`），这些项改了不会产生任何效果——白放着比
-                // 灰掉更糟：玩家会以为调了有用，然后发现「设了不生效」。
-                // 判据 ⑱ 守这里：这几行的末参必须是 `ReplayOn`，而不是恒 true。
                 OnGui.Row("record.autosave", AutoSave, v => { AutoSave = v; Commit(); }, ReplayOn);
                 // 保存策略七项：**每一项都真的在控制回放什么时候落盘**
                 // （Patch_Recording.cs:136/137/139/142/163、SpectreState.cs:254、
@@ -83,31 +78,7 @@ namespace SpectreReplay.Pages
                 OnGui.Row("record.latesave", LateSave, v => { LateSave = v; Commit(); }, ReplayOn);
                 OnGui.Row("record.failsave", FailSave, v => { FailSave = v; Commit(); }, ReplayOn);
                 OnGui.Row("record.backup", Backup, v => { Backup = v; Commit(); }, ReplayOn);
-                // （原「限制按键数」一行 2026-10-19 按用户要求删除。它不是"多余"而是
-                //   **假开关**：文案说限制单局记录的按键数，而全仓没有任何收按键盘数的
-                //   代码；Settings.LimitKey 唯一的消费点是 key_convert_list2array 的
-                //   `!LimitKey ||` 前置条件，而那个函数的末态由末尾兜底循环决定，
-                //   开关真假只改中间态、末态逐字节相同。留着一个拨了没反应、说明还
-                //   在编功能的开关，比没有这个开关更糟——玩家会以为回放文件被它撑大。）
-                // 这几项都是**真的行为开关**（不是摆设）：ManualSave 管 F9 手动保存
-                // 那条补丁挂不挂（Main.cs + Patch_Misc.cs）、CancelSave 管另一条
-                // 「按快捷键放弃本局存档」的补丁（Main.cs + Patch_Misc.cs:66）、
-                // GetDataFromAsyncInput 管按键从异步输入还是轮询取
-                // （Main.cs + AsyncKeyRecorder.cs）。
-                // 之前界面上一个都没有，改它们只能手改 Configs.json——
-                // 而 ManualSave 关掉后 F9 直接失效，玩家会以为按键没绑上。
-                // （原先这里还有第三个「界面语言跟随游戏」，2026-10-17 已删除：
-                //   面板语言由 Ui.Loc.RefreshLanguage 始终跟随游戏，那个开关只影响
-                //   14 语言大表里的通知文案，留着只会让人以为界面语言能单独设。）
                 OnGui.Row("record.manualsave", ManualSave, v => { ManualSave = v; Commit(); }, ReplayOn);
-                // 取消保存：与上一项同类——它管的是「按快捷键放弃本局待存数据」
-                // 那条补丁挂不挂（Patch_Misc.cs:66 的 scrConductor.Update Postfix）。
-                // 关掉后按这个键毫无反应，而界面上此前根本没有这一项。
-                // **必须写限定名 Settings.CancelSave**：本文件顶部 `using static` 同时
-                // 引入了 Settings 与 SpectreState，后者有个 `CancelSave()` 方法。
-                // 方法组与字段同名时简单名解析到方法组，`v => { CancelSave = v; }`
-                // 会报 CS1656「无法为方法组赋值」。（ManualSave 没这个冲突，
-                // SpectreState 里没有同名方法。）
                 OnGui.Row("record.cancelsave", Settings.CancelSave,
                     v => { Settings.CancelSave = v; Commit(); }, ReplayOn);
                 // 异步输入：**开关前先看游戏侧有没有开。** 这条设置只在游戏的
@@ -121,16 +92,6 @@ namespace SpectreReplay.Pages
                 //   始终跟随游戏，那个开关实际只影响 14 语言大表里的通知文案，
                 //   默认 true 就是对的，留着只会让人以为界面语言能单独设。）
                 Gui.Divider();
-                // 把**真实**目录摆出来。原先只在 record.note 里写了一句
-                // "保存在 Mods/SpectreReplay/Replays/"，而 SavePath 实际是模组根
-                // （modEntry.Path），回放散在根目录里、和 dll 混在一起——玩家照
-                // 那句话去 Replays/ 找只会看到空目录，以为保存没成功。
-                //
-                // **它同时是唯一能改保存目录的入口**，对应 Settings.SavePath。
-                // 此前这一行只是一句只读的 Gui.KeyValue：数据在（Settings 里有
-                // 字段）、链路通（ConfigManager 落盘、SpectreState 真的按它写
-                // 文件），却没有任何一行界面能改它——想换个盘放回放只能去手改
-                // Configs.json，而从界面上看不出有这一项。与 ⑨/⑩ 是同一类病。
                 DrawSaveDirRow();
             });
 
@@ -200,9 +161,6 @@ namespace SpectreReplay.Pages
                 // 勾了也不会有任何效果。灰掉比"能点但不生效"诚实。
                 Gui.KeyChips(KeyboardSpecialKeyNames, AllowedKeyboardSpecialKeys, 6,
                     () => Commit(), ReplayOn, "record.specialkeys.kb");
-                // 异步那一组只在游戏侧真的开了异步输入时才有意义——与
-                // DrawAsyncInputRow 同一套判据。没开就整块不显示，而不是
-                // 画一组勾了也不生效的标签。
                 if (GameAsyncInputOn())
                 {
                     Gui.KeyValue("record.specialkeys.async", "", Gui.DimCol);
@@ -215,16 +173,6 @@ namespace SpectreReplay.Pages
                 }
             });
 
-            // ── 键位重映射 ──────────────────────────────────────
-            //
-            // `KeyConvertEnabled` / `KeyCodeConvert` 有字段、有落盘、有真消费点
-            // （Settings.key_convert_list2array 建表，回放/录制两侧按它换算 VK），
-            // 但设置页里此前**一行都没有**——`settings-ui-audit.ps1` 把
-            // KeyConvertEnabled / KeyCodeConvert 判为「无界面」，而它们不是
-            // 自动探测项：玩家想把手柄/宏键盘的自定义键码对回标准键，只能手改
-            // Configs.json 里的 JSON 数组，从界面上完全看不出有这个功能。
-            //
-            // 与「键盘音三项」「保存目录」是同一类病：数据在、链路通、界面缺。
             Gui.Section("record.keymap", Gui.Accent, () =>
             {
                 OnGui.Row("record.keymap.on", KeyConvertEnabled, v =>
@@ -447,15 +395,6 @@ namespace SpectreReplay.Pages
                 }
                 data = loaded;
                 _loadedPath = path;
-                // **只装弹、不发射。** PlayMode = true 只是"下一次 Start_Rewind 时
-                // 走 TryStartPlayback"——而 Start_Rewind 只在【重开/换关/进关】时
-                // 由游戏调用。也就是说点完这个按钮，玩家必须自己再进一次关卡，
-                // 回放才会开始。
-                // 原先这里打一句 status.loaded（「已载入回放」），读起来像"已经
-                // 开始了"，而画面毫无变化——玩家点一下什么都没发生，
-                // 而这正是"点了没反应"那一类。
-                // playback.ready / status.pending_replay 两条文案从建库起就在表里，
-                // 说的都是"重开这关才会自动播放"。这里说清楚，并给出直接重开的入口。
                 PlayActions.SwitchToPlayMode();
                 Status.Say(PlayMode && !is_playing ? "status.pending_replay" : "status.loaded",
                     Path.GetFileNameWithoutExtension(path));
@@ -550,15 +489,6 @@ namespace SpectreReplay.Pages
             _replayCacheTick = int.MinValue;
         }
 
-        /// <summary>
-        /// 「当前」这一组。**任何时候都有话说**：
-        /// 播放中说"正在播放：某某"并给停止入口，录制中说"正在录制"并给放弃入口，
-        /// 其余说"还没载入回放"。
-        ///
-        /// 原先这一整块只在 is_playing 时才画，玩家看到的是"这页上面什么都没有"，
-        /// 分不清是没载入、载入了没生效、还是校验把它拒了——
-        /// 而这三件事的处理方式完全不同。
-        /// </summary>
         private static void DrawPlaybackState()
         {
             if (is_playing)
@@ -686,11 +616,6 @@ namespace SpectreReplay.Pages
                 // 标题行 + 直达按钮：歌名与关卡 id 都写出来，玩家才知道要跳去哪。
                 GUILayout.Label(Loc.F("playback.openlevel.official_go", internalName),
                     Gui.NoteStyle, GUILayout.ExpandWidth(true));
-                // **按钮用独立文案键 `playback.openlevel.official.go`，不复用
-                // `playback.openlevel`。** 理由不是措辞而是可验证性：判据 ⑫b 要求
-                // "同一行同时出现 Button 与 playback.openlevel"，两条分支若共用那个键，
-                // 改坏自制谱那一颗时官方这颗仍会让判据命中 —— 变异 MUT-V5 当场
-                // 退化成假断言（2026-10-17 实测）。两个入口各有自己的键，才能各自被钉住。
                 if (GUILayout.Button(Loc.T("playback.openlevel.official.go"),
                         Gui.ButtonStyle, GUILayout.Width(160f), GUILayout.Height(24f)))
                 {
@@ -733,16 +658,6 @@ namespace SpectreReplay.Pages
             }
         }
 
-        /// <summary>
-        /// 已装弹（PlayMode）但还没开始播：说清楚"下一步该干什么"。
-        ///
-        /// 回放的启动时机是 **Start_Rewind**（重开/换关/进关时由游戏调用），
-        /// 而设置页里点「回放」只把数据装好。原先装完只说一句"已载入"，
-        /// 没有这个状态行，玩家点完按钮画面毫无变化——既不知道要重开，
-        /// 也看不出到底装上了没有。
-        ///
-        /// 注意这里**不画 timing 摘要**：调用方紧接着就画，嵌在里面会出两遍。
-        /// </summary>
         private static void DrawArmedHint()
         {
             if (!PlayMode || data == null)
@@ -892,8 +807,6 @@ namespace SpectreReplay.Pages
             DrawConvertSection();
         }
 
-        /// <summary>启动渲染。前置判据全部交给服务层（它会自己弹"先载入回放"、
-        /// "先进入关卡"、"找不到 ffmpeg"、"渲染已在设置中关闭"）。</summary>
         private static void StartRender()
         {
             try
@@ -919,9 +832,6 @@ namespace SpectreReplay.Pages
             var s = Features.VideoRender.VideoRender.Current;
             if (!Features.VideoRender.VideoRender.Active)
             {
-                // **按记录的终态显示，不要靠 Output 是否非空去猜。**
-                // Output 在渲染一开始就赋值了，取消时它照样非空——
-                // 原先的判据把「我取消了」显示成「渲染完成：xxx.mp4」。
                 string last;
                 switch (s.Result)
                 {
@@ -1032,13 +942,6 @@ namespace SpectreReplay.Pages
             // 翻译了反而对不上。索引与 VideoEncoder.OutContainer 一一对应。
             OnGui.RowDropdown("render.format", new[] { "mp4", "mkv", "webm", "mov" },
                 RenderOutputFormat, i => { RenderOutputFormat = i; Commit(); });
-            // 输出目录：这一项对应 **Settings.RenderOutputDir**（由 OnGui.RowInput 的
-            // 共享 _textDraft 读写，收口在 OnGui.CommitText / FlushConfig）。
-            // **为什么要在注释里显式写出字段名**：RowInput 只收一个文案键，控件与
-            // 字段之间只靠约定连着——连我自己的 settings-ui-audit 都追不到，一度把
-            // 这一项误报成"无界面控件"。写出来之后 grep / 审计都能顺藤摸到，
-            // 也就不必为了可审计性去改 RowInput 的签名（它本质是单实例共享草稿，
-            // 加字段参数反而会暗示一个它并不具备的绑定能力）。
             OnGui.RowInput("render.outdir");
             DrawEncoderNote();
             // ── 实验性：确定性渲染时钟 ──────────────────────────────
@@ -1070,11 +973,6 @@ namespace SpectreReplay.Pages
                     (VideoEncoder.Quality)Mathf.Clamp(RenderEncoderMode, 0, 3), container);
                 Gui.KeyValue("render.codec.current", name, Gui.DimCol);
 
-                // ffmpeg 状态。**为什么要有这一行**：渲染与转换全都依赖 ffmpeg，
-                // 而没有它的时候此前只有"点了开始渲染"才弹一句游戏内提示——
-                // 玩家在设置页看不出任何异常，只会以为是自己参数没配对。
-                // 判定口径与上游一致（SpectreUiPages.Features.cs:693）：
-                // 模组/游戏根目录里找到 exe 就算就绪，否则再探一次系统 PATH。
                 string exe = VideoEncoder.LocateEncoder();
                 bool ready = exe != "ffmpeg" || VideoEncoder.PathProbeSucceeded();
                 Gui.KeyValue("render.ffmpeg",
@@ -1101,18 +999,6 @@ namespace SpectreReplay.Pages
             {
                 OnGui.Note("convert.hint");
                 Gui.Divider();
-                // 目标格式：**独立于 render.format**（用户 2026-10-12 拍板方案 B）。
-                //
-                // 这里原先是一行**只读**的 Gui.KeyValue，只把 RenderOutputFormat
-                // 显示出来——玩家看到"输出格式 .mp4"却点不动，是「有界面但改不了」
-                // 那一族缺陷的第 4 例（前三例：键盘音三项、回放驱动开关、保存目录）。
-                // 真能改的下拉在渲染页，所以本页这一行看起来像坏了。
-                //
-                // 现在改成真下拉，绑 Settings.ConvertTarget。**为什么解耦**：
-                // 渲染格式是"这局录成什么"，转换格式是"把已有的一堆转成什么"，
-                // 复用同一个值会让"渲染 mp4、顺手把旧视频转 mkv"做不到，只能来回改。
-                // （权衡记录：原先复用是怕"选了 webm 却转出 mp4"——那个风险现在由
-                //  这一行自己显示当前值来消除，玩家看得到自己要转成什么。）
                 OnGui.RowDropdown("convert.target", new[] { "mp4", "mkv", "webm", "mov" },
                     ConvertTarget, i => { ConvertTarget = i; Commit(); });
 
@@ -1209,24 +1095,6 @@ namespace SpectreReplay.Pages
                 {
                     EffectRemoverOn = v;
                     Commit();
-                    // 总开关一动，编辑器的保存按钮**必须当场重算**。
-                    //
-                    // **两半都要，只接一半是 2026-10-18 用户报的那个缺陷**
-                    // （「允许覆盖关卡开关后不会实时生效」）：
-                    //   · 关掉 → 补丁被卸载，但按钮的 interactable 还停在禁用态，
-                    //     玩家只能重启游戏（这一半原先就有）；
-                    //   · 打开 → 按钮**仍停在旧态**，而 Prefix 已经放行。于是
-                    //     「能不能存盘」由那颗按钮的 UI 状态决定，不是由
-                    //     SaveLevelEditorAction.Execute 的 Prefix 决定——两边脱节。
-                    //
-                    // 为什么原先不生效：`Commit()` 只做「落盘 + 重挂补丁」，
-                    // 它**不碰任何 UI 状态**；而全仓唯一写 buttonSave.interactable
-                    // 的是 EffectRemover.SetEditorSaveButtons，只在
-                    // `scnEditor.LoadGameScene` 的 Postfix 被调一次。也就是说
-                    // 按钮态是**进编辑器那一刻定死的**，之后拨开关纹丝不动。
-                    //
-                    // 非编辑器场景调用安全：SetEditorSaveButtons 里先判
-                    // `SceneManager.GetActiveScene().name != "scnEditor"` 就早退。
                     if (!v)
                     {
                         EffectRemover.RestoreEditorSaveButtons();
@@ -1237,13 +1105,6 @@ namespace SpectreReplay.Pages
                     }
                 });
                 OnGui.Note("effects.on.note");
-                // 「允许覆盖关卡」跟着去特效开关走：功能没开时它毫无意义。
-                // **现在有禁用态了**（Gui.Dim），所以这两项真的会压暗；
-                // 原先那句「不禁用——本项目没有禁用态样式」已经过期。
-                //
-                // **拨动后必须当场刷新按钮**（同上：Commit 只落盘、不碰 UI）。
-                // 少了这一下，玩家在编辑器里把「允许覆盖关卡」打开，保存按钮
-                // 仍停在上次进编辑器时算出的禁用态——他会以为功能坏了。
                 OnGui.Row("effects.enablesave", EffectRemoverEnableSave,
                     v =>
                     {
@@ -1274,12 +1135,6 @@ namespace SpectreReplay.Pages
                 OnGui.Row("effects.particles", EffectRemoverParticles, v => { EffectRemoverParticles = v; Commit(); });
                 OnGui.Row("effects.backgrounds", EffectRemoverBackgrounds, v => { EffectRemoverBackgrounds = v; Commit(); });
                 OnGui.Row("effects.cameras", EffectRemoverCameras, v => { EffectRemoverCameras = v; Commit(); });
-                // 二级父子（与上游一致）：缩放值是「移除镜头移动」的配套参数，
-                // 但真正生效由 EffectRemoverSetCameraZoom 决定——
-                // EffectRemover.RemoveCameras 里先判它，false 就直接 return，
-                // 滑条拖到哪都不会写进谱面。它默认 false，而全仓原先没有
-                // 任何 UI 能打开它，于是这一行是个**拖得动但毫无作用**的控件。
-                // 所以开关必须在，且滑条受「父项 ∨ 总开关」两个条件管。
                 OnGui.Row("effects.setcamerazoom", EffectRemoverSetCameraZoom,
                     v => { EffectRemoverSetCameraZoom = v; Commit(); },
                     EffectRemoverOn && EffectRemoverCameras);
@@ -1291,12 +1146,6 @@ namespace SpectreReplay.Pages
             Gui.Section("effects.decor", Gui.Accent, () =>
             {
                 OnGui.Row("effects.decorations", EffectRemoverDecorations, v => { EffectRemoverDecorations = v; Commit(); });
-                // 父项门控：这一项是「移除装饰物」的**清除口径**，不是独立动作。
-                // 全仓只有 EffectRemover.RemoveDecorations 读它，而那个方法只在
-                // `if (Settings.EffectRemoverDecorations)` 里被调；父项关着时它拨到哪
-                // 都不改变任何一个字节。原先没挂 enabled，于是成了「拨得动、没反应」。
-                // 上游更彻底——它只在父项开着时**渲染**这一行
-                // （SpectreUiPages.Features.cs:85-86），本项目不藏控件，改成压暗。
                 OnGui.Row("effects.removealldecor", EffectRemoverRemoveAllDecorations,
                     v => { EffectRemoverRemoveAllDecorations = v; Commit(); },
                     EffectRemoverOn && EffectRemoverDecorations);
@@ -1450,16 +1299,6 @@ namespace SpectreReplay.Pages
             }
         }
 
-        /// <summary>
-        /// UMM 是否**检查过**更新。判据是 <c>Params.LastUpdateCheck</c> 有没有被写过：
-        /// <c>CheckModUpdates</c> 一进来就 `stfld Param::LastUpdateCheck = DateTime.Now`，
-        /// 失败也照样写，所以「非默认值」= 确实跑过一次（不管成没成）。
-        ///
-        /// **必须用反射**：<c>Param</c> 类型本身是 public、<c>LastUpdateCheck</c> 字段也是
-        /// public，但拿它的入口 <c>UnityModManager.get_Params</c> 是 **internal**。
-        /// 拿不到就返回 false（退回「未检查」这一态）——宁可说「不知道」，
-        /// 也不能在没证据时说「已是最新」。
-        /// </summary>
         private static bool LastUpdateCheckSeen()
         {
             try
@@ -1601,38 +1440,6 @@ namespace SpectreReplay.Pages
         /// <summary>点击后置位，等下一拍再弹选择框（见 DrawSaveDirRow）。</summary>
         private static bool _pickSaveDirPending;
 
-        /// <summary>
-        /// 一行「回放目录」：显示当前目录 + 一个「更改…」按钮。对应
-        /// <c>Settings.SavePath</c>。
-        ///
-        /// 这一行此前只是只读的 <c>Gui.KeyValue</c>——数据在（Settings 有字段）、
-        /// 链路通（ConfigManager 落盘、SpectreState 真的按它写文件），却没有任何
-        /// 一行界面能改它。想换个盘放回放只能去手改 Configs.json，而从界面上
-        /// 看不出有这一项。与 ⑨（键盘音三项）/ ⑩（回放驱动开关）是同一类病。
-        ///
-        /// **为什么按钮点了不直接弹选择框。** <c>FileBrowser.PickFolder</c> 是
-        /// **阻塞式原生对话框**（UnityFileDialog.dll → file_dialog_pick_folder，
-        /// 见 UnityFileDialog.decompiled.cs:266）。而这里是在 IMGUI 的控件回调里
-        /// ——Layout/Repaint 那一趟还没走完就钻进一个模态原生窗口，事件队列的
-        /// 配对会错位。所以点击只置一个待办，真正的调用交给 MainThread.Defer，
-        /// 在下一拍 Update（OnGUI 之外）执行。
-        /// </summary>
-        /// <summary>
-        /// 「从异步输入取按键」这一行。**必须先报出游戏侧的状态。**
-        ///
-        /// 我们自己的实现是清楚的（`Settings.GetDataFromAsyncInput` → Main 挂
-        /// `Patch_UpdateInputConsumeAsync`、`AsyncKeyRecorder.FlushFrame` 里判它），
-        /// 但它**依赖游戏先打开异步输入**：`FlushFrame` 的第三个条件就是
-        /// `AsyncInputManager.isActive`，为假时整帧直接丢弃（DiscardPending）。
-        ///
-        /// 也就是说：游戏侧没开时，勾上这个开关**一点效果都没有、也不报错**。
-        /// 这是「有界面但改不了」的变体——「有开关但没效果」，比没开关更糟：
-        /// 玩家会以为自己配错了别的东西（键位？输入法？），永远查不到真正原因。
-        ///
-        /// 游戏侧的权威判据是 `RDC.useAsyncInput`（= `AsyncInputManager.isActive`，
-        /// 反编译 RDC.cs:210-215 核实）。它同时也是游戏「异步输入」选项的 setter，
-        /// 所以读它不会产生副作用。
-        /// </summary>
         private static void DrawAsyncInputRow()
         {
             OnGui.Row("record.asyncinput", GetDataFromAsyncInput,
@@ -1824,12 +1631,6 @@ namespace SpectreReplay.Pages
                     _replayCacheTick = Environment.TickCount;
                     return list;
                 }
-                // 扩展名从 `ReplayManager.ReadableExtensions` 取，**不在这里写死**。
-                // 历史上这里是写死的单个 `.sprp`，而当时解码端三种格式全能读
-                // （.sprp / .crpl2 / .crpl 各有一条分支），于是另外两种文件
-                // "磁盘上有、列表里没有"——点不了不是不能用，是根本找不到。
-                // 2026-10-18 旧格式适配整体删除后只剩新格式两种，但"清单只有一份"
-                // 这条仍然要守：写死的第二份会在格式再变时静默失效。
                 var files = Features.Replay.ReplayManager.ReadableExtensions
                     .SelectMany(ext => Directory.GetFiles(dir, "*" + ext))
                     .Distinct(StringComparer.OrdinalIgnoreCase)

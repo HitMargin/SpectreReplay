@@ -197,19 +197,6 @@ internal sealed class ReplayFileInfo
         return sum;
     }
 
-    /// <summary>
-    /// 判定分布要展示的桶，**按显示顺序**：先失误类，再各档 Perfect，最后自动/杂项。
-    ///
-    /// <para><b>为什么用「枚举名字」而不是下标。</b><c>HitMargin</c> 的枚举顺序
-    /// 在 r150 重排过（旧版 10 档、新版 16 档，且 XPerfect 一族是拆出来的）。
-    /// 录制时写进 <c>JudgmentList</c> 的是<b>数组下标</b>，按的是录制那一刻游戏
-    /// 的枚举——所以要用 <see cref="HitMarginCompat.TryResolve"/> 在当前版本里
-    /// 反查出下标，写死 0..15 会在旧版游戏上把整排分布错位。</para>
-    ///
-    /// <para><b>为什么 locale 键是显式的字面量表。</b>文案键必须是字面量——
-    /// Loc 的反向判据要求「表里每个键都有人以字面量取用」，动态拼
-    /// <c>"playback.judge." + name</c> 会让这些键被判成死键。</para>
-    /// </summary>
     private static readonly string[] JudgmentNames =
     {
         "TooEarly", "VeryEarly", "EarlyPerfect", "PerfectMinus",

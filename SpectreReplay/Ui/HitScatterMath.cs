@@ -2,22 +2,6 @@ using System;
 
 namespace SpectreReplay.Ui
 {
-    /// <summary>
-    /// 命中散点图的**纯数学部分**：抽稀取样、尺度归一化、着色分档。
-    ///
-    /// <para><b>为什么把它从 <see cref="HitScatter"/> 里拆出来。</b>
-    /// <c>HitScatter</c> 依赖 <c>Texture2D</c>，离屏套件跑不了它——于是那里的
-    /// 逻辑（抽稀、着色）**一条判据都钉不住**。而它恰好出过两个真缺陷：
-    /// ① 抽稀每段只取第一个，三分之二的样本不进图（统计写着 -166ms，图上找不到）；
-    /// ② 黄色分支永远不可达（Perfect 窗口恒宽于 Pure，`abs &gt; pwin` 必然
-    ///    推出 `abs &gt; qwin`）。两者都是「画出来看着正常、但信息是错的」。
-    /// 把数学搬到这里之后，UiPreview 可以链接这个文件、用真源码打真判据。</para>
-    ///
-    /// <para><b>着色分档的口径</b>：<paramref name="absMs"/> 与该击的两个
-    /// 窗口比——落进较紧的那个算「最好」，落进较宽的那个算「中等」，
-    /// 都没进算「失误」。**用 min/max 而不是写死谁是紧的**：窗口公式在移动端
-    /// 与速度试炼下各有分支，谁宽谁窄不该由这里再赌一次。</para>
-    /// </summary>
     internal static class HitScatterMath
     {
         /// <summary>着色档位（与贴图上的三种语义色一一对应）。</summary>

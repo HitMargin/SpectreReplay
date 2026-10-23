@@ -5,36 +5,6 @@ using UnityEngine;
 
 namespace SpectreReplay.Ui
 {
-    /// <summary>
-    /// 设置界面的视觉工具箱（IMGUI 自绘）。
-    ///
-    /// **为什么要有这一层。** UMM 的默认皮肤是"白底灰框 + 系统字号"，
-    /// 摆出来的效果就是用户说的那种毛坯房：所有文字一样重、所有控件一样平、
-    /// 分组靠空行、状态靠一行裸文字、没有任何视觉层级。要让它"能看"，
-    /// 缺的不是某个控件的样式，而是**一层统一的分组与配色**；
-    /// 把颜色常量散在四个页面里手写，改一次配色就要改四个文件。
-    ///
-    /// **为什么全部自绘。** UnityModManager.UI 里 window/h1/h2/bold/button
-    /// 是 public，可以直接用；但 Textures（图标贴图）与 settings/status/
-    /// www/updates/tooltipBox 全是 private——引用它们等于把自己钉在
-    /// 某个 UMM 版本的内部结构上。这里只用 UnityEngine 自带的
-    /// Texture2D.whiteTexture 染色，配 Unicode 符号做图标（UMM 用的是
-    /// OS 动态字体，这些符号与中文同源，不会缺字形）。
-    ///
-    /// **三条硬约束，全是踩过的坑：**
-    ///   1. Begin/End 必须配对。UMM 对模组 OnGUI 的异常处理是
-    ///      LogException + ShowModSettings=-1 + GUIUtility.ExitGUI()，
-    ///      等于**整个设置面板当场消失**（UnityModManager.decompiled.cs:3886-3899）。
-    ///      所以分组一律走 Section(Action) 这种带 try/finally 的形式，
-    ///      不对外暴露裸的 Begin/End——异常顶多让这一页难看，不会让窗口没了。
-    ///   2. GUI.color / GUI.backgroundColor 用完必须还原。它们影响的是
-    ///      "之后画的每一个控件"，不还原会把 UMM 自己的表头与 Save 按钮
-    ///      一起染色（而 UMM 在调用我们之前刚把两者设成 Color.white，
-    ///      见 :3604-3607）。
-    ///   3. 手画装饰只在 EventType.Repaint 那一趟做。IMGUI 一帧跑好几趟
-    ///      （Layout/Repaint），在 Layout 趟画图等于白画，而 GetLastRect
-    ///      在非 Repaint 趟返回的是无意义矩形。
-    /// </summary>
     internal static class Gui
     {
         // ── 调色板（一处定义，四个页面共用）─────────────────────
@@ -49,27 +19,12 @@ namespace SpectreReplay.Ui
         internal static readonly Color BadCol = new Color(0.93f, 0.34f, 0.34f, 1f);
         internal static readonly Color PillOff = new Color(1f, 1f, 1f, 0.16f);
         internal static readonly Color BtnOff = new Color(1f, 1f, 1f, 0.14f);
-        // 按钮面。**必须是"比卡片亮"的实色**（同 FieldBg 那条教训）：
-        // 圆角贴图自带颜色，不再靠 GUI.backgroundColor 染色，所以这里要直接给对。
-        // 注意：GUI.backgroundColor 是**乘算**的，谁要是再对圆角按钮设它，
-        // 颜色会被再乘一遍变暗——所以原来那几处染色点已改成用专门的样式。
         internal static readonly Color BtnFace = new Color(0.20f, 0.23f, 0.29f, 1f);
         internal static readonly Color BtnHover = new Color(0.28f, 0.32f, 0.39f, 1f);
         // 分段/页签的"未选中"底色（比按钮面再暗一点，让选中态更跳）。
         // 用**不透明**色而不是半透明白：贴图把颜色烘进去了，半透明会在卡片上
         // 二次混色，同一组页签在深/浅卡片上看起来不一样。
         internal static readonly Color BtnQuiet = new Color(0.16f, 0.18f, 0.23f, 1f);
-        // 输入框自绘用的四色。**为什么必须自绘**：UMM 的 PrepareGUI / ScaleGUI
-        // 只重设 label / button / horizontalSlider / horizontalSliderThumb / toggle
-        // （UnityModManager.decompiled.cs:3467-3472 与 :3508-3519），
-        // **从不碰 GUI.skin.textField**——内建输入框会沿用 ADOFAI 自己的深色皮肤，
-        // 在深色卡片上就是一条黑框。
-        //
-        // **底色必须比卡片更亮（2026-10-12 踩过一次）。** 第一版把 FieldBg 定成
-        // (0.07,0.08,0.11)，比 CardBg (0.13,0.15,0.19) **还暗**——玩家看到的仍是
-        // 一个黑洞，与修复前的原生黑框毫无区别，于是"黑框还在"被反馈回来。
-        // 判据不是"颜色是多少"，而是**与卡片的明度差**：凹槽要比承载它的平面亮，
-        // 才读得出"这里可以输入"。描边同理，0.18 太淡，视觉上等于没有边。
         internal static readonly Color FieldBg = new Color(0.21f, 0.24f, 0.30f, 1f);
         internal static readonly Color FieldBorder = new Color(1f, 1f, 1f, 0.30f);
         internal static readonly Color FieldFocus = new Color(0.35f, 0.68f, 0.95f, 1f);
@@ -81,23 +36,10 @@ namespace SpectreReplay.Ui
         internal static readonly Color SliderTrack = new Color(0.14f, 0.16f, 0.21f, 1f);
         internal static readonly Color SliderThumb = new Color(0.88f, 0.91f, 0.95f, 1f);
 
-        // ── hover 色板（滑条 / 开关 / 输入框）─────────────────────────
-        // **为什么这三类控件也要 hover。** 按钮的 hover 是烘在贴图里的
-        // （normal 与 hover 两张图），而滑条/开关/输入框是**纯自绘**的，
-        // 没有任何样式帮它们做这件事——不主动判鼠标位置，鼠标移上去就毫无
-        // 反应，整页只有按钮"活"着，读起来像坏了一半。
-        //
-        // 提亮幅度刻意与 BtnFace→BtnHover（约 +0.06~0.08 亮度）对齐：
-        // 幅度不一致的话，同一页里会出现"按钮亮得很明显、开关几乎看不出来"，
-        // 反而更像 bug。判据 ⑪ 钉的是"取用了 hover 判据与 hover 色"，
-        // 不是某几个具体数字——数字可以调，形态不能丢。
         internal static readonly Color SliderTrackHover = new Color(0.20f, 0.23f, 0.29f, 1f);
         internal static readonly Color SliderFillHover = new Color(0.36f, 0.72f, 1f, 1f);
         internal static readonly Color SliderThumbHover = new Color(1f, 1f, 1f, 1f);
         internal static readonly Color PillOffHover = new Color(1f, 1f, 1f, 0.26f);
-        // 输入框 hover 必须**另起名字**、不能改 FieldBg：判据 ⑤ 拿 FieldBg 与
-        // CardBg 比 Rec.709 亮度（凹槽要比承载面亮），FieldBg 是非悬停的基准色，
-        // 改它就等于把基准改掉了。
         internal static readonly Color FieldBgHover = new Color(0.26f, 0.30f, 0.37f, 1f);
         internal static readonly Color FieldBorderHover = new Color(1f, 1f, 1f, 0.45f);
 
@@ -107,16 +49,6 @@ namespace SpectreReplay.Ui
         internal static readonly Color TipBg = new Color(0.05f, 0.06f, 0.08f, 0.98f);
         internal static readonly Color TipBorder = new Color(0.35f, 0.68f, 0.95f, 0.95f);
 
-        // ── 禁用态（总开关关掉时，它下面的子设置压暗）──────────────
-        // **为什么不用 GUI.enabled = false。** 本页四个主要控件（开关/滑条/
-        // 输入框/下拉）全是自绘的：它们自己 Fill 矩形、自己画文字，**根本不
-        // 经过 IMGUI 的禁用态渲染**。GUI.enabled = false 的结果是"颜色照旧、
-        // 但点不动"——比不置灰更迷惑，玩家会以为界面卡了。所以禁用态必须自己
-        // 做一遍：压暗走颜色，拦截走各控件自己的守卫（它们是唯一知道"这一行
-        // 该不该响应鼠标"的地方）。
-        //
-        // 这也是 Pages.cs 里那句「不禁用——本项目没有禁用态样式」的答案：
-        // 以前确实没有，所以当时的取舍是干脆不禁用。现在有了。
         private static int _dimDepth;
         private static readonly Color DimTint = new Color(0.62f, 0.62f, 0.62f, 1f);
 
@@ -170,11 +102,6 @@ namespace SpectreReplay.Ui
         /// <summary>控件列宽度。下拉/滑条/按键框统一用它，列才对得齐。</summary>
         internal const float CtrlW = 240f;
 
-        // ── 样式缓存 ──────────────────────────────────────────
-        // 必须缓存：GUIStyle 的构造涉及字体尺寸计算，每帧每个控件新建一个
-        // 会明显掉帧（这一页有几十个控件）。缓存失效的判据是"皮肤或字体
-        // 换了"——UMM 的 ScaleGUI 会换掉 GUI.skin.font（玩家在 UMM 设置里
-        // 改字号/字体），不重建就会一直用旧字号。
         private static GUISkin _skin;
         private static Font _font;
         private static GUIStyle _label, _labelC, _bold, _boldC, _h1, _h2, _small, _smallC, _note, _pad, _btn, _btnPrimary, _btnQuiet, _btnAccent, _tipStyle;
@@ -200,11 +127,6 @@ namespace SpectreReplay.Ui
             // 而不是折行——玩家看到半句话被硬生生截断。
             _note = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.UpperLeft, wordWrap = true, clipping = TextClipping.Clip };
             _pad = new GUIStyle { padding = new RectOffset(12, 12, 8, 8), margin = new RectOffset(0, 0, 0, 0) };
-            // 卡片底色**必须由贴图自带**，绝不能用 GUI.backgroundColor 去染一张白底：
-            // 它是**乘算**的，会乘到之后画的每个控件背景上——卡片里那些圆角按钮的
-            // 底色是烘在贴图里的，再乘一遍就把 hover 与 normal 的色差从 20/23/26
-            // 压成 3/3/5（≈1%，肉眼不可辨）。2026-10-16 用户报「打开编辑器按钮
-            // hover 没颜色变化」正是它。判据 ⑨ / MUT-V12 守这里。
             _pad.normal.background = RoundedTex.Get(2, 2, 0, CardBg);
             _btn = MakeButton(GUI.skin.button, BtnFace, BtnHover, TextCol, false);
             _btnPrimary = MakeButton(GUI.skin.button, Accent, Lighten(Accent, 0.15f), Color.white, true);
@@ -244,12 +166,6 @@ namespace SpectreReplay.Ui
                 padding = new RectOffset(10, 10, 4, 4),
             };
             st.border = new RectOffset(Radius + 1, Radius + 1, Radius + 1, Radius + 1);
-            // **不要在这里设 margin 去补行距。** 圆角按钮竖向紧贴确实会咬边
-            // （2026-10-17 用户截图报「按钮的布局似乎融合到了一起」），但
-            // margin 是**布局**尺寸：UMM 的 ScaleGUI 会给按钮定 fixedHeight，
-            // 两者叠加时按钮实际高度会变，页签与行高一起漂。行距统一由
-            // OnGui.RowGap 在行助手那一层补。
-
             st.normal.background = RoundedTex.Get(Size, Size, Radius, face);
             st.normal.textColor = text;
             st.hover.background = RoundedTex.Get(Size, Size, Radius, hover);
@@ -271,9 +187,6 @@ namespace SpectreReplay.Ui
         private static Color Darken(Color c, float k)
             => new Color(Mathf.Max(0f, c.r - k), Mathf.Max(0f, c.g - k), Mathf.Max(0f, c.b - k), c.a);
 
-        // 样式对外只读出口。OnGui / Pages 拿它画自己的行，而不是各自 new GUIStyle
-        // ——重复构造既费时，也会绕过 Ensure 的缓存判据（UMM 的 ScaleGUI 换字体后
-        // 那些自建样式不会跟着更新字号）。
         internal static GUIStyle LabelStyle { get { Ensure(); return _label; } }
         internal static GUIStyle BoldStyle { get { Ensure(); return _bold; } }
         internal static GUIStyle H2Style { get { Ensure(); return _h2; } }
@@ -288,18 +201,6 @@ namespace SpectreReplay.Ui
 
         // ── 原子绘制 ──────────────────────────────────────────
 
-        /// <summary>
-        /// 鼠标是否悬停在 <paramref name="r"/> 上。
-        ///
-        /// **这是滑条 / 开关 / 输入框能做到 hover 变化的唯一来源。** 按钮的
-        /// hover 来自样式里烘好的两张贴图（normal / hover），那三个控件是纯自绘的，
-        /// 没有任何机制替它们判定鼠标位置。判据 ⑪ 认的就是"用没用这个函数"。
-        ///
-        /// **不要在这里碰 <c>GUIUtility.GetControlID</c>**：它按调用顺序分配
-        /// 控件 id，而这个函数会被多个控件在 Layout/Repaint 两趟各调一次，
-        /// 插进来会把别人的 id 全带偏（下拉错位那类毛病的温床）。
-        /// 需要"拖动中也算悬停"的控件（滑条）自己比较 hotControl。
-        /// </summary>
         internal static bool Hover(Rect r)
             => Event.current != null && r.Contains(Event.current.mousePosition);
 
@@ -348,18 +249,6 @@ namespace SpectreReplay.Ui
 
         // ── 分组卡片 ──────────────────────────────────────────
 
-        /// <summary>
-        /// 一个分组：标题条 + 卡片体。**必用这个形式，不要手写 Begin/End。**
-        ///
-        /// 卡片底色由 <c>_pad</c> 的**卡色贴图**自带（见 Ensure 里那条注释），
-        /// **不再用 <c>GUI.backgroundColor = CardBg</c>**：那是乘算，会把卡片里
-        /// 圆角按钮烘好的底色再乘一遍，直接抹平 hover 与 normal 的色差
-        /// （2026-10-16「打开编辑器按钮 hover 没颜色变化」的根因）。
-        ///
-        /// 历史上这里确实靠 backgroundColor 染色，且注释记过"要在 EndVertical
-        /// 之后才还原"以避免白卡片——换成贴图后这个时序问题**整类消失**：
-        /// 底色是样式自带的，与取色发生在哪一趟无关。
-        /// </summary>
         internal static void Section(string titleKey, Color accent, Action body, bool enabled = true)
         {
             Ensure();
@@ -722,10 +611,6 @@ namespace SpectreReplay.Ui
             // **禁用态：按钮点不动。** GUI.Button 自己会检查 GUI.enabled，但这里
             // 是自绘 + GUIStyle.none，**必须自己拦**——否则灰色的 pill 照样能点开。
             bool clicked = !IsDim && GUI.Button(track, GUIContent.none, GUIStyle.none);
-            // 悬停区 = 标签列 + 开关本体。标签列宽固定（LabelW），所以不用
-            // GetLastRect 就能反推出整行的矩形——而 GetLastRect 在本文件里是
-            // 被判据 ③ 明令禁止的（它返回的是最后一个子控件，不是组的矩形）。
-            // 禁用态不登记说明：说明在说"这个开关干什么"，而此刻它开着也点不动。
             if (!IsDim)
             {
                 Tip(RowHit(track, LabelW), labelKey);
@@ -746,8 +631,6 @@ namespace SpectreReplay.Ui
             Text(track, Loc.T(value ? "ui.on" : "ui.off"), value ? Accent : DimCol, _smallC);
             GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
-            // clicked 是本次点击事件，不是新值：早先写成 `clicked != value`
-            // 时，value 已经是 true 就永远不成立——开关只能打开、关不掉。
             if (clicked)
             {
                 onChange?.Invoke(!value);
@@ -770,29 +653,9 @@ namespace SpectreReplay.Ui
             _tipKey = null;
         }
 
-        /// <summary>
-        /// 把控件矩形向左扩出标签列，得到「整行」的命中区。
-        ///
-        /// **为什么要扩到标签上。** 玩家说「鼠标移到功能上」，而一行里真正写名字
-        /// 的是左边那段标签——只认右边那颗小小的开关/滑条，等于要求玩家先猜
-        /// 「哪块算这个功能」。扩出去之后指针落在名字上也会弹说明。
-        ///
-        /// **为什么不用 <c>GetLastRect</c> 去拿标签自己的矩形。** 判据 ③ 明令
-        /// 禁止它（返回的是最后一个**控件**的矩形，紧跟 Begin* 还会抛异常），
-        /// 而标签宽度是固定的 <see cref="LabelW"/>，向左推即可，不必回头去取。
-        /// </summary>
         private static Rect RowHit(Rect ctrl, float labelW)
             => new Rect(ctrl.x - labelW, ctrl.y, labelW + ctrl.width, ctrl.height);
 
-        /// <summary>
-        /// 登记「鼠标悬停在 <paramref name="r"/> 上时显示 <paramref name="labelKey"/> 的说明」。
-        ///
-        /// 说明正文的键是 <c>labelKey + ".tip"</c>，另有专门的闸门判据保证每个
-        /// 控件都写了两种语言——漏写时这里**什么都不弹**，而不是把
-        /// "render.fps.tip" 这种原始键名糊到玩家脸上。
-        ///
-        /// 同一帧内后登记的赢：它画在更上层，视觉上就该由它解释。
-        /// </summary>
         internal static void Tip(Rect r, string labelKey)
         {
             if (string.IsNullOrEmpty(labelKey) || Event.current == null)
@@ -900,14 +763,6 @@ namespace SpectreReplay.Ui
             }
 
             Ensure();
-            // **边界必须是"我们所在的那个窗口"，不是 Screen。**
-            // 这一段原先前后两处都拿 Screen.width / Screen.height 判越界，
-            // 而我们的 OnGUI 是 UMM 用 GUI.Window 回调起来的：控件矩形与
-            // Event.current.mousePosition 全都是**窗口内的局部坐标**。
-            // 窗口宽约 700、屏幕宽 1920 ⇒ `x + W > Screen.width - 8` 永远
-            // 不成立，"贴边翻折"整个分支等于不存在，框子直接画出面板右缘
-            // 被窗口裁掉（2026-10-18 用户截图报的就是它）。
-            // UMM 自己画 tooltip 时比的是 mWindowRect.width，也是这个道理。
             Rect view = Viewport();
             // **宽度仍由常量给上限**（跟着内容走会让长说明撑满整行），
             // 只是再夹到可视区内：窗口窄于 320+边距时，写死的宽度会顶出
@@ -924,19 +779,6 @@ namespace SpectreReplay.Ui
             var content = new GUIContent(text);
             float h = _tipStyle.CalcHeight(content, inner) + PadY * 2f;
 
-            // **锚点必须是鼠标，不是控件矩形。**
-            // UMM 自己画说明框用的就是 Event.current.mousePosition
-            // （UnityModManager.decompiled.cs:3714-3722），我们原先锚的是控件
-            // 矩形：鼠标在一行里左右移动，说明框纹丝不动；更糟的是控件矩形
-            // 与"当前可画区"分属两套坐标（UMM 把我们包在它自己的 ScrollView
-            // 里），窗口一滚动，控件矩形落到视口外，下面的夹取就把框按在
-            // 可视区顶部——现象是"说明永远出现在模组名称那一行的 x 轴上"，
-            // 水平也只剩标签列的起点（2026-10-18 用户报的就是它）。
-            //
-            // 坐标同系已有旁证：Unity 官方 ReorderableListControl 直接把
-            // GUIClip.visibleRect 与 Event.current.mousePosition 做 Contains
-            // （ReorderableListControl.cs:1281），GUIHelper.cs:49 注明
-            // VisibleRect = TopmostRect + scrollViewOffsets。
             Vector2 mouse = Event.current.mousePosition;
             float x = mouse.x + 20f;      // 右下偏移：别让框压在指针底下
             float y = mouse.y + 20f;

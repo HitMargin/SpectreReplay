@@ -24,15 +24,6 @@ internal class Patch_Won_Update
     }
 }
 
-// ——— 命中推进的角度健全性 ————————————————————————————————
-//
-// `GetAngle()` 来自 SpectreState，算的是 `chosenPlanet.angle - targetExitAngle`。
-// 它依赖 conductor 的 crotchetAtStart：`scrPlanet.Update_RefreshAngles` /
-// `AsyncRefreshAngles` 在 crotchetAtStart 为 0 时会产出 ±Infinity。
-//
-// **为什么不只是「判 NaN」**：NaN 在 `angle >= CurrAngle` 里恒假，本来就不会吞数据；
-// 真正危险的是 ±Infinity——它在比较里恒真，会让单帧 while 把整份快照吃完。
-// 所以判据是 IsFinite（非 NaN 且非 ±Inf）。
 internal static class ReplayAngleGuard
 {
     internal static bool IsSane(float angle)
@@ -70,13 +61,6 @@ internal class Patch_PlayerControlUpdate
     {
         if (__instance == (UnityEngine.Object)null) return;
 
-        // Start keyboard sound recording
-        // 门控判据必须是"还没开始录"，**不能**用 "还没记下起始时间戳"：
-        // 起录那一帧 conductor 可能正好为空（切场景/关卡加载中），此时若以
-        // 缺 tick 为条件就会每帧重试 StartRecording——而 IsRecording 已经是 true，
-        // 于是每一帧都在调 Start，麦克风被反复重启，录出来是一堆碎片。
-        // 现在的形状：IsRecording 兜底只允许起录一次；起录后若那一帧拿不到
-        // conductor，**记 0 而不是 return**，下面每帧都会把缺 0 的 tick 补上。
         if (is_recording && Settings.KeybdSoundRecordActive
             && !AudioRecorder.Instance.IsRecording
             && !data.KeybdSoundStartTick.HasValue)

@@ -8,36 +8,6 @@ using ModEntry = UnityModManagerNet.UnityModManager.ModEntry;
 
 namespace SpectreReplay.Ui
 {
-    /// <summary>
-    /// UMM 自带设置界面（IMGUI / GUILayout）。外观由 <see cref="Gui"/> 提供，
-    /// 这里只负责把页面摆出来、把输入派发下去。
-    ///
-    /// **四个必须在位的结构约束，每一个都对应一类真实故障：**
-    ///
-    /// 1. OnGUI / OnShow / OnHide / **OnSave** 是四个不同的入口。
-    ///    UMM 窗口底部的 Save 走 SaveSettingsAndParams()，它**只**调 OnSaveGUI，
-    ///    既不关窗口、也不隐藏我们的设置页
-    ///    （UnityModManager.decompiled.cs:3706-3709 / :6326-6343）。
-    ///    原先这里把 OnSaveGUI 直接接到 OnHide，而 OnHide 第一句是
-    ///    `_visible = false`——于是玩家一点 Save，设置内容当场变成一整片空白，
-    ///    这就是"点保存之后设置不见了"。保存与隐藏必须分开（见 OnSave）。
-    ///
-    /// 2. Save 必须**当场写盘**，不能只置脏等下一帧。落盘若只挂在宿主对象的
-    ///    每帧回调上，宿主缺失/异常时 _dirty 永远不写，而 UMM 会把 OnSaveGUI
-    ///    的异常吞进日志——界面上看不到任何失败，现象就是"保存了但没保存上"。
-    ///
-    /// 3. **绝对不要自己再包一层 ScrollView。** UMM 已经把整个 Mods 页（含模组
-    ///    OnGUI 的调用点）包在它自己的滚动区里：BeginScrollView 在 :3738，我们的
-    ///    OnGUI 在 :3891 被调用，EndScrollView 直到 :3904 才关。再嵌一层会让内层
-    ///    视口高度塌成表头那么高，正文被整片裁掉，而且**不抛任何异常**——
-    ///    UMM 的 Log.txt 里一条 Exception 都没有，现象只是「下面什么都没有」。
-    ///    （这条注释原先写的是反的，说"模组 OnGUI 的调用点没有包"，据此加的那层
-    ///    嵌套滚动就是 2026-10-11 那个"Options 正文不渲染"的直接原因。）
-    ///
-    /// 4. 每帧开头把下拉序号归零。IMGUI 一帧跑多趟（Layout / Repaint），
-    ///    序号跨趟自增会让存下来的"第几个下拉"在第二趟对不上号，
-    ///    现象是下拉点开的瞬间就收起，等于点不动。
-    /// </summary>
     internal static class OnGui
     {
         /// <summary>UMM 选中本模组并显示设置时为真。画界面前置条件。</summary>
@@ -48,9 +18,6 @@ namespace SpectreReplay.Ui
 
         // （原 _scroll 字段已删：不再自建 ScrollView，位置由 UMM 维护）
 
-        /// <summary>输出目录输入框。**自绘**（见 <see cref="TextField"/>）——
-        /// 内建的那个输入框是本页唯一没被 UMM 重设皮肤的控件，在深色卡片上
-        /// 会显示成一条黑框（2026-10-12 用户截图报的就是这一行）。</summary>
         private static readonly TextField _outDir = new TextField();
 
         /// <summary>输入框是否已从设置载入过。首次打开面板前 OnShow 不一定跑过。</summary>
@@ -91,8 +58,6 @@ namespace SpectreReplay.Ui
         internal static void OnShow(ModEntry modEntry)
         {
             _visible = true;
-            // 每次打开都重取一次：上一轮可能还留着玩家没提交完的编辑，
-            // 而设置本身也可能被别处改过（载入配置、外部编辑 Configs.json）。
             _outDir.Text = Settings.RenderOutputDir ?? "";
             _outDir.Editing = false;
             _outDirLoaded = true;
@@ -164,19 +129,6 @@ namespace SpectreReplay.Ui
             // 悬浮说明同理：控件在画的过程中只"登记"，鼠标移开必须当帧就清掉，
             // 否则说明框会挂在上一次悬停的那一行上（看着像卡住了）。
             Gui.ResetTips();
-            // **不要再自己包一层 ScrollView。** UMM 已经把整个 Mods 页（含模组
-            // OnGUI 的调用点）包在它自己的滚动区里：
-            //   :3738  BeginScrollView(..., ExpandHeight(false))
-            //   :3891  modEntries2[num3].OnGUI(...)   ← 我们在这里面
-            //   :3904  EndScrollView()
-            // 再嵌一层会让**内层视口高度塌成表头那么高**，正文被整片裁掉——
-            // 现象是「Options 只剩标题和标签、下面什么都没有」，而且不报任何异常
-            // （UMM 的 Log.txt 里连一条 Exception 都没有，这正是它难查的原因）。
-            //
-            // 旧注释曾断言「模组 OnGUI 的调用点没有包」——那是错的：当时只看到
-            // :3738/:3950/:3988 三处 BeginScrollView，没往上核到 :3904 的 End
-            // 在模组调用点**之后**。布局的 Begin/End 配对已由 UMM 自己负责，
-            // 分组配对我们另有 Gui.Section / DrawPage 的 try/finally。
             DrawHeader();
             DrawPatchWarning();
             DrawTabs();
@@ -194,13 +146,6 @@ namespace SpectreReplay.Ui
 
         // ── 头部 ────────────────────────────────────────────────
 
-        /// <summary>
-        /// 品牌头：名称 + 提示 + 右侧状态徽章。
-        ///
-        /// 状态从原来的"一行裸文字"收进徽章里。关键是**四种情况都有话可说**：
-        /// 原先不在渲染时直接 return，于是开着录制打一整局顶栏一片空白，
-        /// 玩家只会觉得"我明明勾了录制，怎么什么都没发生"。
-        /// </summary>
         private static void DrawHeader()
         {
             string status;
@@ -270,13 +215,6 @@ namespace SpectreReplay.Ui
             for (int i = 0; i < TabKeys.Length; i++)
             {
                 bool on = i == _tab;
-                // 选中页用强调色实底、未选中压暗——比只靠按钮自带的 hover
-                // 更容易分辨"我在哪一页"。
-                //
-                // **不能再用 GUI.backgroundColor 染色。** 它是**乘算**的：
-                // 圆角按钮的底色已经烘进贴图里，再乘一次会把颜色压暗成另一回事
-                // （原先那两处染色就是这么写的，配上自绘贴图会双重变暗）。
-                // 改成两个专门样式，颜色在贴图里定死。
                 if (GUILayout.Button(Loc.T(TabKeys[i]),
                         on ? Gui.AccentButtonStyle : Gui.QuietButtonStyle,
                         GUILayout.Width(TabW), GUILayout.Height(28f)))
@@ -317,23 +255,6 @@ namespace SpectreReplay.Ui
 
         internal const float LabelW = Gui.LabelW;
 
-        /// <summary>
-        /// 行与行之间的竖向间距。**每个行助手收尾时都要调它。**
-        ///
-        /// 为什么必须补：圆角按钮的贴图半径是 8，而按钮高只有 22~28。
-        /// 两行紧贴时上一颗的下圆角与下一颗的上圆角正好咬在一起，中间
-        /// 没有卡片底色透出来——一列按钮连成一根粗色条，看着像"一个被
-        /// 弄坏的控件"而不是三个独立项（2026-10-17 用户截图报
-        /// 「按钮的布局似乎融合到了一起」，指的就是它）。
-        ///
-        /// **为什么不设在 ButtonStyle.margin 里**（那是最省事的写法）：
-        /// margin 是布局尺寸，而 UMM 的 ScaleGUI 会给按钮另外设
-        /// fixedHeight；两者叠加时按钮实高不再等于各调用点写的 22/28，
-        /// 页签与行高会一起漂。行距归布局、贴图归样式，两边互不干扰。
-        ///
-        /// 用「行尾补」而不是「行首补」：第一个行助手前面不会多出一条
-        /// 空白，卡片顶部与标题条仍然贴着。最后一行多出这一档间距无害。
-        /// </summary>
         private static void RowGap()
         {
             GUILayout.Space(4f);
@@ -357,11 +278,6 @@ namespace SpectreReplay.Ui
         internal static void RowSlider(string labelKey, float value, float min, float max,
             Func<float, string> fmt, Action<float> onChange, bool enabled = true)
         {
-            // **不拆成"薄壳 + Core"两个方法。** ⑬d/⑬f 两条判据都是按
-            // 「行助手自己体内有没有 Tip( / RowGap(」判的——拆出 Core 之后
-            // 那两样都跑进 Core 里，薄壳看着就是"没登记说明、没留行距"，
-            // 判据当场变红。判据没写错，它守的正是"每行自己收尾"这个形状。
-            // 所以门控走 Gui.Dim 包住**整段**，让 Tip/RowGap 仍在体内。
             Gui.Dim(!enabled, () =>
             {
                 GUILayout.BeginHorizontal();
@@ -378,13 +294,6 @@ namespace SpectreReplay.Ui
                     LabelW + track.width + FieldW + 50f, track.height), labelKey);
                 float now = Gui.Slider(track, value, min, max);
                 float shown = Mathf.Approximately(now, value) ? value : now;
-                // 右侧数值框。**从只读 Label 改成可编辑输入框**（用户 2026-10-17 要求）：
-                // 滑条拖到 1920 与 1921 在像素上分不出来，而帧率/偏移这类值往往
-                // 玩家心里已有确数——只能拖是"看得见却打不进去"。
-                //
-                // **框里只放数字，单位画在框外**：fmt 产出的是 "1920 px" 这种带单位
-                // 的串，直接当可编辑内容的话，玩家一进去就得先删单位才打得动，
-                // 而且解析必然失败。拆开之后显示与编辑各归各的。
                 Rect field = GUILayoutUtility.GetRect(FieldW, 20f,
                     GUILayout.Width(FieldW), GUILayout.Height(20f));
                 string full = fmt(shown);
@@ -502,12 +411,6 @@ namespace SpectreReplay.Ui
             }
         }
 
-        /// <summary>
-        /// 一行下拉：点按钮展开列表，选中即收起，点开的那行再点一次也收起。
-        ///
-        /// 上一版用 SelectionGrid 当下拉——那是把选项**竖排全部画出来**，
-        /// 一行占掉半页，根本不是下拉。
-        /// </summary>
         internal static void RowDropdown(string labelKey, string[] options, int current,
             Action<int> onChange)
         {
@@ -540,9 +443,6 @@ namespace SpectreReplay.Ui
             GUILayout.BeginVertical(GUILayout.Width(Gui.CtrlW));
             for (int i = 0; i < options.Length; i++)
             {
-                // 选项之间同样要留缝：贴在一起时三张圆角贴图的边角互相
-                // 吃掉，整列融成一根粗色条——2026-10-17 截图里那两块
-                // 粘连的，正是这里和相邻下拉的触发按钮。
                 if (i > 0)
                 {
                     GUILayout.Space(4f);
@@ -578,8 +478,6 @@ namespace SpectreReplay.Ui
             // 捕获 id 只取决于 labelKey，循环内每次重算是一样的值；
             // 提到闭包外面是为了让「画」和「扫键」两段读同一个 id。
             int id = GetCaptureId(labelKey);
-            // 门控走 Gui.Dim 包住**整段绘制**：Tip / RowGap 必须留在本方法体内，
-            // 判据 ⑬d/⑬f 正是按「行助手自己体内有没有 Tip( / RowGap(」判的。
             Gui.Dim(!enabled, () =>
             {
                 GUILayout.BeginHorizontal();
@@ -731,22 +629,6 @@ namespace SpectreReplay.Ui
             return "VK" + vk;
         }
 
-        /// <summary>
-        /// 按键重映射的一行：左键 → 右键，两半都是「点一下再按任意键」的捕获按钮。
-        ///
-        /// **为什么不用 <see cref="RowHotkey"/>。** 那一行绑的是 Unity
-        /// <see cref="KeyCode"/>（保存键那种用途），而重映射表存的是**原生 VK**
-        /// （<see cref="Settings.key_code_convert"/> 的下标与值）。两者的取值域不同，
-        /// 混用会让所有字母键错位。这里用同一个采样入口
-        /// （<see cref="SpectreState.GetKeyboardState"/>）扫原生 VK。
-        /// </summary>
-        /// <param name="onStartCapture">
-        /// 点某一格开始等按键，参数表示改的是<b>哪一半</b>：true = 左（源键），
-        /// false = 右（目标键）。**必须带这个参数**——早先两格共用一个无参回调，
-        /// 点右边会把左边改掉，而界面上看不出是哪一处出的错。
-        /// </param>
-        /// <param name="capturingFrom">等的是左半；<paramref name="capturing"/> 为假时忽略。</param>
-        /// <param name="onCapture">收到一个原生 VK（0 = 取消）。</param>
         internal static void RowKeyRemap(ushort from, ushort to, bool capturing, bool capturingFrom,
             Action<bool> onStartCapture, Action<ushort> onCapture, Action onClear, Action onDelete)
         {
@@ -868,21 +750,6 @@ namespace SpectreReplay.Ui
             }
         }
 
-        /// <summary>
-        /// 文本输入行。**改动先落到草稿，回车（或点别处）才提交。**
-        ///
-        /// 原先每次按键都直接提交：一个字符一次落盘。后果不只是"多个循环"
-        /// ——玩家想整个删掉路径（Ctrl+A 再退格）时，中途每个中间态都会被
-        /// 存下来并被立刻用掉（输出目录会瞬间变成不存在的目录）。
-        ///
-        /// **控件是自绘的**（<see cref="TextField"/>），不再用
-        /// <c>GUILayout.TextField</c>：后者是本页唯一没被 UMM 重设皮肤的控件，
-        /// 会沿用 ADOFAI 自己的深色皮肤，在深色卡片上显示成一条黑框
-        /// （2026-10-12 用户截图报的正是这一行）。自绘之后焦点也由
-        /// <see cref="TextField"/> 自己管，不再需要
-        /// SetNextControlName / GetNameOfFocusedControl 那套 IMGUI 焦点机制
-        /// ——它依赖前后控件决定 control id，在 Repaint 趟容易失焦。
-        /// </summary>
         internal static void RowInput(string labelKey)
         {
             GUILayout.BeginHorizontal();

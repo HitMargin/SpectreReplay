@@ -94,8 +94,6 @@ public static class SpectreState
             {
                 GCS.checkpointNum = startTile;
                 GCS.previousScene = "scnGame";
-                // 飙速模式的倍速要一并还原：回放是按当时倍速录的，
-                // 不还原会让整份回放的按键位置全错。
                 if (data != null && data.SpeedTrailMode is bool stm)
                 {
                     GCS.speedTrialMode = stm;
@@ -184,8 +182,6 @@ public static class SpectreState
             GCS.customLevelPaths = null;
             GCS.loadCustomFromBundle = false;
             GCS.internalLevelName = internalName;
-            // 飙速/练习标记必须还原成录制时的样子：回放按键位置是按当时的
-            // 速度与起跳点录的，不还原会整体错位。
             if (data.SpeedTrailMode is bool stm)
             {
                 GCS.speedTrialMode = stm;
@@ -201,19 +197,6 @@ public static class SpectreState
                 + " (startTile=" + startTile + ")");
         }
 
-        /// <summary>
-        /// 编辑器打开谱面后，等加载完成（<c>isLoading</c> 熄灭、地板表就绪），
-        /// 把选中地板定位到回放起始砖——编辑器试玩是从**当前选中砖**起跳的，
-        /// 不定位就会从第 0 块开始，回放位置全错。
-        ///
-        /// 参考上游 <c>SettingsUI.SelectEditorFloorWhenReady</c>（那份是他们的，
-        /// 我们按同样的判据自己写）。**1800 帧上限**是防"打开失败后无限空转"
-        /// ——没有它，谱面永远加载不出来时这个协程会一直挂着。
-        /// </summary>
-        /// **必须写全限定名 `System.Collections.IEnumerator`。** 本文件
-        /// 顶部有 `using System.Collections.Generic`，直接写 `IEnumerator`
-        /// 会被解析成泛型 `IEnumerator<T>`，报 CS0305（需要 1 个类型参数）。
-        /// 别为此加 `using System.Collections`——那会和 Generic 的同名类型打架。
         private static System.Collections.IEnumerator SelectEditorFloorWhenReady(int floor)
         {
             for (int i = 0; i < 1800; i++)
@@ -549,27 +532,6 @@ public static class SpectreState
         // 备份的对象是「刚写好的主文件」，主文件不存在时它本就无从谈起。
         if (Settings.Backup && savedPath != null)
         {
-            // 备份结果原本被完全忽略：主回放已保存成功时，备份可能因权限受限/磁盘满/
-            // 目录不可写而失败，而用户毫无察觉 —— 直到真出事那天才发现"备份早就没了"。
-            // 备份失败不影响主回放的成功状态（success），但必须告知用户。
-            //
-            // **必须传"目录 + 文件名"，不能只传目录。** SaveReplayNew 内部是
-            // `filePath += ext`——它把实参当成**含扩展名的完整文件路径**。
-            // 原先这里传的是 Path.Combine(mod.Path, "backup")，于是每局都写
-            // 同一个 `backup\backup.sprp`，而它还是个**目录名拼上扩展名**的
-            // 怪路径。README 承诺的是"为每份回放多留一份副本"——单文件覆盖
-            // 等于只有最后一局有备份，前面全丢，且用户看不出来（每局都提示成功）。
-            // ⇒ 备份文件名跟主回放同名，只是换个目录。
-            //
-            // **备份不再重跑整条保存管线，直接复制刚写好的主文件。**
-            // 原先这里再调一次 SaveReplay：编码、Brotli、PBKDF2、AES 全部重来一遍，
-            // 而每遍 PBKDF2 在 Mono 上要一两百毫秒——一局保存因此翻倍卡顿
-            // （2026-10-19 用户报「保存时游戏会卡」）。备份要的是**同一份字节**，
-            // 复制在语义上完全等价，且省掉一整套派生与压缩。
-            //
-            // 复制失败与原先"备份保存失败"同语义：只提示，不算整局保存失败。
-            // 扩展名必须跟着主文件走：调试开关会写 `.psprp`（不解密变体），
-            // 硬编码 `.sprp` 会让备份指向一个不存在的文件、每局都提示失败。
             string mainExt = debug_no_encryption
                 ? ReplayConstants.ExtensionNoEncrypt : ReplayConstants.Extension;
             string backupDir = Path.Combine(Main.mod.Path, "backup");

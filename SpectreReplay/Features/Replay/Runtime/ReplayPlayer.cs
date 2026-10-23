@@ -183,18 +183,6 @@ internal static class ReplayPlayer
         if (KeyEventIndex < 0 || KeyEventIndex >= data.KeyEvents.Count) return;
         scrConductor conductor = ADOBase.conductor;
         if (conductor == null) return;
-        // **不能读 conductor.songposition_minusi。**
-        //
-        // 这个属性在 scrConductor.Update 的**末尾**（:852）才被重算，而
-        // scrController.UpdateInput 在同一方法的 :799 就被调用——也就是说
-        // 这里读到的永远是**上一帧**的值，开局第一帧甚至还是上一局遗留的。
-        //
-        // 实测（诊断日志）：第一帧读到 15.262（上一局的曲中位置），而按当时的
-        // dspTimeSong/dspTime 现场算出来是 -1.526（倒计时阶段，正确）。那个假值
-        // 让游标一次性推进了 64 个事件——前 8 秒的按键在同一帧被全部按下。
-        //
-        // 所以按游戏自己的公式现场算（scrConductor.cs:852 / :856），它和
-        // dspTimeSong、dspTime 出自同一时刻，不存在跨帧陈旧。
         double songPosition = CurrentSongPosition(conductor, out bool ready);
         if (!ready) return;
         PumpInput(songPosition, conductor);
@@ -242,47 +230,11 @@ internal static class ReplayPlayer
         if (songPosition < data.KeyEvents[KeyEventIndex].SongPosition)
             return;
 
-        // 单帧事件上限，**只做限速、绝不丢弃**。正常情况下每帧只有个位数事件
-        // （16ms 内最多几次按键）；一帧里出现成百上千个"待办"只可能是这一帧来得
-        // 太晚（掉帧、暂停恢复、或时钟刚就绪）。闷头灌完的后果是判定链在同一帧里
-        // 被调几十次，玩家看到"一瞬间全部模拟完"——所以限速；但剩下的必须留到
-        // 下一帧继续，游标只能前进、不能跳过（曾经在这里跳游标，直接把整局按键
-        // 跳没了，表现是按键模拟完全失效）。
         const int MaxEventsPerFrame = 64;
         int pumped = 0;
 
         var inputs = _inputBuffer;
         inputs.Clear();
-        // ── 注入方式选择 ──────────────────────────────────────
-        //
-        // **首选合成事件入队**（<see cref="AsyncInputInjector"/>）：它不经过
-        // 操作系统，失焦可用、不受 UIPI 拦截、时间戳是亚帧精度。
-        // 事件走 SkyHookManager.KeyUpdated.Invoke —— 与真实键盘回调同一个入口，
-        // 游戏自己的监听器会把它送进 keyQueue，随后 keyMask / keyDownMask /
-        // ProcessKeyInputs(tick) 全部按真实按键的路径走。
-        //
-        // 不可用时（未开异步输入、反射解析失败、实际入队失败）退回托管覆盖
-        // + SendInput。**两条路互斥**：同时开会把同一颗键算两次
-        // （SendInput 的事件会被 SkyHook 钩子再捕一次，正是 ADOFAIMacro 里
-        // 要专门做"回声配额"丢弃的那种重复）。
-        //
-        // 判据用 Healthy 而不只是 Usable：Usable 是"看起来能用"，而一旦它
-        // 判错、托管覆盖又已经放行，游戏那条链读到的就是永远空的 keyMask——
-        // 两条路一起失效。
-        // **广播判据与「游戏是否出队」是两件事，不能混用。**
-        //
-        // 这里用 Injectable（只看钩子活着、字段拿得到），而不是 Usable
-        // （额外要求 asyncKeyboard.isActive，即只在 PlayerControl 为真）。
-        //
-        // 原因：KeyUpdated 的订阅者不只是游戏。JipperResourcePack 直接监听
-        // `SkyHookManager.KeyUpdated`（KeyViewer.cs:2216），完全不读 RDInput /
-        // keyMask / UnityEngine.Input。用 Usable 当判据的话，非 PlayerControl
-        // 状态下 Inject 不被调用、Invoke 不发生，这类模组整段看不到按键。
-        //
-        // 广播到非 PlayerControl 不会污染判定：游戏监听器只把它写进 keyQueue，
-        // 而 UpdateInput 在 asyncKeyboard.isActive 为假时开头早退（scrController.cs:2900），
-        // 没人出队；AsyncInputManager.Update 又在 !flag 时每帧 ClearKeys()
-        // （AsyncInputManager.cs:159-162 → :110-116 含 keyQueue.Clear）。
         bool asyncInject = AsyncInputInjector.Injectable && AsyncInputInjector.Healthy;
         // SendInput 与**真正在灌**的那条互斥：只要异步广播在走就不发 OS 级按键
         // （SkyHook 会把 SendInput 的键再捕一次，同一颗键算两遍）。
@@ -306,15 +258,6 @@ internal static class ReplayPlayer
                 // Shift/Ctrl/Alt 同样算「按住」；若在此滤掉，录音里只按住修饰键的长条
                 // 会在回放时被判成松手。Esc(27) 与 0（未映射/无效）仍排除。
                 ManagedInput.Note(num, ev.IsPressed);
-                // 真路径：把事件按**它自己的** SongPosition 换算成绝对 tick 入队。
-                // 用 ev.SongPosition 而不是外层 songPosition：外层是"现在"，事件可能
-                // 是这几帧里漏掉的早先按键，用现在的时间戳会把它整体后移，时间戳一偏
-                // ProcessKeyInputs 算出来的角度就偏，判定跟着偏。
-                // 不套 IsBlockedKey：那个表是给 OS 级 SendInput 用的（修饰键会干扰系统），
-                // 合成事件不经过 OS，没有这个问题。
-                // 同一个事件循环里再问一次 Healthy：这一帧的第一个事件就可能已经
-                // 入队失败（conductor 还没建好之类），后面的事件再往同一条断掉的
-                // 管子里塞只会重复告警。失败后交给托管覆盖层兜底。
                 if (asyncInject && AsyncInputInjector.Healthy)
                 {
                     try { AsyncInputInjector.Inject(num, ev.IsPressed, ev.SongPosition); }

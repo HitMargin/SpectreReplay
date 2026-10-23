@@ -52,8 +52,6 @@ public class AudioRecorder : MonoBehaviour
 
     private Thread processingThread;
 
-    // WAV 文件初始化线程（开流 + 写头），与采集线程分开持有，
-    // 停止时两者都要 Join，此前引用被采集线程覆盖导致初始化线程被遗弃
     private Thread initThread;
 
     private readonly object bufferLock = new object();
@@ -117,8 +115,6 @@ public class AudioRecorder : MonoBehaviour
         }
         try
         {
-            // 参数指定的设备优先于预热时记下的设备（此前参数被忽略，换麦克风后仍录旧设备）。
-            // 换设备必须先停旧设备：否则旧麦克风无人收尾，会一直录到全局 StopAllMicrophones
             if (!string.IsNullOrEmpty(deviceName) && ValidateDevice(deviceName)
                 && deviceName != microphoneDevice)
             {
@@ -148,10 +144,6 @@ public class AudioRecorder : MonoBehaviour
                     fileStream = null;
                 }
             }
-            // 参数必须先于 initThread 启动落定：InitializeWavFile 在另一线程读 recordingFrequency
-            // 写 WAV 头，之后才赋值就是数据竞争。文件路径无条件更新（此前只在冷路径赋值，
-            // 预热路径下 FinalizeWavFile 的日志会打旧路径）；采样率/时长仅冷路径生效——
-            // 麦克风已按预热参数在录，改字段只会让 WAV 头与实际数据脱节
             bool prewarmed = Microphone.IsRecording(microphoneDevice);
             currentFilePath = filePath;
             if (!prewarmed)

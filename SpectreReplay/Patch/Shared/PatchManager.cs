@@ -474,11 +474,6 @@ internal static class PatchManager
             if (_delegateCache.TryGetValue(key, out var cached))
                 return (AccessTools.FieldRef<T, F>)cached;
 
-            // FieldRefAccess 在字段不存在时返回 default（即 null），既不抛也不缓存成功标记。
-            // 原写法把它直接塞进缓存：调用方随后解引用 null → NRE，而且 null 被**永久**
-            // 缓存住，同一 key 之后再也拿不到真实结果（即使字段后来被补上也无法恢复）。
-            // 与本类 GetFieldInfo（第 461 行）保持一致：缺失就抛 MissingFieldException，
-            // 且**不缓存失败**——让"字段暂时不存在"在下次调用时能重新尝试。
             var fieldRef = AccessTools.FieldRefAccess<T, F>(fieldName);
             if (fieldRef == null)
                 throw new MissingFieldException($"Cannot create field ref for {fieldName} on {typeof(T)} as {typeof(F)}");

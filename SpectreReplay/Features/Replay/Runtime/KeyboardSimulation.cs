@@ -11,12 +11,6 @@ internal static class KeyboardSimulation
     private const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
     private const uint KEYEVENTF_KEYUP = 0x0002;
 
-    // user32 是否确实不存在（非 Windows）。
-    //
-    // **只在 DllNotFoundException / EntryPointNotFoundException 时才置位**——
-    // 也就是"这个导出真的没有"，而不是"我猜这个平台不该有"。
-    // 早先这里用 Application.platform 猜，一旦猜错，SendInput 整条静默失效，
-    // 而那是玩家唯一在用的注入路径。判据必须建立在**真实调用结果**上，不是前提假设。
     private static volatile bool _dllMissing;
 
     [DllImport("user32.dll", SetLastError = true)]

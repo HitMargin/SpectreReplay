@@ -56,8 +56,6 @@ namespace SpectreReplay.Ui
                 }
                 n.text.text = text;
                 n.icon.enabled = true;
-                // 点它没有任何后续动作，所以清掉上一个提示留下的监听器。
-                // 不清的话玩家点了会触发上一个提示的回调（可能是"跳到关卡选择"）。
                 n.button.onClick.RemoveAllListeners();
                 n.icon.sprite = level == Level.Warning ? n.warningIcon : n.completeIcon;
                 n.icon.color = level == Level.Warning

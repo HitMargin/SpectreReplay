@@ -210,10 +210,6 @@ public static class SpectreAPI
     internal static void RaiseRenderFinished(RenderEndStatus status, string outputPath, string error)
         => Raise(RenderFinished, new RenderResult(status, outputPath, error));
 
-    // **从枚举派生，不再手写顺序。** 原先这里是手写字面量数组，靠"数组顺序 ==
-    // 枚举序号"隐式对齐：往 Phase 中间插一个新值（比如在 WaitingPlayback 后加
-    // Encoding），所有后续阶段名会整体错一位被静默报错名，且下面的长度检查
-    // 因为总数没变根本拦不住。Enum.GetNames 按枚举值升序返回，天然对齐。
     private static readonly string[] PhaseNames =
         Enum.GetNames(typeof(Features.VideoRender.VideoRender.Phase));
 

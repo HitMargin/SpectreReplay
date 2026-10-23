@@ -127,16 +127,8 @@ public static class ConfigManager
         public int render_capture_mode { get; set; }
         public float render_tail { get; set; }
         public bool render_on { get; set; }
-        // 实验性：确定性渲染时钟。缺键时跟随字段默认值（false = 关），
-        // 保持升级前行为——此前这条补丁是"常开无开关"，但**旧配置里没有这个键**，
-        // 若缺键当 true 会让所有存量玩家在不知情下启用实验性功能。
         public bool render_clock_on { get; set; }
-        // 是否把鼠标指针画进成片（见 Settings.RenderCursorOn）。缺键时跟随字段默认值（false），
-        // 保持升级前行为——此前模组从不往画面里画指针，旧配置里也没有这个键。
         public bool render_cursor_on { get; set; }
-        // 渲染中按快捷键提前结束（见 Settings.RenderStopOn / RenderStopKey）。
-        // 缺键时跟随字段默认值（false / 292 = F11），保持升级前行为——
-        // 此前渲染只能录完整份回放，旧配置里也没有这两个键。
         public bool render_stop_on { get; set; }
         public int render_stop_key { get; set; }
         public float judgebar_anim_duration { get; set; }
@@ -394,18 +386,6 @@ public static class ConfigManager
         return true;
     }
 
-    /// <summary>
-    /// 把自研引擎时代的扁平 Configs.json 升级成现在的分区结构。
-    ///
-    /// **为什么需要它。** 旧结构是顶层 PascalCase（RecordingOn / Surface / Width /
-    /// Fps / Encoder / DuplicateWhenLate…），新结构是 Sets/Ints/Strings 分区。
-    /// 部署脚本从不覆盖 Configs.json，所以升级用户磁盘上一直躺着旧文件。
-    /// 读取侧全是 `?? Settings.X`，缺键就落默认值——不崩溃，但**玩家原来的
-    /// 选择被静默改回默认**（旧文件 Surface=1 没人读，实际变成 RenderCaptureMode=0）。
-    ///
-    /// 判据：有旧键且没有新分区。两个结构互斥，不会误判新版文件。
-    /// 迁移后立刻落盘，否则这次会话改的东西下次启动又按旧文件读一遍。
-    /// </summary>
     private static void MigrateLegacyConfig(JObject json)
     {
         // 新版分区任一存在即视为新文件，不做任何事
@@ -530,19 +510,6 @@ public static class ConfigManager
         try
         {
             var json = JObject.Parse(File.ReadAllText(filePath));
-            // ── 旧版配置迁移（早期扁平格式 → 现在的分区格式）───────────────
-            //
-            // 旧 Configs.json 是**扁平**结构（顶层 PascalCase：RecordingOn /
-            // Surface / Width / Fps / Encoder / DuplicateWhenLate…），新结构是
-            // Sets/Ints/Strings 分区。部署脚本从不覆盖 Configs.json，
-            // 所以升级用户的磁盘上躺着的一直是旧文件。
-            //
-            // 不迁移的后果不是崩溃（读取侧全是 `?? Settings.X`，读到缺键就落默认值），
-            // 而是**玩家原来的选择被静默改回默认**：比如旧文件里 Surface=1（整屏取帧）
-            // 没人读，实际变成 RenderCaptureMode=0（纯净相机），玩家只觉得
-            // "我设过的东西怎么自己变了"，而日志里一行都没有。
-            //
-            // 判据用"有旧键且没有新分区"——两个结构互斥，不会误判。
             MigrateLegacyConfig(json);
             // 分区隔离：Configs.json 是用户会手工编辑的文件，某个值写成别的类型
             // （把 true 写成 "是"、把数字写成带引号的字符串）会让该分区的 Value<T> 抛
@@ -563,10 +530,6 @@ public static class ConfigManager
                     Settings.FailSave = sets.Value<bool?>("FailSave") ?? Settings.FailSave;
                     Settings.Backup = sets.Value<bool?>("Backup") ?? Settings.Backup;
                     Settings.ManualSave = sets.Value<bool?>("ManualSave") ?? Settings.ManualSave;
-                    // CancelSave 与 ManualSave 同属「快捷键补丁挂不挂」的开关，
-                    // 写盘侧一直有它（本文件 Sets.CancelSave），读盘侧此前漏了：
-                    // 手改成 false 后重启会被静默读回默认值 true，
-                    // 玩家看到的是「这个开关自己又开了」。
                     Settings.CancelSave = sets.Value<bool?>("CancelSave") ?? Settings.CancelSave;
                     Settings.KeybdSoundRecordActive = sets.Value<bool?>("KeybdSoundRecordActive") ?? Settings.KeybdSoundRecordActive;
                     Settings.KeyConvertEnabled = sets.Value<bool?>("KeyConvertEnabled") ?? Settings.KeyConvertEnabled;
@@ -661,10 +624,6 @@ public static class ConfigManager
                     Settings.KeybdSoundVolume = ints.Value<int?>("KeybdSoundVolume") ?? Settings.KeybdSoundVolume;
                     Settings.MicrophoneOffset = ints.Value<int?>("MicrophoneOffset") ?? Settings.MicrophoneOffset;
                     Settings.EffectRemoverCameraZoomScale = ints.Value<float?>("EffectRemoverCameraZoomScale") ?? Settings.EffectRemoverCameraZoomScale;
-                    // 范围与 UI 滑条一致（judgetext.size / judgetext.fadespeed）。这两个值每次飘字
-                    // 都直接乘到游戏的 scale / fadeSpeed 上（Patch_HitTextShowFx），手改配置写入
-                    // 极大值会让文本缩放爆掉，写 1e400 会被解析成 Infinity 灌进 Unity 变换。
-                    // 同区块的 outline_width / render_* 都已 Clamp，此前只有这两个漏了。
                     Settings.JudgeTextSizeMult = Mathf.Clamp(ints.Value<float?>("judge_size_mult") ?? Settings.JudgeTextSizeMult, 0.5f, 3f);
                     Settings.JudgeTextOutlineWidth = Mathf.Clamp(ints.Value<float?>("judgetext_outline_width") ?? Settings.JudgeTextOutlineWidth, 0f, 1f);
                     Settings.JudgeTextFadeMult = Mathf.Clamp(ints.Value<float?>("judge_fade_mult") ?? Settings.JudgeTextFadeMult, 0.25f, 5f);

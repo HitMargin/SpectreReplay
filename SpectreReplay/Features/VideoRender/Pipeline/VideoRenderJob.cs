@@ -50,10 +50,6 @@ internal sealed class VideoRenderJob : MonoBehaviour
     // TearDown 是否已执行。OnDestroy 兜底与协程正常收尾共用，故需幂等
     private bool tornDown;
 
-    // ── 收尾后台化 ───────────────────────────────────────────────────
-    // 收尾（排空编码器 + 合成音轨）是整场渲染里最长的一段同步等待，原先直接压在
-    // 主线程上，而它偏偏发生在用户最想看到结果的那一刻：画面完全冻死。
-    // 见 StartFinalizeOnWorker 的注释。
     private System.Threading.Thread finalizeWorker;
     // volatile：工作线程写、主线程读
     private volatile bool finalizeDone;
@@ -317,31 +313,8 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // 缓冲池对齐满载深度（队列容量 + 在途回读），消除编码满载期的 LOH 重复分配
         frames.SetSparePoolLimit(encoder.QueueCapacity + frames.MaxInFlight);
 
-        // **锚点直接取游戏自己的 songposition_minusi。**
-        // 原来从 dspTime 反推：`(dspTime - dspTimeSong - calibration) * pitch - addoffset`。
-        // 那个式子在「歌已经开始」的时刻是恒等的，但它引入了两个我们控制不了的量：
-        // dspTimeSong 的检查点平移、以及 dspTime 的缓冲记账滞后。一旦推算时刻落
-        // 在歌曲调度尚未定型的位置，锚点就会整体偏掉——实测偏出 44 秒，
-        // 回放引擎于是一直等迟迟不来的命中，表现成「回放不播放」。
-        // songposition_minusi 是游戏自己维护的权威值，跨检查点、跨 pitch 都已算好，
-        // 直接拿来当锚点，两边永远同源。
         double audioAnchor = conductor.songposition_minusi;
 
-        // ── 双轨时钟：Transpiler 可用走确定性 RenderClock，否则走旧音频游标 ──
-        // 新轨优势：时钟完全由帧号驱动（帧号÷fps），不受音频缓冲量化抖动影响；
-        //           Transpiler 把 scrConductor/scrCountdown 的 dspTime 也换成确定性值，
-        //           倒计时/事件调度/直读 dspTime 的路径全部确定性化。
-        // 旧轨兜底：Transpiler 挂载失败（游戏改了 Update 方法体）时保持原行为。
-        //
-        // **必须连 Settings.RenderClockOn 一起判，不能只看 TranspilerReady。**
-        // TranspilerReady 是"transpiler 跑过"的一次性事实，全仓只有置 true、没有置回
-        // false 的地方（补丁卸载不会清它）。而 2026-10-17 起这条补丁挂了 Feature 开关，
-        // 于是存在一个真实的坏序：**开→渲染→关→再渲染**。此时补丁已卸载、
-        // scrConductor.Update 恢复读真实 dspTime，而 TranspilerReady 仍是旧 true
-        // ⇒ 作业会走确定性轨：一边用帧号算 PinnedSongPosition，一边游戏内部用真实
-        // dspTime，两条时间轴混着用，比纯净兜底更糟。
-        // 加了开关之后，"补丁当前是否真的挂着"由开关谓词决定，所以这里的就绪条件
-        // 必须与那个谓词对齐（开关关 = 视为未就绪 = 走兜底）。
         RenderClock clock = null;
         bool useRenderClock = RenderClockSource.TranspilerReady && Settings.RenderClockOn;
         if (useRenderClock)
@@ -433,29 +406,6 @@ internal sealed class VideoRenderJob : MonoBehaviour
                 double elapsed = useRenderClock ? clock.Time : clockSeconds;
                 double pitch = conductor.song.pitch;
 
-                // ── 锚点自愈 ───────────────────────────────────────────
-                // **检查点开局时，游戏会在捕获开始之后才把时间轴 seek 到检查点位置。**
-                // 那一刻之前抓的锚点会整体偏掉，且偏多少恒定（= 检查点的歌曲时间）。
-                // 2026-10-19 实测：pin=4.336 而游戏真实位置已到 49.112，差 44.8s ——
-                // 回放的命中全排在几十秒之后，表现就是「画面在动、回放不播放」。
-                //
-                // 抓锚点时无法预知 seek 何时发生（它由游戏内部的 Play/StartMusic 异步
-                // 完成），所以这里不猜时机，而是每帧对照游戏的真实位置：
-                // 一旦偏差超过阈值就重算锚点，让钉扎值立刻贴回游戏的实际位置。
-                //
-                // **下面这条 dsp 公式只当「跳变量探针」，不是可靠时钟源。**
-                // 它正是我们当初弃用的那个式子（引入了 dspTimeSong 的检查点平移与
-                // dspTime 的缓冲记账滞后，正是它导致锚点抓偏）。这里只用它回答一个
-                // 粗粒度问题——「游戏的位置是不是突然跳了一个检查点那么远」——
-                // 0.75s 的阈值远大于它的全部误差（缓冲量化 ±3ms + 暖机滞后 ~150ms），
-                // 所以它当判跳探针够用；**绝不能拿它去算锚点本身**（那会把误差固化）。
-                // 锚点一旦重设，用的也是它——但这只在"已经确认跳变"时才发生，
-                // 且随后每帧都会继续对照，误差不会被放大累积。
-                //
-                // 三个约束保证它不会乱跳：
-                //   · 只在捕获前 10 秒内生效（seek 只发生在开局）；
-                //   · 最多重锚 4 次；
-                //   · 阈值 0.75s 远大于探针自身的误差量级。
                 if (frameIndex < fps * 10 && reAnchors < 4)
                 {
                     double unpinnedNow = (AudioSettings.dspTime - conductor.dspTimeSong
@@ -500,10 +450,6 @@ internal sealed class VideoRenderJob : MonoBehaviour
 
             UnscaledDeltaPin.TickFrame(); // 虚拟时钟推进（见 VideoRenderPatches.UnscaledDeltaPin）
 
-            // 时钟巡检（每 5 秒一行）。唯一权威指标是 drift（音频游标 vs 帧号理想时间）：
-            // 恒定 ±数 ms = 正常（dsp 缓冲量化抖动）；随时间增长 = 失锁，渲染不可信。
-            // pin 与 dspPos 在起歌段可有恒定差（dspTime 暖机滞后于音频捕获的记账假象，
-            // 实测不影响成片音画）——两者恒定即可，不要据此判故障
             if (frameIndex % (fps * 5) == 0)
             {
                 double ideal = frameIndex / (double)fps;
@@ -600,15 +546,6 @@ internal sealed class VideoRenderJob : MonoBehaviour
             yield break;
         }
 
-        // **必须在启动后台收尾之前把游戏交还回去。**
-        //
-        // 这是「收尾搬到后台」引入的一处回归：渲染期有三个虚拟时钟，全都只由上面的
-        // 捕获循环推进（PinnedSongPosition / UnscaledDeltaPin / RenderClockSource）。
-        // 原先收尾同步阻塞主线程，游戏根本没机会跑，解开钉扎时一切同时恢复；收尾搬到
-        // 后台之后，主线程空出来带着三个**再也没人推进的冻结时钟**继续跑游戏循环
-        // ⇒ 星球停住、unscaled 动画不动，而进度条已经走完。
-        //
-        // 收尾本身（ffmpeg 排空 + copy 合成）不读任何 Unity 状态，所以放手是安全的。
         ReleaseGameControl();
 
         StartFinalizeOnWorker();
@@ -721,32 +658,6 @@ internal sealed class VideoRenderJob : MonoBehaviour
         }
     }
 
-    // 等回放真正接管：is_playing 只有在 Start_Rewind 校验通过后才会置 true，
-    // 以此为准可避免场景重载后控制器空状态（编辑模式等）被误判为已开始。
-    //
-    // 注意 is_playing 会闪：`Patch_StartRewind.Postfix` 每次都先调
-    // `PlayActions.StopPlaying()` 把它清回 false，而编辑器重开关卡时
-    // Start_Rewind 会连发多次。所以这里判的是「某一刻已经接管」，不做持续性
-    // 假设——真要看它是否稳定，靠下面超时那条现场日志，不靠猜。
-    //
-    // ── 等待预算按「真实秒数」算，不按帧数 ──────────────────────────
-    // 2026-10-20 实测（scnGame 重载 + 谱面自带间隔倒计时）：倒计时还没走完就报了
-    // 「等待回放开始超时」，现场是 is_playing=True / songLive=True /
-    // state=Countdown。倒计时本身没坏，是**预算算错了**：
-    //   · SaveGlobalState 在等待之前就把 Time.captureFramerate=fps、
-    //     vSyncCount=0、targetFrameRate≥1000 全设好，等待循环每帧只花亚毫秒级，
-    //     旧版 `fps * 10` = 600 帧不到一秒就跑完了；
-    //   · 而进 PlayerControl 的判决（scrController.Countdown_Update 要求
-    //     conductor.beatNumber 追上 adjustedCountdownTicks）走的是**真实
-    //     AudioSettings.dspTime**：dspTimeSong = dspTime + buffer(0.5s)，之后
-    //     还要 4 拍（60/145 BPM ≈ 1.66 s），合计 2.1 s 以上。
-    // 「按帧等」和「按秒走」对不上，必然误报。同一动作第二次触发（场景已加载、
-    // Start_Rewind 更早）又能成功——典型的竞态，不是死锁。
-    //
-    // **计时器只能用 System.Diagnostics.Stopwatch。** Time.realtimeSinceStartup /
-    // Time.unscaledTime(AsDouble) 已被 UnscaledDeltaPin 换成虚拟时钟，而推进它的
-    // TickFrame() 只存在于捕获循环里——等待期读这几个值是冻住的，换成它们等于把
-    // 「太快误报」改成「永不超时」。
     private IEnumerator AwaitReplayAlive()
     {
         // 10 秒真实预算：正常倒计时约 2.1 s，余量留给场景加载慢 / 外部 mod 抢时序
@@ -792,45 +703,6 @@ internal sealed class VideoRenderJob : MonoBehaviour
                 yield return null;
                 continue;
             }
-            // ── 什么叫「回放真的接管了」─────────────────────────────
-            //
-            // **不能把成功闸定在 PlayerControl —— 倒计时整段都在它之前。**
-            // scrController.Countdown_Update 要 conductor.beatNumber 追上
-            // adjustedCountdownTicks（本谱 4 拍 / 145 BPM）才切 PlayerControl；
-            // beatNumber 又是靠 songposition 越过 0、1 拍、2 拍、3 拍逐帧 +1
-            // （scrConductor.Update:860-865，每帧最多一拍），所以切状态时
-            // songposition 已经 ≈ 1.24 s —— 倒计时画面（GET READY / 3 2 1 / GO）
-            // 和那 4 声提示音全在它前面。
-            //
-            // 2026-10-20 的成片 Render_20261020_023143_再生.mp4 开头没有倒计时，
-            // 原因就是旧闸把捕获起点卡在 PlayerControl：日志 f=300 时
-            // pin=6.236、已录 5.000 s ⇒ audioAnchor = 1.236 s，第一帧已经在
-            // 倒计时结束之后。
-            //
-            // 现在分三条路放行（顺序即优先级）：
-            //   ① 倒计时（state==Countdown，第 0 块开局）：**无条件提前放行**，锚点取
-            //      当时的 songposition（这段时间它是负数，pin = 负锚点 + 已录秒数，
-            //      正好在歌曲 0 s 处过零），倒计时整段进片，4 声提示音也一起进音轨。
-            //   ② 歌已开始（conductor.hasSongStarted）：检查点开局唯一可行的闸门。
-            //      从中间砖块起播时状态机走 Checkpoint 而不是 Countdown，倒计时在
-            //      Checkpoint 里放完，等 Countdown 永远等不到。详见下方 ② 的说明。
-            //   ③ PlayerControl + 连续两帧正位置：兜底。挡的是「按检查点 seek 还没把
-            //      位置写回」的瞬间，也就是 hasSongStarted 已经置起、但 songposition
-            //      仍是上一轮残留值的极端时序。正常上面两路先命中，走不到这里。
-            //
-            // **倒计时这条路不设任何绝对秒数窗口。** 长度由谱面决定：
-            //     (countdownTicks - 1) 拍 × crotchetAtStart(60/BPM) ÷ countdownSpeedMultiplier
-            // 本谱 4 拍 / 145 BPM ⇒ 3 × 0.4138 ≈ 1.24 s 后才切 PlayerControl；换 100 BPM
-            // 就是 1.8 s，谱面 offset 与音频 buffer（0.5 s）还会把进入前的负段拉得更长。
-            // 2026-10-20 那版把下界写死 -2.0 s：offset 一大或 BPM 一慢就晚放行，
-            // GET READY 段被切掉（用户当场指出「倒计时不一定只有两秒」）。
-            //
-            // 真正可靠的信号是**活的状态机**：state==Countdown 由 Countdown_Update
-            // 按 beatNumber 逐拍推进（scrConductor.Update:860-865，每帧最多一拍），
-            // 最多持续到切换点，不会残留到下一轮；等待循环的轮询频率又远高于帧率，
-            // 所以第一次看到它就等于倒计时刚开头。万一发现时已是末尾（场景加载慢），
-            // 从当时开始录仍好过落到 PlayerControl 再录——少录一段，而不是整段丢失。
-            // ① 倒计时开局（第 0 块，checkpointNum==0）
             if (conductor != null && counting)
             {
                 // 下面两个数只进日志、不进判断：报出这段倒计时的长度，方便复测者
@@ -845,21 +717,6 @@ internal sealed class VideoRenderJob : MonoBehaviour
                 yield break;
             }
 
-            // ② 任意砖块检查点开局（含「从中间渲染」）：**这条路上没有 States.Countdown。**
-            //    scrController.OnMusicScheduled(:1599) 先把 conductor.hasSongStarted 置回
-            //    false，检查点分支(:1611) 置 true，紧接着 Scrub(checkpointNum) 把音乐 seek
-            //    到 `该砖块 entryTimeAfterExtraBeats − 4 拍`，然后直接
-            //    ChangeState(States.Checkpoint)(:1613)。倒计时画面（GET READY / 3 2 1 / GO）
-            //    与那 4 拍提示音**全在 Checkpoint 状态里放完**，状态机从不经过 Countdown，
-            //    由 Checkpoint_Update 等到 songposition 追上该砖块 entryTime 才进 PlayerControl。
-            //    所以用「等 Countdown」当闸门，在中间起播时永远等不到，只能退到
-            //    PlayerControl 才放行 —— 那正好是倒计时结束的瞬间，成片开头必然没有倒计时。
-            //    上游 Spectre 就是按 hasSongStarted 放行的（VideoRenderJob.cs:416），
-            //    这里必须同样处理，否则「从中间渲染」必定丢倒计时。
-            //    锚点在放行后仍取 conductor.songposition_minusi（见下方 audioAnchor 的计算），
-            //    即 Scrub 之后的权威位置，所以放行点提前不会把时间轴拉歪。
-            //    与最后一道兜底的差别只在「状态」：② 认 Checkpoint 和开局首秒，
-            //    不认「歌已开始但位置还是上一轮残留值」这种假就绪。
             bool freshStartPosition = songNow >= 0.0 && songNow < 1.0;
             if (conductor != null && conductor.hasSongStarted
                 && (checkpointing || inPlay || freshStartPosition))
@@ -890,9 +747,6 @@ internal sealed class VideoRenderJob : MonoBehaviour
             yield return null;
         }
 
-        // 超时必须说清当时到底停在哪。没有这几项，日志里只剩一句
-        // 「failed: 等待回放开始超时」，既看不出回放是被校验拒了、被别的
-        // mod 阻断了，还是根本没进 PlayMode——三种情况的修法完全不同。
         if (string.IsNullOrEmpty(playbackRejectReason))
             playbackRejectReason = LocalizationManager.GetLocalizedText("rendervideo.replay_not_taken");
         var blocks = SpectreAPI.SnapshotBlocks();
@@ -1146,41 +1000,10 @@ internal sealed class VideoRenderJob : MonoBehaviour
     // ReleaseGameControl 是否已执行（幂等）
     private bool controlReleased;
 
-    /// <summary>
-    /// 解除渲染期对游戏的全部干预，把游戏完整交还给它自己。
-    ///
-    /// **为什么必须是「全部」而不是「一部分」：** 渲染期同时钉住了几套时间源，
-    /// 而它们的推进**全都在捕获循环里**（TickFrame / clock.Advance / 给
-    /// PinnedSongPosition 赋值）。捕获一停，它们就全冻住：
-    ///   1. <c>VideoRender.PinnedSongPosition</c> —— songposition_minusi 的读写补丁
-    ///      覆盖（Patch_VideoPinSet / Patch_VideoPinGet）。**星球位置是这个值的
-    ///      函数，所以它冻结的直接表现就是星球停住。**
-    ///   2. <c>UnscaledDeltaPin</c> —— 五个 Time.* getter 的原生 detour。
-    ///   3. <c>RenderClockSource.ActiveClock</c> —— transpiler 改写的 dspTime 读取。
-    ///   4. <c>Time.captureFramerate</c> / vSync / targetFrameRate / audioPause 等
-    ///      全局状态（RestoreGlobalState 负责逐项兜底恢复）。
-    ///   5. 倍速钉扎 —— 不清会泄漏到玩家之后的正常游玩里。
-    ///
-    /// **半解比没解更糟**：只断时钟却留着 detour，游戏就拿到
-    /// 「真实 dspTime + 冻结 unscaled + 冻结 songposition」的混合时间源，
-    /// 表现比单纯卡住更难定位。所以这几步必须在同一次调用里走完。
-    ///
-    /// **调用时机（这是修复的核心）**：捕获循环一结束就调，**早于**后台收尾启动。
-    /// 原先一切正常只是因为收尾同步阻塞了主线程、游戏没机会跑；收尾搬到后台后，
-    /// 主线程空出来带着冻结时钟继续跑，就出现了「渲染结束后星球停住」。
-    ///
-    /// 幂等：正常路径（Phases 里调用）与 TearDown 兜底各会调一次。
-    /// </summary>
     private void ReleaseGameControl()
     {
         if (controlReleased) return;
         controlReleased = true;
-        // 依次兜底：任一 API 抛异常都不能带走后面的项（渲染作业常在场景切换途中收尾）
-        // **相机也要一起还。** 捕获期间三台相机的 targetTexture 被指到我们的
-        // RenderTexture 上，屏幕上没有相机清屏：世界冻在最后一帧，IMGUI 每帧照常
-        // 往上叠，半透明菜单一层层累加 ⇒ 越叠越亮、文字重影（"镜厅"）。
-        // 这段窗口是后台收尾（ffmpeg 排空 + mux），几十秒到几分钟。
-        // 原先只在 frames.Dispose()（TearDown 里）还原，太晚了。
         try { frames?.RestoreTargets(); } catch (Exception ex) { Debug.LogException(ex); }
         try { RenderClockSource.ActiveClock = null; } catch (Exception ex) { Debug.LogException(ex); }
         try { UnpinVideoPlayers(); } catch (Exception ex) { Debug.LogException(ex); }
@@ -1189,11 +1012,6 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // UnscaledDeltaPin.Uninstall 与 captureFramerate / vSync / targetFrameRate /
         // runInBackground / audioPause / checkpointNum 的恢复都在这里，它自带逐项兜底。
         RestoreGlobalState();
-        // **最后退出 playtest。** 渲染的第一步是把编辑器切到 playtest
-        // （SwitchToPlayMode + editor.Play），但整条链原先没有任何一步退回去：
-        // 渲染结束后游戏仍停在 playtest 里继续跑，表现就是「渲染完了还在播放」。
-        // 放在时间源与相机都还原之后：SwitchToEditMode 内部会读 conductor/song，
-        // 此时它们已恢复成真实值，不会拿到冻结的钉扎时钟。
         ExitPlaytest();
     }
 
@@ -1346,18 +1164,6 @@ internal sealed class VideoRenderJob : MonoBehaviour
         Destroy(gameObject);
     }
 
-    /// <summary>
-    /// 对象被销毁时的兜底收尾。
-    ///
-    /// 协程在本对象被销毁时会被 Unity 直接终止，<see cref="TearDown"/> 那一行之后
-    /// 的代码不会执行 —— 典型触发：渲染到一半切场景 / 退出关卡 / 退主菜单。
-    /// 后果有三样，且都很隐蔽：
-    ///   1. ffmpeg 进程继续跑（无进程句柄回收），后台占 CPU；
-    ///   2. 临时帧目录留在磁盘（几百 MB 起）；
-    ///   3. VideoRender.Job 永远非 null —— 而它是"能否启动新渲染"的闸门，
-    ///      于是**本局之后再也起不了任何渲染**，只能重启游戏。
-    /// TearDown 已做幂等，正常收尾先执行时这里直接返回。
-    /// </summary>
     private void OnDestroy()
     {
         TearDown();

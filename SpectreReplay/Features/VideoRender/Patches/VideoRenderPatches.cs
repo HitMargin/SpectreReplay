@@ -97,21 +97,11 @@ internal static class UnscaledDeltaPin
 
     internal static void Install()
     {
-        // **不能直接 return。** 上一轮 Uninstall 若有 detour 撤不掉（见 Uninstall
-        // 的说明），列表里会留下那个仍然挂着的 detour。此时若 return，本轮
-        // 「什么都不装」，而 Time.unscaledDeltaTime 仍被残留 detour 接管——
-        // 它读的是 captureFramerate，那个值此刻已恢复成 0 ⇒ 1/0 = Infinity
-        // ⇒ 星球位置 NaN。表现就是用户报的「取消一次渲染后，下一次时钟全炸」。
-        // 所以有残留时先尽力清掉，清掉了再正常安装。
         if (detours.Count > 0)
         {
             Uninstall();
             if (detours.Count > 0)
             {
-                // 确实撤不掉。**不再往上叠新 detour**：叠上去就是两层钉扎，
-                // 而旧那层读的是本类的静态字段、新那层也是，两者互相踩，
-                // 比单纯残留更难定位。明确告警并放弃本轮钉扎——游戏拿到的是
-                // 真实时钟，成片可能不够"确定性"，但不会静默产出 NaN。
                 Debug.LogWarning("[SpectreReplay] unscaled time pin: "
                     + detours.Count + " 个残留 detour 撤销失败，本次不钉扎（走真实时钟）");
                 return;

@@ -2,34 +2,6 @@ using UnityEngine;
 
 namespace SpectreReplay.Ui
 {
-    /// <summary>
-    /// 自绘单行文本输入框。
-    ///
-    /// **为什么要自己写一个。** <c>GUILayout.TextField</c> 是整个设置页里唯一
-    /// 直接吃宿主皮肤的控件：UMM 的 PrepareGUI / ScaleGUI 只重设
-    /// label / button / horizontalSlider / horizontalSliderThumb / toggle
-    /// （UnityModManager.decompiled.cs:3467-3472 与 :3508-3519），
-    /// **从不碰 GUI.skin.textField**。于是这个输入框沿用 ADOFAI 自己的皮肤，
-    /// 在深色卡片上就是一条黑框——2026-10-12 用户截图报的
-    /// 「输出目录那一行是黑的」正是它。同页其余控件要么被 UMM 重设过，
-    /// 要么由 <see cref="Gui"/> 克隆 label 后自绘，所以只有这一行是黑的。
-    ///
-    /// **它自己管什么。** 底色 / 边框 / 文字 / 选区 / 光标 / 水平滚动全部自绘；
-    /// 键盘与鼠标事件自己解析；编辑状态（插入点、选区、滚动量）自己保存。
-    /// 唯一借用的是 IMGUI 的事件队列本身——那是 Unity 给插件的输入来源，
-    /// 绕不开，也不必绕。
-    ///
-    /// **四个踩过的坑，写在这里免得下次再踩：**
-    ///   1. 换行 / 制表必须挡掉。单行框里插进 '\n'，文字会画到第二行，
-    ///      而光标只跟着插入点走一格，看起来像"字乱跑"。
-    ///   2. Ctrl 组合键的 <c>Event.character</c> 是控制字符（Ctrl+A 给 '\x01'），
-    ///      不挡的话按 Ctrl+A 会在路径里插一个看不见的字符。
-    ///   3. 失焦那一下**不要** <c>Event.Use()</c>。用了的话，点旁边那个按钮的
-    ///      那一次点击会被这里吞掉——玩家的感受是"按钮点不动"。
-    ///   4. 光标位置必须按**前缀宽度**算，而前缀宽度要缓存：CalcSize 走字体
-    ///      引擎布局，60 字符的路径每帧重算上百次会明显掉帧，而文本只在
-    ///      按键时才变。缓存判据是"文本或样式换了"（UMM 改字号要跟着重算）。
-    /// </summary>
     internal sealed class TextField
     {
         /// <summary>当前文本。调用方直接读写它（载入设置 / 撤销时覆盖）。</summary>

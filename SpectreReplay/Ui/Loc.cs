@@ -18,33 +18,8 @@ namespace SpectreReplay.Ui
     {
         internal const string Brand = "Spectre Replay";
 
-        /// <summary>头部副标题。**走文案表**：原先写死成中文常量，英文界面下会直接显示
-        /// 中文，而 Loc.cs 在硬编码检查里整文件豁免——这条永远不会被闸门抓到。
-        /// 另外那句话本身也是错的：写的是 F9，而 F9 是「手动保存回放」的键，
-        /// UMM 的开关窗口热键默认是 Ctrl+F10。</summary>
         internal static string Hint => T("ui.hint");
 
-        /// <summary>
-        /// 游戏语言 → 我们的语言代码。
-        ///
-        /// **为什么不复用 <c>LocalizationManager.langlist</c>：** 那张表在
-        /// <c>SpectreReplay</c> 命名空间下，而本文件被链接进离线预览工程
-        /// （<c>tools\UiPreview\UiPreview.csproj</c>）单独编译，那边没有
-        /// LocalizationManager。直接引用会让预览器编译不过，而预览器编译不过时
-        /// 闸门只会报"一条断言都没解析到"——看起来像套件崩了，不像"少链了一个文件"。
-        ///
-        /// 两张表的值必须一致（都对着游戏的 SystemLanguage 枚举）。判据 ⑲b 守这一点：
-        /// 它会读出两张表逐项比对，改了一边忘了另一边会直接红。
-        ///
-        /// （枚举值以游戏 UnityEngine.CoreModule.dll 为准逐个核对过：
-        ///   Czech=7、German=15、French=14、Japanese=22、Korean=23、Polish=27、
-        ///   Portuguese=28、Romanian=29、Russian=30、Spanish=34、Vietnamese=39、
-        ///   ChineseSimplified=40、ChineseTraditional=41、English=10。
-        ///   注意 Chinese=6 是"中文（合体）"，与这两个不是同一个值。
-        ///   预览桩件 LocStubs.cs 曾经把 ChineseSimplified 写成 41、Traditional 写成 42，
-        ///   比真值各偏 1——那种错误在真实游戏里表现为"简中玩家看到繁中"，
-        ///   而离线套件因为用的是同一份错误的桩，永远测不出来。）
-        /// </summary>
         private static readonly Dictionary<SystemLanguage, string> CodeByLanguage =
             new Dictionary<SystemLanguage, string>
             {
@@ -64,15 +39,6 @@ namespace SpectreReplay.Ui
                 { SystemLanguage.German, "de" },
             };
 
-        /// <summary>
-        /// 当前界面语言代码（"zh" / "en" / "ja" …）。
-        ///
-        /// **默认英文而不是中文。** 这里曾经是 `UseChinese = true`，理由是
-        /// "用户是中文用户"；但那句话只在作者自己的机器上成立。模组发出去之后，
-        /// 一个德语玩家在游戏初始化完成前打开面板，会先看到一整屏中文——
-        /// 而他没有任何办法让它变回去，除非去改游戏语言再改回来。
-        /// 英文是这张表里最安全的默认：14 种语言里没有人完全看不懂它。
-        /// </summary>
         internal static string CurrentLanguage = "en";
 
         /// <summary>

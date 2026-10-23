@@ -38,14 +38,6 @@ internal static class ReplayDecoder
         return replay;
     }
 
-    /// <summary>
-    /// 粗判一段字节像不像本模组的回放。
-    ///
-    /// **判据必须看最外层**，不能再看魔数：2026-10-18 加了压缩包装层之后，
-    /// 文件开头是压缩标记（0/1/2）或旧布局的 gzip 头（0x1F），
-    /// 而 <see cref="ReplayConstants.Magic"/> 已经躺在那层里面了。
-    /// 旧版判据在这里会恒定返回 false —— 而它零调用点，所以没人发现。
-    /// </summary>
     public static bool IsNewFormat(byte[] data)
     {
         if (data == null || data.Length < ReplayConstants.CompressionHeaderLen) return false;
@@ -198,10 +190,6 @@ internal static class ReplayDecoder
                 RDC_auto = r.ReadBoolean(),
                 curFreeRoamSection = r.ReadInt32()
             });
-            // v2 起编码端每条末尾追加 HitTick：HasValue(1B) + 有值时 long(8B)。
-            // 此前解码端不读这两项——每条错位 9 字节，第 2 条起 CurrentFloorID/
-            // CurrAngle 全成垃圾，回放只推进一格就永远卡住（floorID 门永不成立）。
-            // v1 旧文件无此追加，按版本跳过保持兼容
             if (ver >= 2)
             {
                 bool hasTick = r.ReadBoolean();

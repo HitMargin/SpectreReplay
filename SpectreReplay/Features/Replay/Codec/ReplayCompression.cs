@@ -4,34 +4,6 @@ using System.IO.Compression;
 
 namespace SpectreReplay.Features.Replay;
 
-/// <summary>
-/// 回放正文的压缩包装层。**新旧两种布局并存**。
-///
-/// <para><b>旧布局</b>（无包装）：整个负载就是一条 gzip 流，首字节恒为 gzip 魔数的
-/// 低字节 <c>0x1F</c>。注意这里拿到的是**解密之后**的字节——磁盘上的 `.sprp`
-/// 首字节是密文的随机值（实测过 20 个存量文件，无一个是 0x1F），压缩层在最里面。</para>
-///
-/// <para><b>新布局</b>：<c>[1 字节算法号][4 字节原文长度][压缩体]</c>。
-/// 算法号见 <see cref="ReplayConstants"/>：0 原文 / 1 gzip / 2 Brotli。</para>
-///
-/// <para><b>怎么区分</b>：新布局第一个字节只可能是 0/1/2，而 gzip 流第一个字节
-/// 恒为 <c>0x1F</c>。两者不相交，所以「读第一个字节」就够，不需要试解。</para>
-///
-/// <para><b>为什么不靠抛异常探测</b>：那样损坏文件会在两条路径上都失败，
-/// 最终报的错误与「格式不认识」分不开；而且 Brotli 解随机字节有小概率
-/// 不抛异常而是吐出垃圾，于是坏文件被当成「合法但内容乱」喂进解码器。</para>
-///
-/// <para><b>实测收益</b>（本机真实回放，908118 B 明文）：gzip/Optimal 469658 B
-/// → Brotli/Optimal 430116 B，**小 8.4%**；代价是 25ms → 40ms。文件目前是
-/// 几百 KB 级，体积和速度都无感。</para>
-///
-/// <para><b>运行时可用性已核实（两层）</b>：① 游戏的
-/// <c>Managed/System.IO.Compression.dll</c>(4.6.57) 里 <c>BrotliStream</c> 是
-/// <b>TypeDef</b>（用 System.Reflection.Metadata 读过元数据，39 个方法），
-/// 不是转发桩；② 编译期要显式引用该 dll——<c>netstandard.dll</c> 的 facade
-/// 里只到 GZipStream 为止，不加引用会报 CS1069「类型已转发」。
-/// csproj 里已加 <c>&lt;Reference Include="System.IO.Compression"&gt;</c>。</para>
-/// </summary>
 internal static class ReplayCompression
 {
     private const long MaxDecompressed = 512L * 1024 * 1024;
@@ -104,14 +76,6 @@ internal static class ReplayCompression
         return ReadWithLimit(decoder, expected);
     }
 
-    /// <summary>
-    /// Brotli 一步式压缩。质量档取 6：本机真实回放（1220012 B 明文）实测
-    /// q4=441813B/29ms、<b>q6=357401B/62ms</b>、q9=355718B/162ms、q11=314652B/3073ms——
-    /// q6 比 q4 小 19% 只多 33ms，q11 的 3 秒卡顿在游戏内不可用，故取 6。
-    /// 窗口 22 是 Brotli 上限，小输入用不满、也无额外代价。
-    /// 缓冲用 <c>GetMaxCompressedLength</c> 一次开够（它给的是最坏情况上界，
-    /// 比流式的 grow-reallocate 少一次拷贝）；理论上不会失败，失败兜底返回 false 走原文包装。
-    /// </summary>
     private static bool TryBrotli(byte[] data, out byte[] body)
     {
         body = null;

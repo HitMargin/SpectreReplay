@@ -93,8 +93,6 @@ internal static class VideoRender
     {
         if (Job != null)
             return;
-        // 总开关。设置页那行「启用视频渲染」就是它。原先没有这个字段、
-        // 那一行绑的是 ReplayOn：关掉渲染会连录制一起关掉，而且关不掉渲染本身。
         if (!Settings.RenderOn)
         {
             TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.disabled"), 3f, NotifType.Warning);
@@ -119,9 +117,6 @@ internal static class VideoRender
             TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.ffmpeg_missing"), 5f, NotifType.Warning);
             return;
         }
-        // 上一轮若是异常退出（Esc / 切场景 / 崩溃），静态钉扎可能还留着。
-        // 不清的话本轮会拿到混合时间源——这正是「取消后下一次渲染回放不播放」
-        // 的成因之一。放在 Launch 之前：作业启动时看到的必须是干净状态。
         ResetLeakedPins();
         ResetSnapshot();
         CurrentPhase = Phase.Restarting;
@@ -165,11 +160,6 @@ internal static class VideoRender
             Job?.AbortOnPlaybackRestart();
     }
 
-    /// <summary>
-    /// 启动前的残留清理：上一轮若是异常退出（Esc、切场景、崩溃），
-    /// 这些静态钉扎可能还留着。不清的话下一轮会拿到混合时间源，
-    /// 表现就是「下一次渲染回放不播放」。
-    /// </summary>
     internal static void ResetLeakedPins()
     {
         UnpinTimeline();
@@ -194,9 +184,6 @@ internal static class VideoRender
         Current.Detail = "";
         Current.Output = "";
         Current.Error = "";
-        // 新一轮开始：上一轮的终态必须清掉，否则渲染进行中界面还会
-        // 带着「上次已完成/已取消」的判断（Active 期间走的是进度分支，
-        // 但这个字段一旦残留，收尾瞬间会闪一下旧结果）。
         Current.Result = Outcome.None;
         Current.FramesDone = 0;
         Current.FramesTotal = 0;

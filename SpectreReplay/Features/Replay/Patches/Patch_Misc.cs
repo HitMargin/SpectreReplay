@@ -35,14 +35,6 @@ internal class Patch_TogglePauseGame
 // ——— scrConductor.Update ————————————————————————————————————
 internal class Patch_ConductorUpdate
 {
-    // 三种"该收摊了"的状态：失败(Fail/Fail2) 与通关(Won)。
-    // **为什么必须写成具名常量而不直接写 5/6/7**：States 的真实顺序是
-    //   0 None, 1 Start, 2 Countdown, 3 Checkpoint, 4 PlayerControl,
-    //   5 Fail, 6 Fail2, 7 Won
-    // （见 adofai-libs\source\Assembly-CSharp\States.cs，2026-10-06 round 43 核对）。
-    // Checkpoint=3 / PlayerControl=4 这个排法特别容易让人按"Fail=6"来数——
-    // 数错一位就会在"玩家还在打"时误开保存入口，或漏掉真正的失败态。
-    // internal：Patch_CancelSaveKey 用的是同一组判定，两处必须永远一致。
     internal const int StateFail = 5;
     internal const int StateFail2 = 6;
     internal const int StateWon = 7;
