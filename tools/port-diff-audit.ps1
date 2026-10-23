@@ -971,7 +971,18 @@ $knownDeviations = @(
     # `scrController.instance.stateMachine` / `scrController.instance.playerOne`，
     # 在场景拆解与转场窗口里这两条链都会断。
     @{ Pat = 'Machine.GetState'; File = 'Patch_Misc.cs'; Why = '2026-10-25 保存/取消保存热键：上游 `(int)(States)scrController.instance.stateMachine.GetState()` 一链到底，转场窗口里 instance 为 null 就 NRE（被 Guard 吞掉 ⇒ 热键静默失效 + 日志刷屏）。改为先取局部 controller、判空早退，再调 GetState；语义不变，只是把 NRE 换成明确的「此时不可保存」' }
-    @{ Pat = 'ex.GetType';       File = 'ReplayRecorder.cs'; Why = '2026-10-25 Stop() 读结算统计整段 try 兜底：is_recording 已翻假，此处异常若逃逸则这份回放再没人保存。上游无兜底，直接 `scrController.instance.playerOne.marginTracker.hitMarginsCount`；我方在 catch 里记下异常类型（只记 type+message，不打栈）并带着已有统计继续保存' } )
+    @{ Pat = 'ex.GetType';       File = 'ReplayRecorder.cs'; Why = '2026-10-25 Stop() 读结算统计整段 try 兜底：is_recording 已翻假，此处异常若逃逸则这份回放再没人保存。上游无兜底，直接 `scrController.instance.playerOne.marginTracker.hitMarginsCount`；我方在 catch 里记下异常类型（只记 type+message，不打栈）并带着已有统计继续保存' }
+    # -- 2026-10-25 P1 后续：TryStartPlayback 失败路径的全局设置还原 --
+    # 难度对齐挪到全部校验之后只是关掉了「校验被拒」这条主泄漏；对齐点与开播
+    # 之间仍有两处会让回放没启动而接管设置没人还：① 中途抛异常（外层 catch
+    # 原先只报错）；② 校验与 StartPlaying 之间被外部 mod 置 ApiBlockPlaying
+    # （Start 静默跳过，不抛异常）。两处都在「没启动 = 泄漏态」时就地还原
+    # CachedDifficulty / CachedNoFail，与 ReplayPlayer.Stop 的还原同一套语义。
+    @{ Pat = 'CachedDifficulty.HasValue'; File = 'Patch_Lifecycle.cs'; Why = '2026-10-25 失败路径还原难度：回放没启动时 ReplayPlayer.Stop 的还原链不会执行，catch 与静默未启动两处就地还原（上游无此接管，也就无此还原）' }
+    @{ Pat = 'CachedDifficulty.Value';  File = 'Patch_Lifecycle.cs'; Why = '同上：还原用的玩家原值' }
+    @{ Pat = 'CachedNoFail.HasValue';    File = 'Patch_Lifecycle.cs'; Why = '同上：noFail 接管同窗口泄漏（原先 catch 只报错，noFail=true 留在玩家局里）' }
+    @{ Pat = 'CachedNoFail.Value';       File = 'Patch_Lifecycle.cs'; Why = '同上：还原用的玩家原值' }
+    @{ Pat = 'failController.noFail';    File = 'Patch_Lifecycle.cs'; Why = '同上：还原目标；instance 判空后经局部变量写回' } )
 
 
 Write-Output ""

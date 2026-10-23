@@ -325,6 +325,30 @@ internal class Patch_StartRewind
             // 整局事件——大关卡里追平过程长达数百帧，追平瞬间还会被判定为"已到尾部"
             // 直接停止回放。
             PlayActions.StartPlaying();
+            // **静默未启动同样是泄漏态。** 校验时（SnapshotBlocks）无阻断、到这里
+            // 之间被外部 mod 调 BlockPlaying 置了 ApiBlockPlaying 的话，
+            // ReplayPlayer.Start 会整个跳过（is_playing 保持 false）且不抛异常——
+            // 上面接管的全局设置（难度 / noFail / hitMarginLimit）就没人还原了。
+            // 在此显式判一次：没启动就还原并按被阻断上报。
+            if (!is_playing)
+            {
+                if (CachedDifficulty.HasValue)
+                {
+                    GCS.difficulty = CachedDifficulty.Value;
+                    CachedDifficulty = null;
+                    SyncDifficultyLabel();
+                }
+                if (CachedNoFail.HasValue)
+                {
+                    var failController = scrController.instance;
+                    if (failController != null)
+                        failController.noFail = CachedNoFail.Value;
+                    CachedNoFail = null;
+                }
+                Reject(LocalizationManager.GetLocalizedText("note.play_error8"),
+                    "ApiBlockPlaying set between validation and StartPlaying");
+                return;
+            }
             if (is_playing && GCS.checkpointNum != data.StartTile)
                 ReplayPlayer.FastForward(GCS.checkpointNum);
             if (is_playing)
@@ -334,6 +358,28 @@ internal class Patch_StartRewind
         catch (Exception ex)
         {
             Debug.Log("load error: " + ex);
+            // **失败路径必须把接管的全局设置还回去。** 难度对齐与 noFail 接管
+            // 都在 try 内（对齐点之后还有 hitMarginLimit / noFail / FastForward
+            // 一整段），中途抛异常时回放没开播，ReplayPlayer.Stop 的还原链
+            // （is_playing=false 直接 return）永远不会执行——难度与 noFail 就此
+            // 泄漏到玩家的正常游玩里。is_playing 为真说明回放已实际启动，还原
+            // 交给 Stop；为假才是泄漏态，就地还原。
+            if (!is_playing)
+            {
+                if (CachedDifficulty.HasValue)
+                {
+                    GCS.difficulty = CachedDifficulty.Value;
+                    CachedDifficulty = null;
+                    SyncDifficultyLabel();
+                }
+                if (CachedNoFail.HasValue)
+                {
+                    var failController = scrController.instance;
+                    if (failController != null)
+                        failController.noFail = CachedNoFail.Value;
+                    CachedNoFail = null;
+                }
+            }
             TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error7"), 3f, NotifType.Warning);
         }
     }
