@@ -107,6 +107,15 @@ internal static class ReplayRecorder
         var events = data.KeyEvents;
         for (int i = 1; i < 256; i++)
         {
+            // **本模组热键不录。** 详见 ManagedInput.IsModHotkey 的说明：
+            // 它们会在回放时被重放成玩法输入，让非编辑器关卡在结算画面自动退出。
+            if (ManagedInput.IsModHotkey(i))
+            {
+                // 仍要同步 Prev，否则松开那一刻会被当成一次「抬起」录进去，
+                // 在回放里凭空产生一个孤立的 UP 事件。
+                PrevKeyState[i] = CurrKeyState[i];
+                continue;
+            }
             if ((PrevKeyState[i] & 0x80) == 0 && (CurrKeyState[i] & 0x80) != 0)
             {
                 events.Add(new KeyEvent

@@ -74,6 +74,10 @@ internal static class AsyncKeyRecorder
 
         foreach (SkyHookEvent ev in FrameBuffer)
         {
+            // 本模组热键不录（原因见 ManagedInput.IsModHotkey）：它们会在回放时
+            // 被当成玩法输入，导致非编辑器关卡在结算画面自动退出。
+            if (ManagedInput.IsModHotkey(ev.Key))
+                continue;
             double dsp = ((long)ev.GetTimeInTicks() + dspNowTicks - nowTicks) / 10000000.0;
             double songPos = conductor.song.pitch * (dsp - conductor.dspTimeSong - scrConductor.calibration_i)
                             - conductor.addoffset;

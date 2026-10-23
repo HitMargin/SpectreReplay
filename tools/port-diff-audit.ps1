@@ -404,6 +404,15 @@ $knownDeviations = @(
     @{ Pat = 'keys.Count';                            File = 'VideoRenderJob.cs'; Why = '同上：取最后一个按键事件的 SongPosition' }
     @{ Pat = 'Math.Max';                              File = 'VideoRenderJob.cs'; Why = '同上：终点砖 entryTime 与最后按键位置取较大者' }
     @{ Pat = 'Mathf.CeilToInt';                       File = 'VideoRenderJob.cs'; Why = '同上：时间轴终点换算成帧数，供 hardStop 使用' }
+    # -- 2026-10-23 本模组热键污染回放（用户报「非编辑器关卡回放结束自动退出」）--
+    # 保存/放弃保存/中止渲染三个界面热键被 RecordKeyboardState 原样记进回放，
+    # 播放时又被重放成玩法输入；结算画面（Won）下 Won_Update 会因此认定
+    # 「玩家按了继续」并退出关卡（源码条件 !isLevelEditor）。录制侧不记、
+    # 播放侧不注入，存量回放也能被兜住。
+    @{ Pat = 'ManagedInput.IsModHotkey';              Why = '2026-10-23 本模组界面热键不进回放：录制侧不记、播放侧不注入（否则非编辑器关卡结算画面会被判成玩家按了继续而退出）' }
+    @{ Pat = 'ManagedInput.SnapshotHeld';             Why = '2026-10-23 回放停止时补发抬起：回放数据常有只按下没抬起的孤立事件，按住状态会泄漏到结算画面' }
+    @{ Pat = 'stillHeld.Count';                       Why = '同上：停止时遍历仍按住的键逐个补发抬起' }
+    @{ Pat = 'ev.Key';                                Why = '同上：异步录制路径也按热键表过滤' }
     @{ Pat = 'VideoRender.TryReadPinnedPosition';     File = 'ReplayPlayer.cs'; Why = '同上：钉扎时间轴的读取入口（两段合起来才是完整名字）' }
     # -- 2026-10-20 回放没开始时的可诊断性（用户报「等待回放开始超时」）--------
     # 上游每处拒绝都是 TriggerMessage(...); return;：通知几秒后消失、**不进日志**，

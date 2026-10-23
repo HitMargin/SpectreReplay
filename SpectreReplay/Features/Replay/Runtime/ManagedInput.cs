@@ -129,6 +129,61 @@ internal static class ManagedInput
         if (_heldCount < 0) _heldCount = 0;
     }
 
+    // ── 本模组热键的回放隔离 ─────────────────────────────────────────
+    //
+    // **这是一类必须挡掉的键。** 保存(F9)/放弃保存(F10)/中止渲染(F11) 是
+    // 界面热键，不是玩法输入。它们在录制时会被 `RecordKeyboardState` 原样记进
+    // 回放，播放时又被原样重放，于是：
+    //
+    //   · 结算画面（Won 状态）下，`scrController.Won_Update` 会问
+    //     `AnyValidInputWasTriggered()` —— 它落到 `RDInput.GetMain(IsDown)`，
+    //     而回放期这个查询被 <see cref="ManagedInput"/> 接管。热键一被重放，
+    //     就会被判成「玩家按了继续」，于是**非编辑器关卡直接退出关卡**
+    //     （源码条件：`!ADOBase.isLevelEditor && flag && winTime 已过 1 秒`）。
+    //     视频渲染正好撞在这条路径上：尾巴没录完，作业被当成「回放被重启」丢掉。
+    //   · 录制时按 F9 存盘，那一刻 `Stop()` 已执行、键还没抬起，所以回放里
+    //     常出现**只有按下没有抬起**的孤立事件，按住状态一直挂到结束。
+    //
+    // 键码域是原生 VK（录制侧 GetKeyboardState / SkyHook 都给 VK），而配置里的
+    // 三个热键是 Unity KeyCode，必须换算后再比。换算有开销，缓存起来，
+    // 只在设置变化时重算。
+    private static int _hotSrcSave = int.MinValue, _hotSrcCancel, _hotSrcStop;
+    private static int _hotVkSave = -1, _hotVkCancel = -1, _hotVkStop = -1;
+
+    private static void EnsureHotkeyCache()
+    {
+        if (_hotSrcSave == SpectreReplay.Settings.SaveButton
+            && _hotSrcCancel == SpectreReplay.Settings.CancelSaveButton
+            && _hotSrcStop == SpectreReplay.Settings.RenderStopKey)
+            return;
+        _hotSrcSave = SpectreReplay.Settings.SaveButton;
+        _hotSrcCancel = SpectreReplay.Settings.CancelSaveButton;
+        _hotSrcStop = SpectreReplay.Settings.RenderStopKey;
+        _hotVkSave = ToNativeVk((KeyCode)_hotSrcSave);
+        _hotVkCancel = ToNativeVk((KeyCode)_hotSrcCancel);
+        _hotVkStop = ToNativeVk((KeyCode)_hotSrcStop);
+    }
+
+    /// <summary>
+    /// <paramref name="vk"/>（原生 VK）是否是本模组的界面热键。
+    /// 录制侧据此不记、播放侧据此不注入——两边都要挡，因为存量回放里已经录进去了。
+    /// </summary>
+    internal static bool IsModHotkey(int vk)
+    {
+        if (vk <= 0) return false;
+        EnsureHotkeyCache();
+        return vk == _hotVkSave || vk == _hotVkCancel || vk == _hotVkStop;
+    }
+
+    /// <summary>当前仍按住的回放键（用于停止时补发抬起，避免状态挂到下一局）。</summary>
+    internal static List<ushort> SnapshotHeld()
+    {
+        var list = new List<ushort>();
+        for (int vk = 0; vk < Held.Length; vk++)
+            if (Held[vk]) list.Add((ushort)vk);
+        return list;
+    }
+
     /// <summary>清空状态。开始 / 停止 / 快进（跳转）时调用，避免上一段的按住状态残留。</summary>
     internal static void Clear()
     {

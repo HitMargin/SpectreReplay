@@ -49,7 +49,20 @@ internal static class ReplayPlayer
             return;
         }
         GCS.hitMarginLimit = Persistence.hitMarginLimit;
+
+        // **先补发抬起，再清空。** 回放数据里常有「只有按下没有抬起」的孤立事件
+        // （录制结束时按着的键不会产生 UP：录制在按键那一刻就停了）。这些键的
+        // 按住状态会一路挂到 Stop 之后，而 Stop 之后 is_playing=false，
+        // RDInput 覆盖随即失效、游戏读回真实键盘——那个键明明是空的，
+        // 状态却已经泄漏到结算画面/关卡选择里。
+        //
+        // 顺序必须是「取快照 → 置 is_playing=false → 按快照发事件」：
+        // 先置假才能让 Note 里的日志与查询语义正确，而快照保证我们发的是
+        // 停止那一刻真正按住的那些键（清空之后就查不到了）。
+        List<ushort> stillHeld = ManagedInput.SnapshotHeld();
         is_playing = false;
+        for (int i = 0; i < stillHeld.Count; i++)
+            ReleaseLeakedKey(stillHeld[i]);
         // 回放结束：清掉托管输入状态，避免残留的按住键继续被 RDInput 报出来
         ManagedInput.Clear();
         if (PlayMode && ManagedInput.Mirror)
@@ -88,6 +101,35 @@ internal static class ReplayPlayer
         catch (Exception ex)
         {
             Debug.LogException(ex);
+        }
+    }
+
+    /// <summary>
+    /// 给一个只按下、从未抬起的回放键补发抬起。
+    ///
+    /// <para>只走 SkyHook 广播（如果那条链可用）：合成一个 KeyReleased 事件
+    /// 灌回事件管线，游戏自己的 keyMask 与订阅 KeyUpdated 的模组都会看到
+    /// 正确的抬起。SendInput 路径不需要补——它本来就在每次 Stop 时按
+    /// <c>CurrKeyState</c> 发抬起（见 Stop 后半段）。</para>
+    /// </summary>
+    private static void ReleaseLeakedKey(ushort vk)
+    {
+        try
+        {
+            if (!AsyncInputInjector.Injectable || !AsyncInputInjector.Healthy)
+                return;
+            // 用当前钉扎/实时位置都行：这里只关心「事件到达且是抬起」，
+            // 时间戳落在现在即可（Inject 内部按 dsp 基准换算）。
+            scrConductor conductor = ADOBase.conductor;
+            if (conductor == null || conductor.song == null) return;
+            double pos = CurrentSongPosition(conductor, out bool ready);
+            if (!ready) return;
+            AsyncInputInjector.Inject(vk, false, pos);
+        }
+        catch (Exception ex)
+        {
+            // 补发抬起是清理性质的，失败不该影响 Stop 的其余步骤
+            Debug.LogWarning("[SpectreReplay] 补发按键抬起失败 vk=" + vk + ": " + ex.Message);
         }
     }
 
@@ -143,7 +185,9 @@ internal static class ReplayPlayer
             ushort num = ev.KeyCode < Settings.key_code_convert.Length
                 ? Settings.key_code_convert[ev.KeyCode]
                 : (ushort)0;
-            if (num == 0 || num == 27) continue;
+            // 热键也不该在跳转后被「恢复成按住」：存量回放里录进了它们，
+            // 而 Restore 不写帧戳、只改按住集合，于是它们会一直挂着到结束。
+            if (num == 0 || num == 27 || ManagedInput.IsModHotkey(num)) continue;
             ManagedInput.Restore(num, ev.IsPressed);
         }
         // 托管状态已就位，同步一份给 SendInput 路径，Stop() 才知道该发哪些抬起
@@ -299,7 +343,7 @@ internal static class ReplayPlayer
             ushort num = ev.KeyCode < Settings.key_code_convert.Length
                 ? Settings.key_code_convert[ev.KeyCode]
                 : (ushort)0;
-            if (num != 0 && num != 27)
+            if (num != 0 && num != 27 && !ManagedInput.IsModHotkey(num))
             {
                 // 托管输入侧：把回放状态并进 RDInput 的查询结果（见 Patch_RDInput）。
                 // 与平台/聚焦无关，也【不】受 IsBlockedKey 影响——那个表是给
