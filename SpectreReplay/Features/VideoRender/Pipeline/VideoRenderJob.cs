@@ -107,6 +107,27 @@ internal sealed class VideoRenderJob : MonoBehaviour
     internal void AbortOnPlaybackRestart()
     {
         if (cancelRequested) return;
+        // **已经进入收尾就不再算「被重新开始」。**
+        //
+        // 官方关卡跑完会自动通关转场回 scnLevelSelect，这次场景切换照样触发
+        // Start_Rewind。若把它当中止，整份视频会在 mux 前一刻被丢掉——
+        // 玩家看到的就是「渲染跑满 100%、然后什么都没留下」。
+        // 2026-10-23 实测：frame 1192 判定到终点、进 tail，转场在 tail 期间发生，
+        // 日志随即出现 aborted。时间轴既已走完，后面的重启只可能是关卡自己结束。
+        // 判据一：已经定下收尾帧（在录尾巴）。
+        // 判据二：钉扎位置已越过回放终点——即便终点判定还没来得及在这一帧执行，
+        //         回放本身事实上已经走完。两个都看，避免「退出恰好早一帧」漏判。
+        if (endingCapture
+            || (replayEndSongPosition > 0.0
+                && VideoRender.PinnedSongPosition >= replayEndSongPosition - 0.001))
+        {
+            // **不是忽略，而是就地收尾。** 关卡已经自己结束，后续帧会是
+            // 关卡选择界面/转场，继续采进去等于把界面录进成片。
+            sceneExited = true;
+            Debug.Log("[SpectreReplay] level finished (Start_Rewind during tail) at song="
+                + VideoRender.PinnedSongPosition.ToString("0.000") + "s — stopping capture");
+            return;
+        }
         cancelRequested = true;
         playbackRestarted = true;
         Debug.LogWarning("[SpectreReplay] render aborted: playback restarted during capture "
@@ -115,6 +136,16 @@ internal sealed class VideoRenderJob : MonoBehaviour
 
     private bool suppressExitPlaytest;
     private bool playbackRestarted;
+    // 是否已判定进入收尾（到达回放终点，正在录尾巴）。
+    // 用于区分「用户在渲染中途重开了回放」与「关卡自己跑完了自动转场」——
+    // 两者都会触发 Start_Rewind，但只有前者该中止作业。
+    private bool endingCapture;
+    // 回放终点的绝对歌曲时间。字段而非局部变量：AbortOnPlaybackRestart 也要用它
+    // 判断「这次 Start_Rewind 是关卡自己跑完了，不是用户重开」。
+    private double replayEndSongPosition;
+    // 关卡已自行结束（非编辑器关卡通关后 Won_Update 会主动退出关卡）。
+    // 置位后捕获循环立刻停：后续帧是关卡选择界面/转场，采进成片就是脏画面。
+    private bool sceneExited;
     // 锚点自愈的已重锚次数（见捕获循环里的锚点自愈段）
     private int reAnchors;
     // AwaitReplayAlive 用：上一帧是否已看到正的 songposition（连续两帧才算稳）
@@ -340,6 +371,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // 回放终点的绝对歌曲时间。**结束判定必须同时看它**，不能只等
         // is_playing 翻假——见循环里 endFrame 的说明。
         double replayEndSong = ReplayEndSongPosition();
+        replayEndSongPosition = replayEndSong;   // AbortOnPlaybackRestart 也要用
         if (replayEndSong <= 0.0) replayEndSong = double.MaxValue;
         captureClock = System.Diagnostics.Stopwatch.StartNew();
         VideoRender.Current.Detail = Path.GetFileName(outputPath);
@@ -365,7 +397,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
         int endFrame = -1;
         bool wasPlaying = SpectreState.is_playing;
 
-        while (frameIndex < hardStop && !cancelRequested)
+        while (frameIndex < hardStop && !cancelRequested && !sceneExited)
         {
             // 回读在途满时先排空再继续（反压）
             while (frames.InFlight >= frames.MaxInFlight && !cancelRequested)
@@ -514,6 +546,11 @@ internal sealed class VideoRenderJob : MonoBehaviour
                     + " (song=" + VideoRender.PinnedSongPosition.ToString("0.000")
                     + "s, end=" + replayEndSong.ToString("0.000") + "s), tail to " + endFrame);
             }
+
+            // 一旦定下收尾帧就置位：之后的 Start_Rewind（官方关卡通关自动转场）
+            // 属于自然结束，不能被当作「回放被重新开始」而中止作业。
+            if (endFrame >= 0)
+                endingCapture = true;
 
             if (endFrame >= 0 && frameIndex >= endFrame)
                 break;
