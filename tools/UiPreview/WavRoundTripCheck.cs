@@ -73,7 +73,7 @@ namespace UiPreview
             int tagAt20 = -1, chAt22 = -1, rateAt24 = -1, bitsAt34 = -1, hdrLen = -1;
             try
             {
-                string root = System.IO.Path.GetFullPath(@"..\..\SpectreReplay");
+                string root = Driver.ProjectDir;   // 从程序集位置推导，不依赖工作目录
                 string src = System.IO.File.ReadAllText(
                     System.IO.Path.Combine(root, @"State\AudioRecorder.cs"));
                 // 必须锚定到 CreateWAVHeader 方法体：文件里另有 5 处 new byte[...]
@@ -169,7 +169,7 @@ namespace UiPreview
             string mixInfo = "";
             try
             {
-                string root2 = System.IO.Path.GetFullPath(@"..\..\SpectreReplay");
+                string root2 = Driver.ProjectDir;
                 string src2 = System.IO.File.ReadAllText(
                     System.IO.Path.Combine(root2, @"State\AudioRecorder.cs"));
                 var mCh = System.Text.RegularExpressions.Regex.Match(src2,

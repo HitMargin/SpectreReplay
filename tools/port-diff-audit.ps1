@@ -964,7 +964,14 @@ $knownDeviations = @(
     @{ Pat = 'controller.chosenPlanet'; File = 'SpectreState.cs'; Why = '同上：具名 controller 后的连带引用' }
     @{ Pat = 'controller.playerOne';   File = 'SpectreState.cs'; Why = '同上：反向旋转判定' }
     @{ Pat = 'planetarySystem.isCW';   File = 'SpectreState.cs'; Why = '同上：反向旋转的判据（isCW 为假时角度取反，上游没有这个重载）' }
-    @{ Pat = 'float.NaN';              File = 'SpectreState.cs'; Why = '同上：取不到 controller / 星球时返回 NaN，让上层 IsSane 拦下而不是拿 0 去比较（0 会误判成「还没到」）' })
+    @{ Pat = 'float.NaN';              File = 'SpectreState.cs'; Why = '同上：取不到 controller / 星球时返回 NaN，让上层 IsSane 拦下而不是拿 0 去比较（0 会误判成「还没到」）' }
+    # ══════════════════════════════════════════════════════════════════
+    # -- 2026-10-25 审计补丁：转场窗口判空 / 统计读取兜底 --
+    # 两处都是上游没有的健壮性改动（不是抄错）：上游直接链式取
+    # `scrController.instance.stateMachine` / `scrController.instance.playerOne`，
+    # 在场景拆解与转场窗口里这两条链都会断。
+    @{ Pat = 'Machine.GetState'; File = 'Patch_Misc.cs'; Why = '2026-10-25 保存/取消保存热键：上游 `(int)(States)scrController.instance.stateMachine.GetState()` 一链到底，转场窗口里 instance 为 null 就 NRE（被 Guard 吞掉 ⇒ 热键静默失效 + 日志刷屏）。改为先取局部 controller、判空早退，再调 GetState；语义不变，只是把 NRE 换成明确的「此时不可保存」' }
+    @{ Pat = 'ex.GetType';       File = 'ReplayRecorder.cs'; Why = '2026-10-25 Stop() 读结算统计整段 try 兜底：is_recording 已翻假，此处异常若逃逸则这份回放再没人保存。上游无兜底，直接 `scrController.instance.playerOne.marginTracker.hitMarginsCount`；我方在 catch 里记下异常类型（只记 type+message，不打栈）并带着已有统计继续保存' } )
 
 
 Write-Output ""

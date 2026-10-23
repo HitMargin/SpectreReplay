@@ -11,51 +11,72 @@ namespace UiPreview
 {
     internal static class Driver
     {
+        // 主项目目录：从**程序集位置**向上找，取同时含 SpectreReplay/ 与 tools/ 的目录。
+        // 老实现按 `Path.GetFullPath(@"..\..\SpectreReplay")` 从**工作目录**推导，只在
+        // cwd 恰好是 tools/UiPreview 时成立——在仓库根 `dotnet run --project tools/UiPreview`
+        // 会把根算成 <盘>:\SpectreReplay，第一个按文件扫描的检查直接
+        // DirectoryNotFoundException 炸掉整套。向上找则与 cwd、输出路径深度
+        // （bin\Debug|Release\net10.0-windows\）都无关。
+        internal static readonly string ProjectDir = FindProjectDir();
+
+        private static string FindProjectDir()
+        {
+            for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+            {
+                if (Directory.Exists(Path.Combine(dir.FullName, "SpectreReplay"))
+                    && Directory.Exists(Path.Combine(dir.FullName, "tools")))
+                    return Path.Combine(dir.FullName, "SpectreReplay");
+            }
+            throw new InvalidOperationException(
+                "找不到项目根：从 \"" + AppContext.BaseDirectory
+                + "\" 向上没有同时含 SpectreReplay/ 与 tools/ 的目录");
+        }
+
         internal static int Run(string outDir, string[] args)
         {
             int locFail = LocCheck.Run(LocCheck.CollectUsedKeys());
             int hardFail = HardTextCheck.Run(
-                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+                ProjectDir);
             int replayFail = ReplayCheck.Run();
             int wavFail = WavRoundTripCheck.Run();
             int runtimeFail = LocRuntimeCheck.Run();
             int portedFail = PortedCompletenessCheck.Run(
-                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+                ProjectDir);
             int shapeFail = UiLogicShapeCheck.Run(
-                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+                ProjectDir);
             int missingKeyFail = MissingRuntimeKeyCheck.Run(
-                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+                ProjectDir);
             int keybdFail = KeybdSoundTickCheck.Run(
-                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+                ProjectDir);
             int cfgFail = ConfigMigrationCheck.Run(
-                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+                ProjectDir);
             int patchFail = PatchTargetCheck.Run(
-                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+                ProjectDir);
             int reflectFail = ReflectionTargetCheck.Run(
-                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+                ProjectDir);
             // LevelProbeCheck 记录三次错判据的历史 + 钉住"移植后仍用场景名"。
             // 它曾是一份从未注册的孤儿检查（存在但一次都不跑）——
             // 所以任何 *.cs 加进 tools\UiPreview 后，必须在这里登记，
             // 否则它既不跑也不会有人发现。
             int levelFail = LevelProbeCheck.Run();
             int xthreadFail = CrossThreadFieldCheck.Run(
-                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+                ProjectDir);
             int cryptoFail = ReplayCryptoCheck.Run(
-                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+                ProjectDir);
             int enumFail = EnumParseGuardCheck.Run(
-                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+                ProjectDir);
             int loadMarkerFail = LoadMarkerCheck.Run(
-                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+                ProjectDir);
             int locFallbackFail = LocFallbackCheck.Run(
-                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+                ProjectDir);
             int locLangFail = LocLanguageCheck.Run(
-                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+                ProjectDir);
             int pinStateFail = PinStateCheck.Run(
-                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+                ProjectDir);
             int injectFail = InstanceInjectionCheck.Run(
-                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+                ProjectDir);
             int logPrefixFail = LogPrefixCheck.Run(
-                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+                ProjectDir);
             int scatterFail = HitScatterMathCheck.Run();
             // 鼠标指针合成：没有异常的那类缺陷——指针不出现、画反、上下颠倒，
             // 只有翻成片才发现，所以拿真源码往 byte[] 上真画一遍再验像素。
@@ -68,9 +89,9 @@ namespace UiPreview
             // 而这条链最弱的环（holdKeys 里是不是真实键、去重条件对不对）
             // 只会在实机上暴露。离线钉住它的接线形状。
             int crossInputFail = CrossPlatformInputCheck.Run(
-                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+                ProjectDir);
             int orphanFail = PortedCompletenessCheck.NoOrphanChecks(
-                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"));
+                ProjectDir);
             int total = locFail + hardFail + replayFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + locLangFail + pinStateFail + injectFail + logPrefixFail + scatterFail + cursorFail + cursorTrackFail + crossInputFail + orphanFail;
             Console.WriteLine();
             Console.WriteLine(total == 0

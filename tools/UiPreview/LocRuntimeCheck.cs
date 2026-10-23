@@ -34,7 +34,7 @@ namespace UiPreview
             // 语言数不写死：写完 13 那次就漏了 zh-t（繁体），实际是 14。
             // 数出来再打印，标签永远不会跟事实不符。
             Console.WriteLine("  ── 运行时文案键（多语言）──");
-            string root = Path.GetFullPath(Path.Combine("..", "..", "SpectreReplay"));
+            string root = Driver.ProjectDir;   // 从程序集位置推导，不依赖工作目录
             string lm = Path.Combine(root, Path.Combine("State", "LocalizationManager.cs"));
             if (!File.Exists(lm))
             {

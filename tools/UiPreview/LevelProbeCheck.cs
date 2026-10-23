@@ -108,7 +108,7 @@ namespace UiPreview
         private static int PortedCodeUsesSceneName()
         {
             string path = System.IO.Path.Combine(
-                System.IO.Path.GetFullPath(@"..\..\SpectreReplay"),
+                Driver.ProjectDir,
                 "Features", "Replay", "Patches", "Patch_Lifecycle.cs");
             if (!System.IO.File.Exists(path))
             {

@@ -44,8 +44,9 @@ namespace UiPreview
 
         private static IEnumerable<string> SourceFiles() => new[]
         {
-            @"..\..\SpectreReplay\Pages\Pages.cs",
-            @"..\..\SpectreReplay\Ui\OnGui.cs",
+            // 走 Driver.ProjectDir（从程序集位置向上推导），不再依赖工作目录
+            Path.Combine(Driver.ProjectDir, "Pages", "Pages.cs"),
+            Path.Combine(Driver.ProjectDir, "Ui", "OnGui.cs"),
         };
 
         internal static int Run(HashSet<string> used)
