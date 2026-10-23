@@ -140,6 +140,10 @@ internal sealed class VideoRenderJob : MonoBehaviour
     // 用于区分「用户在渲染中途重开了回放」与「关卡自己跑完了自动转场」——
     // 两者都会触发 Start_Rewind，但只有前者该中止作业。
     private bool endingCapture;
+    // 渲染开始前玩家所处的模式。收尾时要原样还原，而不是一律切成录制态
+    // （详见 ReleaseGameControl 里的说明）。
+    private bool wasPlayModeBeforeRender;
+    private bool wasRecordModeBeforeRender;
     // 回放终点的绝对歌曲时间。字段而非局部变量：AbortOnPlaybackRestart 也要用它
     // 判断「这次 Start_Rewind 是关卡自己跑完了，不是用户重开」。
     private double replayEndSongPosition;
@@ -251,6 +255,16 @@ internal sealed class VideoRenderJob : MonoBehaviour
         SetPhase(VideoRender.Phase.Restarting, "rendervideo.stage.restarting", "");
         PrepareWorkspace(container);
         SaveGlobalState(fps);
+
+        // **记住渲染前的模式，收尾时原样还原。**
+        //
+        // 渲染必须临时进入回放态（PlayMode=true），但玩家原本可能就在回放态
+        // （从设置页装弹后点渲染）或录制态（边玩边渲染）。收尾时若一律切成
+        // 录制态，原本装弹中的回放会变成「data 还在、却已进入录制模式」——
+        // 界面同时显示「正在录制本局按键」和「已载入那份回放」，两边打架；
+        // 而下次进关还会因为 RecordMode 自动开始录制。（2026-10-24 实测）
+        wasPlayModeBeforeRender = SpectreState.PlayMode;
+        wasRecordModeBeforeRender = SpectreState.RecordMode;
 
         // 走既有回放启动链：重启关卡后 Start_Rewind 补丁会做完整性校验并自动开始回放
         SpectreState.PlayActions.SwitchToPlayMode();
@@ -1117,25 +1131,34 @@ internal sealed class VideoRenderJob : MonoBehaviour
         try { SpectreState.PlayActions.StopPlaying(); }
         catch (Exception ex) { Debug.LogException(ex); }
 
-        // **还必须退出「回放已装弹」这个模式本身。**
+        // **把模式还给渲染开始前的样子。**
         //
         // 渲染期间 `PlayMode` 必须是 true——关卡重开后靠
         // <see cref="Patch_StartRewind.Postfix"/> 里那句 `if (PlayMode) TryStartPlayback()`
-        // 自动接管回放。但此前收尾只停了回放（is_playing=false），**没有把
-        // PlayMode 复位**，而这个标志唯一的复位点是 SwitchToRecordMode()
-        // （启动流程与「卸载回放」按钮）。
+        // 自动接管回放。
         //
-        // 后果是渲染结束后仍处于「回放已装弹、进关即自动播放」状态：玩家之后
-        // **每进一个关卡都会立刻被回放接管**——键盘没反应、关卡自己跑完、
-        // 然后跳到别的场景。玩家只有手动卸载回放才能恢复正常，而那是绕过，
-        // 不是正确行为（2026-10-23 实测询问：「必须要把回放卸载掉才能退出？」）。
+        // 但**不能一律切成录制态**（上一版就是这么干的，2026-10-24 实测出问题）：
+        // 玩家通常是从设置页装弹后点渲染，本来就是回放态。强行切录制态后，
+        // `data` 里还留着那份回放，于是界面同时显示「正在录制本局按键」与
+        // 「已载入那份回放」——两个状态互相打架；而 RecordMode 还会让下次进关
+        // **自动开始录制**，把装弹中的回放顶掉。用户看到的就是「卸载不干净」。
         //
-        // 换到录制态（而不是清空 data）：回放文件仍留在界面上，随时可以再渲染
-        // 或手动播放，只是不再「进关即接管」。
-        try { SpectreState.PlayActions.SwitchToRecordMode(); }
+        // 正确语义是「撤销渲染对模式的临时改动」，即还原到进入渲染前的状态：
+        //   · 原本是回放态 → 回到回放态（那份回放仍然装弹，可再次渲染/播放）
+        //   · 原本是录制态 → 回到录制态
+        try
+        {
+            if (wasPlayModeBeforeRender && !wasRecordModeBeforeRender)
+                SpectreState.PlayActions.SwitchToPlayMode();
+            else if (wasRecordModeBeforeRender)
+                SpectreState.PlayActions.SwitchToRecordMode();
+            else
+                SpectreState.PlayActions.SwitchToRecordMode();
+        }
         catch (Exception ex) { Debug.LogException(ex); }
-        Debug.Log("[SpectreReplay] render teardown: playback mode released "
-            + "(PlayMode=" + SpectreState.PlayMode + " RecordMode=" + SpectreState.RecordMode + ")");
+        Debug.Log("[SpectreReplay] render teardown: mode restored to pre-render state "
+            + "(PlayMode=" + SpectreState.PlayMode + " RecordMode=" + SpectreState.RecordMode
+            + " wasPlay=" + wasPlayModeBeforeRender + " wasRec=" + wasRecordModeBeforeRender + ")");
 
         // **还要把游戏的输入源切回真实键盘。** 这一步与上面的 StopPlaying 是两件事：
         // 前者让我们的 RDInput 覆盖失效，后者恢复游戏自己的输入源标志。

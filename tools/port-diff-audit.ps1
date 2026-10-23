@@ -415,6 +415,11 @@ $knownDeviations = @(
     @{ Pat = 'ev.Key';                                Why = '同上：异步录制路径也按热键表过滤' }
     @{ Pat = 'SpectreState.PlayActions.StopPlaying';  File = 'VideoRenderJob.cs'; Why = '2026-10-23 渲染结束必须停回放：否则 is_playing 恒真，RDInput 所有查询都由回放数据回答，真实键盘被屏蔽，通关后卡在关卡里出不去' }
     @{ Pat = 'SpectreState.PlayActions.SwitchToRecordMode'; File = 'VideoRenderJob.cs'; Why = '2026-10-23 渲染结束还要退出「回放已装弹」模式：PlayMode 不复位时，之后每次进关都会自动启动回放并接管输入（玩家只能手动卸载回放才能恢复）' }
+    # -- 2026-10-24 纠正上一版：不能一律切录制态，要还原渲染前的模式 ------
+    # 玩家多是从设置页装弹后点渲染（本来就是回放态）。强行切录制态后 data 仍是
+    # 那份回放，界面同时显示「正在录制」与「已载入」，且下次进关会自动开录。
+    @{ Pat = 'SpectreState.PlayActions.SwitchToPlayMode'; File = 'VideoRenderJob.cs'; Why = '2026-10-24 渲染收尾还原渲染前的模式（原本装弹中则回到回放态），而不是一律切录制态' }
+    @{ Pat = 'note.stop_playing';                        Why = '2026-10-24 回放结束判定挪到「已耗尽」早退之前：结算态下 Won_Update 是唯一还在跑的入口，否则 is_playing 永远为真、键盘被回放覆盖，只能手动卸载回放才能退出' }
     # -- 2026-10-23 渲染后真实键盘失灵（用户报「只能靠鼠标退出关卡」）--------
     # 游戏在 AsyncInputManager.Update 里按 state==PlayerControl 切换输入源：
     # 玩法态关真实键盘、开异步键盘。渲染全程钉在玩法态，收尾又常在场景切换

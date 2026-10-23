@@ -207,6 +207,35 @@ internal static class ReplayPlayer
         {
             return;
         }
+
+        // **结束判定必须排在「已耗尽」早退之前。**
+        //
+        // 最后一条按键事件通常在 PlayerControl 阶段就灌完了（KeyEventIndex 已经
+        // 追平 Count）。之后关卡进入结算态，PlayerControl_Update 不再运行，
+        // <see cref="Patch_PlayerControlUpdate"/> 里那条「命中与按键都耗尽就 Stop」
+        // 的判定随之停摆；此时唯一还在每帧执行的就是本方法（Won_Update 的 Postfix）。
+        //
+        // 而它原先的第一道检查是「KeyEventIndex >= Count 就 return」——正好把
+        // 这个唯一能收尾的入口挡在门外。后果不是「少一条提示」这么轻：
+        // is_playing 永远为真 ⇒ ManagedInput.Active 永远为真 ⇒ RDInput 的
+        // GetMain/GetState/GetStateKeys 全被回放数据覆盖，真人键盘完全失灵，
+        // 结算画面按什么都不响应，只能去设置页手动卸载回放才能退出关卡。
+        // 2026-10-24 实测：不渲染、仅正常播放回放，结束后同样必须卸载才能退出。
+        //
+        // 判据只认「按键已耗尽」，**不要求命中快照也吃完**：flag=true 只来自
+        // Won_Update 的 Postfix，那时关卡已经打完，命中推进早就停了
+        // （PlayerControl_Update 不再运行）。再要求 PlayIndex 追平，只要还剩
+        // 几个快照没吃完就永远判不到结束——等于没修。
+        if (flag && KeyEventIndex >= data.KeyEvents.Count)
+        {
+            KeyEventIndex = 0;
+            PlayIndex = 0;
+            Debug.Log("[SpectreReplay] replay finished (keys exhausted in Won state), stopping playback");
+            Stop();
+            TriggerMessage(LocalizationManager.GetLocalizedText("note.stop_playing"));
+            return;
+        }
+
         if (KeyEventIndex < 0 || KeyEventIndex >= data.KeyEvents.Count)
         {
             return;
