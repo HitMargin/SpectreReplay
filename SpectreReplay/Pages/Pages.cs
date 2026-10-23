@@ -532,20 +532,28 @@ namespace SpectreReplay.Pages
                 }
                 return;
             }
-            GUILayout.Label(Loc.T("playback.idle"), Gui.NoteStyle, GUILayout.ExpandWidth(true));
-            // 空闲态也要给出卸载入口：`PlayMode` 为真但还没开播（装了弹没发射）
-            // 时 data 仍在，玩家同样需要能反悔——此时上面那个 is_playing 分支
-            // 走不到，不补这一处就会出现"刚载入就又卸不掉了"。
+            // **"还没载入"只在真的什么都没装时才说。**
+            // 这句原先无条件打印，而它上面的两个分支只覆盖「播放中」「录制中」——
+            // 于是"已装弹、还没开播"这个状态走进了这里，同一块里先出现
+            // 「还没载入回放」，紧接着 DrawArmedHint 又说「已装好：某某」，
+            // 两句话当场打架，玩家分不清到底装没装上。
             if (PlayMode && data != null)
             {
+                // 顺序：先报状态，再给操作。反过来会让「卸载回放」按钮压在
+                // 「已装好：某某」上面，读起来像是给上面那句 idle 配的操作。
+                DrawArmedHint();
+                // 已装弹但还没开播时 data 仍在，玩家需要能反悔——此时上面那个
+                // is_playing 分支走不到，不补这一处就会出现"刚载入就又卸不掉了"。
                 GUILayout.BeginHorizontal();
                 DrawUnloadButton();
                 GUILayout.FlexibleSpace();
                 GUILayout.EndHorizontal();
+                DrawTimingSummary();
+                DrawOpenLevelRow();
+                return;
             }
-            DrawArmedHint();
-            DrawTimingSummary();
-            DrawOpenLevelRow();
+
+            GUILayout.Label(Loc.T("playback.idle"), Gui.NoteStyle, GUILayout.ExpandWidth(true));
         }
 
         /// <summary>
