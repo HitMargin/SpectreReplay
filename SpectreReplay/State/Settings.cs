@@ -23,6 +23,18 @@ public static class Settings
     public static bool KeybdSoundRecordActive = true;
 
     public static bool KeyConvertEnabled = false;
+    /// <summary>
+    /// **只模拟映射列表中的按键。**
+    ///
+    /// 开启（且 <see cref="KeyConvertEnabled"/> 也开）时，映射表里没有的键
+    /// 一律不产生输入——只用手柄/宏键盘的几个键打谱时，屏蔽掉其余按键。
+    /// 关掉时表外的键照常按原样使用。
+    ///
+    /// 默认 <c>false</c>：它会让大量按键**静默失效**，必须是玩家自己选的。
+    /// 与 <see cref="KeyConvertEnabled"/> 一样，改动后要调
+    /// <see cref="key_convert_list2array"/> 重建表，否则当场不生效。
+    /// </summary>
+    public static bool LimitKey = false;
     public static bool GetDataFromAsyncInput = false;
 
     public static int SaveButton = 290;
@@ -333,36 +345,52 @@ public static class Settings
 
     // —— 启动归一化 / 键表构建 ————————————————————————
 
+    /// <summary>
+    /// 重建运行时映射表 <see cref="key_code_convert"/>（256 项，下标 = 录像里的键码）。
+    ///
+    /// **三种状态，末态必须真的不同**（这是本方法的历史教训）：
+    ///   · 重映射关（<c>!KeyConvertEnabled</c>）        → 恒等映射，一切键照原样用；
+    ///   · 重映射开 + 只模拟列表（<see cref="LimitKey"/>）→ **表外的键映射成 0**，
+    ///     即回放侧跳过、不产生任何输入；
+    ///   · 重映射开 + 不限制                        → 表内的按表换，表外的恒等。
+    ///
+    /// **上游那版的原罪**：它在末尾有一条 `== 0xFFFF → num` 的兜底循环，把
+    /// 「未映射」与「恒等」抹成同一件事，于是 `LimitKey` 拨不拨末态逐字节相同——
+    /// 一个真开关被实现成了假开关（这也是 2026-10-19 误判它"无实现"并删除的原因）。
+    /// 现在用 **0 表示「不模拟」**，与回放侧 <c>num != 0</c> 的跳过条件对齐
+    /// （ReplayPlayer.cs:300）；0xFFFF 只作内部「尚未赋值」的哨兵。
+    /// </summary>
     internal static void key_convert_list2array()
     {
         key_code_convert = new ushort[256];
-        for (int i = 0; i < 256; i++)
-            key_code_convert[i] = 0xFFFF;
-        // （原式是 `!LimitKey || !KeyConvertEnabled`，2026-10-19 按用户要求删掉
-        //   LimitKey 后只剩 `!KeyConvertEnabled`。这不是"顺手改语义"：那个开关
-        //   对结果**从来没有影响过**——本方法末尾还有一条 `== 0xFFFF` 兜底循环，
-        //   把这里的预填整个重做一遍，所以 LimitKey 真假只改中间态，末态逐字节
-        //   相同。它的提示文案声称"限制单局记录的按键数量"，而全仓没有任何
-        //   收按键盘数的代码，属于"有开关、有说明、没实现"。）
+
         if (!KeyConvertEnabled)
         {
             for (ushort num = 0; num < 256; num++)
                 key_code_convert[num] = num;
-        }
-        if (!KeyConvertEnabled)
             return;
+        }
+
+        // 先全部标成「尚未赋值」。注意这里**不能**直接填 0：0 是「不模拟」。
+        for (int i = 0; i < 256; i++)
+            key_code_convert[i] = 0xFFFF;
+
         foreach (KeyValuePair<ushort, ushort> item in key_code_convert_list)
         {
-            // 目标值同样必须落在键码域内：配置 JSON 手写可注入越界值，
-            // 回放侧 CurrKeyState[映射值] 会直接越界。不合法条目保持 0xFFFF，
-            // 由下方兜底循环回落为恒等映射（等价未重映射）
+            // 两端都必须落在键码域内：配置 JSON 手写可注入越界值，
+            // 回放侧会拿映射结果去索引（CurrKeyState / 键表），越界直接抛。
+            // 不合法条目保持 0xFFFF，交给下面的兜底决定。
             if (item.Key < 256 && item.Value < 256)
                 key_code_convert[item.Key] = item.Value;
         }
+
         for (ushort num = 0; num < 256; num++)
         {
-            if (key_code_convert[num] == 0xFFFF)
-                key_code_convert[num] = num;
+            if (key_code_convert[num] != 0xFFFF) continue;
+            // 表外：限制模式下一律不模拟，否则恒等。
+            // 0 与 27(Esc) 在回放侧本来就跳过，所以「不模拟」用 0 表达最省事，
+            // 且不会额外吞掉一颗本来就不该被模拟的键。
+            key_code_convert[num] = LimitKey ? (ushort)0 : num;
         }
     }
 
@@ -404,11 +432,10 @@ public static class Settings
         }
         checklang();
         key_convert_list2array();
-        for (ushort num = 0; num < 256; num++)
-        {
-            if (key_code_convert[num] == 0xFFFF)
-                key_code_convert[num] = num;
-        }
+        // **这里不能再有 `== 0xFFFF → num` 的兜底。**
+        // key_convert_list2array 已经保证末态没有 0xFFFF（限制模式填 0、
+        // 否则填恒等），多这一道会把限制模式的「0 = 不模拟」整个盖成恒等映射，
+        // 开关再次变成假的。历史上 LimitKey 就是被这两道兜底一起废掉的。
         SpectreState.save_button = (KeyCode)SaveButton;
         SpectreState.cancel_save_button = (KeyCode)CancelSaveButton;
     }

@@ -1,4 +1,4 @@
-﻿// 界面文案数据：14 种语言 × 322 个键。
+﻿// 界面文案数据：14 种语言 × 324 个键。
 //
 // **本文件由 tools/i18n/gen-locdata.ps1 生成，不要手改。** 改文案请改 `tools/i18n/source.json`
 // 或 `tools/i18n/locales/<lang>.json` 后重新生成——手改会在下次生成时被覆盖，
@@ -339,9 +339,11 @@ namespace SpectreReplay.Ui
                     ["ui.keymap.none"] = "未绑定",
                     ["ui.keymap.none.tip"] = "这一格还没有绑定按键。",
                     ["ui.keymap.clear"] = "清空",
-                    ["ui.keymap.clear.tip"] = "把右边的目标键清空：这一条不生效，但源键仍然保留在表里。",
+                    ["ui.keymap.clear.tip"] = "把右边的目标键清空 = 这颗键不再产生任何输入（等于单独屏蔽它）。左半仍留在表里。",
                     ["ui.keymap.delete"] = "删除",
                     ["ui.keymap.delete.tip"] = "把整条对照从表里删掉。",
+                    ["record.keymap.limit"] = "只模拟列表中的按键",
+                    ["record.keymap.limit.tip"] = "开启后，对照表里没有的按键一律不产生输入。只用手柄或宏键盘的几个键打谱时用它屏蔽其余按键。注意它会让大量按键静默失效。",
                 },
                 ["zh-t"] = new System.Collections.Generic.Dictionary<string, string>
                 {
@@ -664,9 +666,11 @@ namespace SpectreReplay.Ui
                     ["ui.keymap.none"] = "未綁定",
                     ["ui.keymap.none.tip"] = "這一格還沒有綁定按鍵。",
                     ["ui.keymap.clear"] = "清空",
-                    ["ui.keymap.clear.tip"] = "把右邊的目標鍵清空：這一條不生效，但源鍵仍然保留在表裡。",
+                    ["ui.keymap.clear.tip"] = "把右邊的目標鍵清空 = 這顆鍵不再產生任何輸入（等於單獨屏蔽它）。左半仍留在表裡。",
                     ["ui.keymap.delete"] = "刪除",
                     ["ui.keymap.delete.tip"] = "把整條對照從表裡刪掉。",
+                    ["record.keymap.limit"] = "只模擬列表中的按鍵",
+                    ["record.keymap.limit.tip"] = "開啟後，對照表裡沒有的按鍵一律不產生輸入。只用手柄或巨集鍵盤的幾個鍵打譜時用它屏蔽其餘按鍵。注意它會讓大量按鍵靜默失效。",
                 },
                 ["en"] = new System.Collections.Generic.Dictionary<string, string>
                 {
@@ -989,9 +993,11 @@ namespace SpectreReplay.Ui
                     ["ui.keymap.none"] = "Not bound",
                     ["ui.keymap.none.tip"] = "This slot has no key bound yet.",
                     ["ui.keymap.clear"] = "Clear",
-                    ["ui.keymap.clear.tip"] = "Clears the target key: this row does nothing, but the source entry stays.",
+                    ["ui.keymap.clear.tip"] = "Clearing the target makes this key produce no input at all (an easy way to block one key). The left entry stays in the table.",
                     ["ui.keymap.delete"] = "Delete",
                     ["ui.keymap.delete.tip"] = "Removes this row from the table.",
+                    ["record.keymap.limit"] = "Only simulate keys in the list",
+                    ["record.keymap.limit.tip"] = "When on, keys not in the table produce no input at all. Use it to block every key except a few on a controller or macro keyboard. Note that this makes many keys silently do nothing.",
                 },
                 ["ja"] = new System.Collections.Generic.Dictionary<string, string>
                 {
@@ -1314,9 +1320,11 @@ namespace SpectreReplay.Ui
                     ["ui.keymap.none"] = "未割り当て",
                     ["ui.keymap.none.tip"] = "このスロットにはまだキーが割り当てられていません。",
                     ["ui.keymap.clear"] = "クリア",
-                    ["ui.keymap.clear.tip"] = "右側のターゲットキーをクリアします。この行は無効になりますが、ソースの項目は表に残ります。",
+                    ["ui.keymap.clear.tip"] = "右側のターゲットキーをクリアすると、このキーはまったく入力されなくなります（1 つのキーを遮断する簡単な方法）。左側の項目は表に残ります。",
                     ["ui.keymap.delete"] = "削除",
                     ["ui.keymap.delete.tip"] = "この行を表から削除します。",
+                    ["record.keymap.limit"] = "リスト内のキーだけをシミュレート",
+                    ["record.keymap.limit.tip"] = "オンにすると、対応表にないキーはまったく入力されません。コントローラーやマクロキーボードの数個のキーだけでプレイするときに、他のキーを遮断するために使います。多くのキーが無反応になる点に注意してください。",
                 },
                 ["ko"] = new System.Collections.Generic.Dictionary<string, string>
                 {
@@ -1639,9 +1647,11 @@ namespace SpectreReplay.Ui
                     ["ui.keymap.none"] = "지정되지 않음",
                     ["ui.keymap.none.tip"] = "이 칸에는 아직 키가 지정되지 않았습니다.",
                     ["ui.keymap.clear"] = "지우기",
-                    ["ui.keymap.clear.tip"] = "오른쪽 대상 키를 지웁니다. 이 줄은 효과가 없지만 원본 항목은 표에 남습니다.",
+                    ["ui.keymap.clear.tip"] = "오른쪽 대상 키를 지우면 이 키는 전혀 입력되지 않습니다(키 하나를 차단하는 간단한 방법). 왼쪽 항목은 표에 남습니다.",
                     ["ui.keymap.delete"] = "삭제",
                     ["ui.keymap.delete.tip"] = "이 줄을 표에서 삭제합니다.",
+                    ["record.keymap.limit"] = "목록에 있는 키만 시뮬레이션",
+                    ["record.keymap.limit.tip"] = "켜면 대응표에 없는 키는 전혀 입력되지 않습니다. 컨트롤러나 매크로 키보드의 몇 개 키만으로 플레이할 때 나머지 키를 차단하는 데 사용합니다. 많은 키가 아무 반응도 하지 않게 된다는 점에 주의하세요.",
                 },
                 ["es"] = new System.Collections.Generic.Dictionary<string, string>
                 {
@@ -1964,9 +1974,11 @@ namespace SpectreReplay.Ui
                     ["ui.keymap.none"] = "Sin asignar",
                     ["ui.keymap.none.tip"] = "Esta casilla aún no tiene ninguna tecla asignada.",
                     ["ui.keymap.clear"] = "Borrar",
-                    ["ui.keymap.clear.tip"] = "Borra la tecla de destino: esta fila no hace nada, pero la entrada de origen permanece.",
+                    ["ui.keymap.clear.tip"] = "Borrar la tecla de destino hace que esta tecla no produzca ninguna entrada (una forma sencilla de bloquear una tecla). La entrada izquierda permanece en la tabla.",
                     ["ui.keymap.delete"] = "Eliminar",
                     ["ui.keymap.delete.tip"] = "Elimina esta fila de la tabla.",
+                    ["record.keymap.limit"] = "Simular solo las teclas de la lista",
+                    ["record.keymap.limit.tip"] = "Al activarlo, las teclas que no estén en la tabla no producen ninguna entrada. Úsalo para bloquear todas las teclas salvo unas pocas de un mando o teclado con macros. Ten en cuenta que muchas teclas dejarán de responder sin avisar.",
                 },
                 ["pt"] = new System.Collections.Generic.Dictionary<string, string>
                 {
@@ -2289,9 +2301,11 @@ namespace SpectreReplay.Ui
                     ["ui.keymap.none"] = "Não vinculado",
                     ["ui.keymap.none.tip"] = "Esta caixa ainda não tem nenhuma tecla vinculada.",
                     ["ui.keymap.clear"] = "Limpar",
-                    ["ui.keymap.clear.tip"] = "Limpa a tecla de destino: esta linha não faz nada, mas a entrada de origem permanece.",
+                    ["ui.keymap.clear.tip"] = "Limpar a tecla de destino faz com que esta tecla não produza nenhuma entrada (uma forma simples de bloquear uma tecla). A entrada da esquerda permanece na tabela.",
                     ["ui.keymap.delete"] = "Excluir",
                     ["ui.keymap.delete.tip"] = "Remove esta linha da tabela.",
+                    ["record.keymap.limit"] = "Simular apenas as teclas da lista",
+                    ["record.keymap.limit.tip"] = "Quando ligado, as teclas que não estão na tabela não produzem entrada alguma. Use para bloquear todas as teclas exceto algumas de um controle ou teclado com macro. Observe que muitas teclas passarão a não responder silenciosamente.",
                 },
                 ["fr"] = new System.Collections.Generic.Dictionary<string, string>
                 {
@@ -2614,9 +2628,11 @@ namespace SpectreReplay.Ui
                     ["ui.keymap.none"] = "Non assigné",
                     ["ui.keymap.none.tip"] = "Aucune touche n'est encore assignée à cette case.",
                     ["ui.keymap.clear"] = "Effacer",
-                    ["ui.keymap.clear.tip"] = "Efface la touche cible : cette ligne n'a aucun effet, mais l'entrée source reste.",
+                    ["ui.keymap.clear.tip"] = "Effacer la touche cible fait que cette touche ne produit plus aucune entrée (un moyen simple de bloquer une touche). L'entrée de gauche reste dans le tableau.",
                     ["ui.keymap.delete"] = "Supprimer",
                     ["ui.keymap.delete.tip"] = "Supprime cette ligne du tableau.",
+                    ["record.keymap.limit"] = "Simuler uniquement les touches de la liste",
+                    ["record.keymap.limit.tip"] = "Activé, les touches absentes du tableau ne produisent aucune entrée. À utiliser pour bloquer toutes les touches sauf quelques-unes d'une manette ou d'un clavier à macros. Notez que beaucoup de touches cesseront de répondre sans prévenir.",
                 },
                 ["de"] = new System.Collections.Generic.Dictionary<string, string>
                 {
@@ -2939,9 +2955,11 @@ namespace SpectreReplay.Ui
                     ["ui.keymap.none"] = "Nicht belegt",
                     ["ui.keymap.none.tip"] = "Diesem Feld ist noch keine Taste zugewiesen.",
                     ["ui.keymap.clear"] = "Leeren",
-                    ["ui.keymap.clear.tip"] = "Leert die Zieltaste: diese Zeile hat keine Wirkung, der Quelleintrag bleibt aber erhalten.",
+                    ["ui.keymap.clear.tip"] = "Das Leeren der Zieltaste sorgt dafür, dass diese Taste gar keine Eingabe mehr erzeugt (eine einfache Möglichkeit, eine Taste zu sperren). Der linke Eintrag bleibt in der Tabelle.",
                     ["ui.keymap.delete"] = "Löschen",
                     ["ui.keymap.delete.tip"] = "Entfernt diese Zeile aus der Tabelle.",
+                    ["record.keymap.limit"] = "Nur Tasten in der Liste simulieren",
+                    ["record.keymap.limit.tip"] = "Wenn aktiv, erzeugen Tasten, die nicht in der Tabelle stehen, gar keine Eingabe. Damit lassen sich alle Tasten außer einigen wenigen auf einem Controller oder einer Makro-Tastatur sperren. Beachte, dass viele Tasten dann stillschweigend nichts mehr tun.",
                 },
                 ["pl"] = new System.Collections.Generic.Dictionary<string, string>
                 {
@@ -3264,9 +3282,11 @@ namespace SpectreReplay.Ui
                     ["ui.keymap.none"] = "Nieprzypisany",
                     ["ui.keymap.none.tip"] = "Do tego pola nie przypisano jeszcze żadnego klawisza.",
                     ["ui.keymap.clear"] = "Wyczyść",
-                    ["ui.keymap.clear.tip"] = "Czyści klawisz docelowy: ten wiersz nic nie robi, ale wpis źródłowy pozostaje.",
+                    ["ui.keymap.clear.tip"] = "Wyczyszczenie klawisza docelowego sprawia, że ten klawisz nie daje żadnego wejścia (prosty sposób na zablokowanie jednego klawisza). Wpis po lewej pozostaje w tabeli.",
                     ["ui.keymap.delete"] = "Usuń",
                     ["ui.keymap.delete.tip"] = "Usuwa ten wiersz z tabeli.",
+                    ["record.keymap.limit"] = "Symuluj tylko klawisze z listy",
+                    ["record.keymap.limit.tip"] = "Po włączeniu klawisze spoza tabeli nie dają żadnego wejścia. Użyj, aby zablokować wszystkie klawisze poza kilkoma na padzie lub klawiaturze z makrami. Pamiętaj, że wiele klawiszy przestanie po cichu reagować.",
                 },
                 ["cs"] = new System.Collections.Generic.Dictionary<string, string>
                 {
@@ -3589,9 +3609,11 @@ namespace SpectreReplay.Ui
                     ["ui.keymap.none"] = "Nepřiřazeno",
                     ["ui.keymap.none.tip"] = "Tomuto políčku ještě není přiřazena žádná klávesa.",
                     ["ui.keymap.clear"] = "Vymazat",
-                    ["ui.keymap.clear.tip"] = "Vymaže cílovou klávesu: tento řádek nic nedělá, ale zdrojová položka zůstává.",
+                    ["ui.keymap.clear.tip"] = "Vymazání cílové klávesy způsobí, že tato klávesa nevyvolá žádný vstup (snadný způsob, jak jednu klávesu zablokovat). Levý záznam zůstává v tabulce.",
                     ["ui.keymap.delete"] = "Odstranit",
                     ["ui.keymap.delete.tip"] = "Odstraní tento řádek z tabulky.",
+                    ["record.keymap.limit"] = "Simulovat pouze klávesy v seznamu",
+                    ["record.keymap.limit.tip"] = "Po zapnutí klávesy, které nejsou v tabulce, nevyvolají žádný vstup. Slouží k zablokování všech kláves kromě několika na ovladači nebo makro klávesnici. Pozor, mnoho kláves přestane tiše reagovat.",
                 },
                 ["ro"] = new System.Collections.Generic.Dictionary<string, string>
                 {
@@ -3914,9 +3936,11 @@ namespace SpectreReplay.Ui
                     ["ui.keymap.none"] = "Neatribuit",
                     ["ui.keymap.none.tip"] = "Acestei casete nu i-a fost atribuită încă nicio tastă.",
                     ["ui.keymap.clear"] = "Golește",
-                    ["ui.keymap.clear.tip"] = "Golește tasta țintă: acest rând nu face nimic, dar intrarea sursă rămâne.",
+                    ["ui.keymap.clear.tip"] = "Golirea tastei țintă face ca această tastă să nu producă nicio intrare (o modalitate simplă de a bloca o tastă). Intarea din stânga rămâne în tabel.",
                     ["ui.keymap.delete"] = "Șterge",
                     ["ui.keymap.delete.tip"] = "Elimină acest rând din tabel.",
+                    ["record.keymap.limit"] = "Simulează doar tastele din listă",
+                    ["record.keymap.limit.tip"] = "Când este activ, tastele care nu sunt în tabel nu produc nicio intrare. Folosește-l pentru a bloca toate tastele cu excepția câtorva de pe un controller sau o tastatură cu macrocomenzi. Reține că multe taste vor deveni silențios inutile.",
                 },
                 ["ru"] = new System.Collections.Generic.Dictionary<string, string>
                 {
@@ -4239,9 +4263,11 @@ namespace SpectreReplay.Ui
                     ["ui.keymap.none"] = "Не назначено",
                     ["ui.keymap.none.tip"] = "Этой ячейке ещё не назначена ни одна клавиша.",
                     ["ui.keymap.clear"] = "Очистить",
-                    ["ui.keymap.clear.tip"] = "Очищает целевую клавишу: эта строка ничего не делает, но исходная запись остаётся.",
+                    ["ui.keymap.clear.tip"] = "Очистка целевой клавиши означает, что эта клавиша вообще не даёт ввода (простой способ заблокировать одну клавишу). Левая запись остаётся в таблице.",
                     ["ui.keymap.delete"] = "Удалить",
                     ["ui.keymap.delete.tip"] = "Удаляет эту строку из таблицы.",
+                    ["record.keymap.limit"] = "Симулировать только клавиши из списка",
+                    ["record.keymap.limit.tip"] = "Когда включено, клавиши, которых нет в таблице, вообще не дают ввода. Используйте, чтобы заблокировать все клавиши, кроме нескольких на геймпаде или клавиатуре с макросами. Учтите, что многие клавиши молча перестанут работать.",
                 },
                 ["vi"] = new System.Collections.Generic.Dictionary<string, string>
                 {
@@ -4564,9 +4590,11 @@ namespace SpectreReplay.Ui
                     ["ui.keymap.none"] = "Chưa gán",
                     ["ui.keymap.none.tip"] = "Ô này chưa được gán phím nào.",
                     ["ui.keymap.clear"] = "Xoá",
-                    ["ui.keymap.clear.tip"] = "Xoá phím đích: dòng này không làm gì, nhưng mục nguồn vẫn còn.",
+                    ["ui.keymap.clear.tip"] = "Xoá phím đích khiến phím này không tạo ra đầu vào nào (cách đơn giản để chặn một phím). Mục bên trái vẫn còn trong bảng.",
                     ["ui.keymap.delete"] = "Xoá bỏ",
                     ["ui.keymap.delete.tip"] = "Xoá dòng này khỏi bảng.",
+                    ["record.keymap.limit"] = "Chỉ mô phỏng các phím trong danh sách",
+                    ["record.keymap.limit.tip"] = "Khi bật, các phím không có trong bảng sẽ không tạo ra đầu vào nào. Dùng để chặn mọi phím trừ vài phím trên tay cầm hoặc bàn phím macro. Lưu ý nhiều phím sẽ âm thầm không phản hồi nữa.",
                 },
             };
     }

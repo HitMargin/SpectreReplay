@@ -270,9 +270,40 @@ internal static class ManagedInput
         }
     }
 
+    /// <summary>
+    /// Unity <see cref="KeyCode"/> → 原生虚拟键码。
+    ///
+    /// **两套编码只在少数键上恰好同值。** <c>KeyCode.Space</c>=32=VK_SPACE、
+    /// <c>KeyCode.Escape</c>=27=VK_ESCAPE、<c>KeyCode.Return</c>=13=VK_RETURN 相同，
+    /// 但字母与方向键全部错位：<c>KeyCode.Q</c>=113 而 VK_Q=81、
+    /// <c>KeyCode.LeftArrow</c>=276 而 VK_LEFT=37、
+    /// <c>KeyCode.LeftShift</c>=304 而 VK_LSHIFT=160。
+    ///
+    /// <see cref="Held"/> 按下标存的是**原生 VK**（ReplayPlayer 写入的是映射后的 VK），
+    /// 所以凡是从 <see cref="KeyCode"/> 进来的查询都必须先换算。
+    /// 换算失败时退回原值——调用方会因越界返回 false，不会误判成「按住了」。
+    /// </summary>
+    private static int ToNativeVk(KeyCode k)
+    {
+        try
+        {
+            SkyHook.KeyLabel label = SkyHook.SkyHookKeyMapper.UnityKeyToSkyHookKey(k);
+            if (label == SkyHook.KeyLabel.Unknown) return (int)k;
+            return SkyHook.SkyHookKeyMapper.KeyLabelToNativeKeyCode(label);
+        }
+        catch
+        {
+            return (int)k;
+        }
+    }
+
     private static bool Any(ButtonState state, int frame, KeyCode vk)
     {
-        int index = (int)vk;
+        // **必须换算成原生 VK 再查。** 直接用 (int)vk 会让所有字母键/方向键/
+        // 修饰键查错位置：Q 查 113 而事件存在 81，于是 Action1 永远不亮；
+        // LeftArrow 查 276 直接越界。只有 Space/Esc/Enter 因为两套编码同值才
+        // 一直「碰巧正常」——这正是这类错位最难发现的原因。
+        int index = ToNativeVk(vk);
         return index >= 0 && index < Held.Length && Matches(state, index, frame);
     }
 

@@ -365,35 +365,62 @@ namespace UiPreview
             //    "开了更安全"。同一处误导在 README 里也出现过。
             fail += CheckPredicate(projectRoot, "⑰ 中文文案不得把关卡称作存档（会让玩家以为动的是进度存档）",
                 "Ui\\LocData.cs", ChineseLocSaysLevelNotSave);
-            // ⑰b 「限制按键数」开关必须保持删除（2026-10-19 用户要求）。
+            // ⑰b 「只模拟映射列表中的按键」必须真的生效（2026-10-23 反转）。
             //
-            //    删它的理由不是"多余"而是**它是假开关**，而且假得很彻底：
-            //      · 文案声称"限制单局记录的按键数量，防止超长关卡把回放文件撑得过大"，
-            //        而全仓没有任何收按键盘数的代码——这个功能不存在。
+            //    **这一段此前是「必须保持删除」**（2026-10-19）。删它的理由是它当时
+            //    确实是假开关，而且假得很彻底：
+            //      · 文案声称"限制单局记录的按键数量"，而全仓没有收按键盘数的代码；
             //      · Settings.LimitKey 唯一的消费点是 key_convert_list2array 的
-            //        `!LimitKey || !KeyConvertEnabled`，而该方法末尾还有一条
-            //        `== 0xFFFF` 兜底循环把表整个重填一遍；开关真假只改中间态，
-            //        末态**逐字节相同**。也就是说拨它从来没有改变过任何行为。
-            //    "有开关、有说明、没实现"比没有这个开关更糟：玩家会以为回放文件
-            //    体积被它控制着，于是去拨它、发现没反应，再去翻别的原因。
+            //        `!LimitKey ||` 前置条件，而该方法末尾还有一条
+            //        `== 0xFFFF → num` 兜底循环把表整个重填一遍——开关真假只改
+            //        中间态，末态**逐字节相同**。
             //
-            //    判据必须查**四个文件**（字段/落盘/界面/文案），只查一处的话
-            //    半删状态照样绿：界面删了、ConfigManager 还在写，玩家手改配置文件
-            //    仍然能让它回到 DLL 里。
-            fail += CheckPredicate(projectRoot, "⑰b 「限制按键数」假开关不得回归（无实现、且从未影响行为）",
-                "Pages\\Pages.cs", NoLimitKeyRow);
-            //    字段本身留没留，四条反向判据各查一个文件。理由：它曾同时活在
-            //    Settings（字段）/ ConfigManager（DTO+落盘+读回）/ Pages（界面行）/
-            //    Loc（标签与说明）。只删界面的话，手改 Configs.json 仍能把它读回
-            //    DLL；只删字段的话，Loc 文案还在，下个人补界面时会以为"本来就该有"。
-            fail += CheckAbsent(projectRoot, "⑰c 设置字段里不得再有 LimitKey",
-                "State\\Settings.cs", new[] { "LimitKey" });
-            fail += CheckAbsent(projectRoot, "⑰d 配置落盘不得再读写 LimitKey",
-                "State\\ConfigManager.cs", new[] { "LimitKey" });
-            fail += CheckAbsent(projectRoot, "⑰e 界面不得再有 record.limitkey 行",
-                "Pages\\Pages.cs", new[] { "record.limitkey" });
-            fail += CheckAbsent(projectRoot, "⑰f 文案表不得再留 limitkey 条目",
-                "Ui\\LocData.cs", new[] { "record.limitkey" });
+            //    但它的**文案与上游语义**其实是另一件事：「只模拟映射列表中的按键」
+            //    （Only simulate the keys in the remapping list）。这是个真需求：
+            //    只用手柄/宏键盘少数几个键打谱时，要屏蔽其余所有按键。上游没做成，
+            //    因为它把「未映射」与「恒等」抹成了同一件事。
+            //
+            //    现在用 **0 = 不模拟** 表达（与回放侧 `num != 0` 的跳过条件对齐），
+            //    并删掉那两道会把它盖掉的兜底循环。于是判据也要反过来：
+            //    不再查"有没有这个字段"，而是查**它是否真的改变末态**。
+            //
+            //    判据必须查末态：`key_convert_list2array` 里必须出现
+            //    `LimitKey ? ... : num` 这个三元（而不是只在前置条件里出现）。
+            fail += CheckPredicate(projectRoot, "⑰b 「只模拟列表中的键」必须真的改变映射表末态（不能只改中间态）",
+                "State\\Settings.cs", LimitKeyChangesFinalState);
+            //    字段与链路必须在。四条各查一个文件——只查一处的话「半删」照样绿：
+            //    界面删了、ConfigManager 还在写，玩家手改配置文件仍能改到它。
+            fail += Check(projectRoot, "⑰c 设置字段里要有 LimitKey",
+                new[] { "State\\Settings.cs" }, new[] { "LimitKey" });
+            fail += Check(projectRoot, "⑰d 配置落盘要读写 LimitKey",
+                new[] { "State\\ConfigManager.cs" }, new[] { "LimitKey" });
+            fail += Check(projectRoot, "⑰e 界面要有 record.keymap.limit 行",
+                new[] { "Pages\\Pages.cs" }, new[] { "record.keymap.limit" });
+            // ⑰f 兜底循环不得回归。**这条是整段的根**：LimitKey 曾经失效，唯一原因
+            //    就是那两道 `== 0xFFFF → num`。只要有人把它加回去，开关立刻变假，
+            //    而界面上完全看不出来（拨了没反应）。
+            fail += CheckPredicate(projectRoot, "⑰f 映射表构建后不得再有 `0xFFFF → num` 兜底（会把 LimitKey 重新废掉）",
+                "State\\Settings.cs", NoIdentityFallbackAfterBuild);
+            // ⑰g 显示层不得把正向映射表当反向表用（2026-10-23 用户报「映射 R→Space，回放却亮 R」）。
+            //
+            //    `ManagedInput.Held[]` 的下标是**已经过映射**的键码
+            //    （ReplayPlayer 里 `num = key_code_convert[ev.KeyCode]` 之后才 Note）。
+            //    显示层问的是「这颗物理键此刻亮不亮」，只需要 KeyCode→原生 VK。
+            //    再查一次同一张表就是反向查表：
+            //      映射 R→Space 时，问 R 得 map[82]=32 ⇒ `Held[32]` 为真 ⇒ **R 亮**；
+            //      问 Space 得 map[32]=32 ⇒ 也亮（未限制时），或 0 ⇒ 不亮（开 LimitKey 时）。
+            //    打开 LimitKey 后表外全填 0，只剩被错误命中的那颗还亮——
+            //    现象就是「映射成空格，回放却按 R」，看起来像映射没生效。
+            fail += CheckPredicate(projectRoot, "⑰g 键位显示不得再过一次 key_code_convert（Held 已是映射后的域）",
+                "Features\\Replay\\Runtime\\KeyViewerBridge.cs", KeyViewerDoesNotRemapAgain);
+            // ⑰h 判定层从 KeyCode 翻键时也必须先换算成原生 VK。
+            //
+            //    这是 ⑰g 的同族错误，藏在兜底路径里（异步链不可用时才走到）：
+            //    `ManagedInput.Matches(InputAction)` 里 `(int)KeyCode.Q` = 113，
+            //    而事件存在 VK 81；LeftArrow 276 直接越界。只有 Space/Esc/Enter
+            //    因为两套编码同值才一直「碰巧正常」。
+            fail += CheckPredicate(projectRoot, "⑰h 从 KeyCode 翻键必须先换算成原生 VK（字母/方向键全错位）",
+                "Features\\Replay\\Runtime\\ManagedInput.cs", KeyCodeQueriesConvertToVk);
             // ⑱ 系列（**总开关关掉时子设置必须压暗**）不在这里判：那四条要读
             // `Pages\\Pages.cs`，而它**没有链进本离屏套件**（见 UiPreview.csproj
             // 的链接清单——只链了 Loc.cs 与 Features\\Replay 那批）。放在这里的话
@@ -1086,20 +1113,93 @@ namespace UiPreview
         }
 
         /// <summary>
-        /// 录制页是否**不再**出现 LimitKey 这个开关（2026-10-19 用户要求删除）。
+        /// <c>LimitKey</c> 是否**真的改变映射表末态**。
         ///
-        /// 它曾是一行 `OnGui.Row("record.limitkey", LimitKey, …)`。删它的理由不是
-        /// "多余"而是**假开关**：文案说"限制单局记录的按键数量，防止超长关卡把
-        /// 回放文件撑得过大"，而全仓没有一行收按键盘数的代码；Settings.LimitKey
-        /// 唯一的消费点是 key_convert_list2array 的 `!LimitKey ||` 前置条件，
-        /// 而那个函数的末态由末尾 `== 0xFFFF` 兜底循环决定——开关真假只改中间态，
-        /// 表逐字节相同。留着一个拨了没反应、说明还在编功能的开关，比没有更糟。
+        /// 这条钉的是 2026-10-19 那次误判的根因：当时的实现只在**前置条件**里用到它
+        /// （`!LimitKey ||` 决定先填恒等还是留哨兵），而函数末尾的 `== 0xFFFF → num`
+        /// 兜底循环把两种中间态重写成同一个末态，开关因此完全无效。
+        /// 只查「LimitKey 出现过」会替那个错误设计背书——**必须查它参与末态赋值**。
         ///
-        /// 判据落在**代码行**上（<see cref="HasCodeUse"/> 会剥注释）：Pages.cs 里
-        /// 解释"为什么删"的注释必然写到这个键名，不剥的话判据会被自己的说明判红。
+        /// 判据形态：方法体里同时出现
+        ///   · `LimitKey ?`（三元参与赋值，而不是只在 if 条件里）
+        ///   · `(ushort)0`（「不模拟」的表示）
         /// </summary>
-        private static bool NoLimitKeyRow(string code)
-            => !HasCodeUse(code, "LimitKey") && !HasCodeUse(code, "record.limitkey");
+        /// <summary>
+        /// 键位显示层不得再查一次重映射表。
+        ///
+        /// `ManagedInput.Held[]` 的下标是**映射后**的键码；显示层问的是物理键亮不亮，
+        /// 只需 KeyCode→原生 VK。再查 `Settings.key_code_convert` 等于把正向表当反查，
+        /// 映射 R→Space 时会亮成 R（见 ⑰g 的推导）。
+        /// </summary>
+        private static bool KeyViewerDoesNotRemapAgain(string code)
+        {
+            string conv = MethodBody(code, "ToNativeVk");
+            if (conv == null) return false;
+            // 换算函数本身不该碰映射表
+            if (conv.Contains("key_code_convert", StringComparison.Ordinal)) return false;
+
+            string post = MethodBody(code, "GetKeyPostfix");
+            if (post == null) return false;
+            // 取下标的那处也不能碰映射表（历史上就是这里 `return Settings.key_code_convert[native];`）
+            return !post.Contains("key_code_convert", StringComparison.Ordinal)
+                && post.Contains("ToNativeVk(", StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// `ManagedInput` 里凡是从 <see cref="KeyCode"/> 取下标的地方，都必须先经
+        /// `ToNativeVk` 换算。钉的是 `Any(ButtonState, int, KeyCode)` 这一个入口——
+        /// 所有 InputAction 查询都从这里走。
+        /// </summary>
+        private static bool KeyCodeQueriesConvertToVk(string code)
+        {
+            string body = MethodBody(code, "Any");
+            if (body == null) return false;
+            // 必须调 ToNativeVk，且不能直接把 KeyCode 强转当下标
+            return body.Contains("ToNativeVk(", StringComparison.Ordinal)
+                && !body.Contains("int index = (int)vk;", StringComparison.Ordinal);
+        }
+
+        private static bool LimitKeyChangesFinalState(string code)
+        {
+            string body = MethodBody(code, "key_convert_list2array");
+            if (body == null) return false;
+            return body.Contains("LimitKey ?", StringComparison.Ordinal)
+                && body.Contains("(ushort)0", StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// 映射表构建之后不得再有把「未赋值」重写成「恒等」的兜底循环。
+        ///
+        /// 那两道循环（`key_convert_list2array` 末尾与 `check()` 里各一条）
+        /// 是 <c>LimitKey</c> 曾经彻底失效的**唯一原因**：限制模式把表外的键写成 0
+        /// （不模拟），兜底随即把它们逐项改回 num（恒等），末态与不限制时逐字节相同。
+        ///
+        /// 现在 `key_convert_list2array` 自己保证末态没有 0xFFFF，
+        /// 因此这个写法在任何地方都不该再出现。
+        /// </summary>
+        private static bool NoIdentityFallbackAfterBuild(string code)
+        {
+            string[] lines = code.Replace("\r\n", "\n").Split('\n');
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string cur = lines[i].TrimStart();
+                if (cur.StartsWith("//", StringComparison.Ordinal)
+                    || cur.StartsWith("*", StringComparison.Ordinal)) continue;
+                if (!cur.Contains("0xFFFF", StringComparison.Ordinal)) continue;
+                // 同行就是恒等赋值
+                if (cur.Contains("key_code_convert[", StringComparison.Ordinal)
+                    && cur.Contains("] = num", StringComparison.Ordinal)) return false;
+                // 拆成「if (...)」+ 紧随的赋值行
+                for (int j = i + 1; j < Math.Min(i + 4, lines.Length); j++)
+                {
+                    string t = lines[j].TrimStart();
+                    if (t.StartsWith("//", StringComparison.Ordinal)) continue;
+                    if (t.Contains("key_code_convert[num] = num", StringComparison.Ordinal)) return false;
+                    if (t.Contains("key_code_convert[i] = i", StringComparison.Ordinal)) return false;
+                }
+            }
+            return true;
+        }
 
         /// <summary>按符号清单判（每个符号都必须在代码里出现）。</summary>
         private static int Check(string projectRoot, string name, string[] files, string[] symbols)

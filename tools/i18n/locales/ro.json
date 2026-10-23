@@ -320,8 +320,10 @@
   "ui.keymap.none": "Neatribuit",
   "ui.keymap.none.tip": "Acestei casete nu i-a fost atribuită încă nicio tastă.",
   "ui.keymap.clear": "Golește",
-  "ui.keymap.clear.tip": "Golește tasta țintă: acest rând nu face nimic, dar intrarea sursă rămâne.",
+  "ui.keymap.clear.tip": "Golirea tastei țintă face ca această tastă să nu producă nicio intrare (o modalitate simplă de a bloca o tastă). Intarea din stânga rămâne în tabel.",
   "ui.keymap.delete": "Șterge",
-  "ui.keymap.delete.tip": "Elimină acest rând din tabel."
+  "ui.keymap.delete.tip": "Elimină acest rând din tabel.",
+  "record.keymap.limit": "Simulează doar tastele din listă",
+  "record.keymap.limit.tip": "Când este activ, tastele care nu sunt în tabel nu produc nicio intrare. Folosește-l pentru a bloca toate tastele cu excepția câtorva de pe un controller sau o tastatură cu macrocomenzi. Reține că multe taste vor deveni silențios inutile."
 }
 }

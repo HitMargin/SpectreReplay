@@ -320,8 +320,10 @@
   "ui.keymap.none": "Nepřiřazeno",
   "ui.keymap.none.tip": "Tomuto políčku ještě není přiřazena žádná klávesa.",
   "ui.keymap.clear": "Vymazat",
-  "ui.keymap.clear.tip": "Vymaže cílovou klávesu: tento řádek nic nedělá, ale zdrojová položka zůstává.",
+  "ui.keymap.clear.tip": "Vymazání cílové klávesy způsobí, že tato klávesa nevyvolá žádný vstup (snadný způsob, jak jednu klávesu zablokovat). Levý záznam zůstává v tabulce.",
   "ui.keymap.delete": "Odstranit",
-  "ui.keymap.delete.tip": "Odstraní tento řádek z tabulky."
+  "ui.keymap.delete.tip": "Odstraní tento řádek z tabulky.",
+  "record.keymap.limit": "Simulovat pouze klávesy v seznamu",
+  "record.keymap.limit.tip": "Po zapnutí klávesy, které nejsou v tabulce, nevyvolají žádný vstup. Slouží k zablokování všech kláves kromě několika na ovladači nebo makro klávesnici. Pozor, mnoho kláves přestane tiše reagovat."
 }
 }

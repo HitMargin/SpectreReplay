@@ -320,8 +320,10 @@
   "ui.keymap.none": "未綁定",
   "ui.keymap.none.tip": "這一格還沒有綁定按鍵。",
   "ui.keymap.clear": "清空",
-  "ui.keymap.clear.tip": "把右邊的目標鍵清空：這一條不生效，但源鍵仍然保留在表裡。",
+  "ui.keymap.clear.tip": "把右邊的目標鍵清空 = 這顆鍵不再產生任何輸入（等於單獨屏蔽它）。左半仍留在表裡。",
   "ui.keymap.delete": "刪除",
-  "ui.keymap.delete.tip": "把整條對照從表裡刪掉。"
+  "ui.keymap.delete.tip": "把整條對照從表裡刪掉。",
+  "record.keymap.limit": "只模擬列表中的按鍵",
+  "record.keymap.limit.tip": "開啟後，對照表裡沒有的按鍵一律不產生輸入。只用手柄或巨集鍵盤的幾個鍵打譜時用它屏蔽其餘按鍵。注意它會讓大量按鍵靜默失效。"
 }
 }

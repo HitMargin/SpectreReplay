@@ -985,42 +985,21 @@ switch ($Which) {
         SetLines 'Features\VideoRender\Pipeline\VideoRenderJob.cs' $lines.ToArray()
     }
     'MUT-V15' {
-        # ⑰c/⑰d/⑰e/⑰f：把「限制按键数」这个假开关的**四处痕迹分别加回来**。
+        # ⑰b 把 LimitKey 从**末态赋值**里摘掉，退回只在中间态用它的旧写法。
         #
-        #    2026-10-19 用户要求删除。删它不是因为"多余"，而是它是**假开关**：
-        #    文案说"限制单局记录的按键数量，防止超长关卡把回放文件撑得过大"，
-        #    而全仓没有一行收按键盘数的代码。Settings.LimitKey 唯一的消费点是
-        #    key_convert_list2array 的 `!LimitKey ||` 前置条件，而那个函数末尾
-        #    还有一条 `== 0xFFFF` 兜底循环把表整个重填一遍——开关真假只改中间态，
-        #    末态逐字节相同，拨它从来没有改变过任何行为。
-        #
-        #    **必须把四处一起加回来**，因为判据是四条反向判：只加 Settings 里
-        #    那一行只能证明 ⑰c 有效，另外三条仍可能是假的。这四条守的是"半删"
-        #    这个真实形态——只删界面的话手改 Configs.json 仍能把它读回 DLL；
-        #    只删字段的话 Loc 文案还在，下个人补界面时会以为"本来就该有这项"。
-        #
-        #    这里只注入**能让四条判据各自变红的最小集合**：
-        #      Settings.cs        ← ⑰c
-        #      ConfigManager.cs   ← ⑰d
-        #      Pages.cs           ← ⑰e
-        #      Loc.cs             ← ⑰f
+        #    这正是上游那版的缺陷形状：表外的键无论限制与否都填成恒等映射，
+        #    开关拨不拨末态逐字节相同。现象是「勾了没反应」，而界面上完全看不出。
         Backup 'State\Settings.cs'
-        Backup 'State\ConfigManager.cs'
-        Backup 'Pages\Pages.cs'
-        Backup 'Ui\LocData.cs'
-        ReplaceExact 'State\Settings.cs' '    public static bool KeyConvertEnabled = false;' "    public static bool KeyConvertEnabled = false;`n    public static bool LimitKey = false;"
-        ReplaceExact 'State\ConfigManager.cs' '        public bool KeyConvertEnabled { get; set; }' "        public bool KeyConvertEnabled { get; set; }`n        public bool LimitKey { get; set; }"
-        ReplaceExact 'Pages\Pages.cs' '                OnGui.Row("record.backup", Backup, v => { Backup = v; Commit(); }, ReplayOn);' "                OnGui.Row(`"record.backup`", Backup, v => { Backup = v; Commit(); }, ReplayOn);`n                OnGui.Row(`"record.limitkey`", LimitKey, v => { LimitKey = v; Commit(); }, ReplayOn);"
-        # 文案表在 LocData.cs（14 语言块）；锚在中文块里那一条上，全文件唯一。
-        # 替换串里同时有引号和逗号：用 here-string 明确边界，
-        # 拼两个参数再传，否则 PowerShell 会把逗号当成参数分隔符
-        # （实测报错：ReplaceExact 多出 1 个实参）。
-        $locOld = '["record.backup"] = "额外存一份备份",'
-        $locNew = @'
-["record.backup"] = "额外存一份备份",
-                    ["record.limitkey"] = "限制按键数",
-'@
-        ReplaceExact 'Ui\LocData.cs' $locOld $locNew.TrimEnd()
+        ReplaceExact 'State\Settings.cs' 'key_code_convert[num] = LimitKey ? (ushort)0 : num;' 'key_code_convert[num] = num;'
+    }
+    'MUT-V16' {
+        # ⑰f 把兜底循环加回 check()：映射表刚建好就被逐项改回恒等。
+        #
+        #    这是 LimitKey 历史上失效的**另一半**根因（key_convert_list2array
+        #    内部那道已经删了，这一道在启动路径上）。只改一处不够——两道只要
+        #    活着一道，限制模式就会被整个盖掉。
+        Backup 'State\Settings.cs'
+        ReplaceExact 'State\Settings.cs' '        key_convert_list2array();' '        key_convert_list2array();`n        for (ushort num = 0; num < 256; num++)`n        {`n            if (key_code_convert[num] == 0xFFFF)`n                key_code_convert[num] = num;`n        }'
     }
     'MUT-PIN1' {
         # ① 撤销失败时把 detour 一起丢掉（原实现的形状）。
@@ -1749,6 +1728,23 @@ switch ($Which) {
         # 现象是「改完当场不生效，重启才生效」，玩家会以为是自己没保存。
         Backup 'Pages\Pages.cs'
         ReplaceExact 'Pages\Pages.cs' '            Settings.key_convert_list2array();   // 这一步不能省：只写 JSON 不重建表，本次会话内映射仍是旧的' '            // （变异：故意不重建运行时映射表）'
+    }
+    'MUT-KM3' {
+        # ⑰g 把显示层改回「再过一次正向映射表」——历史上的真实写法。
+        #
+        #    后果：映射 R→Space 时，问 R 得到 map[82]=32、Held[32] 为真 ⇒ **R 亮**；
+        #    开 LimitKey 后表外全填 0，Space 不亮、只剩 R 亮，看起来像映射没生效。
+        #    2026-10-23 用户报「我把它映射为空格了，为什么回放反而是 R 键」。
+        Backup 'Features\Replay\Runtime\KeyViewerBridge.cs'
+        ReplaceExact 'Features\Replay\Runtime\KeyViewerBridge.cs' '            return SkyHook.SkyHookKeyMapper.KeyLabelToNativeKeyCode(label);' '            return Settings.key_code_convert[SkyHook.SkyHookKeyMapper.KeyLabelToNativeKeyCode(label)];'
+    }
+    'MUT-KM4' {
+        # ⑰h 判定层把 KeyCode 直接当下标（不换算成原生 VK）。
+        #
+        #    字母/方向键全错位：KeyCode.Q=113 而事件存在 81，LeftArrow=276 直接越界。
+        #    只有 Space/Esc/Enter 因两套编码同值才碰巧正常——这正是它长期没暴露的原因。
+        Backup 'Features\Replay\Runtime\ManagedInput.cs'
+        ReplaceExact 'Features\Replay\Runtime\ManagedInput.cs' '        int index = ToNativeVk(vk);' '        int index = (int)vk;'
     }
     'MUT-CI10' {
         # ⑪b 广播判据回归：asyncInject 从 Injectable 退回 Usable。

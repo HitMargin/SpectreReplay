@@ -320,8 +320,10 @@
   "ui.keymap.none": "Non assigné",
   "ui.keymap.none.tip": "Aucune touche n'est encore assignée à cette case.",
   "ui.keymap.clear": "Effacer",
-  "ui.keymap.clear.tip": "Efface la touche cible : cette ligne n'a aucun effet, mais l'entrée source reste.",
+  "ui.keymap.clear.tip": "Effacer la touche cible fait que cette touche ne produit plus aucune entrée (un moyen simple de bloquer une touche). L'entrée de gauche reste dans le tableau.",
   "ui.keymap.delete": "Supprimer",
-  "ui.keymap.delete.tip": "Supprime cette ligne du tableau."
+  "ui.keymap.delete.tip": "Supprime cette ligne du tableau.",
+  "record.keymap.limit": "Simuler uniquement les touches de la liste",
+  "record.keymap.limit.tip": "Activé, les touches absentes du tableau ne produisent aucune entrée. À utiliser pour bloquer toutes les touches sauf quelques-unes d'une manette ou d'un clavier à macros. Notez que beaucoup de touches cesseront de répondre sans prévenir."
 }
 }

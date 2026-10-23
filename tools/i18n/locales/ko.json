@@ -320,8 +320,10 @@
   "ui.keymap.none": "지정되지 않음",
   "ui.keymap.none.tip": "이 칸에는 아직 키가 지정되지 않았습니다.",
   "ui.keymap.clear": "지우기",
-  "ui.keymap.clear.tip": "오른쪽 대상 키를 지웁니다. 이 줄은 효과가 없지만 원본 항목은 표에 남습니다.",
+  "ui.keymap.clear.tip": "오른쪽 대상 키를 지우면 이 키는 전혀 입력되지 않습니다(키 하나를 차단하는 간단한 방법). 왼쪽 항목은 표에 남습니다.",
   "ui.keymap.delete": "삭제",
-  "ui.keymap.delete.tip": "이 줄을 표에서 삭제합니다."
+  "ui.keymap.delete.tip": "이 줄을 표에서 삭제합니다.",
+  "record.keymap.limit": "목록에 있는 키만 시뮬레이션",
+  "record.keymap.limit.tip": "켜면 대응표에 없는 키는 전혀 입력되지 않습니다. 컨트롤러나 매크로 키보드의 몇 개 키만으로 플레이할 때 나머지 키를 차단하는 데 사용합니다. 많은 키가 아무 반응도 하지 않게 된다는 점에 주의하세요."
 }
 }

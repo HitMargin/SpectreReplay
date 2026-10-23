@@ -320,8 +320,10 @@
   "ui.keymap.none": "Chưa gán",
   "ui.keymap.none.tip": "Ô này chưa được gán phím nào.",
   "ui.keymap.clear": "Xoá",
-  "ui.keymap.clear.tip": "Xoá phím đích: dòng này không làm gì, nhưng mục nguồn vẫn còn.",
+  "ui.keymap.clear.tip": "Xoá phím đích khiến phím này không tạo ra đầu vào nào (cách đơn giản để chặn một phím). Mục bên trái vẫn còn trong bảng.",
   "ui.keymap.delete": "Xoá bỏ",
-  "ui.keymap.delete.tip": "Xoá dòng này khỏi bảng."
+  "ui.keymap.delete.tip": "Xoá dòng này khỏi bảng.",
+  "record.keymap.limit": "Chỉ mô phỏng các phím trong danh sách",
+  "record.keymap.limit.tip": "Khi bật, các phím không có trong bảng sẽ không tạo ra đầu vào nào. Dùng để chặn mọi phím trừ vài phím trên tay cầm hoặc bàn phím macro. Lưu ý nhiều phím sẽ âm thầm không phản hồi nữa."
 }
 }

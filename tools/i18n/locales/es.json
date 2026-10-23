@@ -320,8 +320,10 @@
   "ui.keymap.none": "Sin asignar",
   "ui.keymap.none.tip": "Esta casilla aún no tiene ninguna tecla asignada.",
   "ui.keymap.clear": "Borrar",
-  "ui.keymap.clear.tip": "Borra la tecla de destino: esta fila no hace nada, pero la entrada de origen permanece.",
+  "ui.keymap.clear.tip": "Borrar la tecla de destino hace que esta tecla no produzca ninguna entrada (una forma sencilla de bloquear una tecla). La entrada izquierda permanece en la tabla.",
   "ui.keymap.delete": "Eliminar",
-  "ui.keymap.delete.tip": "Elimina esta fila de la tabla."
+  "ui.keymap.delete.tip": "Elimina esta fila de la tabla.",
+  "record.keymap.limit": "Simular solo las teclas de la lista",
+  "record.keymap.limit.tip": "Al activarlo, las teclas que no estén en la tabla no producen ninguna entrada. Úsalo para bloquear todas las teclas salvo unas pocas de un mando o teclado con macros. Ten en cuenta que muchas teclas dejarán de responder sin avisar."
 }
 }

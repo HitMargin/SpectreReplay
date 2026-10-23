@@ -10,6 +10,16 @@ param(
     [string]$Filter = ''
 )
 $ErrorActionPreference = 'Continue'
+
+# **控制台解码必须设成 UTF-8。** 子进程 mutate.ps1 会把输出设成 UTF-8
+# （它自己那边有同样一句），而 5.1 捕获原生输出默认按 OEM 码页（简中 936）解码，
+# 于是「被检出」这类判定串全成乱码，`$detected` 永远为假——
+# **每一条变异都会被判成「断言是假的」**（2026-10-23 实测 0/153，
+# 连本次完全没碰过的 MUT-D22 也报假，随后它单独跑是正常检出的）。
+# 这与 mutate.ps1:42-48 是同一个坑，两个脚本必须同时设。
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
+$OutputEncoding = [Console]::OutputEncoding
+
 $root = Split-Path -Parent $PSScriptRoot
 $mut = Join-Path $root 'tools\mutate.ps1'
 if (-not (Test-Path $mut)) { throw "找不到 $mut" }

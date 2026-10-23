@@ -422,13 +422,8 @@ public static class SpectreState
 
     internal static bool debug_skip_Verification = false;
 
-    // 写「不解密」的 `.psprp` 而不是加密的 `.sprp`。**这与旧格式无关**，是新格式的调试开关：
-    // 解开加密要拿密钥，排查「文件是不是坏了」时先看明文更省事。保留。
+    // 写不解密的 .psprp 而不是加密的 .sprp，便于排查“文件是不是坏了”。
     internal static bool debug_no_encryption = false;
-
-    // 原先这里还有 `debug_save_format`（New/Crp2/Json 三选一）。
-    // 它**全仓只有声明一处**、没有任何界面/配置/写入点，即 Crp2 与 Json 两条写路径
-    // 从来不可达；2026-10-18 用户裁定删掉旧回放文件适配时一并移除，写侧只留新格式。
 
     internal static bool debug_hide_text = false;
 

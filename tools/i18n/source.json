@@ -1596,8 +1596,8 @@
  },
  {
   "key": "ui.keymap.clear.tip",
-  "zh": "把右边的目标键清空：这一条不生效，但源键仍然保留在表里。",
-  "en": "Clears the target key: this row does nothing, but the source entry stays."
+  "zh": "把右边的目标键清空 = 这颗键不再产生任何输入（等于单独屏蔽它）。左半仍留在表里。",
+  "en": "Clearing the target makes this key produce no input at all (an easy way to block one key). The left entry stays in the table."
  },
  {
   "key": "ui.keymap.delete",
@@ -1608,5 +1608,15 @@
   "key": "ui.keymap.delete.tip",
   "zh": "把整条对照从表里删掉。",
   "en": "Removes this row from the table."
+ },
+ {
+  "key": "record.keymap.limit",
+  "zh": "只模拟列表中的按键",
+  "en": "Only simulate keys in the list"
+ },
+ {
+  "key": "record.keymap.limit.tip",
+  "zh": "开启后，对照表里没有的按键一律不产生输入。只用手柄或宏键盘的几个键打谱时用它屏蔽其余按键。注意它会让大量按键静默失效。",
+  "en": "When on, keys not in the table produce no input at all. Use it to block every key except a few on a controller or macro keyboard. Note that this makes many keys silently do nothing."
  }
 ]

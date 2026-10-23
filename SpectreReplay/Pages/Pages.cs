@@ -240,6 +240,16 @@ namespace SpectreReplay.Pages
                     OnGui.Note("record.keymap.off");
                     return;
                 }
+                // 「只模拟列表中的按键」——与总开关同样要**当场重建表**。
+                // 它改的是「表外那些键要不要静默」：开启后表外的键在回放时
+                // 全部跳过（key_code_convert 填 0），只用手柄/宏键盘几个键
+                // 打谱时靠它屏蔽其余按键。
+                OnGui.Row("record.keymap.limit", LimitKey, v =>
+                {
+                    LimitKey = v;
+                    Settings.key_convert_list2array();   // 不重建就当场不生效
+                    Commit();
+                });
                 OnGui.Note("record.keymap.note");
                 DrawKeyRemapList();
             });

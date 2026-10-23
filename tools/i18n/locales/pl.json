@@ -320,8 +320,10 @@
   "ui.keymap.none": "Nieprzypisany",
   "ui.keymap.none.tip": "Do tego pola nie przypisano jeszcze żadnego klawisza.",
   "ui.keymap.clear": "Wyczyść",
-  "ui.keymap.clear.tip": "Czyści klawisz docelowy: ten wiersz nic nie robi, ale wpis źródłowy pozostaje.",
+  "ui.keymap.clear.tip": "Wyczyszczenie klawisza docelowego sprawia, że ten klawisz nie daje żadnego wejścia (prosty sposób na zablokowanie jednego klawisza). Wpis po lewej pozostaje w tabeli.",
   "ui.keymap.delete": "Usuń",
-  "ui.keymap.delete.tip": "Usuwa ten wiersz z tabeli."
+  "ui.keymap.delete.tip": "Usuwa ten wiersz z tabeli.",
+  "record.keymap.limit": "Symuluj tylko klawisze z listy",
+  "record.keymap.limit.tip": "Po włączeniu klawisze spoza tabeli nie dają żadnego wejścia. Użyj, aby zablokować wszystkie klawisze poza kilkoma na padzie lub klawiaturze z makrami. Pamiętaj, że wiele klawiszy przestanie po cichu reagować."
 }
 }

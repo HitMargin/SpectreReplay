@@ -320,8 +320,10 @@
   "ui.keymap.none": "Não vinculado",
   "ui.keymap.none.tip": "Esta caixa ainda não tem nenhuma tecla vinculada.",
   "ui.keymap.clear": "Limpar",
-  "ui.keymap.clear.tip": "Limpa a tecla de destino: esta linha não faz nada, mas a entrada de origem permanece.",
+  "ui.keymap.clear.tip": "Limpar a tecla de destino faz com que esta tecla não produza nenhuma entrada (uma forma simples de bloquear uma tecla). A entrada da esquerda permanece na tabela.",
   "ui.keymap.delete": "Excluir",
-  "ui.keymap.delete.tip": "Remove esta linha da tabela."
+  "ui.keymap.delete.tip": "Remove esta linha da tabela.",
+  "record.keymap.limit": "Simular apenas as teclas da lista",
+  "record.keymap.limit.tip": "Quando ligado, as teclas que não estão na tabela não produzem entrada alguma. Use para bloquear todas as teclas exceto algumas de um controle ou teclado com macro. Observe que muitas teclas passarão a não responder silenciosamente."
 }
 }

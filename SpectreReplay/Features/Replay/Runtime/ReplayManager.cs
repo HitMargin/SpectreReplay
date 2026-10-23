@@ -9,21 +9,7 @@ namespace SpectreReplay.Features.Replay;
 
 internal static class ReplayManager
 {
-    // **回放只有一种格式**：`.sprp`（加密）/ `.psprp`（不加密）。
-    //
-    // 2026-10-18 用户裁定「重构整个回放文件，删掉旧的回放文件适配」——此前
-    // 这套代码背着一整个旧容器世代：
-    //   · 读：`.crpl`（旧版 JSON，含 `CompactCreplayfile` 内嵌结构）、
-    //         `.crpl2`（CRP2 magic + 优化二进制）；
-    //   · 写：`ReplaySaveFormat { New, Crp2, Json }` 三条路径，由
-    //         `SpectreState.debug_save_format` 切换。
-    // 两者**一并删除**。写侧本来也不可达（`debug_save_format` 全仓只有声明
-    // `= New`，没界面、没配置键），但它是「旧格式还能产出」的唯一来源；
-    // 读侧留着没有意义——自己不再产出，只认别人十年前的文件，等于把一整代
-    // 容器结构永久钉在代码里。
-    //
-    // **保留**：`ReplayCrypto` 加解密、`.psprp` 不解密变体、
-    // `SpectreState.debug_no_encryption`——那是新格式的调试开关，与旧格式无关。
+    // 回放文件只有两种后缀：.sprp（加密）、.psprp（不加密）。
 
     internal static string RemoveInvalidPathChars(string input)
     {

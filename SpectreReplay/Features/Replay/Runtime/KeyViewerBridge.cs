@@ -125,25 +125,30 @@ internal static class KeyViewerBridge
         // 两者只对空格、方向键等少数键恰好相同，字母键全部错位——
         // 显示层会变成「按 A 亮 R」这种随机效果。
         //
-        // 必须走与录制/回放同一条映射链：
+        // 只需要做 **KeyCode → 原生 VK** 这一步：
         //   KeyCode →(UnityKeyToSkyHookKey)→ KeyLabel
         //           →(KeyLabelToNativeKeyCode)→ 原生 VK
-        //           →(Settings.key_code_convert)→ ManagedInput 的键表下标
-        // 最后一步与 ReplayPlayer.PumpInput 里对 ev.KeyCode 的处理完全一致。
-        ushort index = ToManagedIndex(code);
+        //
+        // **绝不能在这里再过一次 Settings.key_code_convert。**
+        // `ManagedInput.Held[]` 存的是**已经过映射**的键码（ReplayPlayer 里
+        // `num = key_code_convert[ev.KeyCode]` 之后才 Note），显示层问的是
+        // 「这颗物理键此刻亮不亮」，如果再查一次同一张表，就是把正向表当反向表用：
+        // 映射 R→Space 时，问 R 得到 map[82]=32、`Held[32]` 为真 ⇒ **R 亮**；
+        // 问 Space 得到 map[32]=32（未限制时）或 0（限制时）⇒ Space 反而按表外被吞。
+        // 现象正是「我明明映射成了空格，回放却亮 R」；打开「只模拟列表中的键」后
+        // 表外全填 0，错的这一颗成了唯一还亮的，看起来就像映射根本没生效。
+        ushort index = ToNativeVk(code);
         if (index != 0 && ManagedInput.IsHeldVk(index)) __result = true;
     }
 
-    /// <summary>KeyCode → ManagedInput 键表下标；无法映射时返回 0。</summary>
-    private static ushort ToManagedIndex(KeyCode code)
+    /// <summary>KeyCode → 原生虚拟键码（**不查重映射表**）；无法换算时返回 0。</summary>
+    private static ushort ToNativeVk(KeyCode code)
     {
         try
         {
             SkyHook.KeyLabel label = SkyHook.SkyHookKeyMapper.UnityKeyToSkyHookKey(code);
             if (label == SkyHook.KeyLabel.Unknown) return 0;
-            ushort native = SkyHook.SkyHookKeyMapper.KeyLabelToNativeKeyCode(label);
-            if (native >= Settings.key_code_convert.Length) return 0;
-            return Settings.key_code_convert[native];
+            return SkyHook.SkyHookKeyMapper.KeyLabelToNativeKeyCode(label);
         }
         catch
         {
