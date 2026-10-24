@@ -300,7 +300,28 @@ internal sealed class VideoEncoder : IDisposable
         string args = "-y -i " + Quote(rawVideoPath) + " -i " + Quote(wavPath)
             + " -map 0:v:0 -map 1:a:0 -c:v copy " + audio + " -ac 2 -shortest"
             + " " + Quote(finalVideoPath);
-        RunAndWait(exePath, args);
+        try
+        {
+            RunAndWait(exePath, args);
+        }
+        catch
+        {
+            // **失败的成片必须删掉。** ffmpeg 的 -y 在建进程时就把目标文件截断建好了，
+            // 合成中途失败（管道路径过长 EINVAL、磁盘满、被占用）会在输出目录留下一个
+            // 「看着像成片、点开却打不开」的几 GB 垃圾；玩家往往下次挑片时才撞上。
+            // 已编码的原始流由 RescueMuxFailure 另存成 _videoonly/_audioonly，不陪葬。
+            // （VideoConverter 早就是这么做的，这里补齐同一条止损。）
+            try
+            {
+                if (File.Exists(finalVideoPath))
+                    File.Delete(finalVideoPath);
+            }
+            catch (Exception ex)
+            {
+                Debug.Log("[SpectreReplay] 删除失败的成片失败: " + ex.Message);
+            }
+            throw;
+        }
     }
 
     public void Dispose()

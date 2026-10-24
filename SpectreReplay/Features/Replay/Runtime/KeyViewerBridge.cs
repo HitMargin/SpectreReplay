@@ -38,6 +38,21 @@ internal static class KeyViewerBridge
     private static bool _attemptedThisSession;
 
     /// <summary>
+    /// 补丁被整体卸载后复位「已挂接」状态。
+    ///
+    /// **为什么必须有这一步。** 挂上去的是 PatchManual（owner 是我们），
+    /// SpectrePatchHub.UnpatchAll 会把它卸掉，但这里的 _installed 是普通静态字段，
+    /// 不随卸载翻假。于是「关一次模组再打开」之后：TryInstall 见到 _installed 为真
+    /// 直接返回，桥接补丁**永远不会重新挂上**，键位显示器整局全黑，而且一条日志
+    /// 都不会有（它以为早已装好）。模组每次启用时清一次即可。
+    /// </summary>
+    internal static void Reset()
+    {
+        _installed = false;
+        _attemptedThisSession = false;
+    }
+
+    /// <summary>
     /// 尝试挂载桥接补丁。找不到 KeyViewer 时静默返回——那是正常情况。
     ///
     /// **只有「程序集确实存在」时才会记下「本次会话已尝试」。**

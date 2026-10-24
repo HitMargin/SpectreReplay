@@ -64,6 +64,23 @@ namespace SpectreReplay
             {
                 // 关模组等于设置页没了：把拖动期间攒下的改动先写掉
                 Ui.OnGui.FlushConfig();
+
+                // **先把在跑的回放/录制/渲染收场，再拆补丁。** 关模组不是关一个开关：
+                // ReplayPlayer.Stop 才是「还原难度与 noFail、把键盘交还玩家」的唯一路径。
+                // 跳过它，玩家会被留在录像的判定模式里，而 CachedDifficulty 还攥着
+                // 他的原值——下次装弹再 Stop 时会把泄漏值当成原值写回，玩家真正的
+                // 设置就永久丢了（与「回放启动失败仍泄漏接管设置」同一类漏洞，只是
+                // 入口换成了关模组）。StopRecording 同理：is_recording 翻假后没人收，
+                // 这份录制再也不会被保存。CancelRender 让渲染作业自己走收尾，
+                // 否则它会带着钉扎时钟继续跑，而它依赖的补丁马上就不在了。
+                // 三步都自带「没在跑就早退」的守卫，空闲时关模组只是三次空调用。
+                try { SpectreState.PlayActions.StopPlaying(); }
+                catch (Exception ex) { UnityEngine.Debug.LogWarning("[SpectreReplay] 关模组时停止回放失败：" + ex.Message); }
+                try { SpectreState.PlayActions.StopRecording(); }
+                catch (Exception ex) { UnityEngine.Debug.LogWarning("[SpectreReplay] 关模组时停止录制失败：" + ex.Message); }
+                try { Features.VideoRender.VideoRender.CancelRender(); }
+                catch (Exception ex) { UnityEngine.Debug.LogWarning("[SpectreReplay] 关模组时取消渲染失败：" + ex.Message); }
+
                 SpectreState.SetGetKeyAsyncEnabled(false);
                 SpectrePatchHub.UnpatchAll();
                 PatchManager.UnpatchAll();
@@ -83,6 +100,10 @@ namespace SpectreReplay
                 SpectrePatchHub.Configure(typeof(ADOBase).Assembly,
                     PatchShared.GameVersion.Release, 141, 150);
                 SpectrePatchHub.Initialize(typeof(Main).Assembly);
+                // KeyViewer 桥接是 PatchManual 挂上去的：补丁会随 Initialize 里的
+                // UnpatchAll 一并卸掉，但桥接自己的「已挂接」静态标志不会跟着翻假。
+                // 不清它，关开一次模组之后键位显示器就永久失联且无日志（见 Reset 注释）。
+                Features.Replay.KeyViewerBridge.Reset();
 
                 // 回放功能开关（录制/回放/保存/录像共用这一个功能族）
                 SpectrePatchHub.SetFeatureToggle(FeatureKeys.Replay, () => Settings.ReplayOn);

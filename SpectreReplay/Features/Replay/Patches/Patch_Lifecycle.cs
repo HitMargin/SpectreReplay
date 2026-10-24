@@ -345,6 +345,11 @@ internal class Patch_StartRewind
                         failController.noFail = CachedNoFail.Value;
                     CachedNoFail = null;
                 }
+                // **判定宽限也要还。** 它与难度/noFail 同为「回放期接管」的全局设置，
+                // 还原口径照 ReplayPlayer.Stop（玩家自己的选择存在 Persistence）：
+                // 只还原其中两项，玩家会带着录像的判定宽限继续正常游玩，
+                // 而这档设置在界面上看不出来，只能靠手感发现。
+                GCS.hitMarginLimit = Persistence.hitMarginLimit;
                 Reject(LocalizationManager.GetLocalizedText("note.play_error8"),
                     "ApiBlockPlaying set between validation and StartPlaying");
                 return;
@@ -379,6 +384,8 @@ internal class Patch_StartRewind
                         failController.noFail = CachedNoFail.Value;
                     CachedNoFail = null;
                 }
+                // 判定宽限同属回放期接管的全局设置，异常路径也不能漏（口径同 Stop）
+                GCS.hitMarginLimit = Persistence.hitMarginLimit;
             }
             TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error7"), 3f, NotifType.Warning);
         }

@@ -51,7 +51,14 @@ internal static class ReplayDecoder
     // 每条记录的最小字节数：用于把文件里的 count 收敛到"流里真能装下这么多条"，
     // 避免损坏/截断文件把 count 读成垃圾值后直接拿去做 List 容量
     private const int MinKeyEventBytes = 8 + 2 + 1;      // double + ushort + bool
-    private const int MinHitSnapshotBytes = 4 + 8 + 4 + 1 + 1 + 1 + 8 + 8 + 1 + 1 + 4 + 1; // 含末尾 HitTick 最小 1B
+    private const int MinHitSnapshotBytesV1 = 4 + 8 + 4 + 1 + 1 + 1 + 8 + 8 + 1 + 1 + 4;   // v1：无 HitTick
+    private const int MinHitSnapshotBytes = MinHitSnapshotBytesV1 + 1;  // v2：末尾 HitTick 标记最小 1B
+
+    // **最小长度必须随段版本走。** v1 记录是 41 B（没有末尾 HitTick），若一律按 v2 的
+    // 42 B 收敛，`remaining / 42` 对任意 N 条都算出 N-1，于是**每一份 v1 旧回放**
+    // （r149 及更早、含上游 Spectre 的存量）都会在 ReadCount 里被当成"count 超过流长度"
+    // 直接拒绝，报成"文件损坏"。这不是理论风险：v1 文件里快照段之后就是 EOF，
+    // remaining 精确等于 41×count，floor(41N/42) < N 对 N≥1 恒成立。
     private const int MinCursorSampleBytes = 8 + 4 + 4;  // double + float + float
 
     // count 来自文件内容，不是可信输入：负数（最高位置 1）会让 List 容量抛
@@ -73,6 +80,16 @@ internal static class ReplayDecoder
                 $"Record count {raw} exceeds remaining stream ({remaining} bytes)");
         return raw;
     }
+
+    // count 过了 ReadCount 的比例校验，但**仍不能直接拿来当 List 的初始容量**：
+    // 校验只保证「按最小记录长度算，流里装得下这么多条」，而一个几百 KB 的 .psprp
+    // （无 MAC，任何人可造）可以把 count 声明成 remaining/11，于是预分配在先、
+    // 读到第二条就失败在后——分配本身已经发生，几百 KB 换出的是 GB 级内存。
+    // 所以初始容量封顶；真有多条时 List 自然倍增，代价只是几次数组拷贝。
+    private const int MaxPreallocRecords = 4096;
+
+    private static List<T> NewRecordList<T>(int count)
+        => new List<T>(count < MaxPreallocRecords ? count : MaxPreallocRecords);
 
     private static byte[] Decompress(byte[] data) => ReplayCompression.Decompress(data);
 
@@ -147,7 +164,7 @@ internal static class ReplayDecoder
             throw new InvalidDataException(
                 $"KeyEvent version {ver} too new (known: {ReplayConstants.KeyEventVersion})");
         var count = ReadCount(r, MinKeyEventBytes);
-        var events = new List<KeyEvent>(count);
+        var events = NewRecordList<KeyEvent>(count);
         for (int i = 0; i < count; i++)
             events.Add(new KeyEvent
             {
@@ -173,8 +190,9 @@ internal static class ReplayDecoder
         if (ver > ReplayConstants.HitSnapshotVersion)
             throw new InvalidDataException(
                 $"HitSnapshot version {ver} too new (known: {ReplayConstants.HitSnapshotVersion})");
-        var count = ReadCount(r, MinHitSnapshotBytes);
-        var contexts = new List<HitSnapshot>(count);
+        // 按段版本选最小记录长度：v1 是 41 B、v2 是 42 B（见 MinHitSnapshotBytesV1 处注释）
+        var count = ReadCount(r, ver >= 2 ? MinHitSnapshotBytes : MinHitSnapshotBytesV1);
+        var contexts = NewRecordList<HitSnapshot>(count);
         for (int i = 0; i < count; i++)
         {
             contexts.Add(new HitSnapshot
@@ -219,7 +237,7 @@ internal static class ReplayDecoder
             throw new InvalidDataException(
                 $"CursorTrack version {ver} too new (known: {ReplayConstants.CursorTrackVersion})");
         var count = ReadCount(r, MinCursorSampleBytes);
-        var track = new List<CursorSample>(count);
+        var track = NewRecordList<CursorSample>(count);
         for (int i = 0; i < count; i++)
             track.Add(new CursorSample
             {

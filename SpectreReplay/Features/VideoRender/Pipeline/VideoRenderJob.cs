@@ -992,24 +992,66 @@ internal sealed class VideoRenderJob : MonoBehaviour
 
     private void PrepareWorkspace(VideoEncoder.OutContainer container)
     {
-        tempDir = Path.Combine(Main.mod.Path, "RenderTemp");
+        // **每次作业一份唯一临时目录。** 收尾线程超时后清理会被推迟到后台
+        // （见 DeferCleanupAfterWorker，最长等 40 分钟），而 CloseJob() 在 TearDown
+        // 末尾就放行了下一次渲染。若共用 "RenderTemp" 这一个固定路径，推迟的清理
+        // 删掉的会是**新作业正在写**的那份目录——旧实现注释说「留一个目录远好过
+        // 毁掉成片」，可下一轮开工的第一件事正是把它删掉重建。唯一目录让两边的
+        // 生命周期彻底解耦：清理只删自己那份，迟到多久都伤不到别人。
+        string tempRoot = Path.Combine(Main.mod.Path, "RenderTemp");
+        tempDir = Path.Combine(tempRoot, "job_" + DateTime.Now.ToString(
+            "yyyyMMdd_HHmmss_fff", CultureInfo.InvariantCulture));
         try
         {
-            if (Directory.Exists(tempDir))
-                Directory.Delete(tempDir, true);
             Directory.CreateDirectory(tempDir);
         }
         catch (Exception ex)
         {
-            Debug.Log("[SpectreReplay] 渲染临时目录重置失败: \"" + tempDir + "\" —— "
+            Debug.Log("[SpectreReplay] 渲染临时目录创建失败: \"" + tempDir + "\" —— "
                 + ex.GetType().Name + ": " + ex.Message);
         }
+        PruneStaleRenderTemps(tempRoot);
         // 中间文件按容器选扩展：muxer 按扩展名选，VP9 流写进 .mp4 在 ffmpeg 4.x 是
         // experimental（拒绝写入，渲染首帧即死）。.mkv（matroska）VP9/H.264 通吃；
         // 非 webm 目标编码器写的是 H.264，.mp4 中间文件各版本皆宜
         rawVideoPath = Path.Combine(tempDir,
             container == VideoEncoder.OutContainer.WebM ? "temp_video.mkv" : "temp_video.mp4");
         wavPath = Path.Combine(tempDir, "audio.wav");
+    }
+
+    /// <summary>
+    /// 清掉历史作业遗留的临时目录（崩溃、强杀、断电留下的几百 MB）。
+    ///
+    /// **只动修改时间早于 12 小时的子目录。** 正在跑的作业目录不可能这么旧，
+    /// 而延迟清理线程持有的是它自己那一份完整路径（见 DeferCleanupAfterWorker），
+    /// 删别人的旧目录不会伤到任何在跑的作业。全程 best-effort：磁盘/权限问题
+    /// 只记日志，绝不影响本次渲染。
+    /// </summary>
+    private static void PruneStaleRenderTemps(string tempRoot)
+    {
+        try
+        {
+            if (!Directory.Exists(tempRoot)) return;
+            DateTime cutoff = DateTime.UtcNow.AddHours(-12);
+            foreach (string stale in Directory.GetDirectories(tempRoot))
+            {
+                try
+                {
+                    if (Directory.GetLastWriteTimeUtc(stale) > cutoff) continue;
+                    Directory.Delete(stale, true);
+                }
+                catch (Exception ex)
+                {
+                    Debug.Log("[SpectreReplay] 清理旧渲染临时目录失败: \"" + stale + "\" —— "
+                        + ex.GetType().Name + ": " + ex.Message);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.Log("[SpectreReplay] 枚举旧渲染临时目录失败: "
+                + ex.GetType().Name + ": " + ex.Message);
+        }
     }
 
     private void SaveGlobalState(int fps)

@@ -637,6 +637,47 @@ $knownDeviations = @(
     @{ Pat = 'TimeSpan.FromMinutes';    File = 'VideoRenderJob.cs'; Why = '同上：延迟清理的等待上限（覆盖 FinishVideo 10 分钟 + MuxWith 30 分钟）' }
     @{ Pat = 'Directory.Delete';        File = 'VideoRenderJob.cs'; Why = '同上：延迟清理里删临时目录（与 TearDown 里同一操作，只是时机推到收尾之后）' }
     @{ Pat = 'Directory.Exists';        File = 'VideoRenderJob.cs'; Why = '同上：删之前先确认存在' }
+    # ════════════════════════════════════════════���═════════════════════
+    # -- 2026-10-24 全项目审计（docs\audit\）修出的问题，逐条登记 -----------
+    # 这批全是「上游没有对应实现」的新逻辑，不是抄错。
+    #
+    # ① 渲染临时目录改成每作业唯一（audit C 的 F1）。上游/旧实现用一个固定的
+    #    RenderTemp，而收尾线程超时后清理被推迟到后台线程（最长 40 分钟），
+    #    与「下一轮作业开工先删同一个目录」直接互踩，会删掉别人正在写的文件。
+    @{ Pat = 'Directory.GetDirectories';   File = 'VideoRenderJob.cs'; Why = '2026-10-24 审计：枚举历史作业的临时目录，只清理 12 小时前的残留' }
+    @{ Pat = 'Directory.GetLastWriteTimeUtc'; File = 'VideoRenderJob.cs'; Why = '同上：以修改时间判断是否为在跑作业（在跑的目录不可能隔夜）' }
+    @{ Pat = 'DateTime.UtcNow.AddHours';   File = 'VideoRenderJob.cs'; Why = '同上：12 小时截断点' }
+    @{ Pat = 'DateTime.Now.ToString';      File = 'VideoRenderJob.cs'; Why = '同上：作业唯一目录名的时间戳（与成片命名同源）' }
+    @{ Pat = 'CultureInfo.InvariantCulture'; File = 'VideoRenderJob.cs'; Why = '同上：目录名时间戳按固定区域性格式化，避免逗号小数区产生怪名' }
+    @{ Pat = 'Path.Combine';               File = 'VideoRenderJob.cs'; Why = '同上：拼 RenderTemp\job_<时间戳>' }
+    @{ Pat = 'ex.GetType';                 File = 'VideoRenderJob.cs'; Why = '同上：清理失败时日志带异常类型（只看 Message 分不清权限还是占用）' }
+    # ② mux 失败要删掉半成品成片（audit C 的 F2）。ffmpeg 的 -y 在建进程时就截断
+    #    建好目标文件，合成失败会留一个打不开的几 GB 垃圾。VideoConverter 早有这条
+    #    止损，MuxWith 这条路径漏了。
+    @{ Pat = 'File.Delete';                File = 'VideoEncoder.cs'; Why = '2026-10-24 审计：合成失败时删掉半成品成片（原始流已由 RescueMuxFailure 另存）' }
+    @{ Pat = 'File.Exists';                File = 'VideoEncoder.cs'; Why = '同上：删之前确认存在' }
+    # ③ 回放启动失败要还原判定宽限（audit B）。难度与 noFail 在两条失败分支都还原了，
+    #    唯独漏 GCS.hitMarginLimit —— 它是回放期接管的全局设置，还原口径同 Stop。
+    @{ Pat = 'GCS.hitMarginLimit';         File = 'Patch_Lifecycle.cs'; Why = '2026-10-24 审计：ApiBlockPlaying / 异常两条失败分支补还原判定宽限（漏了会带进正常游玩）' }
+    @{ Pat = 'Persistence.hitMarginLimit'; File = 'Patch_Lifecycle.cs'; Why = '同上：还原来源是玩家自己的持久化设置（与 ReplayPlayer.Stop 同一口径）' }
+    # ④ 关模组要把在跑的回放/录制/渲染收场（audit B + Lead）。Stop 是还原难度/
+    #    noFail/hitMarginLimit 并把键盘交还玩家的唯一路径；跳过它就永久泄漏接管态。
+    #    同时 KeyViewer 桥接的「已挂接」静态标志要复位，否则关开一次模组后键位
+    #    显示器永久失联（补丁被 UnpatchAll 卸了，标志还留着）。
+    @{ Pat = 'SpectreState.PlayActions.StopPlaying';   File = 'Main.cs'; Why = '2026-10-24 审计：关模组前先停回放（还原难度/noFail/判定宽限的唯一路径）' }
+    @{ Pat = 'SpectreState.PlayActions.StopRecording'; File = 'Main.cs'; Why = '同上：停录制，否则 is_recording 翻假后这份录制再没人保存' }
+    @{ Pat = 'Features.VideoRender.VideoRender.CancelRender'; File = 'Main.cs'; Why = '同上：取消渲染，否则作业带着钉扎时钟继续跑而它依赖的补丁已被卸掉' }
+    @{ Pat = 'KeyViewerBridge.Reset';      File = 'Main.cs'; Why = '2026-10-24 审计：每次启用清掉桥接的已挂接标志（PatchManual 已随 UnpatchAll 卸掉）' }
+    # ⑤ 主线程身份改为 Install 时快照（Lead）。旧判据「_pump == null 就当自己是主线程」
+    #    在 Uninstall 之后会把后台收尾线程误判成主线程、就地执行 Unity API。
+    @{ Pat = 'pump.ThreadRef';             File = 'MainThread.cs'; Why = '2026-10-24 审计：泵未装好时的兜底判据（保留旧语义，仅在从未 Install 过时生效）' }
+    @{ Pat = 'Thread.CurrentThread';       File = 'MainThread.cs'; Why = '同上：记录/比较主线程身份，替代原来的 _pump == null 推断' }
+    # ⑥ 去特效的「改写比总开关活得久」（audit D 的 F2）。上游只按总开关判能不能保存，
+    #    于是「开去特效进关 → 关掉开关 → Ctrl+S」会把剥过的数据写回原文件。
+    #    改法：加 LevelDataStripped 标记，存盘判据同时看它；保存拦截与按钮刷新两个补丁
+    #    因此**刻意不挂 Feature**（挂上就随功能一起卸载，残留态再没人拦）。
+    @{ Pat = 'Settings.EffectRemoverEnableSave'; File = 'EffectRemover.cs'; Why = '2026-10-24 审计 F2：EditorSaveEnabled 改为「功能开着看 EnableSave、关着看有没有改写过」' }
+    @{ Pat = 'PatchType.Postfix';      File = 'Patch_EffectRemover.cs'; Why = '2026-10-24 审计 F2：保存拦截/按钮刷新两个补丁摘掉 Feature（改写残留态必须在功能关闭后仍被拦住）' }
     # ══════════════════════════════════════════════════════════════════
     # -- 2026-10-19 补登记：被"相对路径匹配"长期漏掉的历史漂移 -----------
     #

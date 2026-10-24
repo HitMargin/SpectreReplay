@@ -10,19 +10,41 @@ namespace SpectreReplay;
 // 主线程调度器：后台线程要动 Unity API（UI/GameObject/协程）时经 Run() 转回主线程执行。
 // 泵由隐藏的常驻 MonoBehaviour 每 Update 驱动，mod 开启时 Install、关闭时 Uninstall。
 // - 主线程调用 Run：直接同步执行（零开销路径）
-// - 泵未建立（mod 未开启的早期阶段）：也直接执行，不排队不等待
+// - 首次 Install 之前（mod 未开启的极早期）：也直接执行，不排队不等待
+// - Install 过之后（含 Uninstall 之后）：一律按「当前线程是不是主线程」判断，
+//   后台线程只会入队、绝不就地执行——否则关模组那一拍留下的收尾线程会撞上
+//   非主线程访问 Unity API
 // - 泵内每个 action 自带异常隔离：单个回调抛错不会杀死泵
 internal static class MainThread
 {
     private static readonly ConcurrentQueue<Action> _queue = new();
-    private static PumpBehaviour _pump;
+    // **必须 volatile。** 这两个字段都是「主线程写、后台线程读」：_pump 在
+    // Install/Uninstall 里赋值，而 Run 的调用方常常是编码/收尾线程。没有 volatile
+    // 时后台线程可能读到陈旧的 null，把「已经装好」看成「没装」而就地执行 Unity API。
+    private static volatile PumpBehaviour _pump;
+    // **不能靠「_pump == null 就当自己是主线程」推断。** Uninstall() 之后 _pump 变
+    // null，此时仍在跑的收尾/采集线程再调 Run 会被当成主线程、就地执行 Unity 调用
+    //（Notification 等），正是关模组那一刻最容易撞上的崩溃点。改成在 Install（必然
+    // 发生在主线程）时把主线程身份记下来，之后一直用它判断。
+    private static volatile Thread _mainThread;
 
     internal static bool IsMainThread
-        => _pump == null || _pump.ThreadRef == Thread.CurrentThread;
+    {
+        get
+        {
+            Thread main = _mainThread;
+            if (main != null)
+                return main == Thread.CurrentThread;
+            // 首次 Install 之前：既没有泵也没有主线程身份，按「就地执行」老语义处理。
+            PumpBehaviour pump = _pump;
+            return pump == null || pump.ThreadRef == Thread.CurrentThread;
+        }
+    }
 
     internal static void Install()
     {
         if (_pump != null) return;
+        _mainThread = Thread.CurrentThread;
         GameObject go = new GameObject("SpectreMainThread");
         Object.DontDestroyOnLoad(go);
         _pump = go.AddComponent<PumpBehaviour>();

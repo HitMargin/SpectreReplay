@@ -1417,6 +1417,15 @@ switch ($Which) {
         Backup 'Features\Replay\Runtime\ReplayManager.cs'
         ReplaceExact 'Features\Replay\Runtime\ReplayManager.cs' '        ReplayConstants.ExtensionNoEncrypt,  // .psprp 不解密' ''
     }
+    'MUT-U47' {
+        # ⑳c（2026-10-24 审计 D-F2）：给保存拦截挂回 Feature = 让它随总开关卸载。
+        #      这正是判据要抓的形态：玩家开去特效进关（内存里的谱面已就地改写）之后
+        #      关掉开关，补丁随之下线，Ctrl+S 就把剥过的数据写回原文件，原谱没了。
+        #      **只改这一条**：LoadGameScene 那条仍是常开，只数「文件里有没有 Feature」
+        #      的假判据会绿。
+        Backup 'Features\EffectRemover\Patch_EffectRemover.cs'
+        ReplaceExact 'Features\EffectRemover\Patch_EffectRemover.cs' '[SpectrePatch(typeof(SaveLevelEditorAction), "Execute", PatchType.Prefix)]' '[SpectrePatch(typeof(SaveLevelEditorAction), "Execute", PatchType.Prefix, Feature = FeatureKeys.EffectRemover)]'
+    }
     'MUT-CR1' {
         # ③ 确定性回归：把 salt 与 IV 两个随机源都固定 = 退回旧格式那个缺陷。
         #      必须**两个都固定**才表达得了这条缺陷：只固定 IV 时 salt 仍随机、

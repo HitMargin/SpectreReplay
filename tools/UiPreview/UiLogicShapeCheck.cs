@@ -434,6 +434,14 @@ namespace UiPreview
                 "⑳b 去特效总开关 onChange 两半都要刷新按钮(只接关掉那一半会留下脱节)",
                 "Pages\\Pages.cs",
                 s => EffectMasterToggleRefreshesButtons(s));
+            // ⑳c 2026-10-24 全项目审计 D-F2：「谱面已被就地改写」比总开关活得久。
+            //   玩家开去特效进关（Decode 已改完内存里的谱面）之后把开关关掉——
+            //   保存拦截若随 Feature 一起卸载，Ctrl+S 就会把剥过的数据写回原文件，
+            //   原谱直接没了。所以这两条补丁必须常开，由 EditorSaveEnabled 自己判。
+            fail += Check(projectRoot,
+                "⑳c 去特效的保存拦截/按钮刷新不许挂总开关(改写残留态要求在功能关闭后仍被拦住)",
+                "Features\\EffectRemover\\Patch_EffectRemover.cs",
+                s => SaveGuardNotFeatureGated(s));
             // ㉑ 特殊按键过滤必须**真的会生效**（2026-10-18 接线）。
             //
             //    这功能的失败方式是本项目最典型的一种：补丁、界面、配置三段全在，
@@ -2084,6 +2092,41 @@ namespace UiPreview
         /// <summary>本文件已执行的判据条数。汇总行按它印，不写字面量——
         /// 原先硬编码的「四十八条」在加判据后就是一句谎话，而且没人会记得改。</summary>
         private static int _checksRun;
+
+        /// <summary>
+        /// 去特效的「保存拦截」与「按钮刷新」两条补丁**不许挂 Feature**（⑳c，2026-10-24 审计 D-F2）。
+        ///
+        /// <para>挂上就会随总开关一起卸载，而「谱面已被就地改写」这件事比开关活得久：
+        /// 玩家开去特效进关（<c>LevelData.Decode</c> 已把内存里那份改完）→ 关掉开关 →
+        /// 补丁随之下线 → Ctrl+S 把剥过的数据写回原文件，原谱就没了。</para>
+        ///
+        /// <para><c>LoadGameScene</c> 那条同理：关掉开关后重新进关，若没人再刷新，
+        /// 保存按钮会停在上一局留下的禁用态。两条都必须常开，由
+        /// <c>EffectRemover.EditorSaveEnabled</c> 自己判断。</para>
+        ///
+        /// <para>判据形状：找到这两条 <c>[SpectrePatch(...)]</c>，断言其参数里没有
+        /// <c>Feature</c>，且两条都要真的存在（删掉整条也不会白绿）。</para>
+        /// </summary>
+        private static bool SaveGuardNotFeatureGated(string code)
+        {
+            bool sawSave = false, sawLoad = false;
+            foreach (string raw in code.Split('\n'))
+            {
+                string line = raw.Trim();
+                if (!line.Contains("[SpectrePatch(", StringComparison.Ordinal)) continue;
+                if (line.Contains("SaveLevelEditorAction", StringComparison.Ordinal))
+                {
+                    sawSave = true;
+                    if (line.Contains("Feature", StringComparison.Ordinal)) return false;
+                }
+                if (line.Contains("LoadGameScene", StringComparison.Ordinal))
+                {
+                    sawLoad = true;
+                    if (line.Contains("Feature", StringComparison.Ordinal)) return false;
+                }
+            }
+            return sawSave && sawLoad;
+        }
 
         private static int Check(string projectRoot, string name, string rel,
             Func<string, bool> predicate)

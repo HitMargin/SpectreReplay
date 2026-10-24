@@ -21,6 +21,7 @@ namespace UiPreview
             fail += RoundTrip("⑶ 空回放", Sample(0, 0, 0));
             fail += RoundTrip("⑷ 只有命中无按键", Sample(3, 3, 0));
             fail += RejectsGarbage();
+            fail += DecodesV1HitSnapshots();
             if (fail == 0) Console.WriteLine("    ✓ 回放格式往返全部一致");
             return fail;
         }
@@ -146,6 +147,97 @@ namespace UiPreview
             {
                 Console.WriteLine("    ✗ ⑸ 巨大 count 未被 InvalidDataException 拒绝："
                     + ex.GetType().Name + ": " + ex.Message);
+                return 1;
+            }
+        }
+
+        /// <summary>
+        /// v1 旧回放必须仍能解码（2026-10-24 全项目审计修出的回归）。
+        ///
+        /// <para><b>为什么单独一条。</b>快照段的最短记录长度是 ReadCount 的收敛依据：
+        /// v2 记录 42 B（41 B 字段 + 末尾 HitTick 的 1 B 存在标志），v1 记录 41 B。
+        /// 早先两版共用一个 42 B 常量，于是 <c>remaining / 42</c> 对任意 N 条都算出
+        /// N-1，**每一份 v1 旧回放**（r149 及更早、含上游 Spectre 存量）都在 ReadCount
+        /// 里被当成「count 超过流长度」拒绝，报成文件损坏。</para>
+        ///
+        /// <para>构造方式：用生产端编码一份不含 HitTick 的回放（每条正好 41+1 B），
+        /// 再把快照段就地改写成 v1 版式（段版本改 1、每条去掉末尾那 1 B 标志），
+        /// 前后两段的字节原样保留。解码成功、条数一致、且 HitTick 为 null 才算通过。</para>
+        /// </summary>
+        private static int DecodesV1HitSnapshots()
+        {
+            const string name = "⑹ v1 旧回放（无 HitTick）仍能解码";
+            const int v1RecordBytes = 41;
+            try
+            {
+                Replay src = Sample(3, 0, 7);
+                foreach (var snap in src.HitSnapshots)
+                    snap.HitTick = null;   // 只测 v1 版式：连 v2 的 tick 都不写
+                byte[] payload = ReplayCompression.Decompress(ReplayEncoder.Encode(src));
+
+                // 快照段魔数（小端写出即 "HitCtext"）
+                byte[] hitMagic = { 0x48, 0x69, 0x74, 0x43, 0x74, 0x65, 0x78, 0x74 };
+                int at = IndexOfBytes(payload, hitMagic);
+                if (at < 0)
+                {
+                    Console.WriteLine("    ✗ " + name + "：找不到快照段，测试无效");
+                    return 1;
+                }
+                int countPos = at + 8 + 4;
+                int count = BitConverter.ToInt32(payload, countPos);
+                if (count != src.HitSnapshots.Count)
+                {
+                    Console.WriteLine("    ✗ " + name + "：count 读出 " + count + "，与样本 "
+                        + src.HitSnapshots.Count + " 不符，测试无效");
+                    return 1;
+                }
+                int recordsPos = countPos + 4;
+                int v2RecordBytes = v1RecordBytes + 1;   // 每条都有 1 B 的"有无 tick"标志
+                int tailPos = recordsPos + count * v2RecordBytes;
+                if (tailPos > payload.Length)
+                {
+                    Console.WriteLine("    ✗ " + name + "：段长越界，测试无效");
+                    return 1;
+                }
+
+                var v1 = new List<byte>(payload.Length);
+                for (int i = 0; i < at; i++) v1.Add(payload[i]);
+                for (int i = 0; i < hitMagic.Length; i++) v1.Add(hitMagic[i]);
+                v1.AddRange(BitConverter.GetBytes(1));       // 段版本 = 1
+                v1.AddRange(BitConverter.GetBytes(count));
+                for (int i = 0; i < count; i++)
+                    for (int j = 0; j < v1RecordBytes; j++)
+                        v1.Add(payload[recordsPos + i * v2RecordBytes + j]);  // 丢末尾标志
+                // **不复制 tailPos 之后的内容。** v1 回放早于「指针轨迹」段，快照段之后
+                // 就是 EOF；把新版那 16 B 尾部抄过来会白送 ReadCount 一条余量
+                //（139/42 = 3 恰好放行），测出来的就不是真 v1 布局了。
+
+                Replay back = ReplayDecoder.Decode(ReplayCompression.Compress(v1.ToArray()));
+                if (back.HitSnapshots.Count != count)
+                {
+                    Console.WriteLine("    ✗ " + name + "：解出 " + back.HitSnapshots.Count
+                        + " 条，期望 " + count);
+                    return 1;
+                }
+                for (int i = 0; i < count; i++)
+                {
+                    if (back.HitSnapshots[i].HitTick.HasValue)
+                    {
+                        Console.WriteLine("    ✗ " + name + "：v1 记录不该有 HitTick（第 " + i + " 条）");
+                        return 1;
+                    }
+                    if (back.HitSnapshots[i].CurrentFloorID != src.HitSnapshots[i].CurrentFloorID)
+                    {
+                        Console.WriteLine("    ✗ " + name + "：第 " + i + " 条 floorID 不一致");
+                        return 1;
+                    }
+                }
+                Console.WriteLine("    ✓ " + name);
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("    ✗ " + name + "：抛异常 " + ex.GetType().Name + ": " + ex.Message);
                 return 1;
             }
         }

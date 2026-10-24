@@ -93,6 +93,12 @@ internal static class ReplayPlayer
             SyncDifficultyLabel();
         }
         IgnoreMarkFail = false;
+        // **HitLocked 必须在这里复位。** 它是「回放/录制期间由我们接管命中」的闸门，
+        // Patch_Recording 的 scrPlayer.Hit Prefix 见到它为真就直接 return false——
+        // 游戏自己的判定整局被跳过。停止回放时若只翻 is_playing 而留着它，玩家从
+        // 回放页点「停止」继续打这一关，会发现**怎么打都不判定**，只能重开关卡；
+        // 这个状态还会跟着进下一次录制（hit 全被吞，录出一份没有命中的回放）。
+        HitLocked = false;
         SyncEditorNoFailButton();
         try
         {
