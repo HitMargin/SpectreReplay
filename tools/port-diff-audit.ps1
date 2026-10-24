@@ -1023,6 +1023,14 @@ $knownDeviations = @(
     @{ Pat = 'CachedDifficulty.Value';  File = 'Patch_Lifecycle.cs'; Why = '同上：还原用的玩家原值' }
     @{ Pat = 'CachedNoFail.HasValue';    File = 'Patch_Lifecycle.cs'; Why = '同上：noFail 接管同窗口泄漏（原先 catch 只报错，noFail=true 留在玩家局里）' }
     @{ Pat = 'CachedNoFail.Value';       File = 'Patch_Lifecycle.cs'; Why = '同上：还原用的玩家原值' }
+    # -- Patch_LightUp 的还原改用 Finalizer --
+    # 上游是 Prefix 换值 + Postfix 还原。Postfix 在 LightUp 抛异常时根本不执行
+    # （别的 mod 的 Prefix 返回 false 短路原方法时同理），GCS.hitMarginLimit 会停在
+    # 玩家档位上；而 scrPlanet.SwitchChosen:661 的判定早于点亮，紧接着的下一拍就
+    # 按错的严格度统计。改成 Finalizer 后由框架保证「无论正常/异常都跑」，代价是
+    # 与上游多两个 token：补丁类型与 finalizer 的异常形参名。异常本身原样放行。
+    @{ Pat = 'PatchType.Finalizer'; File = 'Patch_Misc.cs'; Why = 'Patch_LightUp 的还原点从 Postfix 改为 Finalizer：上游 Postfix 在 LightUp 抛出或原方法被短路时不执行，全局判定档位会漏还一拍' }
+    @{ Pat = '__exception';         File = 'Patch_Misc.cs'; Why = '同上：Finalizer 的形参由 Harmony 按位置注入（tools/patch-sig-audit.ps1 不校验此名），体内只做还值后 return __exception 原样放行' }
     @{ Pat = 'failController.noFail';    File = 'Patch_Lifecycle.cs'; Why = '同上：还原目标；instance 判空后经局部变量写回' } )
 
 

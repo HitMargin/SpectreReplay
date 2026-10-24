@@ -737,34 +737,62 @@ SpeedTrail 用 `<= 0` 作「没记到」的哨兵 —— 0 与 1.0 都是合法�
 **SpectreReplay 没有这个兜底**——一旦回放触发到这条路径，会抛
 `ArgumentOutOfRangeException` 打断输入更新。
 
-### 偏差 19：回放期间的三个状态夹逼
+### 偏差 19：回放期间的四个状态夹逼
 
 Spectre 回放时改了若干全局状态，都有对应的还原点：
 
 | 状态 | 夹逼方式 |
 |---|---|
 | `HitLocked`（屏蔽真实 `Hit`） | `Patch_Recording.cs:39` 返回 false；`ReplayHit` 内部 `:335/:344` 临时开合 |
-| `GCS.hitMarginLimit` | `Patch_Misc.cs:86/92` 在 `LightUp` 前后夹逼；`ReplayPlayer.Stop():36` 终还原 |
+| `GCS.hitMarginLimit` | `Patch_Misc.cs:89/95` 在 `LightUp` 前后夹逼；`ReplayPlayer.Stop():36` 终还原 |
 | `noFail` | `TryStartPlayback:225` 备份后强制 true；`Stop():54` 还原 |
 | `IgnoreMarkFail` | `Patch_Misc.cs:75` Prefix 令 `__result = null` |
 
-**SpectreReplay 的对应实现**（本轮随修复 C 一并补上）：
+**SpectreReplay 的对应实现**（随 `f96aa86` 移植带入，行号为本仓现状）：
 
 | 状态 | 我们的做法 |
 |---|---|
-| `HitLocked` | ✅ `HitStateReplayer.Locked`，在 `Pump` 里开合；`Patch_HitRecord` 的 Prefix 据此掐掉键轨触发的 `Hit` |
-| `noFail` | ✅ `ClampGlobalState` 备份后强制 true，`Stop` 还原 |
-| `GCS.hitMarginLimit` | ✅ `scrFloor.LightUp` 前后成对夹逼（`PlaybackClamps`），期间置 `PerfectsOnly` |
+| `HitLocked` | ✅ `SpectreState.HitLocked`，`ReplayPlayer` 开场置 true、`Stop` 复位（`ReplayPlayer.cs:31/101`）；`Patch_Recording` 的 Prefix 据此掐掉键轨触发的 `Hit`（`Patch_Recording.cs:41`） |
+| `noFail` | ✅ `Patch_Lifecycle` 在与难度对齐时备份 `CachedNoFail` 后强制 true（`Patch_Lifecycle.cs:305-306`），正常与异常两条拆除链各还原（`:345`、`:388`），`Stop` 再兜一次（`ReplayPlayer.cs:84`） |
+| `GCS.hitMarginLimit` | ✅ `Patch_LightUp` 的 Prefix 换回 `Persistence.hitMarginLimit`、**Finalizer** 还原 `StoredHitMarginLimit`（`Patch_Misc.cs:126-137`）；还原点由上游的 Postfix 改为 Finalizer（理由见下），`Stop` 终还原 |
 | `IgnoreMarkFail` | ✅ `scrPlanet.MarkFail` 的 Prefix，见「修复 D」 |
 
-**`LightUp` 夹逼为什么置 `PerfectsOnly`**：`LightUp()`（`scrFloor.cs:1200`）读
-`GCS.hitMarginLimit != PerfectsOnly` 来决定要不要 `SetToRandomColor()`。
-夹成 `PerfectsOnly` 就是让它**一定跳过**——砖块颜色是**录进视频里的**，
-中途变了成片就与录制不是一回事。方法体跑完（Postfix）立刻恢复成录制档位，
-让后续判定照常按录制时的档位飘字。
+**为什么只能在 `LightUp` 前后成对换、不能开播时换一次**：`GCS.hitMarginLimit`
+一身兼两职。`scrFloor.LightUp()`（`scrFloor.cs:1201`）第 1212 行读
+`GCS.hitMarginLimit != HitMarginLimit.PerfectsOnly` 决定要不要
+`SetToRandomColor()`（闪色开关）；同一个值又是判定严格度——`HitMarginHelper.IsCounted`
+与 `ffxCheckpoint` 都读它，决定这段命中算不算数。
 
-只夹一次（只在开播时设）不够：游戏会在别处把 `GCS.hitMarginLimit` 写回
-玩家真实设置，砖块亮起时读到的可能已经是玩家自己的档位。
+回放期间这两个需求指向**相反**的取值：
+
+- **判定**必须用录像档位（`StoredHitMarginLimit`），否则同一份录像在不同玩家
+  机器上算出的准确率/判定不同，回放不再可复现；
+- **闪色**属于此刻观看的人的观感，与录像录在哪个档位无关，应当跟玩家自己在
+  设置菜单里的选择（`Persistence.hitMarginLimit`）。
+
+因此换值范围必须缩到「读闪色开关那一小段」——`LightUp` 方法体执行期间。
+Prefix 换成玩家档位、Finalizer 立刻还回录像档位，判定路径全程读到的都是录像档位
+（`IsCounted` / `ffxCheckpoint` 不受影响，见 `docs/audit/B-replay-runtime.md` item 9）。
+
+**不是「游戏会把值写回」才需要夹的。** 全源码写 `GCS.hitMarginLimit` 只有两处：
+`ADOStartup.cs:215`（启动时 `= Persistence.hitMarginLimit`）与 `SettingsMenu.cs:612`
+（改设置时）。游玩过程中游戏不会自己写回，所以真正的问题不是「值被改掉」，
+而是「判定与观感本就需要不同的值」。上游 Spectre 用 Prefix+Postfix 成对夹逼
+（`Spectre/Features/Replay/Patch_Misc.cs:89/95`）；本实现把还原点换成了 **Finalizer**，
+因为 Postfix 在 `LightUp` 抛异常、或原方法被别的 mod 的 Prefix 判定跳过时根本不执行，
+`GCS.hitMarginLimit` 会停在玩家档位上——而 `scrPlanet.SwitchChosen:661` 的判定读点早于
+点亮，紧接着的下一拍就会按错的严格度统计一次。Finalizer 由框架保证正常返回与异常逃逸都
+执行：先在体内还值，再 `return __exception` 原样放行（不吞、不记日志——`LightUp` 抛出
+意味着画面状态没走完，吞掉只会让状态更歪）。这是本实现相对上游的一处刻意偏差，已在
+`tools/port-diff-audit.ps1` 的 `$knownDeviations` 登记。
+
+**取舍：成片闪色不确定。** `SetToRandomColor`（`scrFloor.cs:1451`）只在
+`vfx.tileFlashStyle == TileFlashStyle.Rando` 时走 `UnityEngine.Random.Range`
+（`Christmas` 用 `conductor.beatNumber + seqID`，是确定性的）。玩家档位不是
+`PerfectsOnly` 时，同一份回放两次渲染的砖块闪色不同。旧自研引擎走的是相反的一条路：
+`PlaybackClamps` 把这里**夹成 `PerfectsOnly`**，强制不闪色以换取渲染确定性；该文件
+已随 `4f6d561` 整体删除。两条路不可兼得——「闪色跟随玩家设置」与「成片确定」
+只能选一个，当前选前者，理由见 `Patch_Misc.cs:109-115`。
 
 ### 修复 D：回放期间的 `IgnoreMarkFail`（偏差 19 剩余）
 
