@@ -27,7 +27,7 @@ public sealed class ReplayData
     public string InternalLevelName { get; set; }
     /// <summary>关卡文件路径。原键 level_path。</summary>
     public string LevelPath { get; set; }
-    /// <summary>判定宽限设置。原键 hitMarginLimit。</summary>
+    /// <summary>命中判定限制（None / PerfectsOnly / PurePerfectOnly）。原键 hitMarginLimit。</summary>
     public string HitMarginLimit { get; set; }
     /// <summary>长按行为设置。原键 holdBehavior。</summary>
     public string HoldBehavior { get; set; }
