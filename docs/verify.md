@@ -10,11 +10,27 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify.ps1
 用 `-SkipDeploy` 跳过部署那一节）/ `-SkipAudits`（跳过只读审计那一节）/
 `-Ci`（跳过两项依赖本机安装的检查：Steam 部署一致性、上游工作区干净。
 
-> ⚠️ **`-SkipDeploy` 只跳过「部署动作」，不跳过后面的 sha256 比对。** 本机从没部署过
-> （`Mods\SpectreReplay` 为空）时它必然红，看着像代码坏了。那种机器上要跑绿得用 `-Ci`；
-> 语义上正确的做法是「要么真部署一次，要么用 `-Ci`」，别用 `-SkipDeploy` 假装跳过。
-CI 里这两项不是"没部署"就是"目录不存在"，长期假红会淹掉真问题；
-其余各项在 CI 里照常全跑）。
+> ⚠️ **`-SkipDeploy` 只跳过「部署动作」，不跳过后面的 sha256 比对。** 真没部署过时它必然红，
+> 看着像代码坏了。那种机器上要跑绿得用 `-Ci`；语义上正确的做法是「要么真部署一次，
+> 要么用 `-Ci`」，别用 `-SkipDeploy` 假装跳过。
+> CI 里这两项不是"没部署"就是"目录不存在"，长期假红会淹掉真问题；
+> 其余各项在 CI 里照常全跑）。
+>
+> **2026-10-25 更正上面这条的旧解释。** 它原先写的是「本机从没部署过（`Mods\SpectreReplay` 为空）」，
+> 那个诊断是错的，而错的诊断比没有诊断更糟——它让这一项看起来天经地义地该红，
+> 于是长期用 `-Ci` 跳过，**唯一的实机一致性检查等于常年关闭**。真实情况是：
+> 本机 UMM 0.33 扫描的模组目录是 `<game>\UMMMods`（见 `UnityModManager\Log.txt` 的
+> `[Manager] Mods path:` 一行），而四个脚本各自把路径写死成了 `<game>\Mods\SpectreReplay`。
+> 于是部署脚本一直在写一个没人读的目录（空操作），比对也一直在查一个不存在的 dll。
+> 四处各写一份**就是这件事能发生的根因**，现在路径解析只剩 `tools\_gameroot.ps1` 一份：
+>
+> - 解析顺序：`-ModsRoot` 参数 → `SRM_MODS_ROOT` 环境变量 → `Mods` → `UMMMods` → 默认 `Mods`；
+> - 判据是「该目录下有至少一个 `*\Info.json`」，**不是「目录存在」**——本机 `Mods`
+>   目录是存在的、只是空的，只判存在会挑中一个空目录，症状与本 bug 一模一样；
+> - `deploy.ps1` / `verify.ps1` / `ffmpeg-probe.ps1` / `convert-probe.ps1` 全部点源引用它。
+>
+> 另：部署后若目录里残留 `SpectreReplay.dll.<pid>.cache*`，闸门现在会**告警**——
+> UMM 启动时优先加载那个缓存，缓存没清掉时"dll 已更新、游戏仍跑旧代码"是最难查的形态。
 
 > **控制台输出必须按 UTF-8 解码**，`verify.ps1` 开头已显式设置。
 > 2026-10-19 实测过一次：Windows PowerShell 5.1 用 OEM 码页（936/437）

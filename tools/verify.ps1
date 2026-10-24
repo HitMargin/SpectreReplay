@@ -174,9 +174,16 @@ Step '部署一致性' {
         Write-Host '  · CI 模式跳过：本机无 Steam 安装，比对没有意义'
         return
     }
+    # 模组目录不再硬编码 Mods：本机 UMM 实际扫的是 UMMMods，写死 Mods 会让
+    # 这一项永远报「线上 dll 不存在」，而 docs/verify.md 把它误读成
+    # 「本机从没部署过」→ 长期用 -Ci 跳过 → **唯一的实机一致性检查常年关闭**。
+    # 解析顺序与 deploy.ps1 同源（Mods → UMMMods），判据是「该目录真有模组」。
+    . (Join-Path $root 'tools\_gameroot.ps1')
+    $resolved = Get-SrmModsRoot
     $built = Join-Path $root 'SpectreReplay\bin\Release\SpectreReplay.dll'
-    $mod = 'D:\Program Files (x86)\Steam\steamapps\common\A Dance of Fire and Ice\Mods\SpectreReplay'
+    $mod = Join-Path $resolved.Root 'SpectreReplay'
     $live = Join-Path $mod 'SpectreReplay.dll'
+    Write-Host ('  · 模组目录：' + $resolved.Root + '（来源 ' + $resolved.Source + '）') -ForegroundColor DarkGray
     # 取最后一条**非空**输出：deploy.ps1 结尾是个空行，直接 -Last 1 会拿到
     # 它，看起来像"部署脚本啥也没干"。这里踩过一次，误以为部署失败。
     if (-not $SkipDeploy) {
@@ -202,9 +209,17 @@ Step '部署一致性' {
         $script:fail++
     } elseif (-not (Test-Path $live)) {
         Write-Host '  ✗ 线上 dll 不存在' -ForegroundColor Red
+        Format-SrmModsDiagnosis | ForEach-Object { Write-Host ('    ' + $_) -ForegroundColor DarkGray }
         $script:fail++
     } elseif ((Get-FileHash $built -Algorithm SHA256).Hash -eq (Get-FileHash $live -Algorithm SHA256).Hash) {
         Write-Host '  ✓ 线上 dll 与构建产物一致'
+        # UMM 启动时优先加载 <dll>.<pid>.cache。缓存清不掉的话，即便 dll 已经在
+        # 正确位置、hash 也对，游戏里跑的还是上一版——"改了没反应"最难查的形态。
+        $stale = @(Get-ChildItem -Path $mod -Filter 'SpectreReplay.dll.*.cache*' -ErrorAction SilentlyContinue)
+        if ($stale.Count -gt 0) {
+            Write-Host ('  ⚠ 部署目录残留 ' + $stale.Count + ' 个 UMM 缓存文件，游戏可能仍加载旧版本：') -ForegroundColor Yellow
+            $stale | ForEach-Object { Write-Host ('    ' + $_.Name) -ForegroundColor DarkGray }
+        }
     } else {
         Write-Host '  ✗ 线上 dll 与构建产物不一致（没部署？）' -ForegroundColor Red
         $script:fail++

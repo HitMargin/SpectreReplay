@@ -7,8 +7,13 @@
     ⑤ 整流 copy 失败时二次尝试（-c:a aac）能救回来
 #>
 $ErrorActionPreference = 'Stop'
-$ff = 'D:\Program Files (x86)\Steam\steamapps\common\A Dance of Fire and Ice\Mods\SpectreReplay\ffmpeg.exe'
-if (-not (Test-Path $ff)) { throw "ffmpeg not found: $ff" }
+# 同 ffmpeg-probe.ps1：位置交给 _gameroot.ps1 解析，不再写死 Mods 目录。
+. (Join-Path $PSScriptRoot '_gameroot.ps1')
+$ff = Get-SrmFfmpeg
+if (-not $ff) {
+    throw ("ffmpeg not found. 已查：模组目录、游戏根目录、PATH。" +
+        [Environment]::NewLine + (Format-SrmModsDiagnosis))
+}
 $work = Join-Path $env:TEMP 'srp_convert_probe'
 if (Test-Path $work) { Remove-Item $work -Recurse -Force }
 New-Item -ItemType Directory -Path $work -Force | Out-Null

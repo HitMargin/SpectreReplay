@@ -7,8 +7,15 @@
   任何一步非零退出都打印退出码与 stderr 尾部。
 #>
 $ErrorActionPreference = 'Stop'
-$ff = 'D:\Program Files (x86)\Steam\steamapps\common\A Dance of Fire and Ice\Mods\SpectreReplay\ffmpeg.exe'
-if (-not (Test-Path $ff)) { throw "ffmpeg not found: $ff" }
+# ffmpeg 位置与 VideoEncoder.LocateEncoder 同口径（模组目录 → 游戏根目录 → PATH）。
+# 原先写死 `<game>\Mods\SpectreReplay\ffmpeg.exe`，而本机 UMM 实际用的模组目录是
+# UMMMods ⇒ 第一句就 throw，这个"改编码参数后必跑"的验证手段长期不可用。
+. (Join-Path $PSScriptRoot '_gameroot.ps1')
+$ff = Get-SrmFfmpeg
+if (-not $ff) {
+    throw ("ffmpeg not found. 已查：模组目录、游戏根目录、PATH。" +
+        [Environment]::NewLine + (Format-SrmModsDiagnosis))
+}
 $work = Join-Path $env:TEMP 'srp_ffmpeg_probe'
 if (Test-Path $work) { Remove-Item $work -Recurse -Force }
 New-Item -ItemType Directory -Path $work | Out-Null
