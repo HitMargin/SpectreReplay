@@ -470,25 +470,25 @@ grep 全项目：`RegisterLazyPatches` / `ApplyLazyPatchesAsync` 只有定义、
    `Cancel()` 共用同一列表的事实一致。
 8. **`Patch_ConductorUpdate` / `Patch_CancelSaveKey` 的状态常量正确**：`States.cs:1-11` 的
    `Fail=5, Fail2=6, Won=7` 与 `Patch_Misc.cs:38-40` 完全一致。
-9. **`Patch_LightUp` 的 `hitMarginLimit` 换值不影响判定**：判定读点在 `scrPlanet.SwitchChosen:661`，而
-   `LightUp` 在 `MoveOneUnitInDirection` 里（`scrPlanet.cs:1196`），同一个 `Hit()` 里判定先于点亮，所以
-   换值只作用于 `scrFloor.cs:1212` 的砖块着色，不会改判。换值后 Finalizer 恢复 `StoredHitMarginLimit`，
-   与 `ReplayPlayer.Stop():51` 的最终值一致。
-   - **该字段兼作闪色开关，换值是有意为之而非「反正无害」**：`scrFloor.cs:1212` 判
-     `GCS.hitMarginLimit != HitMarginLimit.PerfectsOnly` 才调 `SetToRandomColor()`（`:1214`）。
-     Prefix 换成 `Persistence.hitMarginLimit`，就是让闪色跟随**观看者**当前档位；判定路径仍读录像档位。
-     两个需求取值相反，故换值范围必须缩到读开关那一小段，**不能**改成开播时夹一次——那样
-     `HitMarginHelper.IsCounted` / `ffxCheckpoint` 会整段读到玩家档位，准确率随玩家设置漂移。
-   - **副作用：成片闪色不确定**。`SetToRandomColor`（`scrFloor.cs:1451`）仅在
-     `vfx.tileFlashStyle == TileFlashStyle.Rando` 时用 `UnityEngine.Random.Range` 取色（`Christmas`
-     用 `conductor.beatNumber + seqID`，确定），且 `dontChangeMySprite` 早退；写成
-     `floorRenderer.color` / `topGlow.color` 后保留，影响截图/渲染。要成片确定就得像已删除的
-     `PlaybackClamps` 那样夹成 `PerfectsOnly`，与「闪色跟随玩家设置」不可兼得（`Patch_Misc.cs:109-115`）。
-   - **异常路径也已覆盖（已修）**：原本用 Postfix 还原，`LightUp` 抛异常时 Postfix 不执行，值会停在
-     玩家档位上；`scrPlanet.SwitchChosen:661` 的判定早于点亮，紧接着的下一拍就会按错严格度统计。
-     现改为 `PatchType.Finalizer`（`Patch_Misc.cs:132-137`），框架保证正常返回与异常逃逸都会跑；
-     异常原样 `return __exception` 放行，不吞不记日志。这是对上游 Spectre 的一处**刻意偏差**
-     （上游为 Prefix+Postfix），已在 `tools/port-diff-audit.ps1` 的 `$knownDeviations` 登记。
+9. **`Patch_LightUp` 已删除（2026-10-25），回放期间不再改写 `GCS.hitMarginLimit`**：原先照上游，
+   在 `scrFloor.LightUp()` 前后换成 `Persistence.hitMarginLimit`、结束还原 `StoredHitMarginLimit`。
+   删除依据是换值窗口内没有**可观测**的读点（两处读点要么在窗口之前，要么读到的效果被
+   紧接着的调用覆盖）：
+   - **判定**：读点（`HitMarginHelper.IsCounted` / `ffxCheckpoint`）在 `scrPlanet.SwitchChosen:661`，
+     先于点亮，全程读到的都是录像档位，准确率不会随玩家设置漂移；
+   - **闪色**：`LightUp()` 内部确实读这个字段（`scrFloor.cs:1212` 判 `!= PerfectsOnly` 才调
+     `SetToRandomColor()`），但这个读点**读到的效果被立刻丢掉**：`scrPlanet.cs:1194-1198` 是
+     `floor.LightUp();` 紧接 `floor.SetToRandomColor();`，第二次调用无条件执行，且每次都重新
+     `UnityEngine.Random.Range` 取色（`scrFloor.cs:1457-1460`），把前一次的结果直接覆盖掉；
+     `OnBeat()`（`scrFloor.cs:1436-1438`）每拍还会对已点亮的砖再随机一次，跨拍也留不住。
+     所以换值窗口里这个读点存在、但观测不到；
+   - 唯一还能被换值影响的是第三方扩展点在窗口内读该字段（`OnLandOnPortal` / `HitFloor` 等），
+     那不是回放补丁该替别人决定的值。
+   相应地，`tools/port-diff-audit.ps1` 里 `PatchType.Finalizer` / `__exception` 的登记已一并删除。
+   **遗留（与本次删除无关）**：`SetToRandomColor`（`scrFloor.cs:1451`）在默认
+   `vfx.tileFlashStyle == TileFlashStyle.Rando` 时用 `UnityEngine.Random.Range` 取色，成片闪色
+   本来就不确定。要确定得像已删除的 `PlaybackClamps` 那样在**整段回放**期间接管闪色渲染，
+   不是 `LightUp` 这一小段能解决的，不在本补丁范围内。
 10. **`CursorTrackSampler` 纯函数边界正确**：空轨迹返回 false；首前/尾后夹取；二分不变量
     `track[lo] <= pos < track[hi]` 成立；`span <= 0` 有除零兜底（`:49-54`）。
 11. **`ReplayManager.SaveReplayNew` 的截断保护正确**：`opened` 只在 `FileStream` 构造**之后**置真

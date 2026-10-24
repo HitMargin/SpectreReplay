@@ -47,7 +47,7 @@ foreach ($f in $files) {
 $whitelistClass = @(
     'Patch_WipeToBlack','Patch_SwitchToEditMode','Patch_Restart','Patch_QuitToMainMenu',
     'Patch_StartRewind','Patch_TogglePauseGame','Patch_ConductorUpdate','Patch_CancelSaveKey',
-    'Patch_MarkFail','Patch_LightUp','Patch_UpdateFreeroam','Patch_Won_Update',
+    'Patch_MarkFail','Patch_UpdateFreeroam','Patch_Won_Update',
     'Patch_PlayerControlUpdate','Patch_HoldKeysCrashGuard','Patch_Fail2Action',
     'Patch_OnLandOnPortal','Patch_Hit','Patch_UpdateInputConsumeAsync',
     'Patch_RenderClockConductor','Patch_RenderClockAsyncPosition','Patch_VideoPinSet',

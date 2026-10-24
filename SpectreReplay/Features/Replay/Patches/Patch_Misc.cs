@@ -96,47 +96,6 @@ internal static class Patch_MarkFail
     }
 }
 
-// ——— scrFloor.LightUp ———————————————————————————————————————
-// **为什么在 LightUp 前后夹一次 GCS.hitMarginLimit。** scrFloor.LightUp
-// （Assembly-CSharp/scrFloor.cs:1201）第 1212 行：
-//     if (GCS.hitMarginLimit != HitMarginLimit.PerfectsOnly) SetToRandomColor();
-// 这个设置除了判定严格度，还决定地板点亮时**是否走随机闪色**。回放期间
-// GCS.hitMarginLimit 被占成录像录制时的档位（StoredHitMarginLimit）；但闪色
-// 属于「此刻观看的人」的观感，与录像录在哪个档位无关，所以这里临时换回玩家
-// 自己在设置菜单里的选择（Persistence.hitMarginLimit），出 LightUp 立即还原，
-// 保证判定路径读到的仍是录像档位（IsCounted / ffxCheckpoint 都不受影响）。
-//
-// **已知副作用（是取舍，不是漏改）。** SetToRandomColor（scrFloor.cs:1451）只在
-// vfx.tileFlashStyle == TileFlashStyle.Rando 时用 UnityEngine.Random.Range 取色；
-// 于是玩家档位不是 PerfectsOnly 时，同一份回放两次渲染的砖块闪色不同——成片
-// 不确定。旧自研引擎的做法相反：_legacy_srp/Playback/PlaybackClamps.cs 把这里
-// **夹成 PerfectsOnly**，直接跳过随机；该文件已随 4f6d561 整体删除，本类是移植
-// Spectre 时带来的实现（f96aa86），未保留该做法。要「渲染确定」就得放弃「闪色
-// 与玩家当前设置一致」，属产品取向，见 docs/SPECTRE_COMPARISON.md 的对应条目。
-//
-// **还原为什么用 Finalizer 而不是 Postfix。** LightUp 抛异常（或别的 mod 的
-// Prefix 返回 false 把原方法短路掉）时 Postfix 不执行，GCS.hitMarginLimit 就
-// 停在玩家档位上；而判定读点 scrPlanet.SwitchChosen:661 在同一个 Hit() 里早于
-// 点亮，于是紧接着的**下一拍**会按错的严格度统计一次。Finalizer 无论正常返回
-// 还是异常逃逸都会跑：先还回录像档位，再把异常原样放行。这里不能像
-// Patch_HoldKeysCrashGuard 那样吞异常——LightUp 抛出代表画面状态没走完，
-// 悄悄咽下会改变游戏的失败/中断语义，只做「还值」这件事。
-internal class Patch_LightUp
-{
-    [SpectrePatch(typeof(scrFloor), "LightUp", PatchType.Prefix, Feature = FeatureKeys.Replay)]
-    internal static void Prefix()
-    {
-        if (is_playing) GCS.hitMarginLimit = Persistence.hitMarginLimit;
-    }
-
-    [SpectrePatch(typeof(scrFloor), "LightUp", PatchType.Finalizer, Feature = FeatureKeys.Replay)]
-    internal static Exception Finalizer(Exception __exception)
-    {
-        if (is_playing) GCS.hitMarginLimit = StoredHitMarginLimit;
-        return __exception;
-    }
-}
-
 // ——— scrController.UpdateFreeroam ——————————————————————————
 internal static class Patch_UpdateFreeroam
 {
