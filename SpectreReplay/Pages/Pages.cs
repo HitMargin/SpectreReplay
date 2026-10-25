@@ -177,7 +177,7 @@ namespace SpectreReplay.Pages
                     Commit();
                     // 建表是**启动时**做的（Settings.check），关掉/打开后必须
                     // 立刻重建，否则开关看着变了、实际映射还是旧的。
-                    Settings.key_convert_list2array();
+                    Settings.BuildKeyCodeConvertTable();
                 });
                 if (!KeyConvertEnabled)
                 {
@@ -191,7 +191,7 @@ namespace SpectreReplay.Pages
                 OnGui.Row("record.keymap.limit", LimitKey, v =>
                 {
                     LimitKey = v;
-                    Settings.key_convert_list2array();   // 不重建就当场不生效
+                    Settings.BuildKeyCodeConvertTable();   // 不重建就当场不生效
                     Commit();
                 });
                 OnGui.Note("record.keymap.note");
@@ -264,13 +264,13 @@ namespace SpectreReplay.Pages
         ///
         /// **两步都不能省**：只序列化不建表 ⇒ 界面显示变了、实际映射还是旧的；
         /// 只建表不序列化 ⇒ 当场生效、下次启动全部丢失。
-        /// 与上游 ApplyRemapChange 的顺序一致（先写 JSON 再 key_convert_list2array）。
+        /// 与上游 ApplyRemapChange 的顺序一致（先写 JSON 再 BuildKeyCodeConvertTable）。
         /// </summary>
         private static void ApplyKeyRemap()
         {
             KeyCodeConvert = Newtonsoft.Json.JsonConvert.SerializeObject(
                 Settings.key_code_convert_list, Newtonsoft.Json.Formatting.Indented);
-            Settings.key_convert_list2array();   // 这一步不能省：只写 JSON 不重建表，本次会话内映射仍是旧的
+            Settings.BuildKeyCodeConvertTable();   // 这一步不能省：只写 JSON 不重建表，本次会话内映射仍是旧的
             Commit();
         }
 

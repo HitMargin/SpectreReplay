@@ -32,7 +32,7 @@ public static class Settings
     ///
     /// 默认 <c>false</c>：它会让大量按键**静默失效**，必须是玩家自己选的。
     /// 与 <see cref="KeyConvertEnabled"/> 一样，改动后要调
-    /// <see cref="key_convert_list2array"/> 重建表，否则当场不生效。
+    /// <see cref="BuildKeyCodeConvertTable"/> 重建表，否则当场不生效。
     /// </summary>
     public static bool LimitKey = false;
     public static bool GetDataFromAsyncInput = false;
@@ -293,7 +293,21 @@ public static class Settings
 
     // —— 启动归一化 / 键表构建 ————————————————————————
 
-    internal static void key_convert_list2array()
+    /// <summary>
+    /// 把 <see cref="key_code_convert_list"/> 这张「码位 → 目标键」的对照表展开成
+    /// 256 项查找表 <see cref="key_code_convert"/>，供录制/回放每帧按码位索引。
+    ///
+    /// 三种末态：
+    ///   · 功能关闭 → 恒等表（num → num），等于不改写任何键；
+    ///   · 功能开启 → 表内条目取映射值，表外按 <see cref="LimitKey"/> 决定
+    ///     「不模拟(0)」还是恒等；
+    ///   · 中间态 0xFFFF 只是「尚未赋值」的哨兵，返回前保证被消干净（见方法末尾）。
+    ///
+    /// 名字用 PascalCase 并直述行为。原名 <c>BuildKeyCodeConvertTable</c> 是上游
+    /// Spectre 的 snake_case 写法，改名属纯标识符重构（wire 与行为未动）；
+    /// port-diff 的 $renameFold 已登记折回，移植比对不受影响。
+    /// </summary>
+    internal static void BuildKeyCodeConvertTable()
     {
         key_code_convert = new ushort[256];
 
@@ -360,8 +374,8 @@ public static class Settings
             key_code_convert_list ??= new List<KeyValuePair<ushort, ushort>>();
         }
         checklang();
-        key_convert_list2array();
-        // 这里不能有 `== 0xFFFF → num` 的兜底：key_convert_list2array 已保证末态
+        BuildKeyCodeConvertTable();
+        // 这里不能有 `== 0xFFFF → num` 的兜底：BuildKeyCodeConvertTable 已保证末态
         // 没有 0xFFFF（限制模式填 0、否则填恒等），多一道会把「0 = 不模拟」
         // 整个盖成恒等映射。
         SpectreState.save_button = (KeyCode)SaveButton;

@@ -162,7 +162,7 @@ namespace UiPreview
                 new[] { "record.changedir" });
             // ⑪c 键位重映射必须有界面入口。**与 ⑨/⑪ 同族，且是最严重的一例**：
             //   Settings 有 KeyConvertEnabled / KeyCodeConvert 两个字段、ConfigManager
-            //   落盘、key_convert_list2array 真的在建映射表、回放与录制两侧都按它
+            //   落盘、BuildKeyCodeConvertTable 真的在建映射表、回放与录制两侧都按它
             //   换算 VK——链路完全通，而设置页里**一行都没有**。
             //   settings-ui-audit.ps1 把这两项判为「无界面但被消费」。
             //
@@ -174,7 +174,7 @@ namespace UiPreview
             //   合成一条会把界面键往 Settings.cs 上套，永远红。
             fail += Check(projectRoot, "⑪c 键位重映射有定义、有运行时建表",
                 new[] { "State\\Settings.cs" },
-                new[] { "KeyConvertEnabled", "KeyCodeConvert", "key_convert_list2array" });
+                new[] { "KeyConvertEnabled", "KeyCodeConvert", "BuildKeyCodeConvertTable" });
             // ⑪d 界面必须真的画了这张表，而不是只放一个总开关。
             //
             // **不能用 Check(...) 查子串**：`DrawKeyRemapList` 既是方法名也是
@@ -370,7 +370,7 @@ namespace UiPreview
             //    **这一段此前是「必须保持删除」**（2026-10-19）。删它的理由是它当时
             //    确实是假开关，而且假得很彻底：
             //      · 文案声称"限制单局记录的按键数量"，而全仓没有收按键盘数的代码；
-            //      · Settings.LimitKey 唯一的消费点是 key_convert_list2array 的
+            //      · Settings.LimitKey 唯一的消费点是 BuildKeyCodeConvertTable 的
             //        `!LimitKey ||` 前置条件，而该方法末尾还有一条
             //        `== 0xFFFF → num` 兜底循环把表整个重填一遍——开关真假只改
             //        中间态，末态**逐字节相同**。
@@ -384,7 +384,7 @@ namespace UiPreview
             //    并删掉那两道会把它盖掉的兜底循环。于是判据也要反过来：
             //    不再查"有没有这个字段"，而是查**它是否真的改变末态**。
             //
-            //    判据必须查末态：`key_convert_list2array` 里必须出现
+            //    判据必须查末态：`BuildKeyCodeConvertTable` 里必须出现
             //    `LimitKey ? ... : num` 这个三元（而不是只在前置条件里出现）。
             fail += CheckPredicate(projectRoot, "⑰b 「只模拟列表中的键」必须真的改变映射表末态（不能只改中间态）",
                 "State\\Settings.cs", LimitKeyChangesFinalState);
@@ -844,7 +844,7 @@ namespace UiPreview
             string body = MethodBody(code, "ApplyKeyRemap");
             if (body == null) return false;
             return body.Contains("KeyCodeConvert = ", StringComparison.Ordinal)
-                && body.Contains("key_convert_list2array", StringComparison.Ordinal)
+                && body.Contains("BuildKeyCodeConvertTable", StringComparison.Ordinal)
                 && body.Contains("Commit(", StringComparison.Ordinal);
         }
 
@@ -1161,7 +1161,7 @@ namespace UiPreview
 
         private static bool LimitKeyChangesFinalState(string code)
         {
-            string body = MethodBody(code, "key_convert_list2array");
+            string body = MethodBody(code, "BuildKeyCodeConvertTable");
             if (body == null) return false;
             return body.Contains("LimitKey ?", StringComparison.Ordinal)
                 && body.Contains("(ushort)0", StringComparison.Ordinal);
@@ -1170,11 +1170,11 @@ namespace UiPreview
         /// <summary>
         /// 映射表构建之后不得再有把「未赋值」重写成「恒等」的兜底循环。
         ///
-        /// 那两道循环（`key_convert_list2array` 末尾与 `check()` 里各一条）
+        /// 那两道循环（`BuildKeyCodeConvertTable` 末尾与 `check()` 里各一条）
         /// 是 <c>LimitKey</c> 曾经彻底失效的**唯一原因**：限制模式把表外的键写成 0
         /// （不模拟），兜底随即把它们逐项改回 num（恒等），末态与不限制时逐字节相同。
         ///
-        /// 现在 `key_convert_list2array` 自己保证末态没有 0xFFFF，
+        /// 现在 `BuildKeyCodeConvertTable` 自己保证末态没有 0xFFFF，
         /// 因此这个写法在任何地方都不该再出现。
         /// </summary>
         private static bool NoIdentityFallbackAfterBuild(string code)

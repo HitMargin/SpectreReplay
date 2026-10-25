@@ -995,11 +995,11 @@ switch ($Which) {
     'MUT-V16' {
         # ⑰f 把兜底循环加回 check()：映射表刚建好就被逐项改回恒等。
         #
-        #    这是 LimitKey 历史上失效的**另一半**根因（key_convert_list2array
+        #    这是 LimitKey 历史上失效的**另一半**根因（BuildKeyCodeConvertTable
         #    内部那道已经删了，这一道在启动路径上）。只改一处不够——两道只要
         #    活着一道，限制模式就会被整个盖掉。
         Backup 'State\Settings.cs'
-        ReplaceExact 'State\Settings.cs' '        key_convert_list2array();' '        key_convert_list2array();`n        for (ushort num = 0; num < 256; num++)`n        {`n            if (key_code_convert[num] == 0xFFFF)`n                key_code_convert[num] = num;`n        }'
+        ReplaceExact 'State\Settings.cs' '        BuildKeyCodeConvertTable();' '        BuildKeyCodeConvertTable();`n        for (ushort num = 0; num < 256; num++)`n        {`n            if (key_code_convert[num] == 0xFFFF)`n                key_code_convert[num] = num;`n        }'
     }
     'MUT-PIN1' {
         # ① 撤销失败时把 detour 一起丢掉（原实现的形状）。
@@ -1736,7 +1736,7 @@ switch ($Which) {
         # 界面显示改了、JSON 也写了，但本次会话内 key_code_convert 仍是旧值——
         # 现象是「改完当场不生效，重启才生效」，玩家会以为是自己没保存。
         Backup 'Pages\Pages.cs'
-        ReplaceExact 'Pages\Pages.cs' '            Settings.key_convert_list2array();   // 这一步不能省：只写 JSON 不重建表，本次会话内映射仍是旧的' '            // （变异：故意不重建运行时映射表）'
+        ReplaceExact 'Pages\Pages.cs' '            Settings.BuildKeyCodeConvertTable();   // 这一步不能省：只写 JSON 不重建表，本次会话内映射仍是旧的' '            // （变异：故意不重建运行时映射表）'
     }
     'MUT-KM3' {
         # ⑰g 把显示层改回「再过一次正向映射表」——历史上的真实写法。
