@@ -87,7 +87,7 @@ Version 3 writes the iteration count into the header so it can be tuned later wi
 
 The compressor is versioned independently of the container: the wrapper's first byte names the algorithm (raw / gzip / Brotli), and a payload whose first byte is `0x1F` is treated as a bare gzip stream from the pre-wrapper layout. That older layout is still read, because replays written before Brotli was introduced carry it.
 
-The read path accepts only this container. Replays recorded by upstream Spectre with its own fixed-key format, and replays saved by this mod before the 2026-10-18 rewrite, are **not readable** — that compatibility fallback was removed deliberately, since a decryption routine compiled into the DLL keeps the key right next to the lock.
+The read path accepts only this container. Two older layouts are **not readable** — replays saved by this mod before the 2026-10-18 encryption rewrite, and the older fixed-key format of the project this one derives from — because that compatibility fallback was removed deliberately: a decryption routine compiled into the DLL keeps the key right next to the lock.
 
 Keeping the payload compact matters beyond file size: the recorder runs on the main thread during gameplay, so the per-frame cost is bounded and the file stays small enough to keep hundreds of runs.
 

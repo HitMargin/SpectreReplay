@@ -28,14 +28,14 @@ The whole UI is self-drawn and follows the game's language — **all 14 supporte
 
 **Rendering needs ffmpeg**: place `ffmpeg.exe` in the mod folder, the game root, or somewhere on PATH. Recording and playback do not need it.
 
-**Compatibility**: game r150 (2.7.0) · Unity 6000.3.25f1 · standalone, does not require Spectre (both can run together).
+**Compatibility**: game r150 (2.7.0) · Unity 6000.3.25f1 · standalone, no other mod required.
 
 ---
 
 ## Worth knowing
 
 - With "game screen" as the frame source, **collapse the mod window** while rendering or it will be captured.
-- Only replays recorded by this mod can be read. Upstream Spectre's older format cannot — that compatibility fallback amounted to leaving the key next to the lock, so it was deliberately removed.
+- Only replays recorded by this mod can be read; other formats will not open.
 - After turning effect removal off, the loaded level is still the stripped version in memory; saving is blocked with a message, and **re-entering the level** restores the original.
 
 ---
