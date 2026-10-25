@@ -28,7 +28,7 @@ The whole UI is self-drawn and follows the game's language — **all 14 supporte
 
 **Rendering needs ffmpeg**: place `ffmpeg.exe` in the mod folder, the game root, or somewhere on PATH. Recording and playback do not need it.
 
-**Compatibility**: game r150 (2.7.0) · Unity 6000.3.25f1 · standalone, no other mod required.
+**Compatibility**: game 3.4.0 (build r150) · Unity 6000.3.25f1 · standalone, no other mod required.
 
 ---
 

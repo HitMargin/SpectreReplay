@@ -121,7 +121,7 @@ The mixdown capture is started when the render job starts and stopped when it en
 ## Tech stack
 
 - **C# / .NET Standard 2.1** for the mod assembly — the target the game's Mono runtime loads.
-- **Unity 6000.3.25f1**, game build **r150**, **UnityModManager 0.33**.
+- **Unity 6000.3.25f1**, game **3.4.0** (build **r150**), **UnityModManager 0.33**.
 - **Harmony** for runtime method patching, including transpilers.
 - **Self-drawn IMGUI** for the whole settings UI: rounded nine-slice background textures, custom sliders, toggles and text fields — no stock controls.
 - **ffmpeg** as an external encoder, distributed with the mod: libx264 for CPU encoding, with hardware (NVENC) fallback when available.
