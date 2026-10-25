@@ -38,14 +38,28 @@ if ($running) { throw 'game is running, close it before deploying' }
 
 New-Item -ItemType Directory -Path $modDir -Force | Out-Null
 
-# UMM 会在进程启动时把加载过的 dll 缓存成 <name>.dll.<pid>.cache，
-# 下次启动优先用那份缓存。**不删它的话，游戏里跑的一直是几轮之前的
-# 旧代码**——部署看起来成功，改动却毫无反应。
-# 曾因此误判成"改了没效果"，白查了两天。
+# 顺手清掉模组目录里的 <name>.dll.<pid>.cache*。
+#
+# **旧注释在这里写错了，2026-10-25 实测更正。** 它原来说「UMM 启动时把加载过的
+# dll 缓存成 .cache，下次优先用那份缓存；不删就一直跑几轮之前的旧代码」——
+# 这个结论站不住，三条证据：
+#   ① UnityModManager.dll 里没有任何 ".cache" 字符串（只有反射用的 mCache /
+#      fieldInfoCache），UTF-16 格式串里也找不到拼这个文件名的痕迹；
+#   ② 实测 9 个模组的 .cache 与对应 dll **逐字节相同**（SHA256 一致）、
+#      LastWriteTime 也相同——它是 dll 的完整副本，不是"更早的版本"；
+#   ③ Spectre.dll 与 Spectre.dll.<pid>.cache 的 PE 时间戳相同。
+# 所以即便真有谁去读 .cache，读到的也是同一份字节，行为不会有差别。
+# 生成者至今没定位到（version.dll / 0Harmony / UMM 里都没有对应逻辑，
+# 可能来自带 bootstrap 的第三方 loader），但那是另一个问题。
+#
+# 那为什么还留着这段删除？因为这些文件是纯冗余副本——删掉只会省空间，
+# 不会改变任何加载行为。**别再把它当成"修了没效果"的解释**：那个现象的真因
+# 通常更朴素（dll 没覆盖成功 / 游戏没重启 / 部署到了加载器不扫描的目录，
+# 后者见 tools\_gameroot.ps1 开头那次事故）。
 Get-ChildItem -Path $modDir -Filter "$([System.IO.Path]::GetFileName($dll)).*.cache*" -ErrorAction SilentlyContinue |
     ForEach-Object {
         Remove-Item $_.FullName -Force
-        Write-Output "removed stale cache: $($_.Name)"
+        Write-Output "removed redundant cache copy: $($_.Name)"
     }
 
 Copy-Item $dll (Join-Path $modDir 'SpectreReplay.dll') -Force

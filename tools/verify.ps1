@@ -213,13 +213,11 @@ Step '部署一致性' {
         $script:fail++
     } elseif ((Get-FileHash $built -Algorithm SHA256).Hash -eq (Get-FileHash $live -Algorithm SHA256).Hash) {
         Write-Host '  ✓ 线上 dll 与构建产物一致'
-        # UMM 启动时优先加载 <dll>.<pid>.cache。缓存清不掉的话，即便 dll 已经在
-        # 正确位置、hash 也对，游戏里跑的还是上一版——"改了没反应"最难查的形态。
-        $stale = @(Get-ChildItem -Path $mod -Filter 'SpectreReplay.dll.*.cache*' -ErrorAction SilentlyContinue)
-        if ($stale.Count -gt 0) {
-            Write-Host ('  ⚠ 部署目录残留 ' + $stale.Count + ' 个 UMM 缓存文件，游戏可能仍加载旧版本：') -ForegroundColor Yellow
-            $stale | ForEach-Object { Write-Host ('    ' + $_.Name) -ForegroundColor DarkGray }
-        }
+        # 这里原有一条「.cache 残留 ⇒ 游戏可能仍加载旧版本」的告警，2026-10-25
+        # 实测证明前提是错的，已移除：9 个模组的 .cache 与对应 dll 逐字节相同，
+        # 且 UnityModManager.dll 里没有任何 ".cache" 字符串。
+        # 详见 tools\deploy.ps1 里那段更正说明。真正的「改了没反应」通常是
+        # 部署目录不对（tools\_gameroot.ps1）或游戏没重启。
     } else {
         Write-Host '  ✗ 线上 dll 与构建产物不一致（没部署？）' -ForegroundColor Red
         $script:fail++
