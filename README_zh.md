@@ -119,7 +119,7 @@ Unity 的 `AudioRenderer` 从采集环形缓冲里消费的样本数，**就等�
 ## 技术栈
 
 - **C# / .NET Standard 2.1** —— 模组程序集的目标框架，即游戏 Mono 运行时能加载的那一档。
-- **Unity 6000.3.21f1**、游戏 **r150**、**UnityModManager 0.33**。
+- **Unity 6000.3.25f1**、游戏 **r150**、**UnityModManager 0.33**。
 - **Harmony** 做运行时方法补丁，含 Transpiler。
 - **IMGUI 全自绘**设置界面：圆角九宫格底图、自绘滑条、开关与输入框——没有一个是原生控件。
 - **ffmpeg** 作为外部编码器随模组分发：CPU 编码走 libx264，探到硬件编码器（NVENC）时回退可用。
@@ -127,7 +127,7 @@ Unity 的 `AudioRenderer` 从采集环形缓冲里消费的样本数，**就等�
 
 ## 构建与安装
 
-需要：.NET SDK（7.0 及以上；测试套件目标为 `net10.0-windows`），以及已安装游戏的托管程序集。
+需要：.NET SDK **10.0 及以上**（解决方案文件 `SpectreReplay.slnx` 与 `net10.0-windows` 测试套件都要求 SDK 10），以及已安装游戏的托管程序集。
 
 1. 把游戏的托管程序集（`Assembly-CSharp.dll`、`UnityEngine.*.dll`、`0Harmony.dll`、`UnityModManager.dll`、`Newtonsoft.Json.dll` 等）放进本仓库旁边的 `adofai-libs` 目录——项目文件就在那里找它们。它们以 `Private=false` 引用，绝不会被拷进构建输出。
 2. 构建：

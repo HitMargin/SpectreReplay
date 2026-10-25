@@ -119,7 +119,7 @@ The mixdown capture is started when the render job starts and stopped when it en
 ## Tech stack
 
 - **C# / .NET Standard 2.1** for the mod assembly — the target the game's Mono runtime loads.
-- **Unity 6000.3.21f1**, game build **r150**, **UnityModManager 0.33**.
+- **Unity 6000.3.25f1**, game build **r150**, **UnityModManager 0.33**.
 - **Harmony** for runtime method patching, including transpilers.
 - **Self-drawn IMGUI** for the whole settings UI: rounded nine-slice background textures, custom sliders, toggles and text fields — no stock controls.
 - **ffmpeg** as an external encoder, distributed with the mod: libx264 for CPU encoding, with hardware (NVENC) fallback when available.
@@ -127,7 +127,8 @@ The mixdown capture is started when the render job starts and stopped when it en
 
 ## Build and install
 
-Requirements: the .NET SDK (7.0 or newer; the test harness targets `net10.0-windows`), and the managed assemblies of the installed game.
+Requirements: the .NET SDK **10.0 or newer** (the solution file `SpectreReplay.slnx` and the
+`net10.0-windows` test harness both require SDK 10), and the managed assemblies of the installed game.
 
 1. Place the game's managed assemblies (`Assembly-CSharp.dll`, `UnityEngine.*.dll`, `0Harmony.dll`, `UnityModManager.dll`, `Newtonsoft.Json.dll`, …) in a folder named `adofai-libs` next to this repository — that is where the project file expects them. They are referenced with `Private=false`, so they are never copied into the build output.
 2. Build:
