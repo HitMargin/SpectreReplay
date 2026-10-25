@@ -2,15 +2,17 @@
 
 **English** | [简体中文](README_zh.md)
 
-Replay recording, replay playback and video rendering for *A Dance of Fire and Ice* — record as you play, no re-run needed.
+Replay recording, replay playback and video rendering for *A Dance of Fire and Ice* — it records automatically as you play, and both playback and rendering happen inside the game.
 
-SpectreReplay is a UnityModManager mod (mod id `com.spectre.replay`). It records every run while you play it, plays the recording back inside the live game, and renders a replay to a video file with the audio track included. Nothing is re-simulated behind your back: playback and rendering both run on the game itself, so what you see is what the game produced.
+SpectreReplay is a UnityModManager mod (mod id `com.spectre.replay`). While you play normally it records that run's keypresses and judgements; afterwards the recording can be played back inside the game exactly as it happened, or rendered to a video file with the audio track included. Nothing is re-simulated behind your back: playback and rendering both run on the game itself, so what you see is what the game produced.
+
+> **On "do I have to play the level again?"** Recording it: **no** — keep the mod on and play normally, and the file is already there. Playback and rendering: **yes** — a replay starts when you restart its level, and a render walks the replay through the level again frame by frame to capture it. That is deliberate (see *Video render* below), not a limitation.
 
 ## Features
 
 ### Recording
 
-- **Records while you play.** You do not have to replay a level to capture it — the recorder is armed before you start and collects from the first frame of the run.
+- **Records automatically while you play.** Nothing to start, and no separate run of the level to capture it — the recorder is armed before you enter and collects from the first frame of the run.
 - **Saves automatically.** A completed run is written to disk on its own; nothing to click.
 - **Manual save.** A hotkey saves the current run mid-level, including the runs you abandon on purpose.
 - **Cancel save.** Another hotkey drops the run being recorded — for warm-ups and retries you do not want in the folder.

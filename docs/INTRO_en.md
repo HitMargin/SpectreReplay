@@ -1,18 +1,18 @@
 # SpectreReplay
 
-**Record as you play. No need to re-run the level.**
+**Records automatically as you play. Playback and rendering both happen inside the game.**
 
-A recording / playback / video-render mod for *A Dance of Fire and Ice*. Leave it on and play normally — the replay is already on disk the moment you clear the level. No second attempt just to have a capture.
+A recording / playback / video-render mod for *A Dance of Fire and Ice*. Leave it on and play normally — the replay is already on disk the moment you clear the level, with nothing extra to do on your part.
 
-Neither playback nor rendering is a re-enactment: both run on the game itself, so the frames are the game's own output and the hits are judged by the game. A replay looks **identical** to the run, not merely similar.
+To watch it back or produce a video, the replay is then played through inside the game: the frames are the game's own output and the hits are judged by the game, so it looks **identical** to the run rather than merely similar.
 
 ---
 
 ## What it does
 
-- **Recording** — capture while you play; auto-saves on clear. F9 saves by hand, another hotkey discards the run you don't want. Filter what gets kept (full clears only / skip runs with a miss / also save on failure), keep backups, and optionally record the tap keysounds.
-- **Playback** — replays in-game exactly as it happened, and can jump straight to the level it came from. Expand a file for song, difficulty, BPM, Accuracy, the full judgement spread and a per-hit timing chart.
-- **Rendering** — frame-by-frame capture into a video with audio. Two frame sources (clean camera / game screen), four containers (mp4 / mkv / webm / mov), CPU or GPU encoding, four quality tiers. Also batch-converts existing videos.
+- **Recording** — records the run's keypresses and judgements as you play; auto-saves on clear. F9 saves by hand, another hotkey discards the run you don't want. Filter what gets kept (full clears only / skip runs with a miss / also save on failure), keep backups, and optionally record the tap keysounds.
+- **Playback** — replays in-game exactly as it happened (it starts when you restart that level), and can jump straight to the level it came from. Expand a file for song, difficulty, BPM, Accuracy, the full judgement spread and a per-hit timing chart.
+- **Rendering** — walks the replay through the level again, capturing it frame by frame into a video with audio. Two frame sources (clean camera / game screen), four containers (mp4 / mkv / webm / mov), CPU or GPU encoding, four quality tiers. Also batch-converts existing videos.
 - **Effect removal** — strips filters, particles, decorations, camera moves, track animations and more, all at decode time and per category. In-memory only; the chart file on disk is untouched.
 - **Key remapping** — map the codes your controller or macro keyboard sends onto the keys the game expects.
 
