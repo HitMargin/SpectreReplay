@@ -599,7 +599,7 @@ public class AudioRecorder : MonoBehaviour
         // 不加锁时它可能在 fileStream.CanWrite 检查通过之后、Write 之前被关掉，
         // 采集线程就撞 ObjectDisposedException。CloseFileStreamQuietly 内部已加锁并二次判空。
         CloseFileStreamQuietly();
-        if (recordingClip != (UnityEngine.Object)null)
+        if (recordingClip != null)
         {
             if (processingThread == null || !processingThread.IsAlive)
             {

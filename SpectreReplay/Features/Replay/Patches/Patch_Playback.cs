@@ -59,7 +59,7 @@ internal class Patch_PlayerControlUpdate
     [SpectrePatch(typeof(scrController), "Checkpoint_Update", PatchType.Postfix, Feature = FeatureKeys.Replay)]
     internal static void Postfix(scrController __instance)
     {
-        if (__instance == (UnityEngine.Object)null) return;
+        if (__instance == null) return;
 
         if (is_recording && Settings.KeybdSoundRecordActive
             && !AudioRecorder.Instance.IsRecording

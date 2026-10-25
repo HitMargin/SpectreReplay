@@ -7,7 +7,6 @@ using SpectreReplay.Features.Compat;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using SpectreReplay.API;
-using Object = UnityEngine.Object;
 using static SpectreReplay.SpectreState;
 using static SpectreReplay.Features.Replay.ReplayKeys;
 
@@ -69,7 +68,7 @@ internal static class Patch_Hit
                 OverloadCounter = player.failBar.overloadCounter,
                 NoFailHit = controller.noFailInfiniteMargin,
                 IsAuto = isAuto,
-                NextFloorAuto = nextfloor != (Object)null && nextfloor.auto,
+                NextFloorAuto = nextfloor != null && nextfloor.auto,
                 CachedAngle = controller.chosenPlanet.angle,
                 TargetExitAngle = controller.chosenPlanet.targetExitAngle,
                 MidspinInfiniteMargin = player.midspinInfiniteMargin,
