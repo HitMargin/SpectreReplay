@@ -765,9 +765,29 @@
   "en": "Replays"
  },
  {
-  "key": "playback.files.truncated",
-  "zh": "列表只显示最近的一部分回放；还有 {0} 份较早的没有列出，它们仍在回放目录里。",
-  "en": "Only the most recent replays are listed; {0} older ones are not shown but remain in the replay folder."
+  "key": "playback.search",
+  "zh": "搜索",
+  "en": "Search"
+ },
+ {
+  "key": "playback.search.tip",
+  "zh": "按文件名筛选下面的列表。不区分大小写，输入即生效；Esc 清空。",
+  "en": "Filters the list below by file name. Case-insensitive, applied as you type; Esc clears it."
+ },
+ {
+  "key": "playback.search.empty",
+  "zh": "按文件名筛选…",
+  "en": "Filter by file name…"
+ },
+ {
+  "key": "playback.search.clear",
+  "zh": "清除",
+  "en": "Clear"
+ },
+ {
+  "key": "playback.search.nomatch",
+  "zh": "没有文件名匹配「{0}」的回放。",
+  "en": "No replay file names match \"{0}\"."
  },
  {
   "key": "playback.replay",

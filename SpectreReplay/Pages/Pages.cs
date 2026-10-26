@@ -44,6 +44,15 @@ namespace SpectreReplay.Pages
         private static int _replayCacheTick = int.MinValue;
 
         /// <summary>
+        /// 回放列表的搜索框。
+        ///
+        /// **只影响「列表显示哪些」，不落盘、不进 Settings。** 它是一个视图状态：
+        /// 存进配置的话，玩家上次筛了个词、下次开游戏列表就是空的，而界面上
+        /// 那个输入框可能还在视口外——看起来就是「回放全没了」。
+        /// </summary>
+        private static readonly TextField _replaySearch = new TextField();
+
+        /// <summary>
         /// 正在等第二次点击确认删除的那个文件（空 = 没有待确认的删除）。
         ///
         /// **删除只能两段式**：第一下把按钮变成「确认删除」并把路径记在这里，
@@ -334,21 +343,35 @@ namespace SpectreReplay.Pages
                     OnGui.Note("playback.empty");
                     return;
                 }
+                // 搜索框在**滚动区外面**：它决定「列表显示哪些」，跟着列表一起
+                // 滚出视野的话，每次改筛选词都得先把列表滚回顶部。
+                DrawReplaySearch();
+                var listed = FilterReplays(files);
+                if (listed.Count == 0)
+                {
+                    // 有回放、但都被筛掉了：必须说清是「筛掉了」而不是「没有」，
+                    // 否则玩家会以为文件丢了（它们还在目录里、云备份也照传）。
+                    OnGui.NoteText(Loc.F("playback.search.nomatch", _replaySearch.Text));
+                    return;
+                }
                 // 列表外面套一层**固定高度**的滚动区。行是逐行铺开的，几十行
                 // 就是一两千像素：不封顶时整页会被顶得老长，列表下面的云备份
                 // 区块永远在屏幕之外。封顶后列表自己滚，整页长度就定住了。
+                // **这就是方案的全部**：列表在自己的框里滚，整页那一层仍交给
+                // UMM 自带的滚动条，一像素都不去改它的外观。
+                //
+                // 列表里有多少就画多少——「只显示了一部分」这件事已经不存在，
+                // 所以也不再有截断提示：那是条数上限的伴生文案，上限删了它就该走。
                 Gui.ScrollArea("playback.files", 300f, () =>
                 {
-                    int shown = 0;
-                    foreach (string path in files)
+                    foreach (string path in listed)
                     {
-                        // 条数上限保留、但放宽到 200：高度现在由滚动区兜住，
-                        // 不再怕「画太多把页面撑长」；上限还在是因为每行都要算
-                        // 布局、带两颗按钮，几百上千个文件全铺进来会持续掉帧。
-                        if (shown++ >= 200)
-                        {
-                            break;
-                        }
+                        // **这里没有条数上限。** 原来有一句 `if (shown++ >= 200) break;`，
+                        // 理由是「几百上千行、每行两颗按钮会持续掉帧」。代价是玩家
+                        // 确实有的回放看不见：文件在目录里、云备份也在传，界面上就是
+                        // 少了一半且一个字都不解释。
+                        // 按玩家要求整条删掉：列表里有的 = 磁盘上有的。掉帧风险由
+                        // 上面的搜索框兜——它把「找某一份」的成本降到打几个字。
                         string captured = path;
                         bool loaded = string.Equals(path, _loadedPath, StringComparison.OrdinalIgnoreCase);
                         GUILayout.BeginHorizontal();
@@ -383,18 +406,84 @@ namespace SpectreReplay.Pages
                         }
                     }
                 });
-                // **截断必须有提示。** 上面那行 `shown++ >= 200` 会静默地不再
-                // 画第 201 个及之后的行：文件明明还在文件夹里、云备份也照传，
-                // 界面上却「少了一半回放」且一个字都不解释——玩家第一反应是
-                // 丢档了。提示放在滚动区**外面**：它是「这里只显示了一部分」
-                // 的说明，跟着列表一起滚出视野就失去意义了。
-                if (files.Count > 200)
-                {
-                    OnGui.NoteText(Loc.F("playback.files.truncated", files.Count - 200));
-                }
             });
 
             DrawCloudSection();
+        }
+
+        /// <summary>
+        /// 回放列表的搜索行：按文件名过滤。
+        ///
+        /// <para><b>为什么要有它。</b>回放只增不减，攒到几百份之后「找上次录的
+        /// 那一局」只能靠肉眼在列表里翻；搜索把这件事变成打几个字。</para>
+        ///
+        /// <para><b>为什么边打边生效、不需要回车。</b>这个框唯一的用途是缩小
+        /// 列表，回车在这里没有语义（不像输出目录那样要落盘）。TextField.Text
+        /// 是逐字符更新的，直接读它就是实时筛选。</para>
+        ///
+        /// <para><b>为什么清除按钮要单独给。</b>Esc 也能清空（见下），但「框里
+        /// 有字」时玩家第一反应是找一个叉；而 Esc 这个约定并不会写在界面上，
+        /// 切到英文界面更是没有任何提示。</para>
+        /// </summary>
+        private static void DrawReplaySearch()
+        {
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(Loc.T("playback.search"), Gui.LabelStyle, GUILayout.Width(Gui.LabelW));
+            Rect box = GUILayoutUtility.GetRect(Gui.CtrlW, 24f,
+                GUILayout.Width(Gui.CtrlW), GUILayout.Height(24f));
+            Gui.Tip(box, "playback.search.tip");
+            if (GUILayout.Button(Loc.T("playback.search.clear"), Gui.ButtonStyle,
+                    GUILayout.Width(90f), GUILayout.Height(24f)))
+            {
+                ClearReplaySearch();
+            }
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
+
+            // 与 OnGui.RowInput 同理：输入框自绘、不参与 GUILayout 布局，
+            // 必须画在 EndHorizontal 之后，否则它的鼠标处理会和水平组打架。
+            bool canceled;
+            _replaySearch.Draw(box, Gui.LabelStyle, Loc.T("playback.search.empty"), out canceled);
+            if (canceled)
+            {
+                // Esc = 放弃这次输入。搜索框没有「已保存的值」可以还原，
+                // 所以这里的取消语义只能是清空。
+                ClearReplaySearch();
+            }
+            GUILayout.Space(4f);
+        }
+
+        /// <summary>清空搜索框并让它失焦（Esc 与「清除」按钮共用一处）。</summary>
+        private static void ClearReplaySearch()
+        {
+            _replaySearch.Text = "";
+            _replaySearch.Editing = false;
+        }
+
+        /// <summary>
+        /// 按文件名过滤回放列表（不区分大小写）；空查询直接返回原列表本体。
+        ///
+        /// **只匹配文件名、不匹配整条路径**：列表里显示的是文件名，玩家输入的
+        /// 也只会是文件名；拿整条路径去匹配会让「搜 save」这类词命中一堆目录名，
+        /// 结果看起来毫无规律。
+        /// </summary>
+        private static List<string> FilterReplays(List<string> files)
+        {
+            string query = (_replaySearch.Text ?? "").Trim();
+            if (query.Length == 0)
+            {
+                return files;   // 不复制：上游只读缓存本体
+            }
+            var hit = new List<string>();
+            for (int i = 0; i < files.Count; i++)
+            {
+                string name = Path.GetFileNameWithoutExtension(files[i]);
+                if (name != null && name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    hit.Add(files[i]);
+                }
+            }
+            return hit;
         }
 
         /// <summary>
