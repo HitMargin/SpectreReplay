@@ -104,6 +104,35 @@ function RunAudits {
     }
 }
 
+# **编码自检放在最前面。** 2026-10-26 实测踩到：编辑工具把 port-diff-audit.ps1
+# 的 BOM 写掉，5.1 按 ANSI(GBK) 读中文，从 `Enum.IsDefined` 那行开始引号配不上，
+# 报的是「hash literal was incomplete，line 124」——指不到真凶，看着像登记表写坏了。
+# 这里提前拦：缺 BOM 直接点名文件，并给出补 BOM 的一行命令。
+Step '脚本编码（UTF-8 BOM）' {
+    $scripts = @(Get-ChildItem -LiteralPath $PSScriptRoot -Filter *.ps1 -File)
+    $noBom = @()
+    foreach ($s in $scripts) {
+        $fs = [IO.File]::OpenRead($s.FullName)
+        try {
+            $b = New-Object byte[] 3
+            $n = $fs.Read($b, 0, 3)
+        } finally {
+            $fs.Dispose()
+        }
+        if ($n -lt 3 -or $b[0] -ne 0xEF -or $b[1] -ne 0xBB -or $b[2] -ne 0xBF) {
+            $noBom += $s.Name
+        }
+    }
+    if ($noBom.Count -gt 0) {
+        Write-Host ('  ✗ 缺 UTF-8 BOM：' + ($noBom -join '、')) -ForegroundColor Red
+        Write-Host '    5.1 会按 ANSI 读这些文件，中文变乱码后连引号都配不上（报错行号指不到真凶）。' -ForegroundColor DarkGray
+        Write-Host '    补 BOM：$p=''tools\x.ps1''; [IO.File]::WriteAllText($p,[IO.File]::ReadAllText($p,[Text.UTF8Encoding]::new($false)),[Text.UTF8Encoding]::new($true))' -ForegroundColor DarkGray
+        $script:fail++
+    } else {
+        Write-Host ("  ✓ {0} 个脚本均带 BOM" -f $scripts.Count)
+    }
+}
+
 Step '主项目构建' {
     Push-Location $root
     $out = & dotnet build 'SpectreReplay.slnx' -c Release --no-incremental -v m --nologo 2>&1

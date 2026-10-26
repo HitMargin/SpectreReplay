@@ -18,6 +18,15 @@ public static class Settings
     public static bool LateSave = true;
     public static bool FailSave = false;
     public static bool Backup = true;
+
+    // ── Steam 云同步（回放自动备份到 Steam 云端）─────────────
+    // 默认开：这正是玩家要的"不担心本地文件丢失"。关掉它只是少一步云写入，
+    // 本地保存路径完全不受影响。
+    public static bool CloudSyncOn = true;
+    // 启动时把云端有、本地没有的回放写回本地（换机器/重装后自动找回）。
+    // 只回填缺失文件，从不覆盖本地已有文件。
+    public static bool CloudRestoreOnLoad = true;
+
     public static bool ManualSave = true;
     public static bool CancelSave = true;
     public static bool KeybdSoundRecordActive = true;

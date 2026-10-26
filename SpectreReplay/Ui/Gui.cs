@@ -293,6 +293,39 @@ namespace SpectreReplay.Ui
             }
         }
 
+        // ── 内嵌滚动区 ────────────────────────────────────────
+
+        // 每个滚动区自己的位置，按 key 存。面板关掉再打开时停在原处，
+        // 比每次弹回顶部更符合直觉。
+        private static readonly Dictionary<string, Vector2> _scrollPos = new Dictionary<string, Vector2>();
+
+        /// <summary>
+        /// 固定高度的内层滚动区：内容超过 <paramref name="height"/> 之后在区内滚动，
+        /// 不再把整页往下顶。
+        ///
+        /// <para><b>为什么需要。</b>UMM 窗口自带的滚动条管的是「整页」这一层；
+        /// 某一张卡片自己长到一两千像素时，它只会让整页变得更长。回放列表就是
+        /// 这种情况：几十行逐行铺开，列表下面的 Steam 云区块永远在屏幕之外。</para>
+        ///
+        /// <para><b>为什么位置要按 key 存。</b>滚动位置是逐帧状态，不保存就会在
+        /// 每次重绘时弹回顶部。调用点都是静态方法，没有稳定对象可挂，所以用
+        /// 字符串作身份。</para>
+        /// </summary>
+        internal static void ScrollArea(string key, float height, Action body)
+        {
+            Vector2 pos = _scrollPos.TryGetValue(key, out Vector2 saved) ? saved : Vector2.zero;
+            pos = GUILayout.BeginScrollView(pos, false, true, GUILayout.Height(height));
+            _scrollPos[key] = pos;
+            try
+            {
+                body();
+            }
+            finally
+            {
+                GUILayout.EndScrollView();
+            }
+        }
+
         /// <summary>一行"标签 + 说明"，用于把关键信息摆成表格状。</summary>
         internal static void KeyValue(string labelKey, string value, Color valueColor)
         {

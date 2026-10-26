@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Steam Cloud 探针：验证在 ADOFAI(AppID 977950) 的云端配置下，
+    第三方进程能否用游戏自带的 steam_api64.dll + Remote Storage API
+    写档案并被 Steam 收录/同步。
+
+    运行前提：Steam 客户端已登录（探针不依赖游戏进程，也不用启动游戏——
+    用 steam_appid.txt 直接以 977950 的上下文初始化 SteamAPI）。
+
+    产物：云端文件 "SpectreReplayProbe/probe.bin"。运行后用
+    https://store.steampowered.com/account/remotestorage 或
+    userdata/<账号>/977950/ 确认收录情况。
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>SteamCloudProbe</AssemblyName>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <!-- SteamAPI 的 appid 上下文文件，Init 时从所在目录读取 -->
+    <ProbeAppId>977950</ProbeAppId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="steam_appid.txt" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 游戏自带的 steam_api64.dll 由 build 脚本复制，这里声明排除混淆 -->
+  </ItemGroup>
+
+</Project>

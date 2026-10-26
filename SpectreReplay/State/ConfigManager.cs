@@ -32,6 +32,8 @@ public static class ConfigManager
         public bool LateSave { get; set; }
         public bool FailSave { get; set; }
         public bool Backup { get; set; }
+        public bool CloudSyncOn { get; set; }
+        public bool CloudRestoreOnLoad { get; set; }
         public bool ManualSave { get; set; }
         public bool CancelSave { get; set; }
         public bool KeybdSoundRecordActive { get; set; }
@@ -208,6 +210,8 @@ public static class ConfigManager
                 LateSave = Settings.LateSave,
                 FailSave = Settings.FailSave,
                 Backup = Settings.Backup,
+                CloudSyncOn = Settings.CloudSyncOn,
+                CloudRestoreOnLoad = Settings.CloudRestoreOnLoad,
                 ManualSave = Settings.ManualSave,
                 CancelSave = Settings.CancelSave,
                 KeybdSoundRecordActive = Settings.KeybdSoundRecordActive,
@@ -529,6 +533,8 @@ public static class ConfigManager
                     Settings.LateSave = sets.Value<bool?>("LateSave") ?? Settings.LateSave;
                     Settings.FailSave = sets.Value<bool?>("FailSave") ?? Settings.FailSave;
                     Settings.Backup = sets.Value<bool?>("Backup") ?? Settings.Backup;
+                    Settings.CloudSyncOn = sets.Value<bool?>("CloudSyncOn") ?? Settings.CloudSyncOn;
+                    Settings.CloudRestoreOnLoad = sets.Value<bool?>("CloudRestoreOnLoad") ?? Settings.CloudRestoreOnLoad;
                     Settings.ManualSave = sets.Value<bool?>("ManualSave") ?? Settings.ManualSave;
                     Settings.CancelSave = sets.Value<bool?>("CancelSave") ?? Settings.CancelSave;
                     Settings.KeybdSoundRecordActive = sets.Value<bool?>("KeybdSoundRecordActive") ?? Settings.KeybdSoundRecordActive;

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using SpectreReplay.Features.Cloud;
 using SpectreReplay.Features.EffectRemover;
 using SpectreReplay.Features.Replay;
 using SpectreReplay.Features.VideoRender;
@@ -333,48 +334,87 @@ namespace SpectreReplay.Pages
                     OnGui.Note("playback.empty");
                     return;
                 }
-                int shown = 0;
-                foreach (string path in files)
+                // 列表外面套一层**固定高度**的滚动区。行是逐行铺开的，几十行
+                // 就是一两千像素：不封顶时整页会被顶得老长，列表下面的云备份
+                // 区块永远在屏幕之外。封顶后列表自己滚，整页长度就定住了。
+                Gui.ScrollArea("playback.files", 300f, () =>
                 {
-                    // 只列最近 40 个：回放攒到几百个时把整页全画出来，
-                    // 设置页会长到没法用，而真正要放的多半就是最近那几局。
-                    if (shown++ >= 40)
+                    int shown = 0;
+                    foreach (string path in files)
                     {
-                        break;
-                    }
-                    string captured = path;
-                    bool loaded = string.Equals(path, _loadedPath, StringComparison.OrdinalIgnoreCase);
-                    GUILayout.BeginHorizontal();
-                    if (loaded)
-                    {
-                        Gui.Badge(GUILayoutUtility.GetRect(46f, 20f,
-                            GUILayout.Width(46f), GUILayout.Height(20f)),
-                            Loc.T("playback.loaded"), Gui.OkCol);
-                    }
-                    // 文件名本身就是展开详情的开关。**不另加一颗「详情」按钮**：
-                    // 这一行已经有两颗按钮（回放 / 删除），再加一颗会让「点名字」
-                    // 这个玩家的自然动作失效——点了没反应，还得再找那颗小按钮。
-                    Gui.ClickableLabel(Path.GetFileNameWithoutExtension(path),
-                        loaded || ReplayInfoPanel.IsOpen(captured),
-                        "playback.info.tip",
-                        () => ReplayInfoPanel.Toggle(captured));
-                    if (GUILayout.Button(Loc.T("playback.replay"), Gui.ButtonStyle,
-                            GUILayout.Width(110f), GUILayout.Height(22f)))
-                    {
-                        LoadReplayFile(captured);
-                    }
-                    // **删除放在最后一列、用最轻的样式。** 这一行已经有
-                    // 「回放」那颗主按钮，删除是破坏性操作，不该和它抢位置与
-                    // 视觉权重；用 QuietButtonStyle 与「卸载回放」同一档。
-                    DrawDeleteFileButton(captured);
-                    GUILayout.EndHorizontal();
+                        // 条数上限保留、但放宽到 200：高度现在由滚动区兜住，
+                        // 不再怕「画太多把页面撑长」；上限还在是因为每行都要算
+                        // 布局、带两颗按钮，几百上千个文件全铺进来会持续掉帧。
+                        if (shown++ >= 200)
+                        {
+                            break;
+                        }
+                        string captured = path;
+                        bool loaded = string.Equals(path, _loadedPath, StringComparison.OrdinalIgnoreCase);
+                        GUILayout.BeginHorizontal();
+                        if (loaded)
+                        {
+                            Gui.Badge(GUILayoutUtility.GetRect(46f, 20f,
+                                GUILayout.Width(46f), GUILayout.Height(20f)),
+                                Loc.T("playback.loaded"), Gui.OkCol);
+                        }
+                        // 文件名本身就是展开详情的开关。**不另加一颗「详情」按钮**：
+                        // 这一行已经有两颗按钮（回放 / 删除），再加一颗会让「点名字」
+                        // 这个玩家的自然动作失效——点了没反应，还得再找那颗小按钮。
+                        Gui.ClickableLabel(Path.GetFileNameWithoutExtension(path),
+                            loaded || ReplayInfoPanel.IsOpen(captured),
+                            "playback.info.tip",
+                            () => ReplayInfoPanel.Toggle(captured));
+                        if (GUILayout.Button(Loc.T("playback.replay"), Gui.ButtonStyle,
+                                GUILayout.Width(110f), GUILayout.Height(22f)))
+                        {
+                            LoadReplayFile(captured);
+                        }
+                        // **删除放在最后一列、用最轻的样式。** 这一行已经有
+                        // 「回放」那颗主按钮，删除是破坏性操作，不该和它抢位置与
+                        // 视觉权重；用 QuietButtonStyle 与「卸载回放」同一档。
+                        DrawDeleteFileButton(captured);
+                        GUILayout.EndHorizontal();
 
-                    // 详情就地展开在这一行正下方（点文件名切换）。
-                    if (ReplayInfoPanel.IsOpen(captured))
-                    {
-                        ReplayInfoPanel.Draw(captured);
+                        // 详情就地展开在这一行正下方（点文件名切换）。
+                        if (ReplayInfoPanel.IsOpen(captured))
+                        {
+                            ReplayInfoPanel.Draw(captured);
+                        }
                     }
+                });
+                // **截断必须有提示。** 上面那行 `shown++ >= 200` 会静默地不再
+                // 画第 201 个及之后的行：文件明明还在文件夹里、云备份也照传，
+                // 界面上却「少了一半回放」且一个字都不解释——玩家第一反应是
+                // 丢档了。提示放在滚动区**外面**：它是「这里只显示了一部分」
+                // 的说明，跟着列表一起滚出视野就失去意义了。
+                if (files.Count > 200)
+                {
+                    OnGui.NoteText(Loc.F("playback.files.truncated", files.Count - 200));
                 }
+            });
+
+            DrawCloudSection();
+        }
+
+        /// <summary>
+        /// Steam 云备份区块。**放在回放列表之后、而不是录制页**：它管理的是
+        /// 已经存在的回放文件（上传 / 找回），和上面的列表是同一件事的两半——
+        /// 玩家在这里看见文件、在这里决定要不要备份，不用来回跳页。
+        /// </summary>
+        private static void DrawCloudSection()
+        {
+            Gui.Section("playback.cloud", Gui.Accent, () =>
+            {
+                OnGui.Row("playback.cloud.sync", CloudSyncOn,
+                    v => { CloudSyncOn = v; Commit(); });
+                // 自动回填只在同步开着时才有意义（云端没有新文件，回填也就无从谈起）
+                OnGui.Row("playback.cloud.restoreonload", CloudRestoreOnLoad,
+                    v => { CloudRestoreOnLoad = v; Commit(); }, CloudSyncOn);
+                DrawCloudStatus();
+                OnGui.Button("playback.cloud.restore", () => QueueCloudAction(true), false, CloudReady);
+                OnGui.Button("playback.cloud.uploadall", () => QueueCloudAction(false), false, CloudReady);
+                OnGui.Note("playback.cloud.note");
             });
         }
 
@@ -1600,6 +1640,121 @@ namespace SpectreReplay.Pages
             }
         }
 
+        // ── Steam 云 ────────────────────────────────────────────
+
+        /// <summary>云端按钮是否可点：总开关 + 云同步开关 + Steam 可用。</summary>
+        /// <summary>云端按钮是否可点：同步开着 + Steam 接口可用。
+        /// **不再要求 ReplayOn**：云端管的是已经存在的文件，关掉录制也应当能找回。</summary>
+        private static bool CloudReady => CloudSyncOn && SteamCloud.Ready;
+
+        /// <summary>一行云端状态（数字走缓存，见 CloudReplay.GetStats）。</summary>
+        private static void DrawCloudStatus()
+        {
+            var s = CloudReplay.GetStats();
+            string text;
+            if (!SteamCloud.Ready)
+            {
+                // 非 Steam 版 / Steam 没运行：说清楚"这块功能为什么灰着"，
+                // 否则玩家只会觉得开关拨了没用。
+                text = Loc.T("playback.cloud.status.unavailable");
+            }
+            else if (!s.AppEnabled)
+            {
+                // 客户端里这个游戏的云同步被关掉：写入会"成功"但永不上传。
+                text = Loc.T("playback.cloud.status.disabled");
+            }
+            else if (s.Replays == 0)
+            {
+                text = Loc.T("playback.cloud.status.empty");
+            }
+            else
+            {
+                text = Loc.F("playback.cloud.status.ok", s.Replays, SizeText(s.Bytes));
+            }
+
+            // 软阈值：只提醒，不自动删。云端配额是整个 app 共用的（含游戏自己的
+            // 存档），堆到接近上限时 Steam 的新写入会失败，用户需要知道该清了。
+            if (SteamCloud.Ready && s.AppEnabled
+                && (s.Files > CloudReplay.SoftCount || s.Bytes > CloudReplay.SoftBytes))
+            {
+                text += "\n" + Loc.F("playback.cloud.status.heavy", s.Files, SizeText(s.Bytes));
+            }
+            OnGui.NoteText(text);
+        }
+
+        /// <summary>
+        /// 点按钮后把云端读写在**下一拍**执行。
+        ///
+        /// 与目录选择框同理：批量上传/回填是几十次文件读写 + P/Invoke，
+        /// 直接写在 OnGUI 的 MouseUp 趟里会让这一帧拖长（界面卡一下）。
+        /// 放到主线程回调里，画面先响应，结果再用通知条汇报。
+        /// </summary>
+        private static void QueueCloudAction(bool restore)
+        {
+            try
+            {
+                MainThread.Defer(() =>
+                {
+                    try
+                    {
+                        if (restore)
+                        {
+                            var r = CloudReplay.RestoreMissing();
+                            if (r.Restored > 0)
+                            {
+                                Status.Say("playback.cloud.restored", r.Restored.ToString());
+                            }
+                            else if (r.Failed > 0)
+                            {
+                                Status.Warn("playback.cloud.failed", r.LastError);
+                            }
+                            else
+                            {
+                                Status.Say("playback.cloud.none");
+                            }
+                        }
+                        else
+                        {
+                            var r = CloudReplay.UploadAllLocal();
+                            if (r.Uploaded > 0)
+                            {
+                                Status.Say("playback.cloud.uploaded", r.Uploaded.ToString());
+                            }
+                            else if (r.Failed > 0)
+                            {
+                                Status.Warn("playback.cloud.failed", r.LastError);
+                            }
+                            else
+                            {
+                                Status.Say("playback.cloud.uptodate");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogWarning("[SpectreReplay] 云端操作失败：" + ex.Message);
+                        Status.Warn("playback.cloud.failed", ex.GetType().Name);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[SpectreReplay] 无法排队云端操作：" + ex.Message);
+            }
+        }
+
+        /// <summary>字节数 → 便于阅读的大小（回放普遍在几十 KB～几 MB）。</summary>
+        private static string SizeText(long bytes)
+        {
+            if (bytes >= 1024L * 1024L * 1024L)
+                return (bytes / 1024.0 / 1024.0 / 1024.0).ToString("F1") + " GB";
+            if (bytes >= 1024L * 1024L)
+                return (bytes / 1024.0 / 1024.0).ToString("F1") + " MB";
+            if (bytes >= 1024L)
+                return (bytes / 1024.0).ToString("F0") + " KB";
+            return bytes + " B";
+        }
+
         // ── 工具 ────────────────────────────────────────────────
         /// <summary>拖动滑条期间被推迟的落盘。见 Commit 的说明。</summary>
         private static bool _pendingCommit;
@@ -1660,6 +1815,13 @@ namespace SpectreReplay.Pages
             {
                 Debug.LogWarning("[SpectreReplay] 提交设置失败：" + ex.Message);
             }
+        }
+
+        /// <summary>作废回放列表缓存（新增/回填文件后必须调，否则界面要等一秒才刷新）。</summary>
+        internal static void InvalidateReplayList()
+        {
+            _replayCache = null;
+            _replayCacheTick = int.MinValue;
         }
 
         /// <summary>

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using SpectreReplay.API;
+using SpectreReplay.Features.Cloud;
 using SpectreReplay.Features.Compat;
 using SpectreReplay.Features.Replay;
 using static SpectreReplay.Features.Replay.ReplayKeys;
@@ -586,6 +587,34 @@ public static class SpectreState
         // 事件放在伴生 wav 改名/备份之后：订阅者此刻能拿到完整的成套文件
         if (savedPath != null)
             SpectreAPI.RaiseReplaySaved(savedPath);
+
+        // Steam 云同步放在**事件之后**：外部订阅者不该被云这步挡住；
+        // 而云同步失败也只写一行日志，绝不能让玩家看到"保存失败"
+        // （本地文件这时已经写好了）。上传的是这一局最终的成套产物。
+        if (savedPath != null)
+        {
+            try
+            {
+                string cloudExt = debug_no_encryption
+                    ? ReplayConstants.ExtensionNoEncrypt : ReplayConstants.Extension;
+                string cloudWav = null;
+                if (!without_sound
+                    && data.KeybdSoundFileName is string cloudWavName
+                    && !string.IsNullOrEmpty(cloudWavName))
+                {
+                    cloudWav = Path.Combine(Settings.SavePath, cloudWavName);
+                }
+                if (CloudReplay.OnReplaySaved(savedPath + cloudExt, cloudWav))
+                {
+                    message += Ui.Loc.T("playback.cloud.saved") + "\n";
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[SpectreReplay] 云同步入口异常（不影响本地保存）：" + ex.Message);
+            }
+        }
+
         TriggerMessage(message);
         if (!success && !retry)
         {

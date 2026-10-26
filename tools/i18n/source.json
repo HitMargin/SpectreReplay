@@ -1,4 +1,4 @@
-﻿[
+[
  {
   "key": "page.record",
   "zh": "录制",
@@ -763,6 +763,11 @@
   "key": "playback.files",
   "zh": "回放文件",
   "en": "Replays"
+ },
+ {
+  "key": "playback.files.truncated",
+  "zh": "列表只显示最近的一部分回放；还有 {0} 份较早的没有列出，它们仍在回放目录里。",
+  "en": "Only the most recent replays are listed; {0} older ones are not shown but remain in the replay folder."
  },
  {
   "key": "playback.replay",
@@ -1623,5 +1628,110 @@
   "key": "record.keymap.limit.tip",
   "zh": "开启后，对照表里没有的按键一律不产生输入。只用手柄或宏键盘的几个键打谱时用它屏蔽其余按键。注意它会让大量按键静默失效。",
   "en": "When on, keys not in the table produce no input at all. Use it to block every key except a few on a controller or macro keyboard. Note that this makes many keys silently do nothing."
+ },
+ {
+  "key": "playback.cloud",
+  "zh": "Steam 云备份",
+  "en": "Steam Cloud Backup"
+ },
+ {
+  "key": "playback.cloud.failed",
+  "zh": "云端操作失败：{0}",
+  "en": "Cloud operation failed: {0}"
+ },
+ {
+  "key": "playback.cloud.none",
+  "zh": "云端没有需要找回的回放。",
+  "en": "There are no replays to restore from the cloud."
+ },
+ {
+  "key": "playback.cloud.note",
+  "zh": "每个回放连同它的键盘音一起上传。Steam 只在游戏关闭时才真正送出文件，所以刚录完的回放不会立刻出现在云端；换电脑或重装后第一次启动会自动恢复。",
+  "en": "Each replay is uploaded together with its keysound. Steam only really sends files when the game closes, so a replay you just recorded won't show up in the cloud right away; after switching PCs or reinstalling, the first launch restores them automatically."
+ },
+ {
+  "key": "playback.cloud.restore",
+  "zh": "从云端找回",
+  "en": "Restore from Cloud"
+ },
+ {
+  "key": "playback.cloud.restore.tip",
+  "zh": "把本地缺的回放从云端拉回来，按文件名比对，本地已有的不动。需要云端已有备份，Steam 云不可用时按钮是灰的。",
+  "en": "Brings back replays missing locally from the cloud, matched by file name; existing local files are left alone. Needs a cloud backup; greyed out when Steam Cloud is unavailable."
+ },
+ {
+  "key": "playback.cloud.restoreonload",
+  "zh": "启动时自动回填",
+  "en": "Restore on Startup"
+ },
+ {
+  "key": "playback.cloud.restoreonload.tip",
+  "zh": "每次启动时对照云端，把本地缺的回放自动补回来；本地已有的同名文件不会被覆盖。关掉同步时这一项不做任何事。",
+  "en": "On each launch, checks the cloud and restores replays missing locally; files that already exist are left untouched. Does nothing while syncing is off."
+ },
+ {
+  "key": "playback.cloud.restored",
+  "zh": "已从云端找回 {0} 个回放。",
+  "en": "Restored {0} replays from the cloud."
+ },
+ {
+  "key": "playback.cloud.saved",
+  "zh": "已备份到 Steam 云。",
+  "en": "Backed up to Steam Cloud."
+ },
+ {
+  "key": "playback.cloud.status.disabled",
+  "zh": "这个游戏的 Steam 云同步在客户端里是关闭的，文件写进去也不会真正上传。",
+  "en": "Steam Cloud sync for this game is turned off in the client, so files written here won't actually be uploaded."
+ },
+ {
+  "key": "playback.cloud.status.empty",
+  "zh": "云端还没有回放备份。",
+  "en": "No replays are backed up to the cloud yet."
+ },
+ {
+  "key": "playback.cloud.status.heavy",
+  "zh": "共 {0} 个文件、{1}，已接近 Steam 云配额上限，建议清理一些旧回放。",
+  "en": "{0} files, {1} in total — close to the Steam Cloud quota; consider cleaning up old replays."
+ },
+ {
+  "key": "playback.cloud.status.ok",
+  "zh": "云端已备份 {0} 个回放，共 {1}。",
+  "en": "{0} replays backed up in the cloud, {1} in total."
+ },
+ {
+  "key": "playback.cloud.status.unavailable",
+  "zh": "Steam 云不可用（非 Steam 版，或 Steam 客户端未运行）。",
+  "en": "Steam Cloud is unavailable (not a Steam build, or the Steam client isn't running)."
+ },
+ {
+  "key": "playback.cloud.sync",
+  "zh": "同步到 Steam 云",
+  "en": "Sync to Steam Cloud"
+ },
+ {
+  "key": "playback.cloud.sync.tip",
+  "zh": "关掉它就不再往 Steam 云写文件，本地回放照旧保存；重新打开会把本地已有的回放补传上去。",
+  "en": "When off, nothing is written to Steam Cloud but local replays are still saved; turning it back on uploads the replays you already have."
+ },
+ {
+  "key": "playback.cloud.uploadall",
+  "zh": "全部上传",
+  "en": "Upload All"
+ },
+ {
+  "key": "playback.cloud.uploadall.tip",
+  "zh": "把所有本地回放一次上传到云端；云端已有且没改动的会跳过，不会重复上传。刚录完的回放要等游戏关闭才真正送出。",
+  "en": "Uploads all local replays in one go; ones already in the cloud and unchanged are skipped, so nothing is uploaded twice. A replay you just recorded is only really sent when the game closes."
+ },
+ {
+  "key": "playback.cloud.uploaded",
+  "zh": "已上传 {0} 个回放。",
+  "en": "Uploaded {0} replays."
+ },
+ {
+  "key": "playback.cloud.uptodate",
+  "zh": "云端已经是最新的，没有需要上传的回放。",
+  "en": "The cloud is already up to date; there are no replays to upload."
  }
 ]

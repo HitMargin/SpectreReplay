@@ -142,6 +142,11 @@ namespace SpectreReplay
                 // 挂失败的补丁还要在设置页**常驻**说一句：通知弹一次就没了，
                 // 而玩家往往是"发现某个开关点了没反应"才去翻设置页。
                 Ui.OnGui.PatchFailures = SpectrePatchHub.ApplyFailureCount;
+
+                // Steam 云回填：换机器/重装后把云端有、本地没有的回放写回来。
+                // 放在最后一步——它只碰磁盘文件，不依赖任何补丁，失败也只记日志。
+                // 内部自带开关判断与 try/catch，关模组后再开也只会再扫一次缺失。
+                Features.Cloud.CloudReplay.RestoreOnStartup();
                 return true;
             }
             catch (Exception ex)

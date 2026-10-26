@@ -1027,7 +1027,19 @@ $knownDeviations = @(
     # 上游的 `scrFloor.LightUp` 前后夹逼 `GCS.hitMarginLimit` 已整体删除：换值窗口内
     # 没有任何可观测读点（详见 docs/SPECTRE_COMPARISON.md 偏差 19）。本审计只报
     # 「我们多出的 token」，删掉上游补丁不会产生登记项——这一条留着是给后来者看的。
-    @{ Pat = 'failController.noFail';    File = 'Patch_Lifecycle.cs'; Why = '同上：还原目标；instance 判空后经局部变量写回' } )
+    @{ Pat = 'failController.noFail';    File = 'Patch_Lifecycle.cs'; Why = '同上：还原目标；instance 判空后经局部变量写回' }
+    # ══════════════════════════════════════════════════════════════════
+    # -- 2026-10-26 回放文件随 Steam Cloud 备份（用户要求：换机/重装能找回）--
+    # 上游完全没有云同步：回放只落在本地 Replays\。这一层是新能力，涉及三个
+    # 既有文件的接线（云开关的持久化、启动时回填、保存后上传）。
+    # 新文件 Features\Cloud\SteamCloud.cs / CloudReplay.cs 不在比对清单里
+    # （我们独有），这里登记的只是被它们牵连的既有文件。
+    @{ Pat = 'Features.Cloud.CloudReplay.RestoreOnStartup'; File = 'Main.cs'; Why = '2026-10-26 Steam 云：启动时回填云端回放。必须放在 OnToggle 里起协程等 SteamAPI 就绪——模组的 OnToggle 早于游戏的 Initialize Steam SDK，当场探测必然失败（上游没有这条链）' }
+    @{ Pat = 'Settings.CloudSyncOn';        File = 'ConfigManager.cs'; Why = '2026-10-26 Steam 云：云同步开关的持久化读写（上游没有这组设置）' }
+    @{ Pat = 'Settings.CloudRestoreOnLoad'; File = 'ConfigManager.cs'; Why = '2026-10-26 Steam 云：启动回填开关的持久化读写（默认 true，换机后才找得回来）' }
+    @{ Pat = 'CloudReplay.OnReplaySaved';   File = 'SpectreState.cs'; Why = '2026-10-26 Steam 云：每存一份回放就把它推上云端（上游保存只落本地）' }
+    @{ Pat = 'Features.Cloud';              File = 'SpectreState.cs'; Why = '2026-10-26 Steam 云：上面那次调用的命名空间前缀（云模块是新目录，上游在 Features 下没有 Cloud）' }
+    @{ Pat = 'playback.cloud.saved';        File = 'SpectreState.cs'; Why = '2026-10-26 Steam 云：保存提示里追加一句「已同步到云端」，仅云同步开启时出现（上游提示没有这一句）' } )
 
 
 Write-Output ""
