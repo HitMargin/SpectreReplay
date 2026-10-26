@@ -105,6 +105,10 @@ namespace SpectreReplay.Ui
         private static Font _font;
         private static GUIStyle _label, _labelC, _bold, _boldC, _h1, _h2, _small, _smallC, _note, _pad, _btn, _btnPrimary, _btnQuiet, _btnAccent, _tipStyle;
 
+        // 内层滚动区专用的滚动条三件套（轨道 / 滑块 / 两端按钮）。
+        // 只在本文件的 ScrollArea 里临时挂到 GUI.skin 上，出区立刻还原。
+        private static GUIStyle _bar, _barThumb, _barBtn;
+
         private static void Ensure()
         {
             if (_label != null && _skin == GUI.skin && _font == GUI.skin.font)
@@ -141,6 +145,61 @@ namespace SpectreReplay.Ui
                 clipping = TextClipping.Clip,
                 fontSize = GUI.skin.label.fontSize,
             };
+            BuildScrollbar();
+        }
+
+        /// <summary>
+        /// 内层滚动区的滚动条外观：窄轨道 + 圆角滑块。
+        ///
+        /// <para><b>只做外观，不接管滚动。</b>滚动、拖拽、滚轮仍然交给
+        /// <c>GUILayout.BeginScrollView</c>。这不是偷懒——滑块高度必须等于
+        /// 「可视高度 / 内容总高」，而这个比例只有真正排版完内容的那一趟才知道；
+        /// 自己算就得先空跑一遍内容拿高度，等于把列表画两次（点击会重复触发）。
+        /// 换样式则天然继承：内容越多，滑块越短。</para>
+        ///
+        /// <para><b>为什么要 9-slice。</b>贴图只有 16×16，滑块会被拉成一两百像素高。
+        /// 不设 border 的话圆角纵向被拉平，看起来像一条直线；设了之后只有中间段
+        /// 被拉伸，两端的圆角保持原样。</para>
+        ///
+        /// <para><b>为什么要连按钮一起换。</b>皮肤里的上下箭头按钮若还有底色，
+        /// 会在轨道两端留下两块原生灰方块，和自绘轨道明显不是一套。这里换成
+        /// 零尺寸空样式，等于把箭头去掉。</para>
+        /// </summary>
+        private static void BuildScrollbar()
+        {
+            const int BarW = 12;      // 轨道总宽
+            const int Pad = 2;        // 滑块与轨道边缘的留白
+            const int Radius = 4;
+            const int Tex = 16;
+
+            // padding / margin 显式清零：皮肤里这两项是给原生控件留空隙用的，
+            // 留着会让 12px 的轨道被撑宽，滑块跟着偏。
+            _bar = new GUIStyle(GUI.skin.verticalScrollbar)
+            {
+                fixedWidth = BarW,
+                padding = new RectOffset(0, 0, 0, 0),
+                margin = new RectOffset(0, 0, 0, 0),
+                border = new RectOffset(Radius + 1, Radius + 1, Radius + 1, Radius + 1),
+            };
+            _bar.normal.background =
+                RoundedTex.Get(Tex, Tex, Radius, new Color(0.07f, 0.08f, 0.11f, 0.75f));
+
+            // 滑块比轨道亮得多，一眼能看出「现在停在哪、还能往下走多少」。
+            _barThumb = new GUIStyle(GUI.skin.verticalScrollbarThumb)
+            {
+                fixedWidth = BarW - Pad * 2,
+                border = new RectOffset(Radius, Radius, Radius, Radius),
+                margin = new RectOffset(Pad, Pad, 0, 0),
+            };
+            _barThumb.normal.background =
+                RoundedTex.Get(Tex, Tex, Radius, new Color(0.55f, 0.62f, 0.71f, 0.95f));
+            _barThumb.hover.background =
+                RoundedTex.Get(Tex, Tex, Radius, new Color(0.78f, 0.84f, 0.92f, 1f));
+            _barThumb.active.background =
+                RoundedTex.Get(Tex, Tex, Radius, Accent);
+
+            // 零尺寸的空样式：原生箭头按钮在这里既不占位也不画底。
+            _barBtn = new GUIStyle(GUIStyle.none) { fixedWidth = 0f, fixedHeight = 0f };
         }
 
         /// <summary>
@@ -310,19 +369,51 @@ namespace SpectreReplay.Ui
         /// <para><b>为什么位置要按 key 存。</b>滚动位置是逐帧状态，不保存就会在
         /// 每次重绘时弹回顶部。调用点都是静态方法，没有稳定对象可挂，所以用
         /// 字符串作身份。</para>
+        ///
+        /// <para><b>滚动条是本区自己的。</b>滚动条样式挂在 <c>GUI.skin</c> 上，
+        /// 是全局的：进区前换成 <see cref="BuildScrollbar"/> 那套，出区立刻还原。
+        /// 所以 UMM 整页那条滚动条（归它自己管）不会被牵连，两处的观感也
+        /// 不必互相将就。</para>
+        ///
+        /// <para><b>为什么 alwaysShowVertical = true。</b>内容不足一屏时若把滚动条
+        /// 藏掉，内容区会突然变宽，几十行列表在「刚好放得下」与「放不下」之间
+        /// 来回抖动。恒定显示则列表宽度稳定，滚动条本身也成了「这里可以滚」的提示。</para>
         /// </summary>
         internal static void ScrollArea(string key, float height, Action body)
         {
+            Ensure();
+
+            // 先存档，出区无条件写回：中途抛异常时若没还原，后面所有页面
+            // 都会顶着这条 12px 窄轨道，属于污染全局状态。
+            GUIStyle bar = GUI.skin.verticalScrollbar;
+            GUIStyle thumb = GUI.skin.verticalScrollbarThumb;
+            GUIStyle up = GUI.skin.verticalScrollbarUpButton;
+            GUIStyle down = GUI.skin.verticalScrollbarDownButton;
+            GUI.skin.verticalScrollbar = _bar;
+            GUI.skin.verticalScrollbarThumb = _barThumb;
+            GUI.skin.verticalScrollbarUpButton = _barBtn;
+            GUI.skin.verticalScrollbarDownButton = _barBtn;
+
             Vector2 pos = _scrollPos.TryGetValue(key, out Vector2 saved) ? saved : Vector2.zero;
-            pos = GUILayout.BeginScrollView(pos, false, true, GUILayout.Height(height));
-            _scrollPos[key] = pos;
             try
             {
-                body();
+                pos = GUILayout.BeginScrollView(pos, false, true, GUILayout.Height(height));
+                _scrollPos[key] = pos;
+                try
+                {
+                    body();
+                }
+                finally
+                {
+                    GUILayout.EndScrollView();
+                }
             }
             finally
             {
-                GUILayout.EndScrollView();
+                GUI.skin.verticalScrollbar = bar;
+                GUI.skin.verticalScrollbarThumb = thumb;
+                GUI.skin.verticalScrollbarUpButton = up;
+                GUI.skin.verticalScrollbarDownButton = down;
             }
         }
 
