@@ -18,7 +18,7 @@ SpectreReplay is a UnityModManager mod (mod id `com.spectre.replay`). While you 
 - **Cancel save.** Another hotkey drops the run being recorded — for warm-ups and retries you do not want in the folder.
 - **Protection against junk and lost runs.** Runs can be skipped when the game played itself (auto) or when the run contains misses, and a run can still be saved when you fail a level instead of finishing it.
 - **Backups.** Optionally keep a second copy of every saved replay, so a bad file never costs you the recording. The copy is taken from the finished file rather than saved a second time, and it is skipped when the main save itself failed.
-- **Keyboard sound (optional).** Microphone input can be recorded alongside the run and attached to the replay.
+- **Keyboard sound (optional).** Microphone input is recorded as its own track for the run and re-triggered by the recorded keypresses on playback. It lives **inside** the replay file (16 kHz by default, or 8 kHz for roughly half the size), so a replay carries its keysounds to another machine without a stray wav sitting next to it.
 
 ### Playback
 
@@ -27,6 +27,17 @@ SpectreReplay is a UnityModManager mod (mod id `com.spectre.replay`). While you 
 - **Open the level directly.** A loaded replay knows which chart it came from, so the mod can open that level for you — editor charts and official levels alike — and land on the right floor once it is ready.
 - **Unload.** Drop the armed replay without leaving the level.
 - **Key injection.** Keys are injected into the game's input layer, so the game reacts to them exactly as it reacts to your keyboard. Both the synchronous input path and the asynchronous input path are supported; with async input enabled, timestamps come from the game's own input stamps instead of frame boundaries and are noticeably more accurate.
+- **Search the list.** Once replays pile up, type instead of squinting: the list filters by file name as you type, case-insensitively, and Esc clears it. The cloud column has the same box, kept separate — a cloud replay you have not restored locally is never hidden by a local filter.
+- **Per-replay keysounds.** Volume, mute and time offset can each be set for a single replay; they apply as you drag, and only *save to replay file* writes them into the file itself (in place, no copy). Anything left unset keeps following the global settings. A replay's keysounds can also be exported to a wav under `keybdsound` in the save folder.
+- **Play straight from the cloud.** A cloud replay does not have to be downloaded first: Play streams it from the cloud bytes and writes nothing to disk. Clicking a name only expands its details (song, difficulty, judgement spread, per-hit errors) and never displaces the replay you are playing.
+
+### Steam Cloud backup
+
+- **Replays ride along with Steam Cloud.** Keysounds are embedded in the replay file, so the cloud normally holds just the replay itself; only when the sound could not be embedded (replays from before this feature, or ones whose compressed payload overshot and fell back to a sidecar wav) does the matching wav travel alongside it. After switching machines or reinstalling, the first launch restores whatever is missing locally, matched by file name — an existing local file is never overwritten.
+- **Syncing can be switched off.** Nothing is written to the cloud while it is off and local saves carry on; switching it back on uploads what you already have. *Upload all* does the same in one go, skipping files that are already in the cloud and unchanged.
+- **The config is backed up separately.** The mod's `Configs.json` can be uploaded on its own and pulled back on another machine, restoring every setting. The current file is saved as `Configs.json.bak` first, and it takes two clicks to confirm.
+- **Deleting only touches the cloud.** Only the cloud copy (and its keysound) goes; the local file stays. Near the quota the panel tells you to clean up old replays.
+- **Steam only really sends files when the game closes**, so a replay you just recorded does not appear in the cloud straight away. That is why the panel says *written to the cloud* rather than *synced*.
 
 ### Video rendering
 
@@ -54,6 +65,7 @@ SpectreReplay is a UnityModManager mod (mod id `com.spectre.replay`). While you 
 - **Fully self-drawn controls.** Every control is drawn by the mod itself — rounded panels with nine-slice textures, custom sliders, toggles and text fields — so it looks the same regardless of the game's UI scaling.
 - **Hover explanations.** Each option explains itself on hover, including the input the game must have enabled for that option to do anything.
 - **Five pages** (Recording, Playback, Video Render, Effects, About), opened with a hotkey, and the interface follows the game's language — all **14 languages** the game ships with (Simplified/Traditional Chinese, English, Japanese, Korean, Spanish, Portuguese, French, German, Polish, Czech, Romanian, Russian, Vietnamese).
+- **Toast duration is adjustable.** How long the pop-up at the bottom of the screen stays before hiding lives on the About page (1–10 s, default 3 s). Every message the mod raises scales with it; the few that are worth reading twice (failure reasons often run to two lines) get 2 seconds on top, so they stretch with the setting instead of being pinned by a hard-coded number.
 
 ## How it works
 
@@ -91,11 +103,22 @@ The read path accepts only this container. Two older layouts are **not readable*
 
 Keeping the payload compact matters beyond file size: the recorder runs on the main thread during gameplay, so the per-frame cost is bounded and the file stays small enough to keep hundreds of runs.
 
+### Cloud backup
+
+Steam's cloud API only knows files: there is no query, no transaction, and no notion of "what is new locally", so syncing can only be a reconciliation of two file sets:
+
+- The keysound is normally **embedded in the replay body**, so the cloud usually has a single file to move. Only when it could not be embedded (older replays, or ones whose compressed payload overshot and fell back to a sidecar wav) does that extra same-named wav matter; without it the replay still plays, just silently.
+- Restoring matches by file name and **never overwrites a local file of the same name**. The cloud copy may be an older write from another machine and the local one may be the run you just recorded — only "local wins" is safe in both directions.
+- Writing into the cloud folder is not the same as having uploaded: Steam sends the files when the game exits. That is why the UI says *written to the cloud* and not *synced*.
+- The config is stored separately from replays, because otherwise "restore my settings" would turn into a full download.
+
 ### Playback
 
 On load, the file is decrypted (MAC verified first), decompressed and decoded into a timeline of key events and hit contexts. During playback the mod replays that timeline against the game's own frame update: the recorded state overrides the live state each frame (planet angle, floor, auto flag, judgement state), and keys are injected into the input layer at the timestamps the recording says they happened. This is why a replay looks identical to the run rather than merely similar: the game's real hit detection runs on the injected input, so the visuals are produced by the same code that produced them the first time.
 
 Two input paths are supported. The legacy path injects key events into the game's keyboard state; the asynchronous path feeds the game's async input queue, which is what the game uses for accurate hit timing when that option is on. Injecting through the queue rather than synthesising key state directly is what makes the timing match a human run instead of the frame boundary.
+
+The keysound does not go through that timeline: it is an **optional segment at the tail of the replay file**, carrying its own segment-version ceiling. The reason for placing it there is that people who never record keysounds should pay nothing for the feature — a replay with no keysound does not write the segment at all, so its bytes are identical to those from the build before this feature existed. A segment header the reader does not recognise (wrong magic, or a version above its own) is skipped whole, leaving the timeline and audio it has already read intact. Each replay's volume, mute and offset overrides live in that same segment, so they travel with the file instead of sitting in the local config: copy the file to someone else and they hear it the way you tuned it.
 
 ### Video rendering
 

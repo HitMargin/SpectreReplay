@@ -10,8 +10,9 @@ To watch it back or produce a video, the replay is then played through inside th
 
 ## What it does
 
-- **Recording** — records the run's keypresses and judgements as you play; auto-saves on clear. F9 saves by hand, another hotkey discards the run you don't want. Filter what gets kept (full clears only / skip runs with a miss / also save on failure), keep backups, and optionally record the tap keysounds.
-- **Playback** — replays in-game exactly as it happened (it starts when you restart that level), and can jump straight to the level it came from. Expand a file for song, difficulty, BPM, Accuracy, the full judgement spread and a per-hit timing chart.
+- **Recording** — records the run's keypresses and judgements as you play; auto-saves on clear. F9 saves by hand, another hotkey discards the run you don't want. Filter what gets kept (full clears only / skip runs with a miss / also save on failure), keep backups, and optionally record the tap keysounds from your microphone — they are stored inside the replay file, so they travel with it to another machine.
+- **Playback** — replays in-game exactly as it happened (it starts when you restart that level), and can jump straight to the level it came from. Filter the list by file name as you type. Expand a file for song, difficulty, BPM, Accuracy, the full judgement spread and a per-hit timing chart. Each replay's keysounds can be tuned (volume / mute / offset) on their own and exported to a wav; a cloud replay plays straight from the cloud without being downloaded first.
+- **Cloud backup** — replays ride along with Steam Cloud (the keysound is usually embedded, so there is a single file to move); after switching machines or reinstalling the missing ones are restored automatically (existing local files are never overwritten). Sync can be switched off, everything can be uploaded in one go, and the config can be backed up and restored on its own.
 - **Rendering** — walks the replay through the level again, capturing it frame by frame into a video with audio. Two frame sources (clean camera / game screen), four containers (mp4 / mkv / webm / mov), CPU or GPU encoding, four quality tiers. Also batch-converts existing videos.
 - **Effect removal** — strips filters, particles, decorations, camera moves, track animations and more, all at decode time and per category. In-memory only; the chart file on disk is untouched.
 - **Key remapping** — map the codes your controller or macro keyboard sends onto the keys the game expects.
@@ -36,6 +37,8 @@ The whole UI is self-drawn and follows the game's language — **all 14 supporte
 
 - With "game screen" as the frame source, **collapse the mod window** while rendering or it will be captured.
 - Only replays recorded by this mod can be read; other formats will not open.
+- Cloud backup only writes the files into Steam's cloud folder; **Steam actually uploads them when the game exits**, so a replay you just recorded does not show up in the cloud straight away.
+- A cloud replay plays straight from the cloud and leaves no copy in the local replay folder.
 - After turning effect removal off, the loaded level is still the stripped version in memory; saving is blocked with a message, and **re-entering the level** restores the original.
 
 ---
