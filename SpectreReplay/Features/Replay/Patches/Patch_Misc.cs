@@ -77,7 +77,7 @@ internal class Patch_CancelSaveKey
         {
             // 提示放在这里而不是 CancelSave() 里：那个方法只在 PendingSave 为真时
             // 才被调用，什么都没取消时不能说"已取消"。
-            TriggerMessage(LocalizationManager.GetLocalizedText("note.cancel_save_none"), 3f, NotifType.Warning);
+            TriggerMessage(LocalizationManager.GetLocalizedText("note.cancel_save_none"), type: NotifType.Warning);
             return;
         }
 

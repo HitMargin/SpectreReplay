@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.IO;
+using SpectreReplay.Features.Cloud;
 using SpectreReplay.Features.Replay;
 using SpectreReplay.Ui;
 using UnityEngine;
@@ -33,6 +34,28 @@ namespace SpectreReplay.Pages
         private static ReplayFileInfo _cache;
         private static string _cachePath = "";
         private static DateTime _cacheStamp;
+
+        /// <summary>
+        /// 云端条目的展开位前缀。
+        ///
+        /// <para>本地与云端共用同一套「同时只开一个」的语义，但键空间必须不重叠：
+        /// 云端条目没有本地路径，得现编一个键。加前缀而不是另建一套状态，是因为
+        /// 「展开 A 就收起 B」这条规则只有一处实现（<see cref="Toggle(string)"/>），
+        /// 分成两套迟早出现本地和云端同时展开两段。</para>
+        ///
+        /// <para>安全性：Windows 路径不可能以 <c>cloud:</c> 开头（冒号只能出现在盘符
+        /// 后、且紧跟一个字符），所以本地键永远不会撞上云端键。</para>
+        /// </summary>
+        private const string CloudKeyPrefix = "cloud:";
+
+        private static string CloudKey(string remoteName)
+            => CloudKeyPrefix + (remoteName ?? "");
+
+        /// <summary>云端那一行的展开开关。</summary>
+        internal static void ToggleCloud(string remoteName) => Toggle(CloudKey(remoteName));
+
+        /// <summary>云端那一行此刻是不是展开着。</summary>
+        internal static bool IsOpenCloud(string remoteName) => IsOpen(CloudKey(remoteName));
 
         internal static bool IsOpen(string path)
             => !string.IsNullOrEmpty(path)
@@ -104,7 +127,85 @@ namespace SpectreReplay.Pages
                 return;
             }
             if (info == null) return;
+            DrawBody(info);
+        }
 
+        /// <summary>
+        /// 画云端那一份的详情。
+        ///
+        /// <para>字节直接从 Steam 云缓存读，不落盘——一份「看看这是什么」的详情若顺手
+        /// 写了文件，云回放看得越多本地目录越脏，还会让「回填缺失」误判成「本地已有」。</para>
+        ///
+        /// <para>尺寸与时间由列表条目带进来（云端列表只有这两个字段），解码结果走
+        /// <see cref="CloudReplay.PeekReplay"/>：它只读不装载，不会顶掉正在播的那份。</para>
+        /// </summary>
+        internal static void DrawCloud(string remoteName, int sizeBytes, uint timestampUnix)
+        {
+            ReplayFileInfo info;
+            try
+            {
+                info = CloudInfo(remoteName, sizeBytes, timestampUnix);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[SpectreReplay] 读取云端回放详情失败：" + ex.Message);
+                return;
+            }
+            if (info == null) return;
+            DrawBody(info);
+        }
+
+        /// <summary>
+        /// 云端条目的详情数据，带缓存。
+        ///
+        /// <para>缓存键用 <see cref="CloudKey"/>，时间戳兼作「内容变了没」的戳记：云端
+        /// 那份被别的机器覆盖上传后时间戳会变，届时自动重读。</para>
+        /// </summary>
+        private static ReplayFileInfo CloudInfo(string remoteName, int sizeBytes, uint timestampUnix)
+        {
+            string key = CloudKey(remoteName);
+            // 0 = Steam 没给时间（旧条目）。此时不给戳记，改由 size 参与判断：
+            // 时间戳为 0 的那批条目，能变的只有大小。
+            DateTime stamp = timestampUnix == 0
+                ? DateTime.MinValue
+                : DateTimeOffset.FromUnixTimeSeconds(timestampUnix).LocalDateTime;
+            if (_cache != null
+                && string.Equals(_cachePath, key, StringComparison.OrdinalIgnoreCase)
+                && _cacheStamp == stamp
+                // 时间戳为 0 的旧条目没有戳记可用，退而用大小判「还是不是那一份」。
+                && (timestampUnix != 0 || _cache.FileBytes == sizeBytes))
+            {
+                return _cache;
+            }
+
+            bool ok = CloudReplay.PeekReplay(out ReplayData data, remoteName, out string error);
+            // 详情面板的错误行只认 playback.info.err.* 那三档。云端这份读不出来时，
+            // 「拿到了字节但解不开」与「根本没读到字节」对玩家是同一件事：这一份看不了。
+            // 为此再添两个只有云端会遇到的文案键不值得——说出来也是同一句「读不出来」。
+            string code = ok
+                ? null
+                : (string.Equals(error, "decode_failed", StringComparison.Ordinal)
+                    ? "decode_failed"
+                    : "io_error");
+
+            var info = ReplayFileInfo.FromData(
+                ok ? data : null,
+                "",                                     // 云端这份没有本地路径
+                Path.GetFileNameWithoutExtension(remoteName),
+                sizeBytes,
+                stamp,
+                !(remoteName ?? "").EndsWith(ReplayConstants.ExtensionNoEncrypt,
+                    StringComparison.OrdinalIgnoreCase),
+                code);
+
+            _cache = info;
+            _cachePath = key;
+            _cacheStamp = stamp;
+            return info;
+        }
+
+        private static void DrawBody(ReplayFileInfo info)
+        {
             // 展开段整体往左缩进，让它明显隶属上面那一行
             GUILayout.BeginHorizontal();
             GUILayout.Space(14f);
@@ -212,8 +313,14 @@ namespace SpectreReplay.Pages
         private static void DrawFileLine(ReplayFileInfo info)
         {
             string enc = Loc.T(info.Encrypted ? "playback.info.encrypted" : "playback.info.plain");
-            string size = SizeText(info.FileBytes);
-            string time = info.FileTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+            // 云端条目可能没有时间戳、也没有字节数（Steam 旧条目）。
+            // 这里必须显式兜底：DateTime.MinValue 直接格式化会印出 "0001-01-01 00:00"，
+            // 看着像真数据，比留空更糟。
+            string na = Loc.T("playback.info.na");
+            string size = info.FileBytes > 0 ? SizeText(info.FileBytes) : na;
+            string time = info.FileTime == DateTime.MinValue
+                ? na
+                : info.FileTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
             string ver = string.IsNullOrEmpty(info.ModVersionText) ? "?" : info.ModVersionText;
             GUILayout.Label(Loc.F("playback.info.fileline", info.FileName, size, time, enc, ver),
                 Gui.SmallStyle, GUILayout.ExpandWidth(true));

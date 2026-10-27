@@ -95,12 +95,12 @@ internal static class VideoRender
             return;
         if (!Settings.RenderOn)
         {
-            TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.disabled"), 3f, NotifType.Warning);
+            TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.disabled"), type: NotifType.Warning);
             return;
         }
         if (SpectreState.data == null || SpectreState.data.HitSnapshots.Count == 0)
         {
-            TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.need_replay"), 3f, NotifType.Warning);
+            TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.need_replay"), type: NotifType.Warning);
             return;
         }
         bool inLevel = scrController.instance != null && ADOBase.lm != null && ADOBase.lm.listFloors != null
@@ -108,13 +108,13 @@ internal static class VideoRender
         bool inEditor = ADOBase.editor != null && ADOBase.editor.floors != null && ADOBase.editor.floors.Count > 1;
         if (!inLevel && !inEditor)
         {
-            TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.need_level"), 3f, NotifType.Warning);
+            TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.need_level"), type: NotifType.Warning);
             return;
         }
         string encoderPath = VideoEncoder.LocateEncoder();
         if (encoderPath == "ffmpeg" && !VideoEncoder.PathProbeSucceeded())
         {
-            TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.ffmpeg_missing"), 5f, NotifType.Warning);
+            TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.ffmpeg_missing"), extra: 2f, type: NotifType.Warning);
             return;
         }
         ResetLeakedPins();

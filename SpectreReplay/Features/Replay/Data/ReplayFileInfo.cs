@@ -127,6 +127,54 @@ internal sealed class ReplayFileInfo
             return info;
         }
 
+        Apply(info, data);
+        return info;
+    }
+
+    /// <summary>
+    /// 用已经在内存里的一份回放数据算出摘要——**读的是字节，不是文件**。
+    ///
+    /// <para>给云端列表用：那份文件只存在于 Steam Cloud，本地没有任何路径。
+    /// 为了展开详情先把它写到磁盘上，会在玩家存档目录里留副本，且下次
+    /// <see cref="CloudReplay.RestoreMissing"/> 会因为「本地已有」而跳过真正该补的文件。
+    /// 所以这里只收 <see cref="ReplayData"/>，路径/文件名/大小/时间由调用方给。</para>
+    ///
+    /// <para><paramref name="error"/> 非空表示「根本没拿到数据」：调用方已经知道
+    /// 失败原因（下载失败、名字不合法……），这里不重复猜测，只把文件行填上后返回。</para>
+    /// </summary>
+    /// <param name="data">已解码的回放；<paramref name="error"/> 非空时可为 null。</param>
+    /// <param name="path">展示/日志用路径；云端传空串。</param>
+    /// <param name="name">展示用文件名（不含扩展名）。</param>
+    /// <param name="bytes">文件字节数；未知传 0。</param>
+    /// <param name="time">最后写入时间；未知传 <c>default</c>（界面显示占位）。</param>
+    /// <param name="encrypted">是否为加密变体。</param>
+    /// <param name="error">失败原因码；成功为 null。</param>
+    internal static ReplayFileInfo FromData(ReplayData data, string path, string name,
+        long bytes, DateTime time, bool encrypted, string error = null)
+    {
+        var info = new ReplayFileInfo
+        {
+            FilePath = path ?? "",
+            FileName = name ?? "",
+            Encrypted = encrypted,
+            FileBytes = bytes,
+            FileTime = time,
+            Error = error,
+        };
+        if (data == null) return info;
+        Apply(info, data);
+        return info;
+    }
+
+    /// <summary>
+    /// 把 <see cref="ReplayData"/> 映射成可直接排版的字段。
+    ///
+    /// <para>抽出来是因为本地文件与云端字节是**同一份格式、同一个解码器**，
+    /// 两条路径各写一遍取值，迟早有一边漏掉某个字段（而漏掉的恰好是
+    /// 玩家盯着的那个数字时，没人看得出是漏了）。</para>
+    /// </summary>
+    private static void Apply(ReplayFileInfo info, ReplayData data)
+    {
         // 缺省值与旧版 Str/Bool/Int/Dbl 四个辅助方法逐字一致：缺字符串记空串，缺数值记 0。
         info.SongName = data.SongName ?? "";
         info.ArtistName = data.ArtistName ?? "";
@@ -153,7 +201,6 @@ internal sealed class ReplayFileInfo
         // 早期版本分母错、全完美局会显示成 96%。能重算就重算。
         double recomputed = SpectreReplay.Features.Compat.HitMarginCompat.XAcc(info.JudgmentCounts);
         info.Xacc = recomputed >= 0.0 ? recomputed : info.PercentXacc;
-        return info;
     }
 
     /// <summary>按键流里最晚的那个时间点。没有按键就是 0。</summary>

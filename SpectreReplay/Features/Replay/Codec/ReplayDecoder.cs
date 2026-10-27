@@ -35,6 +35,8 @@ internal static class ReplayDecoder
         replay.KeyEvents = ReadKeyEvents(r);
         replay.HitSnapshots = ReadHitSnapshots(r);
         replay.CursorTrack = ReadCursorTrackIfPresent(r);
+        replay.KeybdAudio = ReadKeybdAudioIfPresent(r);
+        replay.KeybdPrefs = ReadKeybdPrefsIfPresent(r);
         return replay;
     }
 
@@ -149,6 +151,10 @@ internal static class ReplayDecoder
             m.MaximumUsedKeys = r.ReadInt32();
             m.JudgmentList = r.ReadString();
         }
+        // v3 起"没有基准"写成 NaN，0 是合法基准。旧 v2 用 0 当哨兵，这里迁成 NaN——
+        // 与旧回放侧"拒 0"的既有行为完全一致，只让新录的回放能表达真实 0 基准。
+        if (ver < 3 && m.KeybdSoundStartTick == 0.0)
+            m.KeybdSoundStartTick = double.NaN;
         return m;
     }
 
@@ -229,9 +235,16 @@ internal static class ReplayDecoder
         long remaining = r.BaseStream.Length - r.BaseStream.Position;
         if (remaining < sizeof(ulong) + sizeof(int))
             return [];
+        long start = r.BaseStream.Position;
         var magic = r.ReadUInt64();
         if (magic != ReplayConstants.MagicCursorTrack)
-            return [];   // 未知尾部：可能是未来版本的新段，按"旧构建读新文件"语义无视
+        {
+            // 未知尾部：可能是更晚版本的段（现在是键盘音段）。
+            // **必须回退位置**——原实现直接 return，位置已经前进了 8 字节，
+            // 后续段的读取会整体错位 8 字节，把魔数读成垃圾值。
+            r.BaseStream.Position = start;
+            return [];
+        }
         var ver = r.ReadInt32();
         if (ver > ReplayConstants.CursorTrackVersion)
             throw new InvalidDataException(
@@ -246,6 +259,102 @@ internal static class ReplayDecoder
                 Y = r.ReadSingle()
             });
         return track;
+    }
+
+    /// <summary>
+    /// 尾部可选段：嵌入的键盘音（位于指针轨迹之后）。
+    ///
+    /// <para>没有这一段不是错误——旧回放的音频在同目录同名 .wav 里，
+    /// 由 <c>ReplayManager.TryLoadKeybdSound</c> 负责回落。所以本方法
+    /// 探测不到魔数时返回 <c>default</c> 而不是抛异常。</para>
+    ///
+    /// <para>长度字段一律按「不超过剩余字节」校验：负载长度来自文件，
+    /// 是不可信输入，直接拿它分配内存可以被一个几字节的畸形文件撑爆。</para>
+    /// </summary>
+    private static KeybdAudioBlob ReadKeybdAudioIfPresent(BinaryReader r)
+    {
+        long remaining = r.BaseStream.Length - r.BaseStream.Position;
+        // 魔数 8 + 段版本 4 + 编码 4 + 采样率 4 + 声道 4 + 样本数 4 + 长度 4
+        const int HeadLen = 8 + 4 + 4 + 4 + 4 + 4 + 4;
+        if (remaining < HeadLen)
+            return default;
+        long start = r.BaseStream.Position;
+        var magic = r.ReadUInt64();
+        if (magic != ReplayConstants.MagicKeybdAudio)
+        {
+            r.BaseStream.Position = start;
+            return default;
+        }
+        var ver = r.ReadInt32();
+        if (ver > ReplayConstants.KeybdAudioVersion)
+            throw new InvalidDataException(
+                $"KeybdAudio version {ver} too new (known: {ReplayConstants.KeybdAudioVersion})");
+        var blob = new KeybdAudioBlob
+        {
+            Codec = r.ReadInt32(),
+            SampleRate = r.ReadInt32(),
+            Channels = r.ReadInt32(),
+            SampleCount = r.ReadInt32(),
+        };
+        int payloadLen = r.ReadInt32();
+        long after = r.BaseStream.Length - r.BaseStream.Position;
+        if (payloadLen < 0 || payloadLen > after)
+            throw new InvalidDataException(
+                $"KeybdAudio payload {payloadLen} exceeds remaining stream ({after} bytes)");
+        blob.Payload = payloadLen == 0 ? null : r.ReadBytes(payloadLen);
+        if (blob.Payload != null && blob.Payload.Length != payloadLen)
+            throw new InvalidDataException("KeybdAudio payload truncated");
+        return blob;
+    }
+
+    /// <summary>
+    /// 尾部可选段：这一份回放自带的键盘音播放覆盖值（位于键盘音段之后）。
+    ///
+    /// <para><b>读不到不是错误。</b>旧回放、以及没有逐份覆盖的录制，都走全局设置；
+    /// 所以探测不到魔数时返回 <c>default</c>，而不是抛异常。剩余字节不足同样
+    /// 返回 <c>default</c>——旧文件在轨迹段之后就是 EOF，不能因此抛 EndOfStream。</para>
+    ///
+    /// <para>探测失败一律**回退流位置**：本段前面可能还有更晚的尾部段，
+    /// 位置偏了几字节就会把后续魔数读成垃圾值（KeybdAudio 段踩过同一个坑）。</para>
+    ///
+    /// <para>段版本显式上界：本段布局定长，未来版本若在尾部追加字段，
+    /// 按 v1 解析会把后续字节读成垃圾，宁可明确拒绝。</para>
+    /// </summary>
+    private static KeybdPrefs ReadKeybdPrefsIfPresent(BinaryReader r)
+    {
+        // 魔数 8 + 段版本 4 + 标志位 1 + 音量 4 + 偏移 4
+        const int HeadLen = 8 + 4 + 1 + 4 + 4;
+        long remaining = r.BaseStream.Length - r.BaseStream.Position;
+        // 不足一个完整段（含 0 字节的旧文件）就什么都不读：这里是「没有覆盖值」，
+        // 不是「文件损坏」，任何抛异常都会让存量回放整份加载失败。
+        if (remaining < HeadLen)
+            return default;
+        long start = r.BaseStream.Position;
+        var magic = r.ReadUInt64();
+        if (magic != ReplayConstants.MagicKeybdPrefs)
+        {
+            r.BaseStream.Position = start;
+            return default;
+        }
+        var ver = r.ReadInt32();
+        if (ver > ReplayConstants.KeybdPrefsVersion)
+            throw new InvalidDataException(
+                $"KeybdPrefs version {ver} too new (known: {ReplayConstants.KeybdPrefsVersion})");
+        byte flags = r.ReadByte();
+        int volume = r.ReadInt32();
+        int offsetMs = r.ReadInt32();
+        // 未置位的字段在流里仍占 4 字节（布局定长），但值无意义：统一归零，
+        // 让「没有这一项」只有一种表示，搬运/比较时不会带着文件里的垃圾值。
+        bool hasVolume = (flags & ReplayConstants.KeybdPrefsFlagHasVolume) != 0;
+        bool hasOffset = (flags & ReplayConstants.KeybdPrefsFlagHasOffset) != 0;
+        return new KeybdPrefs
+        {
+            HasVolume = hasVolume,
+            Volume = hasVolume ? volume : 0,
+            HasOffset = hasOffset,
+            OffsetMs = hasOffset ? offsetMs : 0,
+            IsMuted = (flags & ReplayConstants.KeybdPrefsFlagIsMuted) != 0,
+        };
     }
 
     public static Replay FromReplayData(ReplayData replayData)
@@ -284,7 +393,9 @@ internal static class ReplayDecoder
         m.Bpm = replayData.Bpm ?? 0.0;
         m.SpeedTrail = replayData.SpeedTrail ?? 0.0;
         m.PlaybackSpeed = replayData.PlaybackSpeed ?? 0.0;
-        m.KeybdSoundStartTick = replayData.KeybdSoundStartTick ?? 0.0;
+        // null（未起录）写 NaN 而不是 0：0 已是合法基准，拿它当"没有基准"会让
+        // 这类回放在播放侧被对齐到歌曲开头（见 Patch_Playback 的基准判定）。
+        m.KeybdSoundStartTick = replayData.KeybdSoundStartTick ?? double.NaN;
 
         m.IsOfficialLevel = replayData.IsOfficialLevel ?? false;
         m.SpeedTrailMode = replayData.SpeedTrailMode ?? false;
@@ -304,6 +415,8 @@ internal static class ReplayDecoder
 
         replay.HitSnapshots = replayData.HitSnapshots;
         replay.CursorTrack = replayData.CursorTrack;
+        replay.KeybdAudio = replayData.KeybdAudio;
+        replay.KeybdPrefs = replayData.KeybdPrefs;
         return replay;
     }
 
@@ -340,7 +453,11 @@ internal static class ReplayDecoder
         replayData.Bpm = m.Bpm;
         replayData.SpeedTrail = m.SpeedTrail;
         replayData.PlaybackSpeed = m.PlaybackSpeed;
-        replayData.KeybdSoundStartTick = m.KeybdSoundStartTick;
+        // NaN（文件里没有基准）还原成 null（本机从未起录）；播放侧两者同样按
+        // "没有基准"处理。再存回去时 null 又写成 NaN，往返后语义不变。
+        replayData.KeybdSoundStartTick = double.IsNaN(m.KeybdSoundStartTick)
+            ? (double?)null
+            : m.KeybdSoundStartTick;
 
         replayData.IsOfficialLevel = m.IsOfficialLevel;
         replayData.SpeedTrailMode = m.SpeedTrailMode;
@@ -361,6 +478,8 @@ internal static class ReplayDecoder
 
         replayData.HitSnapshots = replay.HitSnapshots;
         replayData.CursorTrack = replay.CursorTrack;
+        replayData.KeybdAudio = replay.KeybdAudio;
+        replayData.KeybdPrefs = replay.KeybdPrefs;
         return replayData;
     }
 }

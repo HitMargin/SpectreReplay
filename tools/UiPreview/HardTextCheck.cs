@@ -63,6 +63,13 @@ namespace UiPreview
             // 这里的细节是给排查者看的，玩家看不到也不需要看到。
             { "VideoRenderClockPatches.cs",
                 "transpiler 的失败/让位诊断只写 Player.log，界面提示另有 Loc 文案" },
+            // 编解码器的 error 出参只被 ReplayManager 拿去打 Debug.Log/LogWarning
+            // （保存时嵌入失败、装载时解码失败——这两种情况玩家看到的分别是
+            // 「保存成功但没有嵌入」和「这份回放没有键盘音」，都走 Loc 键）。
+            // 也就是说这串中文连界面的边都摸不到，它存在的意义是让排查者从
+            // Player.log 一眼看出是哪一步不认这份 wav（头坏了 / 位深不支持 / 负载长度不对）。
+            { "KeybdAudioCodec.cs",
+                "编解码失败的 error 串只流向 Player.log，界面提示走 Loc 键" },
         };
 
         internal static int Run(string projectRoot)

@@ -39,6 +39,13 @@
     <Compile Include="..\..\SpectreReplay\Features\Replay\Data\Replay.cs" Link="Real\Replay.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\Data\ReplayKeys.cs" Link="Real\ReplayKeys.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\Data\ReplayConstants.cs" Link="Real\ReplayConstants.cs" />
+    <!-- 嵌入键盘音的压缩块与编解码器：纯 System，不碰引擎，因此能真的在闸门里跑往返。
+         ReplayData.cs 上有 KeybdAudioBlob 属性，漏链就是把“编译失败”留给下游。 -->
+    <Compile Include="..\..\SpectreReplay\Features\Replay\Data\KeybdAudioBlob.cs" Link="Real\KeybdAudioBlob.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\Codec\KeybdAudioCodec.cs" Link="Real\KeybdAudioCodec.cs" />
+    <!-- 逐份回放的键盘音覆盖值。Replay.cs / ReplayData.cs / 编解码器都引用它，
+         漏链就是编译错误（正是要的失败方式）——它同时被 KeybdPrefsCheck 拿去做往返。 -->
+    <Compile Include="..\..\SpectreReplay\Features\Replay\Data\KeybdPrefs.cs" Link="Real\KeybdPrefs.cs" />
     
     <Compile Include="..\..\SpectreReplay\Features\Replay\Data\keyEvent.cs" Link="Real\keyEvent.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\Data\HitSnapshot.cs" Link="Real\HitSnapshot.cs" />

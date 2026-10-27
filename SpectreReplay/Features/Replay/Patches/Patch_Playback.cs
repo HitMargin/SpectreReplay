@@ -81,18 +81,20 @@ internal class Patch_PlayerControlUpdate
             AudioRecorder.Instance.StartRecording(filePath, Settings.MicrophoneDeviceName);
             // 起录帧拿不到导体是常态（倒计时/检查点阶段切场景）。**不能在这里 return**：
             // 那会同时跳过本帧的 Record_kbdstate，更糟的是 tick 永远缺着——回放侧
-            // Patch_Playback:187 判到没有 KeybdSoundStartTick 就静默 return，
-            // 键盘声整段消失且没有任何提示（HasKeybdSound 仍为 true，没有别处会报）。
-            // 记 0 占位：它让下面"缺 tick 就补"的分支接管，导体就绪后立刻补真值。
-            data.KeybdSoundStartTick = 0.0;
+            // 判到没有基准就整段不播，键盘声整段消失且没有任何提示
+            // （HasKeybdSound 仍为 true，没有别处会报）。
+            // 记 NaN 占位：它让下面"缺 tick 就补"的分支接管，导体就绪后立刻补真值。
+            // **不能拿 0 当占位**：0 是合法基准（录制恰从歌曲 0 秒起），与"没记到"
+            // 无法区分，那样的回放会被当成没有基准而整段不播。
+            data.KeybdSoundStartTick = double.NaN;
         }
 
-        // 补起始时间戳：起录帧没有导体时留下的是 0，这里每帧试着换成真值。
-        // 只补一次（非 0 即视为已记），不覆盖已记下的真值。
+        // 补起始时间戳：起录帧没有导体时留下的是 NaN，这里每帧试着换成真值。
+        // 只补一次（非 NaN 即视为已记），不覆盖已记下的真值。
         if (is_recording && Settings.KeybdSoundRecordActive
             && AudioRecorder.Instance.IsRecording
             && data.KeybdSoundStartTick is double pendingTick
-            && pendingTick == 0.0)
+            && double.IsNaN(pendingTick))
         {
             scrConductor tickConductor = ADOBase.conductor;
             if (tickConductor != null)
@@ -214,19 +216,35 @@ internal class Patch_PlayerControlUpdate
         // 输入更新。判空用 Unity 语义（==，能识别已销毁）并顺手清标志。
         if (WavLoader.loaded_clip == null || WavLoader.musicSource == null)
         {
+            // clip 被销毁、source 还活着时，必须把它停掉：否则它会把上一份音频
+            // 一直播下去。导出走的是 AudioListener 实时混音（VideoRenderJob:498），
+            // 这种残留会被原样录进视频，而游戏内未必听得出来——"导出有声、回放
+            // 没声"的另一类来源。source 已销毁时 isPlaying 也无从判断，直接清标志。
+            if (WavLoader.musicSource != null && WavLoader.musicSource.isPlaying)
+                WavLoader.Stop_keybdsound();
             HasKeybdSound = false;
             return;
         }
 
-        if (data.KeybdSoundStartTick is not double keybdStartTick)
-            return;
-        // tick 为 0 = 起录帧没拿到导体、之后也一直没补上（极端情况：整个倒计时
-        // 阶段导体都未就绪）。此时拿 0 当基准会把 wav 从头对齐到歌曲中段，
-        // 键盘声整体前移一大段且听起来"像在乱响"——不如整段不播。
-        // HasKeybdSound 一并清掉，避免每帧白算。
-        if (keybdStartTick <= 0.0)
+        // **没有基准就整段不播**，两种来源：null = 本机从未起录（旧回放/没录到），
+        // NaN = 起录后始终没拿到导体（见上面起录那段）。拿 0 或 NaN 去对齐会把
+        // wav 起点对到歌曲中段，键盘声整体前移一大段、听起来"像在乱响"，比不播更糟。
+        //
+        // **0 与负数都是合法基准**：0 是"恰好从歌曲 0 秒起录"；负数是"在倒计时里起录"
+        // （实测 -0.57，录制侧原样记下）。旧判断写的是 <= 0.0，把这两类整段静音——
+        // 而导出端走 AudioListener 实时混音仍有声，于是表现成"回放没声、导出却有"。
+        // 负 tick 在下面 num = songpos - tick 里是**正确**基准：回放倒计时中 num < 0
+        // 不播，到 songpos == tick 时 num 恰为 0，wav 从头起播，与录制时刻严丝合缝。
+        //
+        // 留着的 source 必须先停：否则它会被导出端的 AudioListener 混音录进去。
+        // 但**不清 HasKeybdSound**——那是"这一份回放本该有键盘音"的标志，云端回放
+        // 用它判"本该有却丢了"（CloudReplay:524）。这里只是没有时间基准、这一帧
+        // 算不出来，被误报成音频丢失会触发一次没必要的重新下载。
+        if (data.KeybdSoundStartTick is not double keybdStartTick
+            || double.IsNaN(keybdStartTick))
         {
-            HasKeybdSound = false;
+            if (WavLoader.musicSource.isPlaying)
+                WavLoader.Stop_keybdsound();
             return;
         }
 
@@ -236,7 +254,9 @@ internal class Patch_PlayerControlUpdate
         scrConductor conductor = ADOBase.conductor;
         if (conductor == null || conductor.song == null)
         {
-            HasKeybdSound = false;
+            // 这里**不清** HasKeybdSound：导体为空也可能只是切状态/结算重开的瞬时态，
+            // 清掉就再也回不来了，整局剩下的键盘声全没（且没有任何提示）。clips/source
+            // 真正被销毁的情况上面已经判过，本分支只是"这帧算不了时间"。
             return;
         }
 
@@ -244,11 +264,28 @@ internal class Patch_PlayerControlUpdate
         // 下推进速度是墙钟的 n 倍。song.pitch 即歌曲实际播放速率（倍速/调速/移调都在这），
         // 歌曲时间差先除回速率换算成真实时间，AudioSource 保持 1× 播放——否则 wav 被
         // 时间压缩 n 倍（倍速谱面键盘声提前跑完、音调变尖），两个 offset 也只在真实时间域有效
+        // 单回放的覆盖值优先，没有才用全局设置（「回放文件优先、本地配置兜底」）。
+        // 偏移是**替换**不是叠加：覆盖值就是这一份该用的偏移，再叠一次全局偏移
+        // 会让调好的人反复对不上。音量单位 0..10（10 = 满），与全局设置同量纲。
+        KeybdPrefs prefs = data.KeybdPrefs;
+        int offsetMs = prefs.HasOffset ? prefs.OffsetMs : Settings.MicrophoneOffset;
+        int volumeStep = Mathf.Clamp(
+            prefs.HasVolume ? prefs.Volume : Settings.KeybdSoundVolume, 0, 10);
+
+        // 静音（或音量归零）：直接停声。别让一条无声的 AudioSource 继续每帧被
+        // seek——代价白付，而且重新开声时可能从错误位置起播。
+        if (prefs.IsMuted || volumeStep <= 0)
+        {
+            if (WavLoader.musicSource.isPlaying)
+                WavLoader.Stop_keybdsound();
+            return;
+        }
+
         float rate = Mathf.Max(0.05f, Mathf.Abs(conductor.song.pitch));
         float num = ((float)(conductor.songposition_minusi
             - keybdStartTick) / rate
             + (float)scrConductor.currentPreset.inputOffset / 1000f
-            + (float)Settings.MicrophoneOffset / 1000f);
+            + (float)offsetMs / 1000f);
 
         if (num >= 0f && (double)num < WavLoader.loaded_clip.length - 0.1)
         {
@@ -256,7 +293,7 @@ internal class Patch_PlayerControlUpdate
                 WavLoader.musicSource.time = num;
             WavLoader.musicSource.pitch = 1f;
             if (!WavLoader.musicSource.isPlaying)
-                WavLoader.Play_keybdsound(WavLoader.loaded_clip, (float)Settings.KeybdSoundVolume / 10f);
+                WavLoader.Play_keybdsound(WavLoader.loaded_clip, volumeStep / 10f);
         }
         else if (WavLoader.musicSource.isPlaying)
             WavLoader.Stop_keybdsound();

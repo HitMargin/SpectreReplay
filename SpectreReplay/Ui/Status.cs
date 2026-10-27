@@ -38,12 +38,19 @@ namespace SpectreReplay.Ui
             internal bool[] RaycastTargets;
         }
 
-        /// <summary>弹一条提示。</summary>
+        /// <summary>
+        /// 弹一条提示。
+        ///
+        /// <paramref name="extra"/> 是**在玩家设定值之上多加的秒数**（默认 0），
+        /// 不是绝对时长——解析统一走 <see cref="Settings.NotificationDuration"/>，
+        /// 与 SpectreState.TriggerMessage 同一套口径。
+        /// </summary>
         internal static void Say(string key, string detail = null,
-            Level level = Level.Info, float seconds = 4f)
+            Level level = Level.Info, float extra = 0f)
         {
             try
             {
+                float seconds = Settings.NotificationDuration(extra);
                 var n = Notification.instance;
                 if (n == null)
                 {
@@ -163,6 +170,6 @@ namespace SpectreReplay.Ui
         /// 一句话警告版。用于"操作没生效"这类必须让玩家看见的情况。
         /// </summary>
         internal static void Warn(string key, string detail = null)
-            => Say(key, detail, Level.Warning, 5f);
+            => Say(key, detail, Level.Warning, extra: 2f);
     }
 }

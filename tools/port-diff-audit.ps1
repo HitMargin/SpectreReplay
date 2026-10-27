@@ -169,13 +169,13 @@ $knownDeviations = @(
     @{ Pat = 'Settings.KeybdSoundRecordActive';      Why = 'round 49 键盘音三项接线的连带改动' }
     # 注：`Settings.Backup`（主保存失败不走备份）的登记在文件末尾那批**带 File = 限定**
     # 的条目里 —— 泛名字必须限定文件，否则等于给全仓开后门。
-    @{ Pat = 'pendingTick) == 0.0';                  Why = 'round 早 键盘音起始时间戳补真值' }
+    @{ Pat = 'double.IsNaN(pendingTick)';            Why = 'round 早 键盘音起始时间戳补真值（MetadataVersion 3 起占位是 NaN，0 已归还给真实基准）' }
     @{ Pat = 'System.Collections.Generic;';          Why = 'using 区按我们自己的需要裁剪' }
     @{ Pat = 'Load() 进入';                          Why = 'round 19 Load() 启动行（铁律⑤地基）' }
     @{ Pat = 'OnGui.OnGUI';                          Why = '我们自写的 UI 装配，上游是 Quartz 壳' }
     @{ Pat = 'PatchShared;';                         Why = '命名空间不同（SpectreReplay）' }
     @{ Pat = 'namespace SpectreReplay';              Why = '命名空间不同' }
-    @{ Pat = 'double.NaN';                           Why = '渲染时钟的 NaN 哨兵（round 早 钉时间轴）' }
+    @{ Pat = 'double.NaN';                           Why = '渲染时钟的 NaN 哨兵（round 早 钉时间轴）；键盘音起始基准也用 NaN 表示"没有基准"（MetadataVersion 3，0/负数都是合法基准）' }
     @{ Pat = 'Debug.Log';                            Why = 'round 31 日志前缀改名的连带面（Debug.Log/LogWarning/LogError 全部改前缀）' }
     @{ Pat = 'ReplayConstants.Extension';            Why = 'round 16 ReadableExtensions：扩展名改为从常量集中取' }
     @{ Pat = 'VideoEncoder.OutContainer.Mov';        Why = 'mov 分支必须重编码（movenc 拒 VP9）' }
@@ -389,6 +389,9 @@ $knownDeviations = @(
     # 按键整体偏移，听起来就是「回放慢拍子」。三处必须同源，故渲染期直接取钉扎值。
     # 上游没有视频渲染，不存在这条时钟，属于我们自己的机制。
     @{ Pat = 'Features.VideoRender';                  File = 'ReplayPlayer.cs'; Why = '2026-10-23 渲染期按键注入改用钉扎时间轴，与画面/命中同源（原先按 dspTime 重算，慢渲染时整体偏移）。名字被 Compare-Object 切在点号处，故按文件限定的两段登记' }
+    @{ Pat = 'double.IsNaN';                          File = 'ReplayDecoder.cs'; Why = '2026-10-27 键盘音起始基准改 tri-state（MetadataVersion 3）：只有 NaN 是"没有基准"，0/负数都是合法值，故解码要按 NaN 判并迁移旧 v2 的 0 哨兵' }
+    @{ Pat = 'double.IsNaN';                          File = 'Patch_Playback.cs'; Why = '2026-10-27 同上：回放侧只拒 NaN 基准（0 与负数照放），占位也从 0 改成 NaN' }
+    @{ Pat = 'WavLoader.musicSource';                 File = 'Patch_Playback.cs'; Why = '键盘音残留必须停源：clip/source 被销毁时不清源会把上一份音频一直播下去，导出端 AudioListener 会原样混进成片（"导出有声、回放没声"的一类来源）' }
     # -- 2026-10-23 全量回放标志改按活数据重算（用户报「提示仍不显示」）--------
     # 起点/终点来自回放文件，总块数只能问当前关卡；而它只在关卡加载后存在。
     # 原先只在 TryStartPlayback 里赋值一次，那条路径上有大量校验可能提前
@@ -740,6 +743,7 @@ $knownDeviations = @(
     @{ Pat = 'Settings.RenderTailSeconds'; File = 'ConfigManager.cs'; Why = '同上' }
     @{ Pat = 'Settings.RenderWidth';    File = 'ConfigManager.cs'; Why = '同上' }
     @{ Pat = 'Settings.SaveButton';     File = 'ConfigManager.cs'; Why = 'DTO 裁剪的连带字段' }
+    @{ Pat = 'Settings.NotificationSeconds'; File = 'ConfigManager.cs'; Why = '2026-10-28 提示条停留时长落盘（notification_seconds）：上游把 3 秒写死在 TriggerMessage 里，我们把它变成玩家可调项' }
 
     # -- Settings：删 CustomJudge / JudgeBar / PlanetColors 整组，加渲染组 --
     # 与 ConfigManager 同源（2026-10-17 用户裁决）。EffectRemoverOn 默认值
@@ -751,6 +755,7 @@ $knownDeviations = @(
     @{ Pat = 'System.Exception';        File = 'Settings.cs'; Why = '落盘失败的异常捕获（用全名免得动 using 区）' }
     @{ Pat = 'System.IO.Path.Combine';  File = 'Settings.cs'; Why = '同上：路径拼装' }
     @{ Pat = 'VanillaMarginColors.Length'; File = 'Settings.cs'; Why = '2026-10-18 判定窗口颜色改从游戏自带色表取（删掉上游的 Features.Other.JudgeTextDefaults）' }
+    @{ Pat = 'Mathf.Clamp';             File = 'Settings.cs'; Why = '2026-10-28 提示条停留时长的启动钳制（手改配置可能写进 0 或 999，0 秒等于弹了看不见）' }
 
     # -- SpectreAPI：删掉 CustomJudge 整组 API（2026-10-17）---------------
     # 上游这里导出 HitSign/TierCount/GetTierCounts 等一整套自定义判定接口。
@@ -795,6 +800,7 @@ $knownDeviations = @(
     @{ Pat = 'ReplayManager.UnLoadReplay'; File = 'SpectreState.cs'; Why = '同上：跳转前卸载当前回放' }
     @{ Pat = 'Settings.SavePath';       File = 'SpectreState.cs'; Why = '同上：跳转时要用回放所在目录' }
     @{ Pat = 'Ui.Loc.T';                File = 'SpectreState.cs'; Why = '同上：文案走我们的 Loc（上游用 LocalizationManager 直取）' }
+    @{ Pat = 'Settings.NotificationDuration'; File = 'SpectreState.cs'; Why = '2026-10-28 提示条停留时长改成「玩家设定的基础值 + 本条自己的差量」：上游 TriggerMessage 把 3 秒写死在默认形参里，改成可调后 4f/5f 这类要多留一会儿的提示必须跟着基础值一起变' }
     @{ Pat = 'Directory.CreateDirectory'; File = 'SpectreState.cs'; Why = '备份目录创建（上游在 SaveReplay 内部做）' }
     @{ Pat = 'File.Copy';               File = 'SpectreState.cs'; Why = '2026-10-19 备份改成直接复制主文件，不再重跑保存管线（PBKDF2 一局两遍半秒卡顿）' }
     @{ Pat = 'File.Exists';             File = 'SpectreState.cs'; Why = '同上：复制前确认源文件在' }
@@ -1039,7 +1045,104 @@ $knownDeviations = @(
     @{ Pat = 'Settings.CloudRestoreOnLoad'; File = 'ConfigManager.cs'; Why = '2026-10-26 Steam 云：启动回填开关的持久化读写（默认 true，换机后才找得回来）' }
     @{ Pat = 'CloudReplay.OnReplaySaved';   File = 'SpectreState.cs'; Why = '2026-10-26 Steam 云：每存一份回放就把它推上云端（上游保存只落本地）' }
     @{ Pat = 'Features.Cloud';              File = 'SpectreState.cs'; Why = '2026-10-26 Steam 云：上面那次调用的命名空间前缀（云模块是新目录，上游在 Features 下没有 Cloud）' }
-    @{ Pat = 'playback.cloud.saved';        File = 'SpectreState.cs'; Why = '2026-10-26 Steam 云：保存提示里追加一句「已同步到云端」，仅云同步开启时出现（上游提示没有这一句）' } )
+    # ══════════════════════════════════════════════════════════════════
+    # -- 2026-10-27 云端回放直接播放：键盘音改成「从内存字节装载」--------
+    # 云回放要求「点了就播、一个字节都不落地」，于是解码与键盘音都得能
+    # 从 byte[] 进来。上游只有「给一条路径、自己去读磁盘」这一条，我们把
+    # 它拆成「取字节」与「解字节」两层，磁盘版只负责第一层。
+    #
+    # 两条规矩刻意与磁盘版逐字对齐，因为不一致的现象极难看出来：
+    # ① 哈希只覆盖 44 字节 WAV 头之后的 PCM —— 范围一旦有一边写错，
+    #    云端回放会永远校验失败，而界面上只是「没键盘音」。
+    # ② 「回放自称带键盘音、但没取到 wav」只算没声音、不算失败：
+    #    画面照放。云端比本地更容易缺 wav（上传中断 / 超过单文件上限）。
+    @{ Pat = 'displayName.EndsWith';             File = 'ReplayManager.cs'; Why = '2026-10-27 内存版解码按 displayName 的扩展名判定是否加密（上游按 filePath；云端那份还没有路径）' }
+    @{ Pat = 'AudioRecorder.VerifyAudioData';    File = 'ReplayManager.cs'; Why = '2026-10-27 内存版键盘音校验：与磁盘版同一套哈希规矩，只是数据源换成 byte[]' }
+    @{ Pat = 'WavLoader.LoadFromMemory';         File = 'ReplayManager.cs'; Why = '2026-10-27 内存版键盘音装载入口（磁盘版是 LoadFromFile）' }
+    @{ Pat = 'WavLoader.loaded_clip';            File = 'ReplayManager.cs'; Why = '2026-10-27 同上：装载结果写回同一个字段，播放侧不需要区分来源' }
+    @{ Pat = 'Path.GetFileNameWithoutExtension'; File = 'ReplayManager.cs'; Why = '2026-10-27 同上：clip 名取自 wav 文件名（云端只有文件名，没有目录）' }
+    @{ Pat = 'SpectreState.DebugMode';           File = 'ReplayManager.cs'; Why = '2026-10-27 内存版同样尊重调试开关（关掉校验时也必须一致，否则两种来源行为分叉）' }
+    @{ Pat = 'stream.Length';                    File = 'AudioRecorder.cs'; Why = '2026-10-27 PCM 哈希抽成共用实现：文件版与内存版走同一个 Stream（上游只有 FileStream 那一份）' }
+    @{ Pat = 'stream.Position';                  File = 'AudioRecorder.cs'; Why = '2026-10-27 同上：跳过 44 字节头再开始算哈希' }
+    @{ Pat = 'stream.Read';                      File = 'AudioRecorder.cs'; Why = '2026-10-27 同上：分块读入 TransformBlock' }
+    @{ Pat = 'fs.Length';                        File = 'AudioRecorder.cs'; Why = '2026-10-27 同上：调试日志里的 PCM 长度改由 fs.Length 减头长算出（原先记在循环里）' }
+    @{ Pat = 'actualHash.Equals';                File = 'AudioRecorder.cs'; Why = '2026-10-27 同上：比较从哈希循环内挪到助手外面，大小写不敏感' }
+    @{ Pat = 'SpectreState.DebugMode';           File = 'AudioRecorder.cs'; Why = '2026-10-27 两个验证入口都要能打调试日志（内存版是新增的那一处）' }
+    @{ Pat = 'playback.cloud.saved';        File = 'SpectreState.cs'; Why = '2026-10-26 Steam 云：保存提示里追加一句「已同步到云端」，仅云同步开启时出现（上游提示没有这一句）' }
+    # ══════════════════════════════════════════════════════════════════
+    # -- 2026-10-27 键盘音嵌入回放本体（尾部可选段 + ADPCM 极限压缩）-----
+    # 用户要求「键盘音彻底融进回放文件、尽量不增大体积、还要能导出音频」。
+    # 段追加在指针轨迹之后、压缩之前：旧构建读完轨迹就返回，永远碰不到它，
+    # 所以 FormatVersion 不用动（旧版本不会因为不认识新段而拒绝整份回放）。
+    @{ Pat = 'ReplayConstants.KeybdAudioVersion'; File = 'ReplayEncoder.cs'; Why = '2026-10-27 键盘音段写入：段版本号（与轨迹段同一条可扩展约定）' }
+    @{ Pat = 'replay.KeybdAudio';                 File = 'ReplayEncoder.cs'; Why = '2026-10-27 同上：有音频才写段，没有就不写（旧文件不长出空段）' }
+    @{ Pat = 'blob.Payload';                      File = 'ReplayEncoder.cs'; Why = '2026-10-27 同上：压缩后的负载逐字节落盘（长度单独记，解码端据此判越界）' }
+    @{ Pat = 'blob.HasData';                      File = 'ReplayEncoder.cs'; Why = '2026-10-27 同上：空负载视为没有音频' }
+    @{ Pat = 'blob.Codec';                        File = 'ReplayEncoder.cs'; Why = '2026-10-27 同上：编码格式代号（ADPCM / mu-law / PCM16）' }
+    @{ Pat = 'blob.SampleRate';                   File = 'ReplayEncoder.cs'; Why = '2026-10-27 同上：解码采样率（降采样后的值，不等于录音采样率）' }
+    @{ Pat = 'blob.Channels';                     File = 'ReplayEncoder.cs'; Why = '2026-10-27 同上：声道数（录音恒为 1，仍然写下来）' }
+    @{ Pat = 'blob.SampleCount';                  File = 'ReplayEncoder.cs'; Why = '2026-10-27 同上：样本数，解码前用来卡上界' }
+    @{ Pat = 'ReplayConstants.KeybdAudioVersion'; File = 'ReplayDecoder.cs'; Why = '2026-10-27 键盘音段读取：版本上界（比本版新就显式拒绝，不猜）' }
+    @{ Pat = 'replay.KeybdAudio';                 File = 'ReplayDecoder.cs'; Why = '2026-10-27 同上：读到就挂在回放对象上，读不到留空（旧文件走这一支）' }
+    @{ Pat = 'blob.Payload';                      File = 'ReplayDecoder.cs'; Why = '2026-10-27 同上：负载按声明长度一次读出' }
+    @{ Pat = 'r.ReadBytes';                       File = 'ReplayDecoder.cs'; Why = '2026-10-27 同上：负载整体读入（长度先卡上界，不会预分配巨量内存）' }
+    @{ Pat = 'data.KeybdAudio';                   File = 'ReplayManager.cs'; Why = '2026-10-27 保存时嵌入 / 装载时优先用嵌入（上游键盘音只能是旁挂 wav）' }
+    @{ Pat = 'blob.Payload';                      File = 'ReplayManager.cs'; Why = '2026-10-27 嵌入体积上限判定：超限就退回旁挂 wav，别让一份回放吃光云端配额' }
+    @{ Pat = 'blob.HasData';                      File = 'ReplayManager.cs'; Why = '2026-10-27 同上：编码失败会退化成空块' }
+    @{ Pat = 'blob.SampleRate';                   File = 'ReplayManager.cs'; Why = '2026-10-27 同上：退化重编码要换目标采样率' }
+    @{ Pat = 'blob.SampleCount';                  File = 'ReplayManager.cs'; Why = '2026-10-27 同上：日志里报压缩前后样本数' }
+    @{ Pat = 'File.ReadAllBytes';                 File = 'ReplayManager.cs'; Why = '2026-10-27 编码前把 wav 整个读进内存（编码器只接受完整 wav 字节）' }
+    @{ Pat = 'File.Exists';                       File = 'ReplayManager.cs'; Why = '2026-10-27 保存时序：正式 wav 可能还没改名，得按候选路径逐个探' }
+    @{ Pat = 'Directory.CreateDirectory';         File = 'ReplayManager.cs'; Why = '2026-10-27 导出键盘音要建 keybdsound 子目录' }
+    @{ Pat = 'KeybdAudioCodec.Encode';            File = 'ReplayManager.cs'; Why = '2026-10-27 保存时调编解码器压缩（上游没有键盘音压缩这一步）' }
+    @{ Pat = 'KeybdAudioCodec.DecodeToWav';       File = 'ReplayManager.cs'; Why = '2026-10-27 装载/导出时把嵌入负载还原成 wav 字节（解码端唯一入口）' }
+    @{ Pat = 'KeybdAudioCodec.QualityBalanced';   File = 'ReplayManager.cs'; Why = '2026-10-27 默认压缩档位（16kHz ADPCM）' }
+    @{ Pat = 'KeybdAudioCodec.QualityExtreme';    File = 'ReplayManager.cs'; Why = '2026-10-27 体积超限时退化到极限档（8kHz ADPCM）而不是直接放弃嵌入' }
+    @{ Pat = 'replayData.KeybdAudio';             File = 'ReplayManager.cs'; Why = '2026-10-27 嵌入结果回写到回放数据（调用方无需再关心 wav 是否还在）' }
+    @{ Pat = 'replayData.KeybdSoundHash';         File = 'ReplayManager.cs'; Why = '2026-10-27 嵌前用本局 PCM 哈希验一次，防止把残留的 tmp.wav 嵌进新回放' }
+    @{ Pat = 'replayData.KeybdSoundFileName';     File = 'ReplayManager.cs'; Why = '2026-10-27 按旁挂 wav 名找回录音（导出与旧文件的回落来源）' }
+    @{ Pat = 'Settings.KeybdSoundCompact';        File = 'ReplayManager.cs'; Why = '2026-10-27 嵌入档位读设置：勾上「极限压缩」就按 8 kHz 存，体积约为默认档一半' }
+    @{ Pat = 'Settings.KeybdSoundCompact';        File = 'ConfigManager.cs'; Why = '2026-10-27 同上：档位要能持久化，否则重启就悄悄退回默认档' }
+    @{ Pat = 'File.WriteAllBytes';                File = 'ReplayManager.cs'; Why = '2026-10-27 导出键盘音落盘（上游没有导出音频这条路）' }
+    @{ Pat = 'name.IndexOfAny';                   File = 'ReplayManager.cs'; Why = '2026-10-27 导出的目标名逐个剔除非法字符（文件名来自回放数据）' }
+    @{ Pat = 'Path.GetInvalidFileNameChars';      File = 'ReplayManager.cs'; Why = '2026-10-27 同上：非法字符集' }
+    @{ Pat = 'Path.GetDirectoryName';             File = 'ReplayManager.cs'; Why = '2026-10-27 嵌入时按回放所在目录找 wav（保存时二者同目录）' }
+    @{ Pat = 'Path.GetFileName';                  File = 'ReplayManager.cs'; Why = '2026-10-27 旁挂 wav 名只取纯文件名，拦住回放数据里的路径成分' }
+    @{ Pat = 'Path.Combine';                      File = 'ReplayManager.cs'; Why = '2026-10-27 拼候选 wav 路径与导出目录' }
+    @{ Pat = 'Settings.SavePath';                 File = 'ReplayManager.cs'; Why = '2026-10-27 同上：候选路径与导出的根目录' }
+    @{ Pat = 'source.KeybdAudio';                 File = 'ReplayManager.cs'; Why = '2026-10-27 导出优先取嵌入音频（回放自带就不再需要旁挂文件）' }
+    @{ Pat = 'source.KeybdSoundFileName';         File = 'ReplayManager.cs'; Why = '2026-10-27 旧回放（无嵌入段）导出时回落到旁挂 wav' }
+    @{ Pat = 'source.FileName';                   File = 'ReplayManager.cs'; Why = '2026-10-27 导出文件名以回放名为基底' }
+    @{ Pat = 'tmp.wav';                           File = 'ReplayManager.cs'; Why = '2026-10-27 保存时序：此刻录音还在 tmp.wav，正是要嵌进去的那份' }
+    @{ Pat = 'wav.Length';                        File = 'ReplayManager.cs'; Why = '2026-10-27 日志里报压缩前的 wav 字节数' }
+    @{ Pat = 'ext.Length';                        File = 'ReplayManager.cs'; Why = '2026-10-27 单回放覆盖值保存：把传入路径归一成不带扩展名的基名（SaveReplayNew 自己会拼）' }
+    @{ Pat = 'filePath.Length';                   File = 'ReplayManager.cs'; Why = '2026-10-27 同上：去掉扩展名时按长度截断' }
+    @{ Pat = 'filePath.Substring';                File = 'ReplayManager.cs'; Why = '2026-10-27 同上：截出新基名' }
+    # -- 2026-10-27 单回放的键盘音播放覆盖（音量 / 静音 / 偏移，尾部第三段）------
+    # 用户要「一个回放单独调偏移/音量」，而全局 Settings 一改会影响所有回放。
+    # 覆盖值写进回放文件本体 → 跟着文件走（云端、换机都在），没写则回落全局设置。
+    @{ Pat = 'prefs.';                            File = 'ReplayEncoder.cs'; Why = '2026-10-27 覆盖段写入：按标志位逐项取值（定长布局，没意义也写 0）' }
+    @{ Pat = 'replay.KeybdPrefs';                 File = 'ReplayEncoder.cs'; Why = '2026-10-27 同上：覆盖值挂在回放对象上' }
+    @{ Pat = 'ReplayConstants.KeybdPrefsFlag';    File = 'ReplayConstants.cs'; Why = '2026-10-27 三个标志位共用的位定义（读写两端同一份，避免一边改一边漏）' }
+    @{ Pat = 'ReplayConstants.KeybdPrefsFlag';    File = 'ReplayEncoder.cs'; Why = '2026-10-27 同上：写端按位拼 flags' }
+    @{ Pat = 'ReplayConstants.KeybdPrefsFlag';    File = 'ReplayDecoder.cs'; Why = '2026-10-27 同上：读端按位还原' }
+    @{ Pat = 'ReplayConstants.KeybdPrefsVersion'; File = 'ReplayEncoder.cs'; Why = '2026-10-27 覆盖段版本号（与轨迹段/音频段同一条可扩展约定）' }
+    @{ Pat = 'ReplayConstants.KeybdPrefsVersion'; File = 'ReplayDecoder.cs'; Why = '2026-10-27 同上：段版本上界，比本版新就显式拒绝，不猜' }
+    @{ Pat = 'replay.KeybdPrefs';                 File = 'ReplayDecoder.cs'; Why = '2026-10-27 同上：读到就挂在回放对象上，读不到留 default' }
+    @{ Pat = 'r.ReadByte';                        File = 'ReplayDecoder.cs'; Why = '2026-10-27 同上：flags 是 1 字节，BinaryReader 只有 ReadByte' }
+    @{ Pat = 'data.KeybdPrefs';                   File = 'Patch_Playback.cs'; Why = '2026-10-27 播放侧每帧现读覆盖值（文件优先，没有才用全局设置）' }
+    @{ Pat = 'prefs.';                            File = 'Patch_Playback.cs'; Why = '2026-10-27 同上：按 Has* 决定用覆盖值还是全局值' }
+    @{ Pat = 'Mathf.Clamp';                       File = 'Patch_Playback.cs'; Why = '2026-10-27 同上：音量按 0..10 档夹取（越界配置不该让 AudioSource 超范围）' }
+    @{ Pat = 'Settings.KeybdSoundVolume';         File = 'Patch_Playback.cs'; Why = '2026-10-27 同上：没有覆盖值时用的全局音量' }
+    @{ Pat = 'Settings.MicrophoneOffset';         File = 'Patch_Playback.cs'; Why = '2026-10-27 同上：没有覆盖值时用的全局偏移' }
+    @{ Pat = 'WavLoader.musicSource.isPlaying';   File = 'Patch_Playback.cs'; Why = '2026-10-27 同上：静音时停掉正在播的那一份，别让无声 source 继续被 seek' }
+    @{ Pat = 'WavLoader.Stop_keybdsound';         File = 'Patch_Playback.cs'; Why = '2026-10-27 同上：静音/音量归零时收声（上游只在这一段之外收）' }
+    @{ Pat = 'CloudReplay.OnConfigSaved';         File = 'ConfigManager.cs'; Why = '2026-10-27 配置写盘成功后上传云端备份（节流 5s + 内容去重 + 异常全兜）' }
+    @{ Pat = 'Features.Cloud';                    File = 'ConfigManager.cs'; Why = '2026-10-27 同上：引入 CloudReplay 的 using（Features/Cloud 是我们独有的目录）' }
+    @{ Pat = 'data.KeybdAudio';                   File = 'SpectreState.cs'; Why = '2026-10-27 嵌入成功就不再保留旁挂 wav（否则磁盘与云端都白占一份）' }
+    @{ Pat = 'File.Delete';                       File = 'SpectreState.cs'; Why = '2026-10-27 同上：删掉那份已经进了本体的 tmp.wav' }
+    @{ Pat = 'tmp.wav';                           File = 'SpectreState.cs'; Why = '2026-10-27 同上：待删的临时录音文件名' }
+)
 
 
 Write-Output ""

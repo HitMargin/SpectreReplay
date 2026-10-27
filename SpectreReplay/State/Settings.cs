@@ -46,10 +46,44 @@ public static class Settings
     public static bool LimitKey = false;
     public static bool GetDataFromAsyncInput = false;
 
+    /// <summary>
+    /// 游戏底部提示条（Notification 弹窗）的**基础停留秒数**。
+    ///
+    /// <para>本模组所有提示都从这里派生：普通提示 = 该值，需要多留一会儿的提示
+    /// = 该值 + 调用点给的差量（见 <see cref="NotificationDuration"/>）。默认 3 秒——
+    /// 正是改造前硬编码的那个基数，所以调这个值不会让既有提示的观感突变，
+    /// 只是把"多久收起"交给玩家。</para>
+    ///
+    /// <para>改它的入口在「关于」页（那里是纯界面偏好的归处，不掺录制/回放行为）。</para>
+    /// </summary>
+    public static float NotificationSeconds = 3f;
+
+    /// <summary>
+    /// 提示条时长解析：基础值 + <paramref name="extra"/> 秒。
+    ///
+    /// 用"基础 + 差量"而不是给每个调用点留一个绝对秒数：玩家把基础调成 6 秒时，
+    /// 那句要读两行的错误提示应当跟着变成 8 秒，而不是原地停在 5 秒——
+    /// 否则"我明明调大了，怎么这条还是很快就没了"会变成一个查不出来的坑。
+    /// </summary>
+    internal static float NotificationDuration(float extra = 0f)
+        => Mathf.Clamp(NotificationSeconds + extra, 0.5f, 30f);
+
     public static int SaveButton = 290;
     public static int CancelSaveButton = 291;
     public static int KeybdSoundVolume = 10;
     public static int MicrophoneOffset = 0;
+
+    /// <summary>
+    /// 键盘音嵌入回放时是否用「极限」档（8 kHz / 约 4 KB/s）。
+    ///
+    /// <para>开：负载体积减半，音质略降（实测 SNR 18.4 dB，扫频段 19.7 dB）；
+    /// 关：默认「均衡」档（16 kHz / 约 8 KB/s，SNR 19.7 dB）。</para>
+    ///
+    /// <para><b>默认 false。</b>体积差在真实录音上只有约 13%（键盘音大部分是静音，
+    /// 静音块本来就只占 4 字节），而音质的损失是全局的——默认给均衡档更合适，
+    /// 特别在意回放体积的玩家自己切。</para>
+    /// </summary>
+    public static bool KeybdSoundCompact = false;
 
     public static string SavePath = "";
     public static string InputedKey = "";
@@ -382,6 +416,9 @@ public static class Settings
             }
             key_code_convert_list ??= new List<KeyValuePair<ushort, ushort>>();
         }
+        // 提示条停留时长：手改配置文件可能写进 0 或 999。夹到有意义区间——
+        // 0 秒等于「弹出来看不见」，999 秒则永不消失，两种都像模组坏了。
+        NotificationSeconds = Mathf.Clamp(NotificationSeconds, 1f, 10f);
         checklang();
         BuildKeyCodeConvertTable();
         // 这里不能有 `== 0xFFFF → num` 的兜底：BuildKeyCodeConvertTable 已保证末态

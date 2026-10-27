@@ -509,6 +509,38 @@ public class AudioRecorder : MonoBehaviour
         return "";
     }
 
+    /// <summary>WAV 头长度：录制的哈希只覆盖其后的 PCM 数据。</summary>
+    private const int WavHeaderSize = 44;
+
+    /// <summary>
+    /// 算出「跳过前 44 字节 WAV 头」的 SHA256，文件版与内存版共用这一个实现。
+    ///
+    /// <para>抽出来的唯一理由就是别让两处各算一遍：哈希覆盖的范围一旦有一边
+    /// 写错（比如谁顺手把头部也算进去），云端回放会**永远**校验失败，而现象只是
+    /// 「键盘音没声」，几乎不可能联想到是哈希范围不一致。</para>
+    ///
+    /// <para>数据不足一个头时返回 false，由调用方决定怎么报错。</para>
+    /// </summary>
+    private static bool TryComputePcmHash(Stream stream, out string actualHash)
+    {
+        actualHash = null;
+        if (stream == null || stream.Length <= WavHeaderSize)
+        {
+            return false;
+        }
+        stream.Position = WavHeaderSize;
+        using SHA256 sha = SHA256.Create();
+        byte[] buffer = new byte[65536];
+        int read;
+        while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            sha.TransformBlock(buffer, 0, read, null, 0);
+        }
+        sha.TransformFinalBlock(new byte[0], 0, 0);
+        actualHash = BitConverter.ToString(sha.Hash).Replace("-", "").ToLowerInvariant();
+        return true;
+    }
+
     public static bool VerifyAudioFile(string filePath, string expectedHash)
     {
         if (!File.Exists(filePath))
@@ -524,35 +556,69 @@ public class AudioRecorder : MonoBehaviour
         try
         {
             using FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, useAsync: true);
-            using SHA256 sha = SHA256.Create();
-            long length = fs.Length;
-            const long headerSize = 44L;
-            if (length <= headerSize)
+            if (!TryComputePcmHash(fs, out string actualHash))
             {
-                Debug.LogError("[AudioRecorder] 文件太小，不包含音频数据");
+                Debug.LogError("[AudioRecorder] 文件太小，不包含音频数据: " + filePath);
                 return false;
             }
-            fs.Position = headerSize;
-            byte[] buffer = new byte[65536];
-            long totalBytes = 0L;
-            int read;
-            while ((read = fs.Read(buffer, 0, buffer.Length)) > 0)
-            {
-                sha.TransformBlock(buffer, 0, read, null, 0);
-                totalBytes += read;
-            }
-            sha.TransformFinalBlock(new byte[0], 0, 0);
-            string actualHash = BitConverter.ToString(sha.Hash).Replace("-", "").ToLowerInvariant();
             bool matched = actualHash.Equals(expectedHash, StringComparison.OrdinalIgnoreCase);
             if (SpectreState.DebugMode)
             {
-                Debug.Log(("[AudioRecorder] 文件验证: " + filePath + ", " + $"大小: {totalBytes}字节, " + "预期: " + expectedHash + ", 实际: " + actualHash + ", " + $"匹配: {matched}"));
+                Debug.Log(("[AudioRecorder] 文件验证: " + filePath + ", " + $"大小: {fs.Length - WavHeaderSize}字节, " + "预期: " + expectedHash + ", 实际: " + actualHash + ", " + $"匹配: {matched}"));
             }
             return matched;
         }
         catch (Exception ex)
         {
             Debug.LogError(("[AudioRecorder] 验证文件时出错: " + ex.Message));
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 校验「内存里的那份 wav」是否与录制时记下的哈希一致。
+    ///
+    /// <para>云端直接回放要在**不落盘**的前提下拿到键盘音：先 Download 成 byte[]，
+    /// 再喂给 <c>WavLoader</c>。但校验这一步不能省——云端那份同样是外部数据：可能
+    /// 是别的机器上传的、被截断的、或是旧版本写的。少了校验，坏音频会一路播到
+    /// 「键盘音听起来像噪音」才被发现，而那时没人会想到是哈希不对。</para>
+    ///
+    /// <para>首 44 字节（WAV 头）不参与哈希——与 <see cref="VerifyAudioFile"/> 一致，
+    /// 因为录制端就是这么算的（只哈希 PCM 数据）。两边算的范围一旦不同，
+    /// 云端回放会永远校验失败。</para>
+    /// </summary>
+    internal static bool VerifyAudioData(byte[] wavData, string expectedHash)
+    {
+        if (wavData == null || wavData.Length == 0)
+        {
+            Debug.LogError("[AudioRecorder] 音频数据为空");
+            return false;
+        }
+        if (string.IsNullOrEmpty(expectedHash))
+        {
+            Debug.LogError("[AudioRecorder] 预期哈希值为空");
+            return false;
+        }
+        try
+        {
+            using var ms = new MemoryStream(wavData, writable: false);
+            if (!TryComputePcmHash(ms, out string actualHash))
+            {
+                Debug.LogError("[AudioRecorder] 音频数据太小，不包含 PCM 数据: " + wavData.Length + " B");
+                return false;
+            }
+            bool matched = actualHash.Equals(expectedHash, StringComparison.OrdinalIgnoreCase);
+            if (SpectreState.DebugMode)
+            {
+                Debug.Log("[AudioRecorder] 云端音频校验: " + (wavData.Length - WavHeaderSize)
+                    + " 字节, 预期: " + expectedHash + ", 实际: " + actualHash
+                    + ", 匹配: " + matched);
+            }
+            return matched;
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[AudioRecorder] 校验音频数据时出错: " + ex.Message);
             return false;
         }
     }

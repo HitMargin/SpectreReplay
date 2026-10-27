@@ -126,7 +126,7 @@ internal class Patch_StartRewind
         LastReject = userMessage + (string.IsNullOrEmpty(detail) ? "" : " (" + detail + ")");
         Debug.Log("[SpectreReplay] TryStartPlayback 拒绝: " + userMessage
             + (string.IsNullOrEmpty(detail) ? "" : " | " + detail));
-        TriggerMessage(userMessage, 3f, NotifType.Warning);
+        TriggerMessage(userMessage, type: NotifType.Warning);
     }
 
     private static void TryStartPlayback()
@@ -391,7 +391,7 @@ internal class Patch_StartRewind
                 // 命中判定限制（HitMarginLimit）同属回放期接管的全局设置，异常路径也不能漏（口径同 Stop）
                 GCS.hitMarginLimit = Persistence.hitMarginLimit;
             }
-            TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error7"), 3f, NotifType.Warning);
+            TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error7"), type: NotifType.Warning);
         }
     }
 
@@ -411,7 +411,7 @@ internal class Patch_StartRewind
             }
             if (scrPlayerManager.instance.players.Count() != 1)
             {
-                TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error8"), 3f, NotifType.Warning);
+                TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error8"), type: NotifType.Warning);
                 return;
             }
             data.Reset();

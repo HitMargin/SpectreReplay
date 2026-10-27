@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using SpectreReplay.Features.Cloud;
 using UnityEngine;
 
 namespace SpectreReplay;
@@ -37,6 +38,7 @@ public static class ConfigManager
         public bool ManualSave { get; set; }
         public bool CancelSave { get; set; }
         public bool KeybdSoundRecordActive { get; set; }
+        public bool KeybdSoundCompact { get; set; }
         public bool KeyConvertEnabled { get; set; }
         public bool LimitKey { get; set; }
         public bool GetDataFromAsyncInput { get; set; }
@@ -133,6 +135,8 @@ public static class ConfigManager
         public bool render_cursor_on { get; set; }
         public bool render_stop_on { get; set; }
         public int render_stop_key { get; set; }
+        /// <summary>提示条停留秒数（见 Settings.NotificationSeconds）。</summary>
+        public float notification_seconds { get; set; }
         public float judgebar_anim_duration { get; set; }
         public float judgebar_sensitivity { get; set; }
         public float judgebar_life { get; set; }
@@ -215,6 +219,7 @@ public static class ConfigManager
                 ManualSave = Settings.ManualSave,
                 CancelSave = Settings.CancelSave,
                 KeybdSoundRecordActive = Settings.KeybdSoundRecordActive,
+                KeybdSoundCompact = Settings.KeybdSoundCompact,
                 KeyConvertEnabled = Settings.KeyConvertEnabled,
                 LimitKey = Settings.LimitKey,
                 GetDataFromAsyncInput = Settings.GetDataFromAsyncInput,
@@ -309,6 +314,7 @@ public static class ConfigManager
                 render_cursor_on = Settings.RenderCursorOn,
                 render_stop_on = Settings.RenderStopOn,
                 render_stop_key = Settings.RenderStopKey,
+                notification_seconds = Settings.NotificationSeconds,
                 judgebar_anim_duration = Settings.JudgeBarAnimationDuration,
                 judgebar_sensitivity = Settings.JudgeBarSensitivity,
                 judgebar_life = Settings.JudgeBarTickLife,
@@ -386,6 +392,20 @@ public static class ConfigManager
             Debug.Log("[SpectreReplay] 配置保存失败（本次设置改动未落盘，重启后会丢失）: "
                 + ex.GetType().Name + " " + ex.Message);
             return false;
+        }
+
+        // 落盘成功之后才做「配置上云」——顺序不能反：先云后本地的话，云端那份
+        // 可能比本地新，而本地写盘失败时反倒显得「已经同步好了」。
+        // 节流、去重、Steam 未就绪、非主线程转派全部在 CloudReplay 内部兜住，
+        // 这里再包一层只是双保险：**云同步失败绝不能改成「本地保存失败」**，
+        // 本地文件此刻已经确实写好了，那是唯一会让玩家丢数据的方向。
+        try
+        {
+            CloudReplay.OnConfigSaved(filePath);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("[SpectreReplay] 配置云同步异常（不影响本地保存）: " + ex.Message);
         }
         return true;
     }
@@ -538,6 +558,7 @@ public static class ConfigManager
                     Settings.ManualSave = sets.Value<bool?>("ManualSave") ?? Settings.ManualSave;
                     Settings.CancelSave = sets.Value<bool?>("CancelSave") ?? Settings.CancelSave;
                     Settings.KeybdSoundRecordActive = sets.Value<bool?>("KeybdSoundRecordActive") ?? Settings.KeybdSoundRecordActive;
+                    Settings.KeybdSoundCompact = sets.Value<bool?>("KeybdSoundCompact") ?? Settings.KeybdSoundCompact;
                     Settings.KeyConvertEnabled = sets.Value<bool?>("KeyConvertEnabled") ?? Settings.KeyConvertEnabled;
                     Settings.LimitKey = sets.Value<bool?>("LimitKey") ?? Settings.LimitKey;
                     Settings.GetDataFromAsyncInput = sets.Value<bool?>("GetDataFromAsyncInput") ?? Settings.GetDataFromAsyncInput;
@@ -652,6 +673,7 @@ public static class ConfigManager
                     // 在轮询处把关（见 VideoRenderJob.StopRequestedByHotkey）。
                     // Clamp 到某个区间反而会把手改配置里的怪值悄悄改成另一个**看似正常**的键。
                     Settings.RenderStopKey = ints.Value<int?>("render_stop_key") ?? Settings.RenderStopKey;
+                    Settings.NotificationSeconds = Mathf.Clamp(ints.Value<float?>("notification_seconds") ?? Settings.NotificationSeconds, 1f, 10f);
                     Settings.JudgeBarAnimationDuration = Mathf.Clamp(ints.Value<float?>("judgebar_anim_duration") ?? Settings.JudgeBarAnimationDuration, 0f, 1f);
                     Settings.JudgeBarSensitivity = Mathf.Clamp(ints.Value<float?>("judgebar_sensitivity") ?? Settings.JudgeBarSensitivity, 0f, 1f);
                     Settings.JudgeBarTickLife = Mathf.Clamp(ints.Value<float?>("judgebar_life") ?? Settings.JudgeBarTickLife, 0f, 10f);

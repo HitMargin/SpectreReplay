@@ -757,19 +757,44 @@ switch ($Which) {
         # **整段键盘音消失且没有任何提示**（HasKeybdSound 仍为 true）。
         # 同时那一帧的 Record_kbdstate 也被跳过（按键少采一帧）。
         Backup 'Features\Replay\Patches\Patch_Playback.cs'
-        ReplaceExact 'Features\Replay\Patches\Patch_Playback.cs' 'data.KeybdSoundStartTick = 0.0;' 'if (ADOBase.conductor == null) { return; }'
+        ReplaceExact 'Features\Replay\Patches\Patch_Playback.cs' 'data.KeybdSoundStartTick = double.NaN;' 'if (ADOBase.conductor == null) { return; }'
     }
     'MUT-A2' {
         # 键盘音起始时间戳：删掉"缺 tick 就补真值"的分支（把补记那一段判成恒假）。
-        # 起录帧拿不到导体时 tick 会停在 0，之后再也补不上来。
+        # 起录帧拿不到导体时 tick 会停在 NaN 占位，之后再也补不上来。
         Backup 'Features\Replay\Patches\Patch_Playback.cs'
-        ReplaceExact 'Features\Replay\Patches\Patch_Playback.cs' '&& pendingTick == 0.0)' '&& false)'
+        ReplaceExact 'Features\Replay\Patches\Patch_Playback.cs' '&& double.IsNaN(pendingTick))' '&& false)'
     }
     'MUT-A3' {
-        # 键盘音起始时间戳：回放侧不再拒非正基准（拿 0 当基准会把 wav 从头
-        # 对齐到歌曲中段，听起来像乱响，比不播更糟）。
+        # 键盘音起始时间戳：回放侧又把**真实 0.0 基准**当"没有基准"。
+        # 录制恰从歌曲 0 秒起时 tick 就是 0.0，这类回放会被整段静音，
+        # 而导出端走 AudioListener 实时混音仍有声 —— 正是本轮要修的那类缺陷。
         Backup 'Features\Replay\Patches\Patch_Playback.cs'
-        ReplaceExact 'Features\Replay\Patches\Patch_Playback.cs' 'if (keybdStartTick <= 0.0)' 'if (false)'
+        ReplaceExact 'Features\Replay\Patches\Patch_Playback.cs' '|| double.IsNaN(keybdStartTick))' '|| double.IsNaN(keybdStartTick) || keybdStartTick == 0.0)'
+    }
+    'MUT-A4' {
+        # 键盘音起始时间戳：回放侧把**负基准**也当无效。
+        # 起录帧常落在倒计时里（实测 -0.57），这类回放会被整段静音而导出端仍有声。
+        # 单独造一条，是为了证明 ③ 里"不许出现 < 0.0"那句自己也活着——
+        # A3 只改 0 那一半，看不出负数判据有没有被删。
+        Backup 'Features\Replay\Patches\Patch_Playback.cs'
+        ReplaceExact 'Features\Replay\Patches\Patch_Playback.cs' '|| double.IsNaN(keybdStartTick))' '|| double.IsNaN(keybdStartTick) || keybdStartTick < 0.0)'
+    }
+    'MUT-A5' {
+        # 键盘音起始时间戳："没有基准"又写回 0（而不是 NaN）。
+        # 这样真实 0.0 基准与缺字段在文件里彻底撞车——解码侧再也不敢信 0，
+        # 于是要么真实 0 基准被静音，要么缺基准的被对齐到歌曲开头，二选一。
+        # 抓它的是 KeybdSoundTickCheck 的 ⑹/⑺（真实编解码往返），不是形状判据。
+        Backup 'Features\Replay\Codec\ReplayDecoder.cs'
+        ReplaceExact 'Features\Replay\Codec\ReplayDecoder.cs' 'm.KeybdSoundStartTick = replayData.KeybdSoundStartTick ?? double.NaN;' 'm.KeybdSoundStartTick = replayData.KeybdSoundStartTick ?? 0.0;'
+    }
+    'MUT-A6' {
+        # 键盘音起始时间戳：去掉旧 v2 文件里"0 是哨兵"的迁移。
+        # 旧回放（录制侧补不上导体就写 0）会被当成真实 0.0 基准，
+        # 键盘声被对齐到歌曲开头——现象是"回放里键盘音乱响/提前跑完"，
+        # 而导出端仍有声，与原始缺陷同一族。抓它的是 ⑻。
+        Backup 'Features\Replay\Codec\ReplayDecoder.cs'
+        ReplaceExact 'Features\Replay\Codec\ReplayDecoder.cs' 'if (ver < 3 && m.KeybdSoundStartTick == 0.0)' 'if (false)'
     }
     'MUT-C1' {
         # 旧配置迁移：把 LoadConfigs 里的迁移调用删掉 = 回到"旧文件被静默按默认值读"。
@@ -1864,7 +1889,7 @@ switch ($Which) {
         ReplaceExact 'Features\Replay\Runtime\KeyboardSimulation.cs' 'internal static class KeyboardSimulation' 'internal static class KeyboardSimulation { /* accidental drift */ internal static int __driftProbe = 1;'
     }
     default {
-        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-PORT1）"
+        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-PORT1）"
     }
 }
 

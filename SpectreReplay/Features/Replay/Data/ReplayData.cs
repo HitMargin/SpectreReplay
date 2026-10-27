@@ -82,7 +82,16 @@ public sealed class ReplayData
     public double? PercentXacc { get; set; }
     /// <summary>播放速度倍率。原键 playbackSpeed。</summary>
     public double? PlaybackSpeed { get; set; }
-    /// <summary>按键音的起始 tick；播放时按需延后计算。原键 keybdsound_start_tick。</summary>
+    /// <summary>
+    /// 按键音的起始 tick。原键 keybdsound_start_tick。
+    ///
+    /// <para><b>tri-state</b>：<c>null</c> = 本机从未起录；<c>NaN</c> = 已起录但这帧
+    /// 还没拿到导体（占位，等回填）；其余（含 <b>0 与负数</b>）都是真实基准。</para>
+    ///
+    /// <para>0 不能当"没记到"的哨兵：录制恰好从歌曲 0 秒起时它也是真值，撞车后
+    /// 唯一的出路是把这类回放整段静音。落盘时 null/NaN 统一写 NaN
+    /// （<see cref="ReplayConstants.MetadataVersion"/> 3）。</para>
+    /// </summary>
     public double? KeybdSoundStartTick { get; set; }
     #endregion
 
@@ -97,6 +106,22 @@ public sealed class ReplayData
     /// 「当时指针在哪」，与画面同源；不参与必需字段完整性检查。
     /// </summary>
     public List<CursorSample> CursorTrack { get; set; } = [];
+
+    /// <summary>
+    /// 嵌在回放文件里的键盘音（压缩后）。旧回放为 <c>default</c>——此时
+    /// <see cref="KeybdAudioBlob.HasData"/> 为 false，播放退回「同目录同名 .wav」
+    /// 的老路径。判断「有没有声音」不要直接看这个字段，用
+    /// <c>SpectreState.HasKeybdSound</c>（那边已经涵盖了两条来源）。
+    /// </summary>
+    public KeybdAudioBlob KeybdAudio { get; set; }
+
+    /// <summary>
+    /// 这一份回放自带的键盘音播放覆盖值。旧回放为 <c>default</c>——此时
+    /// <see cref="KeybdPrefs.HasAny"/> 为 false，播放完全跟随全局设置。
+    /// <para>与 <see cref="KeybdAudio"/> 分开存：音频是「有没有声音」，
+    /// 覆盖值是「这一份回放怎么放」，两者互不依赖（可以只改音量而不嵌入音频）。</para>
+    /// </summary>
+    public KeybdPrefs KeybdPrefs { get; set; }
 
     /// <summary>
     /// 回放元数据是否齐全。等价于旧版对四张必需键字典逐个 ContainsKey，
@@ -167,5 +192,9 @@ public sealed class ReplayData
         KeyEvents.Clear();
         HitSnapshots.Clear();
         CursorTrack.Clear();
+        KeybdAudio = default;
+        // 覆盖值也必须一起清：Reset 之后是「一张新录的回放」，
+        // 若残留上一份的音量/静音，下一份保存就会莫名带上前一份的设置。
+        KeybdPrefs = default;
     }
 }

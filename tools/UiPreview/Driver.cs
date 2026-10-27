@@ -85,6 +85,14 @@ namespace UiPreview
             // 与按歌曲时间取样（插值/夹取/倒计时负区间）——兼容路径断了在游戏里
             // 毫无症状，只有成片里指针消失/跳回才看得到，必须离线钉住。
             int cursorTrackFail = CursorTrackCheck.Run();
+            // 嵌入键盘音：容器段（与轨迹共存的回退位置、段版本/长度上界）
+            // 与压缩编解码（压缩率、时长守恒、导出 wav 头自洽、畸形输入不 OOM）。
+            // 这一段的缺陷在游戏里全都没有异常，只表现为「没声音」，必须离线钉住。
+            int keybdAudioFail = KeybdAudioCheck.Run();
+            // 逐份回放的键盘音覆盖值（音量/偏移/静音）：尾部可选段的「不写段」「与音频
+            // 共存」「无音频仍可读」三种布局 + 版本上界 + 垃圾尾部。这些缺陷在游戏里
+            // 一律不抛异常，只表现为音量/静音突然不对，必须离线钉住。
+            int keybdPrefsFail = KeybdPrefsCheck.Run();
             // 跨平台回放输入：非 Windows / 未聚焦时 SendInput 完全没有用，
             // 而这条链最弱的环（holdKeys 里是不是真实键、去重条件对不对）
             // 只会在实机上暴露。离线钉住它的接线形状。
@@ -92,7 +100,7 @@ namespace UiPreview
                 ProjectDir);
             int orphanFail = PortedCompletenessCheck.NoOrphanChecks(
                 ProjectDir);
-            int total = locFail + hardFail + replayFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + locLangFail + pinStateFail + injectFail + logPrefixFail + scatterFail + cursorFail + cursorTrackFail + crossInputFail + orphanFail;
+            int total = locFail + hardFail + replayFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + locLangFail + pinStateFail + injectFail + logPrefixFail + scatterFail + cursorFail + cursorTrackFail + keybdAudioFail + keybdPrefsFail + crossInputFail + orphanFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"

@@ -750,10 +750,125 @@ namespace UiPreview
                 "㉞ 检查点开局(从中间渲染)必须在 Checkpoint 放行(否则倒计时整段录不到)",
                 "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
                 s => CheckpointStartCanRelease(s));
+            // ㉟ 控件宽度必须按**实测文案**算，不许写死。
+            //
+            //    2026-10-27 用户截图：云配置备份那两颗按钮的英文文案
+            //    「Upload Config to Cloud」被截成「Jpload Config to Clouc」——
+            //    按钮矩形写死 150f，而文案比 150 宽。同类写法当时还有 10 处
+            //    （回放/删除/卸载/打开关卡/换目录…），全部在长文案语言下裁字。
+            //
+            //    为什么判据是「禁止写死」而不是「把 150 调成 190」：调数字只对
+            //    当下这一种语言有效，14 张语言表里还有更长的（西语
+            //    「Confirmar eliminación」、俄语「Подтвердить удаление」）。唯一
+            //    不随语言失效的做法是量出来。
+            //
+            //    ① Pages.cs 里不许再出现 GUILayout.Width(数字：按钮、徽章、
+            //       尺寸标签一律走 Gui.ButtonW / Gui.BadgeRect；
+            //    ② 按钮文案不许内联 Loc.*：不先取到变量就无从测宽，这一条正好
+            //       卡住「看着改了、其实还是老写法」的半修形态；
+            //    ③ 测宽工具必须真的走 GUIStyle.CalcSize，而不是又一张常量表。
+            fail += Check(projectRoot,
+                "㉟a 布局宽度不许写死(GUILayout.Width(数字) 一律禁止：长文案语言会裁字)",
+                "Pages\\Pages.cs",
+                s => NoNumericLayoutWidth(s));
+            fail += Check(projectRoot,
+                "㉟b 按钮文案不许内联 Loc.*(必须先取变量才谈得上按文案测宽)",
+                "Pages\\Pages.cs",
+                s => ButtonsHoistCaption(s));
+            fail += Check(projectRoot,
+                "㉟c 测宽工具必须走 GUIStyle.CalcSize(ButtonW/BadgeRect)",
+                "Ui\\Gui.cs",
+                s => WidthToolsMeasureText(s));
+
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");
             return fail;
         }
+
+        /// <summary>
+        /// 页面里不许出现 <c>GUILayout.Width(数字</c>。
+        ///
+        /// <para>Clean() 已经剥掉注释，所以注释里提到宽度不会假红；这个判据盯的是
+        /// **布局代码**：控件宽度要么按文案实测（<see cref="Gui"/> 的 ButtonW /
+        /// BadgeRect），要么用 Gui.LabelW / Gui.CtrlW 这类统一的列宽常量。</para>
+        /// </summary>
+        private static bool NoNumericLayoutWidth(string s)
+        {
+            const string Key = "GUILayout.Width(";
+            int at = 0;
+            while ((at = s.IndexOf(Key, at, StringComparison.Ordinal)) >= 0)
+            {
+                int i = at + Key.Length;
+                if (i < s.Length && s[i] >= '0' && s[i] <= '9') return false;
+                at = i;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 按钮文案不许内联 <c>Loc.T(...)</c>／<c>Loc.F(...)</c>：必须先取到局部
+        /// 变量，才能把同一份文案喂给测宽工具。内联等于「宽度只能写死」。
+        ///
+        /// <para>两种按法不同：<c>GUI.Button(rect, caption, style)</c> 的文案是
+        /// 第 2 个实参，<c>GUILayout.Button(caption, style)</c> 的是第 1 个。</para>
+        ///
+        /// <para>切实参必须**按括号深度**：<c>Loc.F("a", b)</c> 自己带逗号，
+        /// 按逗号二分会把一条文案切成两半、于是漏判。</para>
+        /// </summary>
+        private static bool ButtonsHoistCaption(string s)
+        {
+            return CaptionArg(s, "GUI.Button(", 1) == null
+                && CaptionArg(s, "GUILayout.Button(", 0) == null;
+        }
+
+        /// <summary>
+        /// 扫一遍 <paramref name="head"/> 的每次出现，返回**第一个内联了 Loc. 的文案实参**；
+        /// 全都先取变量则返回 <c>null</c>。
+        /// </summary>
+        private static string CaptionArg(string s, string head, int captionIndex)
+        {
+            int at = 0;
+            while ((at = s.IndexOf(head, at, StringComparison.Ordinal)) >= 0)
+            {
+                int i = at + head.Length;
+                int depth = 0;
+                int arg = 0;
+                int start = i;
+                int end = -1;
+                for (; i < s.Length; i++)
+                {
+                    char c = s[i];
+                    if (c == '(')
+                    {
+                        depth++;
+                    }
+                    else if (c == ')')
+                    {
+                        // depth == 0 表示这个右括号收的是按钮调用本身
+                        if (depth == 0) { end = i; break; }
+                        depth--;
+                    }
+                    else if (c == ',' && depth == 0)
+                    {
+                        if (arg == captionIndex) { end = i; break; }
+                        arg++;
+                        start = i + 1;
+                    }
+                }
+                if (end < 0) { at += head.Length; continue; }
+                string caption = s.Substring(start, end - start);
+                if (caption.Contains("Loc.")) return caption.Trim();
+                at = end;
+            }
+            return null;
+        }
+
+        /// <summary>测宽工具必须真的量文字（GUIStyle.CalcSize），不能又是一张常量表。</summary>
+        private static bool WidthToolsMeasureText(string s)
+            => s.Contains("internal static float ButtonW(", StringComparison.Ordinal)
+               && s.Contains("internal static Rect BadgeRect(", StringComparison.Ordinal)
+               && s.Contains("CalcSize(new GUIContent(label))", StringComparison.Ordinal)
+               && s.Contains("CalcSize(new GUIContent(s))", StringComparison.Ordinal);
 
         /// <summary>
         /// 「删除」是不是**两段式**：第一下只进入待确认态、第二下才删。
@@ -1676,11 +1791,28 @@ namespace UiPreview
             // 正则必须用逐字字符串 @"..."：普通字符串里写 \" 是 CS1009
             // （无法识别的转义序列），而 [TF]\( 这类反斜杠会让转义更难读。
             const string Pattern = @"GUILayout\.Button\(\s*Loc\.[TF]\(""([^""]+)""";
+            // 2026-10-27 起按钮文案改成「先取变量、再按实测宽度」：
+            // string label = Loc.T("k"); ... GUILayout.Button(label, ...)。
+            // 只认内联形态会让这两条判据在改造后与代码无关地常红——
+            // 假红和假绿一样是缺陷，都得修判据。
+            const string Assign = @"string\s+(\w+)\s*=\s*Loc\.[TF]\(""([^""]+)""";
             int n = 0;
             var hits = System.Text.RegularExpressions.Regex.Matches(code, Pattern);
             foreach (System.Text.RegularExpressions.Match m in hits)
             {
                 if (m.Groups[1].Value == key)
+                    n++;
+            }
+
+            // ② 先取变量再交给按钮的形态。变量名回代进正则，避免把
+            //    "某个叫 label 的变量" 误当成"这个键的按钮"。
+            foreach (System.Text.RegularExpressions.Match m
+                in System.Text.RegularExpressions.Regex.Matches(code, Assign))
+            {
+                if (m.Groups[2].Value != key) continue;
+                string v = System.Text.RegularExpressions.Regex.Escape(m.Groups[1].Value);
+                if (System.Text.RegularExpressions.Regex.IsMatch(
+                        code, @"GUILayout\.Button\(\s*" + v + @"\b"))
                     n++;
             }
             return n;

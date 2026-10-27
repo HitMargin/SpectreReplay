@@ -848,8 +848,35 @@ namespace UiPreview
                 && body.Contains("Commit(", StringComparison.Ordinal);
         }
 
+
+
         private static bool HasOpenLevelButton(string code)
         {
+            // 2026-10-27 起按钮文案改成「先取变量、再按实测文案宽度布局」：
+            //     string openLabel = Loc.T(editorReplay ? "playback.openlevel.editor" : "playback.openlevel");
+            //     if (GUILayout.Button(openLabel, Gui.ButtonStyle,
+            //             GUILayout.Width(Gui.ButtonW(openLabel, Gui.ButtonStyle, 160f))))
+            // 这种写法下 caption 与 GUILayout.Button 不再同一行。只认同行会让判据
+            // 与代码无关地常红（假红也是缺陷）；但也不能退化成「整文件搜字符串」——
+            // 那样把按钮删掉、只留一句变量声明也照样绿。
+            // 折中判法：先收集「绑定到这个键的变量名」，再要求该变量真的作为
+            // GUILayout.Button 的实参出现。
+            const string Key = "playback.openlevel";
+            var hoisted = new List<string>();
+            foreach (string rawBind in code.Replace("\r\n", "\n").Split('\n'))
+            {
+                string bind = rawBind.TrimStart();
+                if (!bind.StartsWith("string ", StringComparison.Ordinal)) continue;
+                if (!bind.Contains("= Loc.", StringComparison.Ordinal)) continue;
+                // 键名必须**完整出现**（带收尾引号），否则
+                // "playback.openlevel.official.go" 也会命中。
+                if (!bind.Contains("\"" + Key + "\"", StringComparison.Ordinal)) continue;
+                int eq = bind.IndexOf("= Loc.", StringComparison.Ordinal);
+                if (eq <= "string ".Length) continue;
+                string name = bind.Substring("string ".Length, eq - "string ".Length).Trim();
+                if (name.Length > 0 && !name.Contains(' ')) hoisted.Add(name);
+            }
+
             foreach (string raw in code.Replace("\r\n", "\n").Split('\n'))
             {
                 string line = raw.TrimStart();
@@ -857,16 +884,27 @@ namespace UiPreview
                     || line.StartsWith("*", StringComparison.Ordinal)) continue;
                 if (!line.Contains("GUILayout.Button", StringComparison.Ordinal)) continue;
 
-                // **必须按"键名边界"判，不能只 Contains("playback.openlevel")。**
-                // 2026-10-17 实测踩到：官方关卡那颗按钮用了 `playback.openlevel.official.go`，
-                // 它包含 `playback.openlevel` 这个子串 ⇒ 把自制谱那颗改坏（MUT-V5）后
-                // 判据仍被官方这颗命中，断言当场退化成假的。
-                // 判法：出现 `playback.openlevel` 之后紧接的字符必须是引号或行尾，
-                // 即它是一个**完整键名**而不是更长的键的前缀。
-                int at = line.IndexOf("playback.openlevel", StringComparison.Ordinal);
+                // 形态二：文案先绑到变量，按钮只收变量名。
+                foreach (string v in hoisted)
+                {
+                    if (line.Contains("GUILayout.Button(" + v, StringComparison.Ordinal)
+                        || line.Contains("GUILayout.Button( " + v, StringComparison.Ordinal))
+                    {
+                        return true;
+                    }
+                }
+
+                // 形态一：文案内联在按钮里。**必须按键名边界判**，不能只
+                // Contains("playback.openlevel")：2026-10-17 实测踩到，官方关卡那颗
+                // 按钮用了 `playback.openlevel.official.go`，它包含
+                // `playback.openlevel` 这个子串 ⇒ 把自制谱那颗改坏（MUT-V5）后判据
+                // 仍被官方这颗命中，断言当场退化成假的。判法：出现
+                // `playback.openlevel` 之后紧接的字符必须是引号或行尾，即它是一个
+                // 完整键名而不是更长的键的前缀。
+                int at = line.IndexOf(Key, StringComparison.Ordinal);
                 while (at >= 0)
                 {
-                    int after = at + "playback.openlevel".Length;
+                    int after = at + Key.Length;
                     // 前面也必须是引号，避免匹配到 `xxx.playback.openlevel` 这种
                     char before = at > 0 ? line[at - 1] : '"';
                     if (after >= line.Length || line[after] == '"')
@@ -876,12 +914,11 @@ namespace UiPreview
                             return true;
                         }
                     }
-                    at = line.IndexOf("playback.openlevel", at + 1, StringComparison.Ordinal);
+                    at = line.IndexOf(Key, at + 1, StringComparison.Ordinal);
                 }
             }
             return false;
         }
-
         /// <summary>
         /// 编辑器跳转是否**等场景就绪再定位起始砖**。
         ///

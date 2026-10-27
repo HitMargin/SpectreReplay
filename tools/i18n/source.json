@@ -125,6 +125,11 @@
   "en": "Time offset"
  },
  {
+  "key": "record.keybd.compact",
+  "zh": "极限压缩键盘音",
+  "en": "Compress keyboard sound to the minimum"
+ },
+ {
   "key": "record.keybd.note",
   "zh": "键盘音就是回放时按下去的“嗒嗒”声。时间偏移用于校准它整体的早晚：声音偏早就往负调，偏晚就往正调，单位毫秒。",
   "en": "Keyboard sound is the tap played back when a key was pressed. Time offset calibrates it as a whole: shift negative if it is early, positive if late, in milliseconds."
@@ -233,6 +238,131 @@
   "key": "playback.unload",
   "zh": "卸载回放",
   "en": "Unload replay"
+ },
+ {
+  "key": "playback.keybd.export",
+  "zh": "导出键盘音",
+  "en": "Export keyboard sounds"
+ },
+ {
+  "key": "playback.keybd.export.tip",
+  "zh": "把这份回放的键盘音存成 wav 文件，放在保存目录下的 keybdsound 子目录里。",
+  "en": "Saves this replay's keyboard sounds as a wav file in the keybdsound folder of your save folder."
+ },
+ {
+  "key": "playback.keybd.export.ok",
+  "zh": "已导出键盘音：{0}",
+  "en": "Keyboard sounds exported: {0}"
+ },
+ {
+  "key": "playback.keybd.export.fail",
+  "zh": "导出键盘音失败：{0}",
+  "en": "Couldn't export the keyboard sounds: {0}"
+ },
+ {
+  "key": "playback.keybd.export.none",
+  "zh": "这份回放没有键盘音",
+  "en": "This replay has no keyboard sounds."
+ },
+ {
+  "key": "playback.keybd.export.nodir",
+  "zh": "保存目录不可用",
+  "en": "The save folder is unavailable."
+ },
+ {
+  "key": "playback.keybd.export.decodefail",
+  "zh": "键盘音数据损坏",
+  "en": "The keyboard sound data is damaged."
+ },
+ {
+  "key": "playback.keybd.export.writefail",
+  "zh": "写入文件失败",
+  "en": "Couldn't write the file."
+ },
+ {
+  "key": "playback.keybd.section",
+  "zh": "这份回放的键盘音",
+  "en": "Keyboard sounds for this replay"
+ },
+ {
+  "key": "playback.keybd.volume",
+  "zh": "音量",
+  "en": "Volume"
+ },
+ {
+  "key": "playback.keybd.volume.tip",
+  "zh": "只改这一份回放的键盘音音量（0–100%）。拖动即时生效；要留下来得点「保存到回放文件」。",
+  "en": "Sets the keyboard sound volume for this replay only (0-100 %). Applies as you drag; click Save to keep it."
+ },
+ {
+  "key": "playback.keybd.mute",
+  "zh": "静音",
+  "en": "Mute"
+ },
+ {
+  "key": "playback.keybd.mute.tip",
+  "zh": "只让这一份回放的键盘音静音，谱面音乐照常。静音时调音量不会解除静音。",
+  "en": "Silences this replay's keyboard sounds only; the song keeps playing. Moving the volume slider does not unmute."
+ },
+ {
+  "key": "playback.keybd.offset",
+  "zh": "时间偏移",
+  "en": "Time offset"
+ },
+ {
+  "key": "playback.keybd.offset.tip",
+  "zh": "只调这一份回放的键盘音相对谱面的时间（毫秒）。正值更晚、负值更早；它替换全局偏移，不是叠加。",
+  "en": "Shifts this replay's keyboard sounds against the chart, in milliseconds. Positive is later, negative earlier; this replaces the global offset instead of adding to it."
+ },
+ {
+  "key": "playback.keybd.reset",
+  "zh": "恢复全局设置",
+  "en": "Use global settings"
+ },
+ {
+  "key": "playback.keybd.reset.tip",
+  "zh": "清掉这一份回放的全部覆盖值（音量 / 静音 / 偏移），重新跟随全局设置。",
+  "en": "Clears every override on this replay (volume, mute, offset) so it follows the global settings again."
+ },
+ {
+  "key": "playback.keybd.save",
+  "zh": "保存到回放文件",
+  "en": "Save to replay file"
+ },
+ {
+  "key": "playback.keybd.save.tip",
+  "zh": "把上面三个值写进这份回放的本地文件，下次载入也还在。改的是文件本身，不生成副本。",
+  "en": "Writes the three values above into this replay's own local file so they survive reloading. Edits that file in place; no copy is made."
+ },
+ {
+  "key": "playback.keybd.note",
+  "zh": "拖动即时生效，但只影响这次播放；点「保存到回放文件」才会写进文件。没设过的项跟随全局设置。",
+  "en": "Changes take effect right away but only for this session; click Save to write them into the file. Anything you leave unset follows the global settings."
+ },
+ {
+  "key": "playback.keybd.saved",
+  "zh": "已保存到回放文件：{0}",
+  "en": "Saved to the replay file: {0}"
+ },
+ {
+  "key": "playback.keybd.savefail",
+  "zh": "保存失败：{0}",
+  "en": "Couldn't save: {0}"
+ },
+ {
+  "key": "playback.keybd.savenolocal",
+  "zh": "这份回放是从 Steam 云端装载的，没有本地文件；改动只在这次播放有效，无法保存回去。",
+  "en": "This replay came from Steam Cloud and has no local file, so the changes only last for this session and cannot be saved back."
+ },
+ {
+  "key": "playback.keybd.savenofile",
+  "zh": "回放文件已不在原处",
+  "en": "The replay file is no longer where it was"
+ },
+ {
+  "key": "playback.keybd.writefail",
+  "zh": "写入文件失败",
+  "en": "Couldn't write the file."
  },
  {
   "key": "playback.note",
@@ -598,6 +728,16 @@
   "key": "about.path",
   "zh": "保存目录",
   "en": "Save folder"
+ },
+ {
+  "key": "about.notif.seconds",
+  "zh": "提示条停留时长",
+  "en": "Toast duration"
+ },
+ {
+  "key": "about.notif.seconds.tip",
+  "zh": "屏幕底部提示条自动收起的秒数。默认 3 秒；警告与需要读两行的提示会自动多留 2 秒，并跟着这个值一起变长。",
+  "en": "Seconds before the message at the bottom of the screen hides itself. Default 3 s; warnings and two-line messages get 2 extra seconds automatically and grow with this value."
  },
  {
   "key": "about.engine",
@@ -1455,6 +1595,11 @@
   "en": "Calibrates the keyboard sound as a whole: negative if it is early, positive if late, in milliseconds."
  },
  {
+  "key": "record.keybd.compact.tip",
+  "zh": "勾上后键盘音以 8 kHz 存进回放文件，体积约为默认档的一半，听感略闷；默认档是 16 kHz。只影响之后新保存的回放。",
+  "en": "When on, the keyboard sound is stored inside the replay at 8 kHz — about half the default size, slightly duller. The default is 16 kHz. Only affects replays saved afterwards."
+ },
+ {
   "key": "record.savekey.tip",
   "zh": "手动保存本局的快捷键，默认 F9。点一下它再按任意键即可改绑。",
   "en": "Hotkey for saving this run, F9 by default. Click it, then press any key to rebind."
@@ -1653,11 +1798,85 @@
   "key": "playback.cloud",
   "zh": "Steam 云备份",
   "en": "Steam Cloud Backup"
+ }, {
+  "key": "playback.cloud.delete.tip",
+  "zh": "只删云端这一份（连配套键盘音），本地文件保留。要点两下才真删。",
+  "en": "Removes just this copy from the cloud (with its key sounds); your local file stays. Two clicks to confirm."
+ },
+ {
+  "key": "playback.cloud.deleted",
+  "zh": "已从云端删除：{0}",
+  "en": "Deleted from the cloud: {0}"
+ },
+ {
+  "key": "playback.cloud.download",
+  "zh": "下载",
+  "en": "Download"
+ },
+ {
+  "key": "playback.cloud.download.exists",
+  "zh": "本地已有这份回放，没有覆盖。",
+  "en": "This replay is already in your local folder; nothing was overwritten."
+ },
+ {
+  "key": "playback.cloud.download.tip",
+  "zh": "把这一份云端回放（连键盘音）写回本地回放目录；本地已有同名文件时不覆盖。",
+  "en": "Writes this cloud replay (and its key sounds) into your local replay folder; existing files are never overwritten."
+ },
+ {
+  "key": "playback.cloud.downloaded",
+  "zh": "已下载到本地：{0}",
+  "en": "Downloaded to your local folder: {0}"
+ },
+ {
+  "key": "playback.cloud.upload.exists",
+  "zh": "云端已有这份回放。",
+  "en": "This replay is already in the cloud."
+ },
+ {
+  "key": "playback.cloud.upload.one",
+  "zh": "上传",
+  "en": "Upload"
+ },
+ {
+  "key": "playback.cloud.upload.one.tip",
+  "zh": "把这一份本地回放（连键盘音）传到云端。",
+  "en": "Sends this local replay (and its key sounds) to the cloud."
+ },
+ {
+  "key": "playback.cloud.uploaded.one",
+  "zh": "已上传到云端：{0}",
+  "en": "Uploaded to the cloud: {0}"
+ },
+ {
+  "key": "playback.cloud.err.unavailable",
+  "zh": "Steam 云端不可用",
+  "en": "Steam Cloud is unavailable"
+ },
+ {
+  "key": "playback.cloud.err.unreadable",
+  "zh": "这份回放读不出来（可能已损坏）",
+  "en": "this replay could not be read (it may be damaged)"
+ },
+ {
+  "key": "playback.cloud.err.notfound",
+  "zh": "云端已经没有这份文件",
+  "en": "that file is no longer in the cloud"
  },
  {
   "key": "playback.cloud.failed",
   "zh": "云端操作失败：{0}",
   "en": "Cloud operation failed: {0}"
+ },
+ {
+  "key": "playback.cloud.list",
+  "zh": "云端回放",
+  "en": "Cloud replays"
+ },
+ {
+  "key": "playback.cloud.list.note",
+  "zh": "点名字展开详情；回放按钮从云端直接播放，不写入本地回放目录。",
+  "en": "Click a name to expand its details; the Play button plays it straight from the cloud, writing nothing to your local replay folder."
  },
  {
   "key": "playback.cloud.none",
@@ -1668,6 +1887,11 @@
   "key": "playback.cloud.note",
   "zh": "每个回放连同它的键盘音一起上传。Steam 只在游戏关闭时才真正送出文件，所以刚录完的回放不会立刻出现在云端；换电脑或重装后第一次启动会自动恢复。",
   "en": "Each replay is uploaded together with its keysound. Steam only really sends files when the game closes, so a replay you just recorded won't show up in the cloud right away; after switching PCs or reinstalling, the first launch restores them automatically."
+ },
+ {
+  "key": "playback.cloud.play.nosound",
+  "zh": "已从云端载入「{0}」，但云端缺少它的键盘音，本次回放没有按键声。",
+  "en": "Loaded {0} from the cloud, but its keysound is missing there, so this playback has no key sounds."
  },
  {
   "key": "playback.cloud.restore",
@@ -1753,5 +1977,110 @@
   "key": "playback.cloud.uptodate",
   "zh": "云端已经是最新的，没有需要上传的回放。",
   "en": "The cloud is already up to date; there are no replays to upload."
+ },
+ {
+  "key": "playback.cloud.cfg.title",
+  "zh": "配置文件",
+  "en": "Config file"
+ },
+ {
+  "key": "playback.cloud.cfg.status",
+  "zh": "云端配置备份：{0}（{1}）",
+  "en": "Cloud config backup: {0} ({1})"
+ },
+ {
+  "key": "playback.cloud.cfg.none",
+  "zh": "云端还没有配置备份。",
+  "en": "There is no config backup in the cloud yet."
+ },
+ {
+  "key": "playback.cloud.cfg.unknown",
+  "zh": "时间未知",
+  "en": "time unknown"
+ },
+ {
+  "key": "playback.cloud.cfg.note",
+  "zh": "云端只保留一份配置备份，与回放分开存放；Steam 会在游戏关闭时才真正送出文件。",
+  "en": "Only one config backup is kept, stored separately from replays; Steam really sends the file when the game closes."
+ },
+ {
+  "key": "playback.cloud.cfg.upload",
+  "zh": "上传配置到云端",
+  "en": "Upload Config to Cloud"
+ },
+ {
+  "key": "playback.cloud.cfg.upload.tip",
+  "zh": "把本机的 Configs.json 上传到 Steam 云；换机器后用旁边的「从云端取回配置」就能还原。会直接覆盖云端原有那份。",
+  "en": "Uploads this machine's Configs.json to Steam Cloud; on another machine use Restore Config from Cloud next to it to bring it back. This overwrites the copy already in the cloud."
+ },
+ {
+  "key": "playback.cloud.cfg.uploaded",
+  "zh": "配置已上传到云端。",
+  "en": "The config was uploaded to the cloud."
+ },
+ {
+  "key": "playback.cloud.cfg.restore",
+  "zh": "从云端取回配置",
+  "en": "Restore Config from Cloud"
+ },
+ {
+  "key": "playback.cloud.cfg.restore.tip",
+  "zh": "用云端的备份覆盖本机 Configs.json；覆盖前会把本机原文件备份成 Configs.json.bak。要点两下才真做。",
+  "en": "Overwrites this machine's Configs.json with the cloud copy; the current file is saved as Configs.json.bak first. Two clicks to confirm."
+ },
+ {
+  "key": "playback.cloud.cfg.confirm",
+  "zh": "确认覆盖？",
+  "en": "Overwrite?"
+ },
+ {
+  "key": "playback.cloud.cfg.restored",
+  "zh": "已从云端取回配置；本机原配置已备份为 Configs.json.bak。",
+  "en": "Restored the config from the cloud; your previous config was backed up as Configs.json.bak."
+ },
+ {
+  "key": "playback.cloud.cfg.err.noconfig",
+  "zh": "本机还没有配置文件，先改一项设置再上传。",
+  "en": "There is no config file on this machine yet; change any setting and try again."
+ },
+ {
+  "key": "playback.cloud.cfg.err.empty",
+  "zh": "本机配置文件是空的，没有上传。",
+  "en": "The local config file is empty, so nothing was uploaded."
+ },
+ {
+  "key": "playback.cloud.cfg.err.read",
+  "zh": "读不出本机配置文件（可能被其他程序占用或没有权限）。",
+  "en": "Could not read the local config file (it may be locked by another program or permission-denied)."
+ },
+ {
+  "key": "playback.cloud.cfg.err.path",
+  "zh": "找不到本机配置文件的存放位置。",
+  "en": "Could not determine where the local config file should be."
+ },
+ {
+  "key": "playback.cloud.cfg.err.nocloud",
+  "zh": "云端还没有配置备份，先上传一次。",
+  "en": "There is no config backup in the cloud yet; upload one first."
+ },
+ {
+  "key": "playback.cloud.cfg.err.download",
+  "zh": "从云端下载配置失败，本机设置没有改动。",
+  "en": "Downloading the config from the cloud failed; your local settings were left unchanged."
+ },
+ {
+  "key": "playback.cloud.cfg.err.write",
+  "zh": "写不进本机配置文件（可能被占用），本机设置没有改动。",
+  "en": "Could not write the local config file (it may be locked); your local settings were left unchanged."
+ },
+ {
+  "key": "playback.cloud.cfg.err.upload",
+  "zh": "上传失败（云端可能已满或暂时不可写）。",
+  "en": "Upload failed (the cloud may be full or temporarily unwritable)."
+ },
+ {
+  "key": "playback.cloud.cfg.err.other",
+  "zh": "出了点问题，细节见日志。",
+  "en": "Something went wrong; see the log for details."
  }
 ]

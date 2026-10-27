@@ -159,7 +159,7 @@ public static class SpectreState
                 // **必须走 Ui.Loc，不是 LocalizationManager**：这条文案只存在于
                 // 界面层那两张表里（zh/en），14 语言大表里没有它——用错会在
                 // LocCheck 那里报"缺 14 种语言"，而运行时则是露出原始键名。
-                TriggerMessage(Ui.Loc.T("playback.openlevel.official"), 4f);
+                TriggerMessage(Ui.Loc.T("playback.openlevel.official"), extra: 1f);
                 Debug.LogWarning("[SpectreReplay] 该回放没有记录内部关卡名（旧版本录制），无法直达官方关卡");
                 return;
             }
@@ -486,7 +486,7 @@ public static class SpectreState
         // 旧字典版用 ContainsKey 判存在：空串算“有值”。这里必须是 == null，不能换成 IsNullOrEmpty。
         string fileName = data.FileName == null ? CreateFileName() : data.FileName;
         string savePath = Path.Combine(Settings.SavePath, fileName);
-        if (ReplayManager.SaveReplay(data, savePath, debug_no_encryption))
+        if (ReplayManager.SaveReplay(data, savePath, debug_no_encryption, embedKeybdSound: !without_sound))
         {
             message += LocalizationManager.GetLocalizedText("note.save_success") + "\n";
             savedPath = savePath;
@@ -496,9 +496,27 @@ public static class SpectreState
             message += LocalizationManager.GetLocalizedText("note.save_fail") + savePath + "\n";
             success = false;
         }
-        if (!without_sound && data.KeybdSoundFileName != null)
+        // 音频已经压进回放本体时，**不再保留旁挂 wav**：两份内容完全相同，
+        // 留一份会让磁盘与云端体积直接翻倍，而这正是「彻底融入」要消灭的东西。
+        // 代价是老版本模组读新回放会没有声音（画面照常），这是可接受的单向升级。
+        bool soundEmbedded = data.KeybdAudio.HasData;
+        string tmpPath = Path.Combine(Settings.SavePath, "tmp.wav");
+        // 只在主文件真的写成功后才清理：写失败会走 retry 重存一次，
+        // 那时还指望 tmp.wav 里的音频，先删了就等于把声音弄丢。
+        if (soundEmbedded && savedPath != null)
         {
-            string tmpPath = Path.Combine(Settings.SavePath, "tmp.wav");
+            try
+            {
+                if (File.Exists(tmpPath)) File.Delete(tmpPath);
+            }
+            catch (Exception ex)
+            {
+                // 删不掉只是多占一份磁盘，不该让保存提示变成失败
+                Debug.Log("[SpectreReplay] 清理 tmp.wav 失败（音频已嵌入回放）: " + ex.Message);
+            }
+        }
+        else if (!without_sound && data.KeybdSoundFileName != null)
+        {
             string keybdName = data.KeybdSoundFileName;
             // 键存在但值为空串时（解码自外部/损坏的回放文件），Path.Combine 会退化成
             // "目录\tmp.wav" 这样的路径：要么 File.Move 抛异常，要么把 tmp.wav 移到目录上。
@@ -563,7 +581,7 @@ public static class SpectreState
             {
                 message += LocalizationManager.GetLocalizedText("note.save_fail") + "backup\n";
             }
-            else if (!without_sound
+            else if (!without_sound && !soundEmbedded
                      && data.KeybdSoundFileName is string backupWav
                      && !string.IsNullOrEmpty(backupWav))
             {
@@ -598,7 +616,7 @@ public static class SpectreState
                 string cloudExt = debug_no_encryption
                     ? ReplayConstants.ExtensionNoEncrypt : ReplayConstants.Extension;
                 string cloudWav = null;
-                if (!without_sound
+                if (!without_sound && !soundEmbedded
                     && data.KeybdSoundFileName is string cloudWavName
                     && !string.IsNullOrEmpty(cloudWavName))
                 {
@@ -625,15 +643,26 @@ public static class SpectreState
 
     internal enum NotifType { Info, Warning }
 
-    internal static void TriggerMessage(string message, float dur = 3f, NotifType type = NotifType.Info)
+    /// <summary>
+    /// 弹一条提示。
+    ///
+    /// <paramref name="extra"/> 是**在玩家设定值之上多加的秒数**（默认 0），
+    /// 不是绝对时长——要读两行的错误提示写成 2，玩家把基础调大时它跟着变大。
+    /// 基础值来自 <see cref="Settings.NotificationSeconds"/>，见
+    /// <see cref="Settings.NotificationDuration"/>。
+    /// </summary>
+    internal static void TriggerMessage(string message, float extra = 0f, NotifType type = NotifType.Info)
     {
         if (debug_hide_text) return;
-        // Notification 内部 StartCoroutine + UI 操作，后台线程直调会炸——转回主线程
+        // Notification 内部 StartCoroutine + UI 操作，后台线程直调会炸——转回主线程。
+        // 带过去的是 extra 而不是解析后的秒数：在对侧解析一次就够了，
+        // 传绝对秒数会让递归进来时又加一遍基础值。
         if (!MainThread.IsMainThread)
         {
-            MainThread.Run(() => TriggerMessage(message, dur, type));
+            MainThread.Run(() => TriggerMessage(message, extra, type));
             return;
         }
+        float dur = Settings.NotificationDuration(extra);
         try
         {
             var n = Notification.instance;

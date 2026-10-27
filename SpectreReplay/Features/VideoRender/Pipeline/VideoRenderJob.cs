@@ -665,7 +665,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
 
         if (cancelRequested) { NotifyCanceled(); yield break; }
 
-        TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.done") + "\n" + outputPath, 5f);
+        TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.done") + "\n" + outputPath, extra: 2f);
         Debug.Log("[SpectreReplay] replay video complete: " + outputPath);
         ReportEnd(SpectreAPI.RenderEndStatus.Completed, outputPath, null);
     }
@@ -1106,7 +1106,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
     private void NotifyFailed(string message)
     {
         VideoRender.Current.Error = message;
-        TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.failed") + "\n" + message, 5f, NotifType.Warning);
+        TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.failed") + "\n" + message, extra: 2f, type: NotifType.Warning);
         Debug.Log("[SpectreReplay] replay render failed: " + message);
         ReportEnd(SpectreAPI.RenderEndStatus.Failed, null, message);
     }
@@ -1121,11 +1121,11 @@ internal sealed class VideoRenderJob : MonoBehaviour
             string reason = LocalizationManager.GetLocalizedText("rendervideo.playback_restarted");
             VideoRender.Current.Error = reason;
             TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.failed") + "\n" + reason,
-                5f, NotifType.Warning);
+                extra: 2f, type: NotifType.Warning);
             ReportEnd(SpectreAPI.RenderEndStatus.Failed, null, reason);
             return;
         }
-        TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.canceled"), 3f, NotifType.Warning);
+        TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.canceled"), type: NotifType.Warning);
         ReportEnd(SpectreAPI.RenderEndStatus.Canceled, null, null);
     }
 

@@ -682,6 +682,18 @@ namespace SpectreReplay.Ui
 
         // ── 徽章 / 标签 ───────────────────────────────────────
 
+        /// <summary>
+        /// 按文案实测宽度占一个徽章矩形。写死 46f 时俄语「Загружено」/西语
+        /// 「Cargado」会被裁掉一截——徽章是短控件，但短文案也会随语言变长。
+        /// 下限沿用调用处原来的宽度，中/英下视觉不变。
+        /// </summary>
+        internal static Rect BadgeRect(string s, float minWidth, float height)
+        {
+            Ensure();
+            float w = Mathf.Max(minWidth, _smallC.CalcSize(new GUIContent(s)).x + 14f);
+            return GUILayoutUtility.GetRect(w, height, GUILayout.Width(w), GUILayout.Height(height));
+        }
+
         /// <summary>胶囊徽章：半透明底 + 同色描边 + 同色文字。</summary>
         internal static void Badge(Rect r, string s, Color c)
         {
@@ -770,6 +782,43 @@ namespace SpectreReplay.Ui
 
         private static Rect RowHit(Rect ctrl, float labelW)
             => new Rect(ctrl.x - labelW, ctrl.y, labelW + ctrl.width, ctrl.height);
+
+        // ── 按文案自适应宽度 ───────────────────────────────────
+        //
+        // **为什么必须有这条。** 按钮宽度原来都是写死的常量（110 / 150 / 70…），
+        // 那套数字只在中文文案下刚好够用。换成英文立刻翻车：
+        // 「Upload Config to Cloud」比 150px 宽得多，被截成「Jpload … Clouc」
+        // （2026-10-27 用户截图）。14 张语言表里还有更长的——西语
+        // 「Confirmar eliminación」、俄语「Подтвердить удаление」、
+        // 波兰语「Potwierdź usunięcie」——所以��法只能是"按文案实测"，
+        // 不能是"把那个数字调大"：调大只对当下这一种语言有效，
+        // 下一张语言表照样裁。
+        //
+        // 下限沿用每个调用处原来写死的值（短文案下按钮不缩水、同一列仍整齐），
+        // 上限**故意不设**：裁字比占宽更难用。
+        internal static float ButtonW(string label, GUIStyle style, float minWidth)
+        {
+            Ensure();
+            if (style == null || string.IsNullOrEmpty(label))
+            {
+                return minWidth;
+            }
+            // +2：CalcSize 给的是内容尺寸，浮点舍入会把最右一像素落到矩形外，
+            // 表现为最后一个字母被切掉一条竖边。
+            float w = style.CalcSize(new GUIContent(label)).x + 2f;
+            return Mathf.Max(minWidth, Mathf.Ceil(w));
+        }
+
+        /// <summary>
+        /// 同 <see cref="ButtonW"/>，直接占一个布局矩形。
+        /// 用法与 <c>GUILayoutUtility.GetRect(w, h, GUILayout.Width(w), …)</c> 一致，
+        /// 只是宽度由文案决定——留给需要 <c>Gui.Tip</c> 的按钮（它们必须拿到 Rect）。
+        /// </summary>
+        internal static Rect ButtonRect(string label, GUIStyle style, float minWidth, float height)
+        {
+            float w = ButtonW(label, style, minWidth);
+            return GUILayoutUtility.GetRect(w, height, GUILayout.Width(w), GUILayout.Height(height));
+        }
 
         internal static void Tip(Rect r, string labelKey)
         {
