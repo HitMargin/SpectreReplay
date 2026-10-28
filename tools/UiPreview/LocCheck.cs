@@ -92,10 +92,26 @@ namespace UiPreview
             }
 
             // ② 页面引用到的键，在**每一种语言**下都必须能解析成非空、且不是键名本身。
+            //
+            //    驱动方式必须是**游戏语言桩件**（RDString.language），不能直接戳
+            //    Loc.CurrentLanguage：T 取词时会从游戏语言同步（2026-10-28 修的
+            //    中英混排），直接戳的值当场就被覆盖——循环名 义上测 14 种语言，
+            //    实际每一轮都在测 RDString.language 指的那一种，且因那一表恰好
+            //    是全的而照样绿（与变异腐烂同一性质的假绿）。
+            //    驱动后断言 CurrentLanguage 真的到了目标语言：驱动方式本身腐烂
+            //    （比如 CodeByLanguage 改名）时这里先红，而不是静默测错对象。
             foreach (var lang in Languages)
             {
                 if (!tables.ContainsKey(lang)) continue;
-                Loc.CurrentLanguage = lang;
+                RDString.language = CodeToSystemLanguage(lang);
+                Loc.RefreshLanguage();
+                if (Loc.CurrentLanguage != lang)
+                {
+                    Console.WriteLine($"    ✗ [{lang}] 驱动游戏语言桩件后 CurrentLanguage 是 \"{Loc.CurrentLanguage}\""
+                        + " —— 驱动方式失效（CodeByLanguage 反查不到？），本用例测的不是目标语言");
+                    fail++;
+                    continue;
+                }
                 int bad = 0;
                 foreach (var k in used)
                 {
@@ -118,16 +134,42 @@ namespace UiPreview
                 fail += bad;
             }
 
-            // ③ 未在 14 种语言里的键（比如荷兰语）必须回落到英文，而不是露键名。
-            Loc.CurrentLanguage = "nl";
+            // ③ 未在 14 种语言里的游戏语言必须回落到英文，而不是露键名。
+            //    驱动同样走游戏语言桩件：回落发生在 RefreshLanguage 的 else 分支，
+            //    只能从这里进来。
+            //
+            //    驱动值用 **Chinese (6)**，不是 Dutch 之类的"明显外国语言"：
+            //    桩件枚举刻意只列了 CodeByLanguage 引用的 14 种（LocStubs.cs:31
+            //    记着 2026-10-19 Italian 值抄错的教训，多列的项没有任何判据看它）；
+            //    Chinese 是桩件里唯一「枚举存在、真值有游戏背书、但不在
+            //    CodeByLanguage 里」的值——CodeByLanguage 用的是
+            //    ChineseSimplified(40)/ChineseTraditional(41)。
+            RDString.language = UnityEngine.SystemLanguage.Chinese;
             string fallback = Loc.T("page.record");
             string enVal = tables["en"]["page.record"];
-            bool okFallback = fallback == enVal;
-            Console.WriteLine($"    {(okFallback ? "✓" : "✗")} ③ 不支持的语言回落到英文（nl → \"{fallback}\"）");
+            bool okFallback = Loc.CurrentLanguage == "en" && fallback == enVal;
+            Console.WriteLine($"    {(okFallback ? "✓" : "✗")} ③ 不支持的游戏语言回落到英文（Chinese(6) → \"{fallback}\"）");
             if (!okFallback) fail++;
 
-            Loc.CurrentLanguage = "en";
+            RDString.language = UnityEngine.SystemLanguage.ChineseSimplified;
             return fail;
+        }
+
+        /// <summary>
+        /// 语言代码 → SystemLanguage 枚举（驱动 RDString.language 桩件用）。
+        ///
+        /// **为什么反查 CodeByLanguage 而不是再写一份映射**：写第二份就是
+        /// LocLanguageCheck ① 钉的那种「两张表各写各的」——表变了这里不知道。
+        /// 反查失败返回 English 不会静默：② 的驱动自检会发现 CurrentLanguage
+        /// 到不了目标语言并判红。
+        /// </summary>
+        internal static UnityEngine.SystemLanguage CodeToSystemLanguage(string code)
+        {
+            foreach (var kv in Loc.CodeByLanguage)
+            {
+                if (kv.Value == code) return kv.Key;
+            }
+            return UnityEngine.SystemLanguage.English;
         }
     }
 }

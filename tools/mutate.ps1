@@ -1137,6 +1137,36 @@ switch ($Which) {
         if ($drop.Count -eq $ls.Count) { throw 'MUT-I2 没删掉任何行（锚点没命中）' }
         SetLines 'Ui\LocData.cs' $drop.ToArray()
     }
+    'MUT-LANG3' {
+        # ⑲d：把 Loc.T 里的语言同步挪回「面板打开时」——这次缺陷史的原状。
+        #
+        #    RefreshLanguage 只剩 OnGui 的面板开/关两个调用点后，全程不开面板的
+        #    会话里 CurrentLanguage 恒为启动默认 "en"：游戏内提示（Status.Say /
+        #    TriggerMessage 走 T 取词）全部英文，而同一条提示里走
+        #    LocalizationManager 的行照常中文——中英混排（2026-10-28 实测）。
+        #    LocLanguageCheck ④ 的「T 方法体里必须调 RefreshLanguage」必须因此变红。
+        #
+        #    锚点带注释行以保唯一：RefreshLanguage() 在 OnGui 里还有两处合法调用，
+        #    只写方法名会命中 3 次。变异删的是 T 里的那一次调用（连同它头上的
+        #    说明注释一起退回）。
+        Backup 'Ui\Loc.cs'
+        $ls = Lines 'Ui\Loc.cs'
+        $out = New-Object System.Collections.ArrayList
+        $skipping = $false
+        foreach ($line in $ls) {
+            if (-not $skipping -and $line.Trim() -eq '// **每次取词都同步游戏语言**，与 LocalizationManager.GetLocalizedText') {
+                $skipping = $true
+                continue
+            }
+            if ($skipping) {
+                if ($line.Trim() -eq 'RefreshLanguage();') { $skipping = $false }
+                continue
+            }
+            [void]$out.Add($line)
+        }
+        if ($out.Count -eq $ls.Count) { throw 'MUT-LANG3 没删掉任何行（锚点没命中）' }
+        SetLines 'Ui\Loc.cs' $out.ToArray()
+    }
     'MUT-X1' {
         # 跨线程可见性：把泵线程写、主线程读的 pumpFailure 退回普通字段。
         # 这类缺陷编译通过、跑起来也基本正常（x86 弱内存模型下常常碰巧看到新值），

@@ -72,38 +72,41 @@ namespace UiPreview
             //
             //    探针键必须在**所有**语言里都存在，否则 Remove 的命中与否本身就
             //    不确定。page.record 是四个页签之一，必然有。
+            //
+            //    驱动必须走**游戏语言桩件**（RDString.language），不能直接戳
+            //    Loc.CurrentLanguage：T 取词时会从游戏语言同步（2026-10-28 修的
+            //    中英混排），戳进去的值当场被覆盖，用例静默测错对象。
             string probe = "page.record";
-            string langSaved = Loc.CurrentLanguage;
             try
             {
-                Loc.CurrentLanguage = "ja";
+                RDString.language = LocCheck.CodeToSystemLanguage("ja");
                 var ja = tables["ja"];
                 string jaSaved = ja[probe];
                 ja.Remove(probe);
                 string got = Loc.T(probe);
                 ja[probe] = jaSaved;
-                bool fellBack = got == en[probe];
+                bool fellBack = Loc.CurrentLanguage == "ja" && got == en[probe];
                 Console.WriteLine("    " + (fellBack ? "✓" : "✗")
                     + " ② 当前语言缺键时退回英文（探针 " + probe + "）");
                 if (!fellBack) fail++;
             }
             finally
             {
-                Loc.CurrentLanguage = langSaved;
+                RDString.language = UnityEngine.SystemLanguage.ChineseSimplified;
             }
 
             // ③ 连英文也缺时才退到中文——证明中间那一级不是摆设。
             string enSaved = en[probe];
             try
             {
-                Loc.CurrentLanguage = "ja";
+                RDString.language = LocCheck.CodeToSystemLanguage("ja");
                 var ja = tables["ja"];
                 string jaSaved = ja[probe];
                 ja.Remove(probe);
                 en.Remove(probe);
                 string got = Loc.T(probe);
                 ja[probe] = jaSaved;
-                bool fellBack = got == zh[probe];
+                bool fellBack = Loc.CurrentLanguage == "ja" && got == zh[probe];
                 Console.WriteLine("    " + (fellBack ? "✓" : "✗")
                     + " ③ 英文也缺时退回中文（证明中文兜底不是摆设）");
                 if (!fellBack) fail++;
@@ -111,7 +114,7 @@ namespace UiPreview
             finally
             {
                 en[probe] = enSaved;      // 无论上面成没成，字典都要复原
-                Loc.CurrentLanguage = "en";
+                RDString.language = UnityEngine.SystemLanguage.ChineseSimplified;
             }
 
             // ④ 全都缺才露键名——这是"真漏"的唯一信号
@@ -121,7 +124,6 @@ namespace UiPreview
             Console.WriteLine("    " + (ok ? "✓" : "✗") + " ④ 全都缺才露键名");
             if (!ok) fail++;
 
-            Loc.CurrentLanguage = "en";
             if (fail == 0)
             {
                 Console.WriteLine("    ✓ 回退链每一级都按设计工作，且没有静默降级");

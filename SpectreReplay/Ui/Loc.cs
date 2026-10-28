@@ -20,7 +20,10 @@ namespace SpectreReplay.Ui
 
         internal static string Hint => T("ui.hint");
 
-        private static readonly Dictionary<SystemLanguage, string> CodeByLanguage =
+        // internal 而不是 private：离线检查（LocCheck.CodeToSystemLanguage）要
+        // **反查**它来驱动游戏语言桩件。写第二份映射就是 LocLanguageCheck ①
+        // 钉的那类「两张表各写各的」——表变了检查不知道。
+        internal static readonly Dictionary<SystemLanguage, string> CodeByLanguage =
             new Dictionary<SystemLanguage, string>
             {
                 { SystemLanguage.English, "en" },
@@ -87,6 +90,19 @@ namespace SpectreReplay.Ui
             {
                 return "";
             }
+            // **每次取词都同步游戏语言**，与 LocalizationManager.GetLocalizedText
+            // 同一口径（LocalizationManager.cs:606 的注释记着同一课）。
+            //
+            // 只在面板打开时刷新不够：游戏内提示（Status.Say / TriggerMessage）
+            // 走的也是这里，而玩家可以全程不开面板——打完一局直接保存回放，
+            // CurrentLanguage 还是启动默认 "en"。2026-10-28 实测：保存成功提示
+            // 的第一行走 LocalizationManager（每次取词同步）是中文，第二行走
+            // 这里是英文，同一条通知里两种语言。
+            //
+            // 开销：RDString.language 是静态字段读 + 一次 TryGetValue，
+            // OnGUI 每帧几十次取词也察觉不到——GetLocalizedText 已在同帧路径上
+            // 这么跑了很久。
+            RefreshLanguage();
             if (LocData.Languages.TryGetValue(CurrentLanguage, out var table)
                 && table.TryGetValue(key, out string val))
             {

@@ -133,6 +133,48 @@ namespace UiPreview
             //    "跳过"，**不能静默通过**——静默通过等于这条判据不存在。
             fail += CheckStubEnumValues();
 
+            // ④ Loc.T 必须在**取词路径上**同步游戏语言，不能只靠面板打开时刷新。
+            //
+            //    缺陷史（2026-10-28 实测）：Loc.CurrentLanguage 默认 "en"，
+            //    RefreshLanguage 的调用点只有 OnGui 的面板开/关两处。玩家全程
+            //    不开面板时（打完一局直接保存回放），游戏内提示走 T 取词，
+            //    拿到的还是启动默认英文。而同一条提示的第一行走的是
+            //    LocalizationManager.GetLocalizedText——它在取词前每次同步
+            //    （它头上 :606 的注释记着同一课），于是简中玩家看到
+            //    「保存成功!」+「Backed up to Steam Cloud.」同框混排。
+            //
+            //    判据不是「RefreshLanguage 方法存在」而是「T 的方法体里调用它」：
+            //    只查方法存在会被删调用点、留方法骗过（CrossPlatformInputCheck
+            //    的 ⑤b 也是同一句教训）。
+            string locCode = SrcUtil.Source(projectRoot, @"Ui\Loc.cs");
+            if (locCode.Length == 0)
+            {
+                Console.WriteLine("    ✗ 读不到 Ui/Loc.cs");
+                fail++;
+            }
+            else
+            {
+                int tAt = locCode.IndexOf("internal static string T(string key)", StringComparison.Ordinal);
+                int fAt = locCode.IndexOf("internal static string F(string key", StringComparison.Ordinal);
+                if (tAt < 0)
+                {
+                    Console.WriteLine("    ✗ 找不到 Loc.T（取词入口改名了？断言要跟着挪）");
+                    fail++;
+                }
+                else
+                {
+                    string tBody = fAt > tAt
+                        ? locCode.Substring(tAt, fAt - tAt)
+                        : locCode.Substring(tAt);
+                    if (!tBody.Contains("RefreshLanguage()", StringComparison.Ordinal))
+                    {
+                        Console.WriteLine("    ✗ Loc.T 取词前没有同步游戏语言 —— 全程不开面板的会话里，"
+                            + "游戏内提示全是启动默认英文（2026-10-28 中英混排实测）");
+                        fail++;
+                    }
+                }
+            }
+
             return fail;
         }
 
