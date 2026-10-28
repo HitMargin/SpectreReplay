@@ -1776,8 +1776,11 @@ switch ($Which) {
         # ⑦ 平台守卫失效：SendInputs 在非 Windows 上不再提前返回。
         # user32 不存在时这里是 DllNotFoundException（不是 return 0），而调用点
         # 在回放每帧的路径上——一次异常就打断整帧的输入与命中推进。
+        #
+        # 锚点是 _dllMissing 闩锁，不是历史上那个 Available 属性（ba92948 清理
+        # 叙述性注释时把 Available/Broken 一并删了，旧锚点从此 0 命中、变异失效）。
         Backup 'Features\Replay\Runtime\KeyboardSimulation.cs'
-        ReplaceExact 'Features\Replay\Runtime\KeyboardSimulation.cs' 'if (!Available) return;' ''
+        ReplaceExact 'Features\Replay\Runtime\KeyboardSimulation.cs' 'if (_dllMissing) return;' ''
     }
     'MUT-CI7' {
         # ⑧ 注入层下沉回归：把 GetMain 的补丁从 RDInput 静态入口挪到 RDInputType 层。
@@ -1831,8 +1834,12 @@ switch ($Which) {
         # Inject 根本不被调用、KeyUpdated.Invoke 不发生 —— 直接订阅 SkyHook 事件流的
         # 键位显示模组（JipperResourcePack 的 KeyViewer.cs:2216）整段失明，
         # 而游戏判定与 RDInput 系模组都还正常，极难定位。
+        #
+        # 锚点必须带 `bool asyncInject = ` 前缀：Injectable 在 ReplayPlayer 里出现
+        # 两次（另一处是 Stop 的 ReleaseLeakedKey 守卫），只写成员名会命中 2 次、
+        # 变异失效（exit 2）。
         Backup 'Features\Replay\Runtime\ReplayPlayer.cs'
-        ReplaceExact 'Features\Replay\Runtime\ReplayPlayer.cs' 'AsyncInputInjector.Injectable' 'AsyncInputInjector.Usable'
+        ReplaceExact 'Features\Replay\Runtime\ReplayPlayer.cs' 'bool asyncInject = AsyncInputInjector.Injectable' 'bool asyncInject = AsyncInputInjector.Usable'
     }
 
 

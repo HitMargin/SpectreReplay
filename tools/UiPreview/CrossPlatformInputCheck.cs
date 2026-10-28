@@ -36,6 +36,8 @@ namespace UiPreview
             string input = SrcUtil.Source(projectRoot, "Features/Replay/Runtime/ManagedInput.cs");
             string patch = SrcUtil.Source(projectRoot, "Features/Replay/Patches/Patch_InputInjection.cs");
             string player = SrcUtil.Source(projectRoot, "Features/Replay/Runtime/ReplayPlayer.cs");
+            string kbsim = SrcUtil.Source(projectRoot, "Features/Replay/Runtime/KeyboardSimulation.cs");
+            string recorder = SrcUtil.Source(projectRoot, "Features/Replay/Runtime/ReplayRecorder.cs");
 
             int fail = 0;
             void Expect(bool ok, string msg)
@@ -92,6 +94,30 @@ namespace UiPreview
                 "⑤ ReplayPlayer 的发送条件被平台/失败标记污染 —— 原有按键模拟会被新判据削弱");
             Expect(player.Contains("ManagedInput.Mirror"),
                 "⑤ ReplayPlayer 的镜像条件不是 ManagedInput.Mirror");
+
+            // ⑤b SendInput 的 dll 缺失守卫必须是**异常闩锁**，不是平台判断。
+            //     user32 在非 Windows 上不存在，那里抛 DllNotFoundException；调用点
+            //     在回放每帧的路径上，一次未捕获的异常就打断整帧的输入与命中推进。
+            //     而用 Application.platform 提前返回是另一种错法（见下条）：判断写错
+            //     会让 SendInput 在 Windows 上也整条静默失效，而它是镜像路径唯一的载体。
+            Expect(kbsim.Contains("if (_dllMissing) return;"),
+                "⑤b SendInputs 没有 _dllMissing 守卫 —— 非 Windows 上每帧抛 DllNotFoundException，整帧输入与命中推进被打断");
+            Expect(kbsim.Contains("catch (DllNotFoundException)") && kbsim.Contains("_dllMissing = true;"),
+                "⑤b SendInputs 没有把 DllNotFoundException 闩锁成 _dllMissing —— 每次调用都重新抛一次");
+            Expect(!Regex.IsMatch(kbsim, @"Application\.platform|RuntimePlatform"),
+                "⑤b SendInputs 用平台判断提前返回 —— 判断一旦写错，SendInput 会整条静默失效");
+
+            // ⑤c 录制侧必须走 SampleKeyState（带守卫 + Input.GetKey 回退），
+            //     不能直接调 user32 的 GetKeyboardState。前者在非 Windows 上退回
+            //     Unity 的 Input.GetKey 逐键轮询（与游戏 RDInputType_Keyboard 同源），
+            //     后者在非 Windows 上直接 DllNotFoundException——录制一开局每帧抛，
+            //     回放文件里一个按键事件都没有。
+            Expect(recorder.Contains("KeyboardSimulation.SampleKeyState("),
+                "⑤c 录制侧没走 SampleKeyState —— 非 Windows 上每帧抛 DllNotFoundException，录出的回放没有任何按键");
+            Expect(!recorder.Contains("KeyboardSimulation.GetKeyboardState("),
+                "⑤c 录制侧直接调了 GetKeyboardState —— 绕过了平台守卫与 Input.GetKey 回退");
+            Expect(kbsim.Contains("Input.GetKey("),
+                "⑤c SampleKeyState 没有 Input.GetKey 回退 —— 非 Windows 上录制拿不到任何按键状态");
 
             // ⑥ holdKeys 必须是真实键码，不能是 AnyKeyCode(null) 占位。
             Expect(!patch.Contains("new AnyKeyCode(null)"),
