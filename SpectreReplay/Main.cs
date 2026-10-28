@@ -118,6 +118,18 @@ namespace SpectreReplay
                 // Steam 上下文，不清就是拿悬空句柄开路（见 ResetProbe 注释）。
                 Features.Cloud.SteamCloud.ResetProbe();
 
+                // 调试开关。**不持久化、不进配置**：DebugMode 只反映构建类型
+                // （编辑器与 Debug 构建为 true），四个行为开关每次装配都复位。
+                // 它们是临时排查用具，活在内存里就够；写进配置只会在下次启动
+                // 变成「回放播不了 / 提示不弹」却查不到原因。
+                // 这四个开关的界面只存在于调试分区，而那个分区还要先改
+                // SpectreState.ShowDebugSection 才会显示（默认 false）。
+                SpectreState.DebugMode = UnityEngine.Debug.isDebugBuild;
+                SpectreState.debug_skip_Verification = false;
+                SpectreState.debug_no_encryption = false;
+                SpectreState.debug_hide_text = false;
+                SpectreState.debug_use_old_hit = false;
+
                 // 回放功能开关（录制/回放/保存/录像共用这一个功能族）
                 SpectrePatchHub.SetFeatureToggle(FeatureKeys.Replay, () => Settings.ReplayOn);
                 SpectrePatchHub.SetFeatureToggle(FeatureKeys.ReplayManualSave, () => Settings.ReplayOn && Settings.ManualSave);

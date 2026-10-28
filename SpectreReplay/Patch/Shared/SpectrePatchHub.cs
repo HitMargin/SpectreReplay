@@ -726,7 +726,7 @@ internal static class SpectrePatchHub
             + string.Join(" | ", snapshot));
         SpectreReplay.SpectreState.TriggerMessage(
             "SpectreReplay 有 " + snapshot.Count + " 个功能未能加载（游戏版本可能不兼容），详见日志",
-            8f, SpectreReplay.SpectreState.NotifType.Warning);
+            extra: 5f, SpectreReplay.SpectreState.NotifType.Warning);
     }
 
     private static void Unapply(Spec spec)

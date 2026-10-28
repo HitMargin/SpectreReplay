@@ -2082,6 +2082,45 @@ namespace SpectreReplay.Pages
                 Gui.KeyValue("about.path", SaveDirText(), Gui.DimCol);
                 Gui.Divider();
                 DrawUpdateRow();
+
+                // 调试分区：**双重门控**。DebugMode 只反映构建类型，ShowDebugSection
+                // 要改源码才为 true——两个条件都要：调试构建不等于「想看见调试面板」，
+                // 而正式发行的包里连这一块都不会被画出来。
+                // 用 WarnCol 而不是 Accent：这一区里的开关能让回放播不了、提示不弹、
+                // 存出不加密的文件，视觉上就该和「取消渲染」那类危险操作同色。
+                if (DebugMode && ShowDebugSection)
+                {
+                    DrawDebugSection();
+                }
+            });
+        }
+
+        /// <summary>
+        /// 关于页的调试分区，只在 <see cref="DebugMode"/> 与 <see cref="ShowDebugSection"/>
+        /// 同时为真时绘制。
+        ///
+        /// <para><b>这些开关一律不持久化。</b>它们改的是本次运行的进程内状态，关模组或
+        /// 重启游戏就回到默认值——所以这里刻意不调 <c>Commit()</c>，也没有对应的配置项。
+        /// 理由见 SpectreState 里那组字段的注释：四种效果（跳过校验、不弹提示、存不加密
+        /// 文件、走旧判定）一旦留在玩家机器上，都会表现为「好好的回放播不了」而且无从自查。</para>
+        ///
+        /// <para><b>为什么还要 ShowDebugSection 这道门。</b>调试构建在日常游玩里并不罕见
+        /// （编辑器、开发版），可上面这些开关对普通玩家只有坏处。所以「调试构建」和
+        /// 「愿意看见调试面板」分成两件事：前者自动判定，后者只能改源码。</para>
+        /// </summary>
+        private static void DrawDebugSection()
+        {
+            Gui.Section("about.debug", Gui.WarnCol, () =>
+            {
+                OnGui.Note("about.debug.note");
+                OnGui.Row("about.debug.skipverify", debug_skip_Verification,
+                    v => debug_skip_Verification = v);
+                OnGui.Row("about.debug.hidetext", debug_hide_text,
+                    v => debug_hide_text = v);
+                OnGui.Row("about.debug.noencryption", debug_no_encryption,
+                    v => debug_no_encryption = v);
+                OnGui.Row("about.debug.oldhit", debug_use_old_hit,
+                    v => debug_use_old_hit = v);
             });
         }
 

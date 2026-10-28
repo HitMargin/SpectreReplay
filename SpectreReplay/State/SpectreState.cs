@@ -413,15 +413,37 @@ public static class SpectreState
 
     internal static HitMarginLimit StoredHitMarginLimit = (HitMarginLimit)0;
 
+    // ── 调试开关（**一律不持久化**）────────────────────────────
+    //
+    // 这五个字段都不进 Configs.json、也不是设置页里的正式配置：它们改的是
+    // 「回放校验 / 提示条 / 存盘格式 / 命中判定」这类一旦留在玩家机器上就会
+    // 变成「我这回放怎么播不了」的状态，只该在开发期临时打开。
+    //
+    // 有效范围 = 本次装配：Main.OnToggle 每次都会把它们复位成 false，
+    // 所以关开一次模组、重启游戏都会回到默认值。
+
+    /// <summary>
+    /// 调试构建标记：由 <see cref="Main.OnToggle"/> 按 <c>Debug.isDebugBuild</c> 赋值，
+    /// **不是**玩家可改的配置。它本身不改变任何行为，只表示「这是个调试构建」。
+    /// </summary>
     internal static bool DebugMode = false;
 
+    /// <summary>
+    /// 是否在关于页显示调试分区。**只能改这一行源码**：没有配置项、没有界面开关，
+    /// 正式发行时玩家永远看不到它（见 <c>Pages.DrawAbout</c>）。
+    /// </summary>
+    internal static bool ShowDebugSection = false;
+
+    /// <summary>跳过回放/音频校验。排查帧时序问题时用，默认关。</summary>
     internal static bool debug_skip_Verification = false;
 
     // 写不解密的 .psprp 而不是加密的 .sprp，便于排查“文件是不是坏了”。
     internal static bool debug_no_encryption = false;
 
+    /// <summary>不弹提示条（录视频、截干净画面时用）。</summary>
     internal static bool debug_hide_text = false;
 
+    /// <summary>走旧的命中判定路径。</summary>
     internal static bool debug_use_old_hit = false;
 
     internal static KeyCode save_button = (KeyCode)290;

@@ -104,9 +104,13 @@ namespace UiPreview
             // 游戏里毫无托管异常——直接原生访问违例，必须离线钉住形状。
             int cloudFail = CloudLifecycleCheck.Run(
                 ProjectDir);
+            // 调试开关曾经只搬了读取点、没搬开关（五个字段恒为 false）。现在按
+            // 「不持久化 + 必须改源码才显示分区」接线，判据钉住别退化回配置项。
+            int debugFail = DebugSwitchCheck.Run(
+                ProjectDir);
             int orphanFail = PortedCompletenessCheck.NoOrphanChecks(
                 ProjectDir);
-            int total = locFail + hardFail + replayFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + locLangFail + pinStateFail + injectFail + logPrefixFail + scatterFail + cursorFail + cursorTrackFail + keybdAudioFail + keybdPrefsFail + crossInputFail + cloudFail + orphanFail;
+            int total = locFail + hardFail + replayFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + locLangFail + pinStateFail + injectFail + logPrefixFail + scatterFail + cursorFail + cursorTrackFail + keybdAudioFail + keybdPrefsFail + crossInputFail + cloudFail + debugFail + orphanFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"

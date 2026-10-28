@@ -730,6 +730,56 @@
   "en": "Save folder"
  },
  {
+  "key": "about.debug",
+  "zh": "调试（仅本次运行）",
+  "en": "Debug (this run only)"
+ },
+ {
+  "key": "about.debug.note",
+  "zh": "这些开关不写进配置，关开模组或重启游戏即恢复默认；本分区本身要改源码里的 ShowDebugSection 才会出现。",
+  "en": "These switches are never saved to the config, so restarting the mod or the game resets them. This section only appears after ShowDebugSection is edited in the source."
+ },
+ {
+  "key": "about.debug.skipverify",
+  "zh": "跳过回放校验",
+  "en": "Skip replay verification"
+ },
+ {
+  "key": "about.debug.hidetext",
+  "zh": "不显示提示条",
+  "en": "Hide toast messages"
+ },
+ {
+  "key": "about.debug.noencryption",
+  "zh": "存成不加密的 .psprp",
+  "en": "Save as unencrypted .psprp"
+ },
+ {
+  "key": "about.debug.oldhit",
+  "zh": "使用旧命中判定",
+  "en": "Use the old hit judgement"
+ },
+ {
+  "key": "about.debug.skipverify.tip",
+  "zh": "跳过回放与音频的完整性校验。只有文件被改过、或本构建的帧时序与录制时不同（改过着色器／时间源）时才需要；一切正常时不要开——校验是发现坏回放的第一道线。",
+  "en": "Skips the replay and audio integrity checks. Only needed when the file was modified, or when this build's frame timing differs from the one it was recorded on (edited shaders or time source). Leave it off when nothing is broken, since the check is the first line of defence against corrupt replays."
+ },
+ {
+  "key": "about.debug.hidetext.tip",
+  "zh": "不显示画面底部的提示条。录视频、截干净画面，或不想让自己的调试输出被顶掉时用；代价是操作没生效这类失败也不再有提示。",
+  "en": "Suppresses the toast messages at the bottom of the screen. Useful while recording video, capturing clean frames, or when your own debug output would otherwise be pushed aside; the cost is that silent failures, such as an action that did nothing, go unannounced too."
+ },
+ {
+  "key": "about.debug.noencryption.tip",
+  "zh": "保存回放时写不加密的 .psprp 而不是 .sprp，方便用一般工具检查内容。本模组仍能读取，但它没有完整性保护（谁都能改），不要拿去做分享或备份。",
+  "en": "Saves replays as unencrypted .psprp instead of .sprp so the contents can be inspected with ordinary tools. This mod still loads them, but they carry no integrity protection (anyone can edit them), so do not use them for sharing or backups."
+ },
+ {
+  "key": "about.debug.oldhit.tip",
+  "zh": "用旧的命中判定路径重算判定，用来比对新的判定是不是把某一击吃错了。只影响回放期间的显示，不改录下来的数据。",
+  "en": "Recomputes judgements with the old hit path, for checking whether the new path mis-scores a particular hit. Only affects what is shown during playback; the recorded data is untouched."
+ },
+ {
   "key": "about.notif.seconds",
   "zh": "提示条停留时长",
   "en": "Toast duration"

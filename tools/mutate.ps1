@@ -838,6 +838,26 @@ switch ($Which) {
         Backup 'Main.cs'
         ReplaceExact 'Main.cs' 'Features.Cloud.SteamCloud.ResetProbe();' '// stale probe'
     }
+    'MUT-C8' {
+        # 调试开关曾经只搬读取点、没搬开关（五个字段恒为 false）。把装配时的
+        # DebugMode 赋值删掉 = 回到那个状态：编辑器里跳过不了校验、关不掉提示条。
+        # DebugSwitchCheck ① 必须因此变红。
+        Backup 'Main.cs'
+        ReplaceExact 'Main.cs' 'SpectreState.DebugMode = UnityEngine.Debug.isDebugBuild;' '// no debug mode'
+    }
+    'MUT-C9' {
+        # 双重门控退化成单重：只留 DebugMode，等于所有调试构建的玩家都能看见
+        # 这几个会把回放存成不加密文件的开关。DebugSwitchCheck ③ 必须因此变红。
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' 'if (DebugMode && ShowDebugSection)' 'if (DebugMode)'
+    }
+    'MUT-C10' {
+        # 调试分区内部误调 Commit() = 把这些开关写进配置。那正是需求明确排除的
+        # 行为（「回放播不了 / 提示不弹」会持久留在玩家机器上）。
+        # DebugSwitchCheck ⑤ 必须因此变红。
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' 'OnGui.Note("about.debug.note");' 'OnGui.Note("about.debug.note"); Commit();'
+    }
     'MUT-T1' {
         # 补丁目标预检的覆盖率自证：把 nameof(...) 的解析能力去掉。
         # 那会让三条补丁重新变成"未校验"——而它们正是偏差 21「钉时间轴
