@@ -426,7 +426,7 @@ public static class SpectreState
     /// 调试构建标记：由 <see cref="Main.OnToggle"/> 按 <c>Debug.isDebugBuild</c> 赋值，
     /// **不是**玩家可改的配置。它本身不改变任何行为，只表示「这是个调试构建」。
     /// </summary>
-    internal static bool DebugMode = false;
+    internal static bool DebugMode = true;
 
     /// <summary>
     /// 是否在关于页显示调试分区。**只能改这一行源码**：没有配置项、没有界面开关，
