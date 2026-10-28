@@ -50,6 +50,15 @@ namespace SpectreReplay
         {
             try
             {
+                // **云同步必须先失能再落盘，顺序不能反。** 退出时序里游戏自己的
+                // SteamClient.Shutdown()（scrController.OnApplicationQuit）跑在
+                // Application.quitting 之前（编辑器 ExitPlayMode 崩溃栈实证），
+                // 此时模组缓存的 RemoteStorage 句柄已经悬空；FlushConfig 会触发
+                // 配置上传，拿悬空句柄调 FileWrite 是原生访问违例，try/catch
+                // 拦不住，整个进程跟着崩。失能后 OnConfigSaved 见 Ready=false
+                // 静默早退，本地照写；退出瞬间的写入本来也赶不上 Steam 客户端
+                // 的批量上传，下次会话第一次写盘会全量补传。
+                Features.Cloud.CloudReplay.PrepareForExit();
                 Ui.OnGui.FlushConfig();
             }
             catch (Exception ex)
@@ -104,6 +113,10 @@ namespace SpectreReplay
                 // UnpatchAll 一并卸掉，但桥接自己的「已挂接」静态标志不会跟着翻假。
                 // 不清它，关开一次模组之后键位显示器就永久失联且无日志（见 Reset 注释）。
                 Features.Replay.KeyViewerBridge.Reset();
+                // Steam 云探测同理：编辑器 Play 会话之间模组域不重载，上一个
+                // Play 留下的接口指针指向已随 SteamClient.Shutdown 销毁的
+                // Steam 上下文，不清就是拿悬空句柄开路（见 ResetProbe 注释）。
+                Features.Cloud.SteamCloud.ResetProbe();
 
                 // 回放功能开关（录制/回放/保存/录像共用这一个功能族）
                 SpectrePatchHub.SetFeatureToggle(FeatureKeys.Replay, () => Settings.ReplayOn);

@@ -922,6 +922,28 @@ namespace SpectreReplay.Features.Cloud
         }
 
         /// <summary>
+        /// 退出前把云同步整个失能（<see cref="Main.OnQuitting"/> 在 FlushConfig 之前调用）。
+        ///
+        /// <para>**为什么退出路径不能再碰 Steam。** 退出时序里游戏自己的
+        /// <c>SteamClient.Shutdown()</c>（scrController.OnApplicationQuit）跑在
+        /// Application.quitting 事件之前——编辑器 ExitPlayMode 的崩溃栈实证：
+        /// <c>Internal_ApplicationQuit → OnQuitting</c> 执行时 Steam 上下文已销毁。
+        /// FlushConfig → SaveConfigs → OnConfigSaved 若在此时上传，会拿悬空的
+        /// RemoteStorage 句柄调 FileWrite，原生访问违例崩掉整个进程，
+        /// 托管 try/catch 拦不住（Editor.log 里只有原生栈、没有 Managed Stacktrace）。
+        /// 正常 Steam 版同样存在这个窗口，只是退出时配置内容通常与运行中最后
+        /// 一次上传相同、被指纹去重短路遮住了。</para>
+        ///
+        /// <para>退出瞬间写进云缓存的文件也来不及上传：Steam 客户端在进程退出后
+        /// 才批量同步本地缓存。砍掉这次上传的代价是配置备份最多滞后一个会话——
+        /// 下次会话 <c>_configUploaded</c> 从 null 起步，第一次写盘就全量补传。</para>
+        /// </summary>
+        internal static void PrepareForExit()
+        {
+            SteamCloud.Disable("quitting");
+        }
+
+        /// <summary>
         /// 现在允许上传配置吗。
         ///
         /// <para><b>为什么要有这道闸。</b>启动时有一次「从云端恢复配置」。在它给出

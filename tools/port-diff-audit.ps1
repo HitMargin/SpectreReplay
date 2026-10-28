@@ -1041,6 +1041,8 @@ $knownDeviations = @(
     # 新文件 Features\Cloud\SteamCloud.cs / CloudReplay.cs 不在比对清单里
     # （我们独有），这里登记的只是被它们牵连的既有文件。
     @{ Pat = 'Features.Cloud.CloudReplay.RestoreOnStartup'; File = 'Main.cs'; Why = '2026-10-26 Steam 云：启动时回填云端回放。必须放在 OnToggle 里起协程等 SteamAPI 就绪——模组的 OnToggle 早于游戏的 Initialize Steam SDK，当场探测必然失败（上游没有这条链）' }
+    @{ Pat = 'Features.Cloud.CloudReplay.PrepareForExit'; File = 'Main.cs'; Why = '2026-10-28 Steam 云：退出链先失能云同步再落盘。游戏自己的 SteamClient.Shutdown（scrController.OnApplicationQuit）跑在 Application.quitting 之前，此时缓存的 RemoteStorage 句柄已悬空，FlushConfig 触发的上传会拿悬空句柄调 FileWrite 原生崩溃（_RE 编辑器退出实测）；退出瞬间的写入也赶不上 Steam 客户端的批量同步，下次会话首写全量补传（上游没有这条链）' }
+    @{ Pat = 'Features.Cloud.SteamCloud.ResetProbe'; File = 'Main.cs'; Why = '2026-10-28 Steam 云：装配时重置接口探测状态。编辑器 Play 会话之间模组域不重载，上一个 Play 的悬空 _iface 会跨会话残留（与 KeyViewerBridge.Reset 同一类静态标志清理，上游没有这条链）' }
     @{ Pat = 'Settings.CloudSyncOn';        File = 'ConfigManager.cs'; Why = '2026-10-26 Steam 云：云同步开关的持久化读写（上游没有这组设置）' }
     @{ Pat = 'Settings.CloudRestoreOnLoad'; File = 'ConfigManager.cs'; Why = '2026-10-26 Steam 云：启动回填开关的持久化读写（默认 true，换机后才找得回来）' }
     @{ Pat = 'CloudReplay.OnReplaySaved';   File = 'SpectreState.cs'; Why = '2026-10-26 Steam 云：每存一份回放就把它推上云端（上游保存只落本地）' }

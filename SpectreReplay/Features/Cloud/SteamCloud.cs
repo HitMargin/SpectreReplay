@@ -101,6 +101,13 @@ namespace SpectreReplay.Features.Cloud
         /// <summary>下一次允许重试探测的时刻（TickCount）。见 <see cref="Ensure"/>。</summary>
         private static int _nextProbeTick = int.MinValue;
         private static bool _readyLogged;
+        /// <summary>
+        /// 退出失能。**只清 <c>_iface</c> 挡不住重探测**：Ensure 的 1 秒重试会在
+        /// 下一次 Ready 查询时重新拿指针——Steam 上下文被游戏 Shutdown 后，
+        /// 访问器可能返回「半销毁」状态下的非零句柄，Ready 就地复活、随后的
+        /// 原生调用照崩。必须用持久标志把探测整个关死。
+        /// </summary>
+        private static bool _disabled;
 
         internal static bool Ready
         {
@@ -126,6 +133,39 @@ namespace SpectreReplay.Features.Cloud
         }
 
         /// <summary>
+        /// 把云接口整个失能（退出/关服路径用，见 <see cref="CloudReplay.PrepareForExit"/>）。
+        ///
+        /// <para>**为什么必须是持久标志而不是只清指针。** 退出时序里游戏自己的
+        /// <c>SteamClient.Shutdown()</c>（scrController.OnApplicationQuit）已经跑过，
+        /// 此时缓存的接口指针是悬空的——但悬空不等于非零，<see cref="Ensure"/> 的
+        /// 判空永远通过。清掉指针后若允许重探测，下一次 Ready 查询就会从
+        /// 「半销毁」的 steam_api 里拿回一个非零句柄，失能形同虚设。</para>
+        /// </summary>
+        internal static void Disable(string reason)
+        {
+            _disabled = true;
+            _iface = IntPtr.Zero;
+            _reason = reason;
+        }
+
+        /// <summary>
+        /// 重置探测状态（模组装配时调用，见 <see cref="Main.OnToggle"/>）。
+        ///
+        /// <para>**编辑器 Play 会话之间模组域不重载**：上一个 Play 留下的接口指针
+        /// 指向的 Steam 上下文，早已随那一次的 <c>SteamClient.Shutdown()</c> 销毁，
+        /// 不清掉的话下一次 Play 直接拿悬空句柄开路。独立游戏进程没有这个窗口
+        /// （进程退出域即销毁），但重置无害——下一次 Ready 查询照常探测。</para>
+        /// </summary>
+        internal static void ResetProbe()
+        {
+            _disabled = false;
+            _iface = IntPtr.Zero;
+            _reason = "";
+            _nextProbeTick = int.MinValue;
+            _readyLogged = false;
+        }
+
+        /// <summary>
         /// 探测接口指针。
         ///
         /// **"未初始化"必须可重试，不能一锤定音。** 模组的 OnToggle（本类第一次
@@ -137,6 +177,9 @@ namespace SpectreReplay.Features.Cloud
         /// </summary>
         private static void Ensure()
         {
+            // 失能态一票否决，先于一切探测逻辑：此时指针是悬空的，
+            // 重探只会把毒句柄请回来（见 Disable 的注释）
+            if (_disabled) return;
             if (_iface != IntPtr.Zero) return;
             if (_reason == "no_dll" || _reason == "old_sdk" || _reason == "bad_arch") return;
             if (_nextProbeTick != int.MinValue

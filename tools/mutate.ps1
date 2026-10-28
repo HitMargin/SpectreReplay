@@ -815,6 +815,29 @@ switch ($Which) {
         Backup 'State\ConfigManager.cs'
         ReplaceExact 'State\ConfigManager.cs' 'MigrateBool(json, sets, "AutoSave", "AutoSave", Settings.AutoSave);' '// dropped'
     }
+    'MUT-C5' {
+        # Steam 云退出接线（_RE 工程编辑器退出实测崩进程）：把 OnQuitting 里的
+        # 失能调用删掉 = 退出路径拿着悬空的 RemoteStorage 句柄上传。游戏自己的
+        # SteamClient.Shutdown（scrController.OnApplicationQuit）跑在
+        # Application.quitting 之前，此时句柄已死，FileWrite 是原生访问违例，
+        # try/catch 拦不住。CloudLifecycleCheck ① 的顺序判据必须因此变红。
+        Backup 'Main.cs'
+        ReplaceExact 'Main.cs' 'Features.Cloud.CloudReplay.PrepareForExit();' '// exited'
+    }
+    'MUT-C6' {
+        # Steam 云失能的持久性：Disable 退化成「只清指针」。Ensure 的 1 秒重试
+        # 会从「半销毁」的 steam_api 里把句柄重新探回来，失能就地复活、
+        # Ready 复真、随后的原生调用照崩。CloudLifecycleCheck ③ 必须因此变红。
+        Backup 'Features\Cloud\SteamCloud.cs'
+        ReplaceExact 'Features\Cloud\SteamCloud.cs' '_disabled = true;' '_iface = IntPtr.Zero;'
+    }
+    'MUT-C7' {
+        # Steam 云探测重置：把装配时的 ResetProbe 删掉 = 编辑器 Play 会话之间
+        # 悬空的 _iface 跨会话残留（模组域不重载），下一次 Play 直接拿旧句柄
+        # 开路。CloudLifecycleCheck ② 必须因此变红。
+        Backup 'Main.cs'
+        ReplaceExact 'Main.cs' 'Features.Cloud.SteamCloud.ResetProbe();' '// stale probe'
+    }
     'MUT-T1' {
         # 补丁目标预检的覆盖率自证：把 nameof(...) 的解析能力去掉。
         # 那会让三条补丁重新变成"未校验"——而它们正是偏差 21「钉时间轴

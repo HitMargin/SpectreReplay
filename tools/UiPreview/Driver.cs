@@ -98,9 +98,15 @@ namespace UiPreview
             // 只会在实机上暴露。离线钉住它的接线形状。
             int crossInputFail = CrossPlatformInputCheck.Run(
                 ProjectDir);
+            // Steam 云生命周期：退出链 OnQuitting → FlushConfig 会在 Steam 上下文
+            // 已被游戏 Shutdown 之后上传（_RE 工程编辑器退出实测崩进程，原生栈）。
+            // 三处接线（退出先失能再落盘 / 装配重置探测 / 失能是持久标志）断在
+            // 游戏里毫无托管异常——直接原生访问违例，必须离线钉住形状。
+            int cloudFail = CloudLifecycleCheck.Run(
+                ProjectDir);
             int orphanFail = PortedCompletenessCheck.NoOrphanChecks(
                 ProjectDir);
-            int total = locFail + hardFail + replayFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + locLangFail + pinStateFail + injectFail + logPrefixFail + scatterFail + cursorFail + cursorTrackFail + keybdAudioFail + keybdPrefsFail + crossInputFail + orphanFail;
+            int total = locFail + hardFail + replayFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + locLangFail + pinStateFail + injectFail + logPrefixFail + scatterFail + cursorFail + cursorTrackFail + keybdAudioFail + keybdPrefsFail + crossInputFail + cloudFail + orphanFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"
