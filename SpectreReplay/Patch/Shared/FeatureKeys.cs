@@ -5,27 +5,7 @@ namespace SpectreReplay;
 // 不能命名为 Features——会与命名空间 Spectre.Features 在子命名空间内撞名
 internal static class FeatureKeys
 {
-    public const string JudgeText = "JudgeText";
-    public const string JudgeFx = "JudgeFx";
-    public const string JudgeFilter = "JudgeFilter";
-    public const string JudgeColor = "JudgeColor";
-    public const string JudgeBar = "JudgeBar";
     public const string EffectRemover = "EffectRemover";
-    public const string PlanetColor = "PlanetColor";
-    public const string LegacyPauseCalc = "LegacyPauseCalc";
-    public const string AlwaysShowMaxUsedKeys = "AlwaysShowMaxUsedKeys";
-    public const string DecorationPreview = "DecorationPreview";
-    public const string EnableProEvents = "EnableProEvents";
-    // PACL2 对等功能的 Spectre 原生实现
-    public const string MemoryOptimizer = "MemoryOptimizer";
-    public const string EditorBugfix = "EditorBugfix";
-    public const string BpmBeatCalculator = "BpmBeatCalculator";
-    public const string SpeedPauseConverter = "SpeedPauseConverter";
-    public const string BetterUndoRedo = "BetterUndoRedo";
-    public const string BGAMode = "BGAMode";
-    public const string EditorUI = "EditorUI";
-    public const string Timeline = "Timeline";
-    public const string CustomEvents = "CustomEvents";
     // 回放系统总开关：录制/回放/保存/录像共用的地基补丁全部挂此键；
     // 生命周期清理补丁（StopAll 系列）不挂，保证关闭后切场景仍能清残留状态
     public const string Replay = "Replay";
