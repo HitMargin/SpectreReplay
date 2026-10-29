@@ -283,7 +283,8 @@ public static class SpectreAPI
 
     /// <summary>
     /// 功能补丁是否全部解析就绪（目标方法存在、版本门控通过）。<br/>
-    /// feature 取 FeatureKeys 常量字符串，如 "Replay"、"PlanetColor"。
+    /// feature 取 FeatureKeys 常量字符串，如 "Replay"、"EffectRemover"。
+    /// （未注册的 feature 名一律返回 false——本模组只注册了 Main.cs 里那几条。）
     /// </summary>
     public static bool IsFeatureAvailable(string feature) => SpectrePatchHub.IsAvailable(feature);
 
