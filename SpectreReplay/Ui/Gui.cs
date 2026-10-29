@@ -117,14 +117,21 @@ namespace SpectreReplay.Ui
             }
             _skin = GUI.skin;
             _font = GUI.skin.font;
-            _label = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft };
-            _labelC = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter };
-            _bold = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold };
-            _boldC = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
-            _h1 = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, fontSize = 19 };
-            _h2 = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, fontSize = 13 };
-            _small = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontSize = 11 };
-            _smallC = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontSize = 11, fontStyle = FontStyle.Bold };
+            // 下面八个样式全部克隆自 skin.label，因此也继承了 UMM 改的 Overflow，
+            // 必须逐个显式设回 Clip：Overflow 下超出矩形的文字会**继续画出去**，
+            // 而同一行右侧的按钮/开关是后画的，底色正好盖在溢出的字上——
+            // 玩家看到的是「文字钻进按钮底下消失了」。受害最长的是回放列表的
+            // 文件名：它的矩形右缘就贴着「回放」按钮的左缘。输入框那轮已经在
+            // TextField 里用 GUI.BeginClip 自剪过一次（同一个根因），这里是把
+            // 同一纪律补齐到其余样式。
+            _label = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, clipping = TextClipping.Clip };
+            _labelC = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, clipping = TextClipping.Clip };
+            _bold = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, clipping = TextClipping.Clip };
+            _boldC = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold, clipping = TextClipping.Clip };
+            _h1 = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, fontSize = 19, clipping = TextClipping.Clip };
+            _h2 = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, fontSize = 13, clipping = TextClipping.Clip };
+            _small = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontSize = 11, clipping = TextClipping.Clip };
+            _smallC = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontSize = 11, fontStyle = FontStyle.Bold, clipping = TextClipping.Clip };
             // 说明文字要**换行**：UMM 把 GUI.skin.label.clipping 改成了 Overflow
             // （decompiled :3509），照抄 Skin.label 的话长句会一路画出窗口外
             // 而不是折行——玩家看到半句话被硬生生截断。
@@ -222,6 +229,9 @@ namespace SpectreReplay.Ui
                 fontStyle = bold ? FontStyle.Bold : FontStyle.Normal,
                 // 让文字与圆角之间留出呼吸，否则贴边看起来像被裁掉
                 padding = new RectOffset(10, 10, 4, 4),
+                // 按钮文字也裁在矩形里：内建 button 皮肤自己没被 UMM 动过
+                // clipping，但依赖「默认恰好是 Clip」太悬，写明与 label 一套口径。
+                clipping = TextClipping.Clip,
             };
             st.border = new RectOffset(Radius + 1, Radius + 1, Radius + 1, Radius + 1);
             st.normal.background = RoundedTex.Get(Size, Size, Radius, face);
@@ -713,11 +723,19 @@ namespace SpectreReplay.Ui
             Text(new Rect(r.x + 13f, r.y + 28f, r.width - 200f, 16f), subtitle, DimCol, _small);
             if (!string.IsNullOrEmpty(badge))
             {
-                Rect b = new Rect(r.x + r.width - 132f, r.y + 13f, 122f, 20f);
                 if (badgeColor == Color.clear)
                 {
                     badgeColor = OkCol;
                 }
+                // 徽章宽度按文案实测、右缘对齐向左生长：状态文案是一整句话
+                // （最长 22 个字 ≈ 240px），写死 122px 时文字会从胶囊两边溢出。
+                // 与 BadgeRect 同一条教训（写死宽度总会在某门语言/某条文案上破）。
+                // 上限挡窄窗口：徽章再往左长就会吃掉副标题，超上限时靠 Clip
+                // 在胶囊内截断——极端窄窗下宁可截断，不许盖住别的字。
+                float bw = Mathf.Max(40f, Mathf.Min(
+                    r.width - 185f,
+                    Mathf.Max(122f, _smallC.CalcSize(new GUIContent(badge)).x + 14f)));
+                Rect b = new Rect(r.x + r.width - bw - 10f, r.y + 13f, bw, 20f);
                 Badge(b, badge, badgeColor);
             }
         }

@@ -779,6 +779,48 @@ namespace UiPreview
                 "㉟c 测宽工具必须走 GUIStyle.CalcSize(ButtonW/BadgeRect)",
                 "Ui\\Gui.cs",
                 s => WidthToolsMeasureText(s));
+            // ㊱ label 派生样式必须**逐个显式** clipping=Clip。
+            //
+            //    2026-10-29 用户截图：回放列表里长文件名的尾部「钻进」右侧
+            //    「回放」按钮底下，字面消失。根因是 UMM 把 skin.label 的 clipping
+            //    改成了 Overflow（Gui.cs Ensure 的注释里有来历），克隆自它的样式
+            //    全部继承：超出矩形的文字不是裁掉，而是**继续画出去**；同一行
+            //    右侧的按钮是后画的，底色正好盖在溢出的字上。同一根因此前已经
+            //    各修过一轮局部：输入框用 BeginClip 自剪、说明文字显式设了 Clip
+            //    ——都是哪疼修哪，其余八个 label 派生样式一直漏着。
+            //
+            //    判据逐个初始化器检查：每个 new GUIStyle(GUI.skin.label) 的
+            //    大括号里必须写明 clipping = TextClipping.Clip。只写 clipping
+            //    不写值、或写成 Overflow，都算失败——这条防的是「新加一个样式
+            //    忘了设」和「顺手把显式设置删掉当冗余」两种回归。
+            fail += Check(projectRoot,
+                "㊱ label 派生样式必须逐个显式 Clip(继承 Overflow 会把字画进后画控件底下)",
+                "Ui\\Gui.cs",
+                s => LabelStylesExplicitlyClip(s));
+            // ㊲ 顶栏状态徽章必须按文案实测宽度（右缘对齐、向左生长）。
+            //
+            //    ㉟ 那轮把列表徽章/按钮全改成了实测宽（写死 46f/150f 在长文案
+            //    语言下裁字），但 Header 里的状态徽章漏网：写死 122×20，而状态
+            //    是一整句话（status.all_off 最长 22 个字 ≈ 240px），文字会从
+            //    胶囊两边溢出。判据钉在 Header 方法体内：宽度必须来自
+            //    _smallC.CalcSize，且写死的 -132f 定位不许回来。只查整个文件
+            //    是假判据——BadgeRect 里合法地有 CalcSize，会把没修的 Header
+            //    陪绿。
+            fail += Check(projectRoot,
+                "㊲ 顶栏徽章必须按文案实测宽(写死 122 时长状态句从胶囊两边溢出)",
+                "Ui\\Gui.cs",
+                s => HeaderBadgeMeasuresText(s));
+            // ㊳ OnGui 的行助手同样不许写死布局宽度。㉟a 只扫 Pages.cs，而
+            //    行助手里有一批写死宽度的按钮：2026-10-30 用户截图，键位重映射
+            //    行的「Delete」在英文下比写死的 56px 内容区宽，按钮样式把词折成
+            //    两行，22px 高的按钮装不下两行，字被拦腰裁断——「Clear」短所以
+            //    没事，看上去就像随机坏。键位槽写死 74 同理：长键名
+            //    （PrintScreen）与等待提示（按下任意键…）都会折行。宽度纪律与
+            //    Pages.cs 同一套：要么 Gui.ButtonW 实测，要么走具名常量。
+            fail += Check(projectRoot,
+                "㊳ OnGui 行助手布局宽度不许写死(重映射行 Delete 折行被拦腰裁断)",
+                "Ui\\OnGui.cs",
+                s => NoNumericLayoutWidth(s));
 
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");
@@ -2258,6 +2300,53 @@ namespace UiPreview
                 }
             }
             return sawSave && sawLoad;
+        }
+
+        /// <summary>
+        /// ㊱ 的判定：每个克隆自 skin.label 的样式，初始化器里必须显式写
+        /// <c>clipping = TextClipping.Clip</c>。对象初始化器可能跨行
+        /// （_tipStyle 就是），用 <c>[^}]</c> 配 Singleline 一次取到大括号内容。
+        /// 一个匹配都找不到同样判失败：判据的默认姿态是不信。
+        /// </summary>
+        private static bool LabelStylesExplicitlyClip(string s)
+        {
+            var matches = System.Text.RegularExpressions.Regex.Matches(
+                s, @"new GUIStyle\(GUI\.skin\.label\)\s*\{(?<init>[^}]*)\}",
+                System.Text.RegularExpressions.RegexOptions.Singleline);
+            if (matches.Count == 0)
+            {
+                return false;
+            }
+            foreach (System.Text.RegularExpressions.Match m in matches)
+            {
+                if (!m.Groups["init"].Value.Contains(
+                    "clipping = TextClipping.Clip", StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// ㊲ 的判定：只看 Header 方法体（从签名到第一个 8 空格缩进的收括号），
+        /// 徽章宽度必须来自 _smallC.CalcSize，写死的 -132f 定位不许回来。
+        /// </summary>
+        private static bool HeaderBadgeMeasuresText(string s)
+        {
+            int at = s.IndexOf("internal static void Header", StringComparison.Ordinal);
+            if (at < 0)
+            {
+                return false;
+            }
+            int end = s.IndexOf("\n        }", at, StringComparison.Ordinal);
+            if (end < 0)
+            {
+                return false;
+            }
+            string body = s.Substring(at, end - at);
+            return body.Contains("_smallC.CalcSize", StringComparison.Ordinal)
+                && !body.Contains("- 132f", StringComparison.Ordinal);
         }
 
         private static int Check(string projectRoot, string name, string rel,

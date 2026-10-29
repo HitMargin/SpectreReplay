@@ -587,6 +587,23 @@ switch ($Which) {
         Backup 'Ui\Gui.cs'
         ReplaceExact 'Ui\Gui.cs' ('            if (Event.current.type != EventType.Repaint)') ('            if (false)')
     }
+    'MUT-U48' {
+        # ㊱：_label 退回继承 UMM 的 Overflow——长文字重新开始往矩形外画，
+        #     被同排后画的控件盖住（2026-10-29 用户截图的根因）。
+        Backup 'Ui\Gui.cs'
+        ReplaceExact 'Ui\Gui.cs' ('_label = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, clipping = TextClipping.Clip };') ('_label = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft };')
+    }
+    'MUT-U49' {
+        # ㊲：顶栏状态徽章退回写死 122×20——长状态句从胶囊两边溢出。
+        Backup 'Ui\Gui.cs'
+        ReplaceExact 'Ui\Gui.cs' ('Rect b = new Rect(r.x + r.width - bw - 10f, r.y + 13f, bw, 20f);') ('Rect b = new Rect(r.x + r.width - 132f, r.y + 13f, 122f, 20f);')
+    }
+    'MUT-U50' {
+        # ㊳：Delete 按钮宽度退回写死 56——英文下词被折成两行，22px 高的
+        #     按钮装不下，字被拦腰裁断（2026-10-30 用户截图）。
+        Backup 'Ui\OnGui.cs'
+        ReplaceExact 'Ui\OnGui.cs' ('                    GUILayout.Width(Gui.ButtonW(deleteLabel, Gui.QuietButtonStyle, 56f)),') ('                    GUILayout.Width(56f),')
+    }
     'MUT-U25' {
         # ⑫i：把已删除的「界面语言跟随游戏」开关加回来（防回归变异）。
         #      用单引号字符串拼出双引号，避免在 here-string 外层写转义。
@@ -1969,7 +1986,7 @@ switch ($Which) {
         ReplaceExact 'Features\Replay\Runtime\KeyboardSimulation.cs' 'internal static class KeyboardSimulation' 'internal static class KeyboardSimulation { /* accidental drift */ internal static int __driftProbe = 1;'
     }
     default {
-        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-PORT1）"
+        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U50 / MUT-PORT1）"
     }
 }
 

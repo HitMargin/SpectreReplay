@@ -53,6 +53,10 @@ namespace SpectreReplay.Ui
         /// <summary>标签页固定宽度：页名长短不一，按内容伸缩会让整排跳动。</summary>
         private const float TabW = 132f;
 
+        /// <summary>重映射行中间箭头「→」的列宽：单个字形，固定即可，但宽度
+        /// 纪律要求不写数字字面量，提出成常量。</summary>
+        private const float ArrowW = 20f;
+
         // ── UMM 回调 ────────────────────────────────────────────
 
         internal static void OnShow(ModEntry modEntry)
@@ -630,31 +634,41 @@ namespace SpectreReplay.Ui
         }
 
         internal static void RowKeyRemap(ushort from, ushort to, bool capturing, bool capturingFrom,
-            Action<bool> onStartCapture, Action<ushort> onCapture, Action onClear, Action onDelete)
+            float slotW, Action<bool> onStartCapture, Action<ushort> onCapture, Action onClear, Action onDelete)
         {
             GUILayout.BeginHorizontal();
             bool waitingFrom = capturing && capturingFrom;
             bool waitingTo = capturing && !capturingFrom;
-            Rect f = GUILayoutUtility.GetRect(74f, 24f, GUILayout.Width(74f), GUILayout.Height(24f));
+            // 槽位宽度由调用方按**全部可能出现的文案**实测取最大后传入
+            // （对照表是两列格子，逐行各量各的会左右错位）。写死 74 时长键名
+            // （VkName 会出「PrintScreen」）与等待按键的提示词都会超宽折行，
+            // 两行文字塞进 24px 高的按钮就被拦腰裁掉。
+            Rect f = GUILayoutUtility.GetRect(slotW, 24f, GUILayout.Width(slotW), GUILayout.Height(24f));
             if (GUI.Button(f, waitingFrom ? Loc.T("ui.presskey") : VkName(from),
                     waitingFrom ? Gui.AccentButtonStyle : Gui.ButtonStyle))
             {
                 onStartCapture(true);
             }
-            GUILayout.Label("→", Gui.LabelStyle, GUILayout.Width(20f));
-            Rect t = GUILayoutUtility.GetRect(74f, 24f, GUILayout.Width(74f), GUILayout.Height(24f));
+            GUILayout.Label("→", Gui.LabelStyle, GUILayout.Width(ArrowW));
+            Rect t = GUILayoutUtility.GetRect(slotW, 24f, GUILayout.Width(slotW), GUILayout.Height(24f));
             if (GUI.Button(t, waitingTo ? Loc.T("ui.presskey") : VkName(to),
                     waitingTo ? Gui.AccentButtonStyle : Gui.ButtonStyle))
             {
                 onStartCapture(false);
             }
-            if (GUILayout.Button(Loc.T("ui.keymap.clear"), Gui.QuietButtonStyle,
-                    GUILayout.Width(56f), GUILayout.Height(22f)))
+            // 「Delete」比「Clear」宽：写死 56px 时英文/西语下这个词超出内容区，
+            // 按钮样式把词折成两行，22px 高的按钮装不下两行，字被拦腰裁断
+            // （2026-10-30 用户截图）。宽度按文案实测，下限沿用原设计——
+            // 与 Gui.ButtonW 注释里记的是同一课。
+            string clearLabel = Loc.T("ui.keymap.clear");
+            if (GUILayout.Button(clearLabel, Gui.QuietButtonStyle,
+                    GUILayout.Width(Gui.ButtonW(clearLabel, Gui.QuietButtonStyle, 56f)), GUILayout.Height(22f)))
             {
                 onClear();
             }
-            if (GUILayout.Button(Loc.T("ui.keymap.delete"), Gui.QuietButtonStyle,
-                    GUILayout.Width(56f), GUILayout.Height(22f)))
+            string deleteLabel = Loc.T("ui.keymap.delete");
+            if (GUILayout.Button(deleteLabel, Gui.QuietButtonStyle,
+                    GUILayout.Width(Gui.ButtonW(deleteLabel, Gui.QuietButtonStyle, 56f)), GUILayout.Height(22f)))
             {
                 onDelete();
             }
@@ -728,15 +742,19 @@ namespace SpectreReplay.Ui
             GUILayout.BeginHorizontal();
             // wide 用专门的强调样式：GUI.backgroundColor 是乘算，会把贴图里
             // 烘好的底色再压一遍。
-            Rect bt = GUILayoutUtility.GetRect(wide ? 220f : 140f, 28f,
-                GUILayout.Width(wide ? 220f : 140f), GUILayout.Height(28f));
+            string caption = Loc.T(labelKey);
+            GUIStyle st = wide ? Gui.PrimaryButtonStyle : Gui.ButtonStyle;
+            // 宽度按文案实测，下限沿用原设计（wide 220 / 普通 140）：14 张语言表
+            // 里总有比中文长的一门，写死就是下一颗被裁字的按钮。
+            float bw = Gui.ButtonW(caption, st, wide ? 220f : 140f);
+            Rect bt = GUILayoutUtility.GetRect(bw, 28f,
+                GUILayout.Width(bw), GUILayout.Height(28f));
             Gui.Tip(bt, labelKey);
             // **始终调 GUI.Button，只丢弃结果**，不要短路跳过这次调用：
             // 那样禁用时按钮整块不画，玩家看到的是位置上的一个空洞，
             // 而不是「灰着的按钮」。绘制走 Repaint 趟，点中判定走 MouseUp 趟，
             // 两者由同一次调用内部分流，丢弃返回值正好只砍掉点击、保住外观。
-            bool hit = GUI.Button(bt, Loc.T(labelKey),
-                wide ? Gui.PrimaryButtonStyle : Gui.ButtonStyle);
+            bool hit = GUI.Button(bt, caption, st);
             if (!enabled || Gui.IsDim)
             {
                 hit = false;
@@ -768,8 +786,10 @@ namespace SpectreReplay.Ui
             // 既不用加宽控件列、也不会让这一行比上下行宽一截。
             // 手打绝对路径对玩家是很糟的体验：路径要精确到盘符与每层目录名，
             // 打错一个字符就是「渲染失败」而界面不说是路径的问题。
-            if (GUILayout.Button(Loc.T("record.changedir"), Gui.ButtonStyle,
-                    GUILayout.Width(90f), GUILayout.Height(24f)))
+            // 宽度按文案实测（下限 90）：写死会在长文案语言下裁字。
+            string changeLabel = Loc.T("record.changedir");
+            if (GUILayout.Button(changeLabel, Gui.ButtonStyle,
+                    GUILayout.Width(Gui.ButtonW(changeLabel, Gui.ButtonStyle, 90f)), GUILayout.Height(24f)))
             {
                 _pickOutDirPending = true;
             }

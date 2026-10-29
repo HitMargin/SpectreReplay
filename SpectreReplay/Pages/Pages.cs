@@ -277,12 +277,24 @@ namespace SpectreReplay.Pages
         private static void DrawKeyRemapList()
         {
             var list = Settings.key_code_convert_list;
+            // 槽位宽度按**当前所有可能出现的文案**实测取最大：绑定的键名
+            // （VkName 会出「PrintScreen」这种长名）、「未绑定」、等待按键时的
+            // 「按下任意键…」。写死 74 时长文案折行，两行塞进 24px 高的按钮
+            // 就是拦腰裁断。整张表取同一个值：两列格子逐行各量各的会左右错位。
+            float slotW = Gui.ButtonW(Loc.T("ui.presskey"), Gui.ButtonStyle, 74f);
+            slotW = Mathf.Max(slotW,
+                Gui.ButtonW(Loc.T("ui.keymap.none"), Gui.ButtonStyle, slotW));
+            foreach (KeyValuePair<ushort, ushort> probe in list)
+            {
+                slotW = Mathf.Max(slotW, Gui.ButtonW(OnGui.VkName(probe.Key), Gui.ButtonStyle, slotW));
+                slotW = Mathf.Max(slotW, Gui.ButtonW(OnGui.VkName(probe.Value), Gui.ButtonStyle, slotW));
+            }
             for (int i = 0; i < list.Count; i++)
             {
                 int idx = i;
                 KeyValuePair<ushort, ushort> pair = list[idx];
                 bool capturing = _remapRow == idx;
-                OnGui.RowKeyRemap(pair.Key, pair.Value, capturing, _remapFrom,
+                OnGui.RowKeyRemap(pair.Key, pair.Value, capturing, _remapFrom, slotW,
                     from =>
                     {
                         // 再点同一格 = 取消等待
