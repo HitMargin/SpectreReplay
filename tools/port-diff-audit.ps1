@@ -1173,6 +1173,30 @@ $knownDeviations = @(
     @{ Pat = 'parameters.Length';         File = 'GameCompat.cs';     Why = '2026-10-29 同上：形参个数校验' }
     @{ Pat = 'RDInput.GetMainHeldKeys';   File = 'GameCompat.cs';     Why = '2026-10-29 持键兼容层解析失败时，异常消息里点名的目标方法' }
     @{ Pat = 'System.Linq.Expressions';   File = 'GameCompat.cs';     Why = '2026-10-29 表达式树所在命名空间（见上面 Expression.* 的说明）' }
+
+    # ── 2026-10-29 混音静默诊断（用户反馈「渲染时音频捕获失败」）──────────
+    # 原实现只在 UI 上给一句 "mixdown silent after 3 restarts"，日志里没有任何
+    # 可区分原因的字段：样本数恒 0？dsp 时钟没推进？设备被独占？三者的处置完全
+    # 不同，却全都长成同一句话。补上采样诊断后这几个 API 才是必需的。
+    @{ Pat = 'AudioSettings.dspTime';          File = 'VideoAudioTrack.cs'; Why = '2026-10-29 静默诊断：dsp 时钟是否推进，是区分「设备被占用」与「音频系统停了」的唯一依据' }
+    @{ Pat = 'AudioSettings.GetConfiguration'; File = 'VideoAudioTrack.cs'; Why = '2026-10-29 启动与判死时打印设备快照，便于两次日志对拍（换耳机/插 HDMI/改采样率）' }
+    @{ Pat = 'AudioSettings.outputSampleRate'; File = 'VideoAudioTrack.cs'; Why = '2026-10-29 同上：实际采样率可能与配置里的不同，要一起记' }
+    @{ Pat = 'AudioSettings.speakerMode';      File = 'VideoAudioTrack.cs'; Why = '2026-10-29 同上：声道数由它推导，设备切换会让它变' }
+    @{ Pat = 'cfg.dspBufferSize';              File = 'VideoAudioTrack.cs'; Why = '2026-10-29 同上：dsp 缓冲大小，设备重建后常会变' }
+    @{ Pat = 'cfg.numRealVoices';              File = 'VideoAudioTrack.cs'; Why = '2026-10-29 同上：可用发声数掉到 0 说明音频设备已失效' }
+    @{ Pat = 'cfg.numVirtualVoices';           File = 'VideoAudioTrack.cs'; Why = '2026-10-29 同上' }
+    @{ Pat = 'cfg.sampleRate';                 File = 'VideoAudioTrack.cs'; Why = '2026-10-29 同上' }
+    @{ Pat = 'cfg.speakerMode';                File = 'VideoAudioTrack.cs'; Why = '2026-10-29 同上' }
+    @{ Pat = 'double.IsNaN';                   File = 'VideoAudioTrack.cs'; Why = '2026-10-29 诊断字段用 NaN 表示「尚未采到」，避免与真实测量值 0 混淆' }
+    @{ Pat = 'ex.GetType';                     File = 'VideoAudioTrack.cs'; Why = '2026-10-29 读配置本身可能抛（音频系统已挂），诊断不能因此再炸一次' }
+    @{ Pat = 'firstSilentDsp.ToString';        File = 'VideoAudioTrack.cs'; Why = '2026-10-29 日志格式化 dsp 起点' }
+    @{ Pat = 'lastSilentDsp.ToString';         File = 'VideoAudioTrack.cs'; Why = '2026-10-29 日志格式化 dsp 末点' }
+    @{ Pat = 'mixdown.Diagnose';               File = 'VideoRenderJob.cs';  Why = '2026-10-29 音频判死时把完整诊断写进 Player.log，用户贴日志即可定位' }
+    @{ Pat = 'rendervideo.audio_failed';       File = 'VideoRenderJob.cs';  Why = '2026-10-29 三个音频失败点收口到 NotifyAudioFailed()，共用同一行本地化标签' }
+    @{ Pat = 'now.ToString';                   File = 'VideoAudioTrack.cs'; Why = '2026-10-29 静默日志里格式化当前 dsp' }
+    @{ Pat = 'sb.Append';                      File = 'VideoAudioTrack.cs'; Why = '2026-10-29 诊断串拼接（DescribeSilence / Diagnose）' }
+    @{ Pat = 'sb.ToString';                    File = 'VideoAudioTrack.cs'; Why = '2026-10-29 同上：产出诊断串' }
+    @{ Pat = 'Seconds.ToString';               File = 'VideoAudioTrack.cs'; Why = '2026-10-29 诊断里打印已写入音频时长' }
 )
 
 

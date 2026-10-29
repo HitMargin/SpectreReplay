@@ -31,6 +31,23 @@ internal sealed class VideoAudioTrack : IDisposable
     private bool capturing;
     private int frameNo;
 
+    // ── 静默诊断 ──────────────────────────────────────────────────────
+    // 「mixdown silent」是一类症状而不是一个原因：AudioRenderer 抓不到混音，
+    // 可能是游戏被静音、输出设备被独占（同时开麦克风录音最典型）、蓝牙在
+    // A2DP/HFP 之间切换导致设备重建，也可能是 dsp 时钟压根没推进。
+    // 这些的处置完全不同，而日志里只有一句 "silent" 时全都无法区分——
+    // 实测反馈就是这样：用户只看到「音频捕获失败」，不知道要改什么。
+    //
+    // 所以静默期间持续记录三组量，判死时一并写进 DeathReason：
+    //   ① 每帧拿到的样本数（恒 0 = 根本没有可捕获的混音，不是"抓到静音"）
+    //   ② AudioSettings.dspTime 是否在推进（不推进 = 音频系统整体停了）
+    //   ③ 设备/声道/音量快照（被独占或切设备会在这里体现）
+    private int firstSilentSampleCount = -1;   // 首次静默时 GetSampleCount 的返回值
+    private int maxSilentSampleCount;          // 静默期间见过的最大样本数（>0 说明偶尔有数据）
+    private double firstSilentDsp = double.NaN;
+    private double lastSilentDsp = double.NaN;
+    private bool dspAdvanced;
+
     internal int SampleRate { get; }
     internal int Channels { get; }
 
@@ -61,9 +78,27 @@ internal sealed class VideoAudioTrack : IDisposable
             Debug.Log("[SpectreReplay] mixdown: first start failed once, retry succeeded");
         }
         capturing = true;
+        // 启动时把设备快照整条打出来：故障反馈里最常见的一句是「以前能渲染，现在不行」，
+        // 而"现在"与"以前"的差别往往就在这几项（换了耳机、插了 HDMI、改了采样率）。
+        // 有了这一行，两次日志可以直接对拍。
+        string cfgText;
+        try
+        {
+            AudioConfiguration cfg = AudioSettings.GetConfiguration();
+            cfgText = "dspBufferSize=" + cfg.dspBufferSize
+                + " numRealVoices=" + cfg.numRealVoices
+                + " numVirtualVoices=" + cfg.numVirtualVoices
+                + " cfgSampleRate=" + cfg.sampleRate
+                + " speakerMode=" + cfg.speakerMode;
+        }
+        catch (Exception ex)
+        {
+            cfgText = "cfgUnreadable=" + ex.GetType().Name + ":" + ex.Message;
+        }
         Debug.Log("[SpectreReplay] mixdown started. sampleRate=" + SampleRate
             + " channels=" + Channels
-            + " dspBufferSize=" + AudioSettings.GetConfiguration().dspBufferSize);
+            + " " + cfgText
+            + " dspNow=" + AudioSettings.dspTime.ToString("0.0000"));
     }
 
     internal void CaptureFrame()
@@ -74,7 +109,7 @@ internal sealed class VideoAudioTrack : IDisposable
         int floats = Math.Max(0, perChannel) * Channels;
         if (floats == 0)
         {
-            OnSilence();
+            OnSilence(perChannel);
             return;
         }
         SizeBuffers(floats);
@@ -126,11 +161,28 @@ internal sealed class VideoAudioTrack : IDisposable
         file = null;
     }
 
-    private void OnSilence()
+    private void OnSilence(int perChannel)
     {
+        // 采样诊断：只在静默期记账，正常帧（:88 的 silentFrames = 0）不会走到这里。
+        if (firstSilentSampleCount < 0)
+        {
+            firstSilentSampleCount = perChannel;
+            firstSilentDsp = AudioSettings.dspTime;
+        }
+        if (perChannel > maxSilentSampleCount)
+            maxSilentSampleCount = perChannel;
+        double now = AudioSettings.dspTime;
+        if (!double.IsNaN(firstSilentDsp) && now - firstSilentDsp > 0.001)
+            dspAdvanced = true;
+        lastSilentDsp = now;
+
         silentFrames++;
         if (silentFrames == 1 || silentFrames % fps == 0)
-            Debug.Log("[SpectreReplay] mixdown silent. frame=" + frameNo + " consecutive=" + silentFrames);
+            Debug.Log("[SpectreReplay] mixdown silent. frame=" + frameNo
+                + " consecutive=" + silentFrames
+                + " samples=" + perChannel
+                + " dsp=" + now.ToString("0.0000")
+                + " dspAdvancing=" + dspAdvanced);
         // 每静默满 1 秒重启一次，预算内不判死
         if (silentFrames >= fps && restarts < RestartBudget)
         {
@@ -142,18 +194,60 @@ internal sealed class VideoAudioTrack : IDisposable
                 if (restarts >= RestartBudget)
                 {
                     Dead = true;
-                    DeathReason = "AudioRenderer restart failed";
+                    DeathReason = "AudioRenderer restart failed" + DescribeSilence();
                 }
                 return;
             }
-            Debug.Log("[SpectreReplay] mixdown restarted, attempt " + restarts);
+            Debug.Log("[SpectreReplay] mixdown restarted, attempt " + restarts
+                + " (silent for " + (fps) + " frames, last samples=" + perChannel + ")");
             return;
         }
         if (restarts >= RestartBudget && silentFrames >= giveUpFrames)
         {
             Dead = true;
-            DeathReason = "mixdown silent after " + restarts + " restarts";
+            DeathReason = "mixdown silent after " + restarts + " restarts" + DescribeSilence();
         }
+    }
+
+    /// <summary>
+    /// 把静默期间采到的诊断量拼成一句话，供 <see cref="DeathReason"/> 用（会进 UI 提示）。
+    ///
+    /// 文案按「哪种原因最可能、用户该做什么」排序，而不是按采集顺序堆字段：
+    /// <list type="bullet">
+    /// <item><c>samples=0</c> 恒成立且 dsp 不推进 → 音频系统整体停了（设备被占用/静音）。</item>
+    /// <item><c>samples=0</c> 但 dsp 在推进 → 有音频时钟但没有混音输出，多为输出设备被独占。</item>
+    /// <item><c>samples&gt;0</c> 却仍判静默 → 偶发拿不到，属于时序抖动而非设备故障。</item>
+    /// </list>
+    /// </summary>
+    private string DescribeSilence()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append("; samples=").Append(firstSilentSampleCount < 0 ? 0 : firstSilentSampleCount);
+        if (maxSilentSampleCount > 0)
+            sb.Append("(max ").Append(maxSilentSampleCount).Append(')');
+        sb.Append(" channels=").Append(Channels);
+        sb.Append(" rate=").Append(SampleRate);
+        sb.Append(" dspAdvancing=").Append(dspAdvanced);
+        if (!double.IsNaN(firstSilentDsp) && !double.IsNaN(lastSilentDsp))
+            sb.Append(" dspDelta=").Append((lastSilentDsp - firstSilentDsp).ToString("0.00"));
+        try
+        {
+            AudioConfiguration cfg = AudioSettings.GetConfiguration();
+            sb.Append(" dspBuffer=").Append(cfg.dspBufferSize);
+            sb.Append(" actualRate=").Append(AudioSettings.outputSampleRate);
+            sb.Append(" speakerMode=").Append(AudioSettings.speakerMode);
+        }
+        catch (Exception ex)
+        {
+            sb.Append(" cfgUnreadable=").Append(ex.GetType().Name);
+        }
+        // 只在「拿不到样本」时给行动建议：偶发抖动不该让用户去翻设备设置。
+        // **建议不在这里拼中文**：这段会进 UI 提示，而玩家可见文案必须走 Loc 表
+        // （硬写中文等于只服务中文用户，闸门的「硬编码文案」检查也会红）。
+        // 原因定性用机器可读的短标记，完整排查提示交给 Diagnose() 写进 Player.log。
+        if (firstSilentSampleCount <= 0)
+            sb.Append(dspAdvanced ? "; cause=dsp-advancing-but-no-mix" : "; cause=dsp-frozen");
+        return sb.ToString();
     }
 
     // 托管侧暂存的分桶增长：只增不减，避免每帧 new float[]/byte[] 进 LOH。
@@ -200,6 +294,44 @@ internal sealed class VideoAudioTrack : IDisposable
         file.Write(BitConverter.GetBytes((short)32), 0, 2);              // bits per sample
         file.Write(BitConverter.GetBytes(0x61746164), 0, 4);             // "data"
         file.Write(BitConverter.GetBytes(dataField), 0, 4);
+    }
+
+    /// <summary>
+    /// 判死时的完整诊断串，专供 Player.log（比 DeathReason 更全：含时长与帧数）。
+    /// 与 <see cref="DescribeSilence"/> 分开是因为后者要进 UI 提示，必须短；
+    /// 日志这条可以尽情长，反正用户只负责整段贴出来。
+    /// </summary>
+    internal string Diagnose()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append("frames=").Append(frameNo);
+        sb.Append(" written=").Append(written).Append("B(").Append(Seconds.ToString("0.000")).Append("s)");
+        sb.Append(" silenceFirstSamples=").Append(firstSilentSampleCount);
+        sb.Append(" silenceMaxSamples=").Append(maxSilentSampleCount);
+        sb.Append(" restarts=").Append(restarts);
+        sb.Append(" dspAdvancing=").Append(dspAdvanced);
+        if (!double.IsNaN(firstSilentDsp) && !double.IsNaN(lastSilentDsp))
+        {
+            sb.Append(" dspFirst=").Append(firstSilentDsp.ToString("0.0000"));
+            sb.Append(" dspLast=").Append(lastSilentDsp.ToString("0.0000"));
+            sb.Append(" dspDelta=").Append((lastSilentDsp - firstSilentDsp).ToString("0.000"));
+        }
+        sb.Append(" channels=").Append(Channels);
+        sb.Append(" rate=").Append(SampleRate);
+        try
+        {
+            AudioConfiguration cfg = AudioSettings.GetConfiguration();
+            sb.Append(" dspBuffer=").Append(cfg.dspBufferSize);
+            sb.Append(" numBuffers=").Append(cfg.numRealVoices).Append('/').Append(cfg.numVirtualVoices);
+            sb.Append(" speakerMode=").Append(cfg.speakerMode);
+            sb.Append(" sampleRate=").Append(cfg.sampleRate);
+        }
+        catch (Exception ex)
+        {
+            sb.Append(" cfg=").Append(ex.GetType().Name).Append(':').Append(ex.Message);
+        }
+        sb.Append(" reason=").Append(DeathReason);
+        return sb.ToString();
     }
 
     private bool _sizeWarned;

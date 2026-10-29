@@ -345,8 +345,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
         {
             // 本地化标签 + 括号里的技术细节，与本文件其余两处音频失败一致。
             // DeathReason 本身多数以 "AudioRenderer." 开头，不能再拼同样的前缀。
-            NotifyFailed(LocalizationManager.GetLocalizedText("rendervideo.audio_failed")
-                + " (" + mixdown.DeathReason + ")");
+            NotifyAudioFailed();
             yield break;
         }
         encoder = new VideoEncoder(encoderPath, rawVideoPath, outputPath,
@@ -571,8 +570,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
                 break;
             if (mixdown.Dead)
             {
-                NotifyFailed(LocalizationManager.GetLocalizedText("rendervideo.audio_failed")
-                    + " (" + mixdown.DeathReason + ")");
+                NotifyAudioFailed();
                 yield break;
             }
         }
@@ -1109,6 +1107,24 @@ internal sealed class VideoRenderJob : MonoBehaviour
         TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.failed") + "\n" + message, extra: 2f, type: NotifType.Warning);
         Debug.Log("[SpectreReplay] replay render failed: " + message);
         ReportEnd(SpectreAPI.RenderEndStatus.Failed, null, message);
+    }
+
+    /// <summary>
+    /// 音频轨判死的统一出口：三个失败点（构造、循环内、收尾）共用一处，
+    /// 免得又把「UI 提示了、日志里没有」的老问题带回来。
+    ///
+    /// <para>Diagnose() 的技术细节本来就写在 DeathReason 里（采样数、dsp 是否推进、
+    /// 设备快照），这里再把整串原样打进 Player.log —— 用户反馈时贴日志即可定位，
+    /// 不必再让他复现一次。</para>
+    /// </summary>
+    private void NotifyAudioFailed()
+    {
+        string detail = mixdown != null ? mixdown.DeathReason : "";
+        string message = LocalizationManager.GetLocalizedText("rendervideo.audio_failed")
+            + (string.IsNullOrEmpty(detail) ? "" : " (" + detail + ")");
+        if (mixdown != null)
+            Debug.Log("[SpectreReplay] mixdown 判死诊断: " + mixdown.Diagnose());
+        NotifyFailed(message);
     }
 
     private void NotifyCanceled()
