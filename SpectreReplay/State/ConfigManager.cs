@@ -19,7 +19,6 @@ public static class ConfigManager
         public IntsData Ints { get; set; } = new IntsData();
         public StringsData Strings { get; set; } = new StringsData();
         public StringListsData StringLists { get; set; } = new StringListsData();
-        public ColorsData Colors { get; set; } = new ColorsData();
     }
 
 
@@ -73,26 +72,6 @@ public static class ConfigManager
 
         public bool AlwaysShowMaxUsedKeys { get; set; }
         public bool LegacyPauseCalculation { get; set; }
-        public bool PlanetColorOn { get; set; }
-        public bool JudgeTextOn { get; set; }
-        public bool JudgeFxOn { get; set; }
-        public bool JudgeFilterOn { get; set; }
-        public bool JudgeColorOn { get; set; }
-        public bool JudgeGlowOn { get; set; }
-        public bool JudgeTextOutlineOn { get; set; }
-        public bool JudgeTextOutlineGradientOn { get; set; }
-        public bool JudgeTextParticleOn { get; set; }
-        public bool JudgeBarOn { get; set; }
-        public bool JudgeBarDynamicOn { get; set; }
-        public bool JudgeBarUnlockStrict { get; set; }
-        public bool JudgeBarEdgeColorOn { get; set; }
-        public bool JudgeBarZonePureOn { get; set; }
-        public bool JudgeBarZonePerfectOn { get; set; }
-        public bool JudgeBarZoneCountedOn { get; set; }
-        public bool JudgeBarShowFailureJudgement { get; set; }
-        public bool JudgeBarFailureBandAlwaysOn { get; set; }
-        public bool JudgeBarTickOutlineOn { get; set; }
-        public bool OverloadBarOn { get; set; }
         public bool DecorationPreviewOn { get; set; }
         public bool MemoryOptimizerOn { get; set; }
         public bool EditorBugfixOn { get; set; }
@@ -117,9 +96,6 @@ public static class ConfigManager
         public int KeybdSoundVolume { get; set; }
         public int MicrophoneOffset { get; set; }
         public float EffectRemoverCameraZoomScale { get; set; }
-        public float judge_size_mult { get; set; }
-        public float judgetext_outline_width { get; set; }
-        public float judge_fade_mult { get; set; }
         public int render_width { get; set; }
         public int render_height { get; set; }
         public int render_fps { get; set; }
@@ -137,15 +113,6 @@ public static class ConfigManager
         public int render_stop_key { get; set; }
         /// <summary>提示条停留秒数（见 Settings.NotificationSeconds）。</summary>
         public float notification_seconds { get; set; }
-        public float judgebar_anim_duration { get; set; }
-        public float judgebar_sensitivity { get; set; }
-        public float judgebar_life { get; set; }
-        public float overloadbar_x { get; set; }
-        public float overloadbar_y { get; set; }
-        public float judgebar_edge_span { get; set; }
-        public float judgebar_bg_opacity { get; set; }
-        public float judgebar_pos_x { get; set; }
-        public float judgebar_pos_y { get; set; }
     }
 
     private class StringsData
@@ -155,7 +122,6 @@ public static class ConfigManager
         public string currlanguage { get; set; }
         public string microphone_device_name { get; set; }
         public string key_code_convert { get; set; }
-        public List<string> judgetext_texts { get; set; }
         public string render_output_dir { get; set; }
     }
 
@@ -163,25 +129,6 @@ public static class ConfigManager
     {
         public HashSet<string> allowed_keyboard_special_keys { get; set; }
         public HashSet<string> allowed_async_special_keys { get; set; }
-        public HashSet<string> judge_hidden_margins { get; set; }
-    }
-
-    // 星球颜色：hex 字符串 "#RRGGBBAA"，索引与 PlanetarySystem.allPlanets 一致，部件顺序见 PlanetColorApplier
-    private class ColorsData
-    {
-        public bool[] planetcolor_player_on { get; set; }
-        public string[] planetcolor_base { get; set; }
-        public string[][] planetcolor_parts { get; set; }
-        public bool[][] planetcolor_part_on { get; set; }
-        public string[] judge_margin_colors { get; set; }
-        public bool[] judge_margin_colors_on { get; set; }
-        public string judge_glow_color { get; set; }
-        public string judgebar_edge_color { get; set; }
-        public string judgetext_outline_color { get; set; }
-        public string judgebar_tick_outline_color { get; set; }
-        public string judgebar_zone_pure { get; set; }
-        public string judgebar_zone_perfect { get; set; }
-        public string judgebar_zone_counted { get; set; }
     }
 
     /// <summary>
@@ -254,26 +201,6 @@ public static class ConfigManager
 
                 AlwaysShowMaxUsedKeys = Settings.AlwaysShowMaxUsedKeys,
                 LegacyPauseCalculation = Settings.LegacyPauseCalculation,
-                PlanetColorOn = Settings.PlanetColorOn,
-                JudgeTextOn = Settings.JudgeTextOn,
-                JudgeFxOn = Settings.JudgeFxOn,
-                JudgeFilterOn = Settings.JudgeFilterOn,
-                JudgeColorOn = Settings.JudgeColorOn,
-                JudgeGlowOn = Settings.JudgeGlowOn,
-                JudgeTextOutlineOn = Settings.JudgeTextOutlineOn,
-                JudgeTextOutlineGradientOn = Settings.JudgeTextOutlineGradientOn,
-                JudgeTextParticleOn = Settings.JudgeTextParticleOn,
-                JudgeBarOn = Settings.JudgeBarOn,
-                JudgeBarDynamicOn = Settings.JudgeBarDynamicOn,
-                JudgeBarUnlockStrict = Settings.JudgeBarUnlockStrict,
-                JudgeBarEdgeColorOn = Settings.JudgeBarEdgeColorOn,
-                JudgeBarZonePureOn = Settings.JudgeBarZonePureOn,
-                JudgeBarZonePerfectOn = Settings.JudgeBarZonePerfectOn,
-                JudgeBarZoneCountedOn = Settings.JudgeBarZoneCountedOn,
-                JudgeBarShowFailureJudgement = Settings.JudgeBarShowFailureJudgement,
-                JudgeBarFailureBandAlwaysOn = Settings.JudgeBarFailureBandAlwaysOn,
-                JudgeBarTickOutlineOn = Settings.JudgeBarTickOutlineOn,
-                OverloadBarOn = Settings.OverloadBarOn,
                 DecorationPreviewOn = Settings.DecorationPreviewOn,
                 MemoryOptimizerOn = Settings.MemoryOptimizerOn,
                 EditorBugfixOn = Settings.EditorBugfixOn,
@@ -297,9 +224,6 @@ public static class ConfigManager
                 KeybdSoundVolume = Settings.KeybdSoundVolume,
                 MicrophoneOffset = Settings.MicrophoneOffset,
                 EffectRemoverCameraZoomScale = Settings.EffectRemoverCameraZoomScale,
-                judge_size_mult = Settings.JudgeTextSizeMult,
-                judgetext_outline_width = Settings.JudgeTextOutlineWidth,
-                judge_fade_mult = Settings.JudgeTextFadeMult,
                 render_width = Settings.RenderWidth,
                 render_height = Settings.RenderHeight,
                 render_fps = Settings.RenderFps,
@@ -315,15 +239,6 @@ public static class ConfigManager
                 render_stop_on = Settings.RenderStopOn,
                 render_stop_key = Settings.RenderStopKey,
                 notification_seconds = Settings.NotificationSeconds,
-                judgebar_anim_duration = Settings.JudgeBarAnimationDuration,
-                judgebar_sensitivity = Settings.JudgeBarSensitivity,
-                judgebar_life = Settings.JudgeBarTickLife,
-                overloadbar_x = Settings.OverloadBarX,
-                overloadbar_y = Settings.OverloadBarY,
-                judgebar_edge_span = Settings.JudgeBarEdgeSpan,
-                judgebar_bg_opacity = Settings.JudgeBarBackgroundOpacity,
-                judgebar_pos_x = Settings.JudgeBarPositionX,
-                judgebar_pos_y = Settings.JudgeBarPositionY
             },
             Strings = new StringsData
             {
@@ -332,30 +247,12 @@ public static class ConfigManager
                 currlanguage = Settings.CurrLanguage,
                 microphone_device_name = Settings.MicrophoneDeviceName,
                 key_code_convert = Settings.KeyCodeConvert,
-                judgetext_texts = new List<string>(Settings.JudgeTexts),
                 render_output_dir = Settings.RenderOutputDir
             },
             StringLists = new StringListsData
             {
                 allowed_keyboard_special_keys = Settings.AllowedKeyboardSpecialKeys,
-                allowed_async_special_keys = Settings.AllowedAsyncSpecialKeys,
-                judge_hidden_margins = Settings.JudgeHiddenMargins
-            },
-            Colors = new ColorsData
-            {
-                planetcolor_player_on = Settings.PlanetColorPlayerOn,
-                planetcolor_base = ToHexArray(Settings.PlanetColorBase),
-                planetcolor_parts = ToHexArrays(Settings.PlanetColorParts),
-                planetcolor_part_on = Settings.PlanetColorPartsOn,
-                judge_margin_colors = ToHexArray(Settings.JudgeMarginColors),
-                judge_margin_colors_on = Settings.JudgeMarginColorsOn,
-                judge_glow_color = ToHex(Settings.JudgeGlowColor),
-                judgetext_outline_color = ToHex(Settings.JudgeTextOutlineColor),
-                judgebar_edge_color = ToHex(Settings.JudgeBarEdgeColor),
-                judgebar_zone_pure = ToHex(Settings.JudgeBarPureColor),
-                judgebar_zone_perfect = ToHex(Settings.JudgeBarPerfectColor),
-                judgebar_zone_counted = ToHex(Settings.JudgeBarCountedColor),
-                judgebar_tick_outline_color = ToHex(Settings.JudgeBarTickOutlineColor)
+                allowed_async_special_keys = Settings.AllowedAsyncSpecialKeys
             }
         };
         // 从这里往下的全部工作（序列化、建目录、写盘）都在
@@ -592,26 +489,6 @@ public static class ConfigManager
                     Settings.EffectRemoverSetCameraZoom = sets.Value<bool?>("EffectRemoverSetCameraZoom") ?? Settings.EffectRemoverSetCameraZoom;
                     Settings.AlwaysShowMaxUsedKeys = sets.Value<bool?>("AlwaysShowMaxUsedKeys") ?? Settings.AlwaysShowMaxUsedKeys;
                     Settings.LegacyPauseCalculation = sets.Value<bool?>("LegacyPauseCalculation") ?? Settings.LegacyPauseCalculation;
-                    Settings.PlanetColorOn = sets.Value<bool?>("PlanetColorOn") ?? Settings.PlanetColorOn;
-                    Settings.JudgeTextOn = sets.Value<bool?>("JudgeTextOn") ?? Settings.JudgeTextOn;
-                    Settings.JudgeFxOn = sets.Value<bool?>("JudgeFxOn") ?? Settings.JudgeFxOn;
-                    Settings.JudgeFilterOn = sets.Value<bool?>("JudgeFilterOn") ?? Settings.JudgeFilterOn;
-                    Settings.JudgeColorOn = sets.Value<bool?>("JudgeColorOn") ?? Settings.JudgeColorOn;
-                    Settings.JudgeGlowOn = sets.Value<bool?>("JudgeGlowOn") ?? Settings.JudgeGlowOn;
-                    Settings.JudgeTextOutlineOn = sets.Value<bool?>("JudgeTextOutlineOn") ?? Settings.JudgeTextOutlineOn;
-                    Settings.JudgeTextOutlineGradientOn = sets.Value<bool?>("JudgeTextOutlineGradientOn") ?? Settings.JudgeTextOutlineGradientOn;
-                    Settings.JudgeTextParticleOn = sets.Value<bool?>("JudgeTextParticleOn") ?? Settings.JudgeTextParticleOn;
-                    Settings.JudgeBarOn = sets.Value<bool?>("JudgeBarOn") ?? Settings.JudgeBarOn;
-                    Settings.JudgeBarDynamicOn = sets.Value<bool?>("JudgeBarDynamicOn") ?? Settings.JudgeBarDynamicOn;
-                    Settings.JudgeBarUnlockStrict = sets.Value<bool?>("JudgeBarUnlockStrict") ?? Settings.JudgeBarUnlockStrict;
-                    Settings.JudgeBarEdgeColorOn = sets.Value<bool?>("JudgeBarEdgeColorOn") ?? Settings.JudgeBarEdgeColorOn;
-                    Settings.JudgeBarZonePureOn = sets.Value<bool?>("JudgeBarZonePureOn") ?? Settings.JudgeBarZonePureOn;
-                    Settings.JudgeBarZonePerfectOn = sets.Value<bool?>("JudgeBarZonePerfectOn") ?? Settings.JudgeBarZonePerfectOn;
-                    Settings.JudgeBarZoneCountedOn = sets.Value<bool?>("JudgeBarZoneCountedOn") ?? Settings.JudgeBarZoneCountedOn;
-                    Settings.JudgeBarTickOutlineOn = sets.Value<bool?>("JudgeBarTickOutlineOn") ?? Settings.JudgeBarTickOutlineOn;
-                    Settings.JudgeBarShowFailureJudgement = sets.Value<bool?>("JudgeBarShowFailureJudgement") ?? Settings.JudgeBarShowFailureJudgement;
-                    Settings.JudgeBarFailureBandAlwaysOn = sets.Value<bool?>("JudgeBarFailureBandAlwaysOn") ?? Settings.JudgeBarFailureBandAlwaysOn;
-                    Settings.OverloadBarOn = sets.Value<bool?>("OverloadBarOn") ?? Settings.OverloadBarOn;
                     Settings.DecorationPreviewOn = sets.Value<bool?>("DecorationPreviewOn") ?? Settings.DecorationPreviewOn;
                     Settings.MemoryOptimizerOn = sets.Value<bool?>("MemoryOptimizerOn") ?? Settings.MemoryOptimizerOn;
                     Settings.EditorBugfixOn = sets.Value<bool?>("EditorBugfixOn") ?? Settings.EditorBugfixOn;
@@ -626,13 +503,6 @@ public static class ConfigManager
                     Settings.FixChartLoadOn = sets.Value<bool?>("FixChartLoadOn") ?? Settings.FixChartLoadOn;
                     Settings.CustomEventsOn = sets.Value<bool?>("CustomEventsOn") ?? Settings.CustomEventsOn;
                     Settings.EnableProEvents = sets.Value<bool?>("EnableProEvents") ?? Settings.EnableProEvents;
-                    // 旧配置迁移：P1/P2 开关写入对应星球
-                    bool? p1On = sets.Value<bool?>("PlanetColorP1On");
-                    if (p1On.HasValue)
-                        Settings.PlanetColorPlayerOn[0] = p1On.Value;
-                    bool? p2On = sets.Value<bool?>("PlanetColorP2On");
-                    if (p2On.HasValue)
-                        Settings.PlanetColorPlayerOn[1] = p2On.Value;
                 }
             }
             catch (Exception ex)
@@ -651,9 +521,6 @@ public static class ConfigManager
                     Settings.KeybdSoundVolume = ints.Value<int?>("KeybdSoundVolume") ?? Settings.KeybdSoundVolume;
                     Settings.MicrophoneOffset = ints.Value<int?>("MicrophoneOffset") ?? Settings.MicrophoneOffset;
                     Settings.EffectRemoverCameraZoomScale = ints.Value<float?>("EffectRemoverCameraZoomScale") ?? Settings.EffectRemoverCameraZoomScale;
-                    Settings.JudgeTextSizeMult = Mathf.Clamp(ints.Value<float?>("judge_size_mult") ?? Settings.JudgeTextSizeMult, 0.5f, 3f);
-                    Settings.JudgeTextOutlineWidth = Mathf.Clamp(ints.Value<float?>("judgetext_outline_width") ?? Settings.JudgeTextOutlineWidth, 0f, 1f);
-                    Settings.JudgeTextFadeMult = Mathf.Clamp(ints.Value<float?>("judge_fade_mult") ?? Settings.JudgeTextFadeMult, 0.25f, 5f);
                     Settings.RenderWidth = Mathf.Clamp(ints.Value<int?>("render_width") ?? Settings.RenderWidth, 320, 7680);
                     Settings.RenderHeight = Mathf.Clamp(ints.Value<int?>("render_height") ?? Settings.RenderHeight, 240, 4320);
                     Settings.RenderFps = Mathf.Clamp(ints.Value<int?>("render_fps") ?? Settings.RenderFps, 15, 480);
@@ -674,15 +541,6 @@ public static class ConfigManager
                     // Clamp 到某个区间反而会把手改配置里的怪值悄悄改成另一个**看似正常**的键。
                     Settings.RenderStopKey = ints.Value<int?>("render_stop_key") ?? Settings.RenderStopKey;
                     Settings.NotificationSeconds = Mathf.Clamp(ints.Value<float?>("notification_seconds") ?? Settings.NotificationSeconds, 1f, 10f);
-                    Settings.JudgeBarAnimationDuration = Mathf.Clamp(ints.Value<float?>("judgebar_anim_duration") ?? Settings.JudgeBarAnimationDuration, 0f, 1f);
-                    Settings.JudgeBarSensitivity = Mathf.Clamp(ints.Value<float?>("judgebar_sensitivity") ?? Settings.JudgeBarSensitivity, 0f, 1f);
-                    Settings.JudgeBarTickLife = Mathf.Clamp(ints.Value<float?>("judgebar_life") ?? Settings.JudgeBarTickLife, 0f, 10f);
-                    Settings.OverloadBarX = Mathf.Clamp(ints.Value<float?>("overloadbar_x") ?? Settings.OverloadBarX, -960f, 960f);
-                    Settings.OverloadBarY = Mathf.Clamp(ints.Value<float?>("overloadbar_y") ?? Settings.OverloadBarY, -960f, 960f);
-                    Settings.JudgeBarEdgeSpan = Mathf.Clamp(ints.Value<float?>("judgebar_edge_span") ?? Settings.JudgeBarEdgeSpan, 60f, 70f);
-                    Settings.JudgeBarBackgroundOpacity = Mathf.Clamp(ints.Value<float?>("judgebar_bg_opacity") ?? Settings.JudgeBarBackgroundOpacity, 0f, 1f);
-                    Settings.JudgeBarPositionX = Mathf.Clamp(ints.Value<float?>("judgebar_pos_x") ?? Settings.JudgeBarPositionX, -960f, 960f);
-                    Settings.JudgeBarPositionY = Mathf.Clamp(ints.Value<float?>("judgebar_pos_y") ?? Settings.JudgeBarPositionY, -960f, 960f);
                 }
             }
             catch (Exception ex)
@@ -699,10 +557,6 @@ public static class ConfigManager
                     Settings.CurrLanguage = strs.Value<string>("currlanguage") ?? Settings.CurrLanguage;
                     Settings.MicrophoneDeviceName = strs.Value<string>("microphone_device_name") ?? Settings.MicrophoneDeviceName;
                     Settings.KeyCodeConvert = strs.Value<string>("key_code_convert") ?? Settings.KeyCodeConvert;
-                    var judgeTexts = strs["judgetext_texts"]?.ToObject<List<string>>();
-                    if (judgeTexts != null)
-                        for (int i = 0; i < Settings.JudgeTexts.Length && i < judgeTexts.Count; i++)
-                            Settings.JudgeTexts[i] = judgeTexts[i] ?? "";
                     Settings.RenderOutputDir = strs.Value<string>("render_output_dir") ?? Settings.RenderOutputDir;
                 }
             }
@@ -721,90 +575,11 @@ public static class ConfigManager
                     var asyncKeys = strLists["allowed_async_special_keys"]?.ToObject<HashSet<string>>();
                     if (asyncKeys != null)
                         Settings.AllowedAsyncSpecialKeys = asyncKeys;
-                    var hiddenMargins = strLists["judge_hidden_margins"]?.ToObject<HashSet<string>>();
-                    if (hiddenMargins != null)
-                        Settings.JudgeHiddenMargins = hiddenMargins;
                 }
             }
             catch (Exception ex)
             {
                 Debug.Log("[SpectreReplay] 配置分区 \"StringLists\" 载入失败（其余分区不受影响）: " + ex.Message);
-            }
-            try
-            {
-                var colors = json["Colors"];
-                if (colors != null)
-                {
-                    var playerOns = colors["planetcolor_player_on"]?.ToObject<bool[]>();
-                    if (playerOns != null)
-                        for (int i = 0; i < Settings.PlanetColorPlayerOn.Length && i < playerOns.Length; i++)
-                            Settings.PlanetColorPlayerOn[i] = playerOns[i];
-
-                    var bases = colors["planetcolor_base"]?.ToObject<string[]>();
-                    if (bases != null)
-                        for (int i = 0; i < Settings.PlanetColorBase.Length && i < bases.Length; i++)
-                            if (TryParseHex(bases[i], out Color c))
-                                Settings.PlanetColorBase[i] = c;
-
-                    var parts = colors["planetcolor_parts"]?.ToObject<string[][]>();
-                    if (parts != null)
-                        for (int i = 0; i < Settings.PlanetColorParts.Length && i < parts.Length; i++)
-                        {
-                            if (parts[i] == null) continue;
-                            for (int j = 0; j < Settings.PlanetColorParts[i].Length && j < parts[i].Length; j++)
-                                if (TryParseHex(parts[i][j], out Color c))
-                                    Settings.PlanetColorParts[i][j] = c;
-                        }
-
-                    var partOns = colors["planetcolor_part_on"]?.ToObject<bool[][]>();
-                    if (partOns != null)
-                        for (int i = 0; i < Settings.PlanetColorPartsOn.Length && i < partOns.Length; i++)
-                        {
-                            if (partOns[i] == null) continue;
-                            for (int j = 0; j < Settings.PlanetColorPartsOn[i].Length && j < partOns[i].Length; j++)
-                                Settings.PlanetColorPartsOn[i][j] = partOns[i][j];
-                        }
-
-                    var judgeColors = colors["judge_margin_colors"]?.ToObject<string[]>();
-                    if (judgeColors != null)
-                        for (int i = 0; i < Settings.JudgeMarginColors.Length && i < judgeColors.Length; i++)
-                            if (TryParseHex(judgeColors[i], out Color jc))
-                                Settings.JudgeMarginColors[i] = jc;
-
-                    var judgeColorOns = colors["judge_margin_colors_on"]?.ToObject<bool[]>();
-                    if (judgeColorOns != null)
-                        for (int i = 0; i < Settings.JudgeMarginColorsOn.Length && i < judgeColorOns.Length; i++)
-                            Settings.JudgeMarginColorsOn[i] = judgeColorOns[i];
-
-                    string judgeGlow = colors.Value<string>("judge_glow_color");
-                    if (TryParseHex(judgeGlow, out Color glowColor))
-                        Settings.JudgeGlowColor = glowColor;
-
-                    string textOutline = colors.Value<string>("judgetext_outline_color");
-                    if (TryParseHex(textOutline, out Color textOutlineColor))
-                        Settings.JudgeTextOutlineColor = textOutlineColor;
-
-                    string edgeColor = colors.Value<string>("judgebar_edge_color");
-                    if (TryParseHex(edgeColor, out Color barEdgeColor))
-                        Settings.JudgeBarEdgeColor = barEdgeColor;
-
-                    string zonePure = colors.Value<string>("judgebar_zone_pure");
-                    if (TryParseHex(zonePure, out Color zonePureColor))
-                        Settings.JudgeBarPureColor = zonePureColor;
-                    string zonePerfect = colors.Value<string>("judgebar_zone_perfect");
-                    if (TryParseHex(zonePerfect, out Color zonePerfectColor))
-                        Settings.JudgeBarPerfectColor = zonePerfectColor;
-                    string zoneCounted = colors.Value<string>("judgebar_zone_counted");
-                    if (TryParseHex(zoneCounted, out Color zoneCountedColor))
-                        Settings.JudgeBarCountedColor = zoneCountedColor;
-                    string tickOutline = colors.Value<string>("judgebar_tick_outline_color");
-                    if (TryParseHex(tickOutline, out Color tickOutlineColor))
-                        Settings.JudgeBarTickOutlineColor = tickOutlineColor;
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.Log("[SpectreReplay] 配置分区 \"Colors\" 载入失败（其余分区不受影响）: " + ex.Message);
             }
             Debug.Log("[SpectreReplay] 配置载入成功");
         }
@@ -833,29 +608,4 @@ public static class ConfigManager
         }
     }
 
-    private static string ToHex(Color c) => "#" + ColorUtility.ToHtmlStringRGBA(c); private static string[] ToHexArray(Color[] colors)
-    {
-        // null 兜底：调用方传 null 时返回 null，而不是在这里抛 NRE。
-        // 返回 null 对 JSON 是合法值，读回来仍是 null，各调用点本来就有判空。
-        if (colors == null) return null;
-        var arr = new string[colors.Length];
-        for (int i = 0; i < colors.Length; i++)
-            arr[i] = "#" + ColorUtility.ToHtmlStringRGBA(colors[i]);
-        return arr;
-    }
-
-    private static string[][] ToHexArrays(Color[][] colorArrays)
-    {
-        var arr = new string[colorArrays.Length][];
-        for (int i = 0; i < colorArrays.Length; i++)
-            arr[i] = ToHexArray(colorArrays[i]);
-        return arr;
-    }
-
-    private static bool TryParseHex(string s, out Color color)
-    {
-        color = Color.clear;
-        if (string.IsNullOrEmpty(s)) return false;
-        return ColorUtility.TryParseHtmlString(s.StartsWith("#") ? s : "#" + s, out color);
-    }
 }

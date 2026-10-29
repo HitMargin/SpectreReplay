@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq.Expressions;
 using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
@@ -281,5 +282,201 @@ internal static class GameCompat
             _hasUpdateHitErrorMeter = found;
             return found;
         }
+    }
+
+    // ── scrMisc.GetAdjustedAngleBoundaryInDeg ──
+    //
+    // r150：返回嵌在 scrMisc 里的泛型结构体（.Perfect/.Pure 是公开字段），参数是 Difficulty
+    // r149-：返回 double，参数是 HitMarginGeneral，每个判定档单独调一次
+    //
+    // <para><b>为什么这里必须用表达式树，而不是直接写类型名 + CreateDelegate。</b>
+    // r150 那个返回值类型在 r147/r148 的程序集里**根本不存在**。源码里只要出现一次
+    // 这个类型名，用旧程序集编译就是 CS0426——而「同一份源码能被 r147/r148/r150 三份
+    // 程序集编译通过」正是本轮兼容性唯一可静态验证的手段，绝不能为了写法好看把它弄丢。
+    // 表达式树把类型留在运行期（MethodInfo + 字段名），源码只出现两版都有的
+    // Difficulty 与 double；调用期仍是一次普通方法调用加一次字段读。</para>
+    //
+    // <para><b>为什么不能退回 MethodInfo.Invoke。</b>调用点（ReplayAnalyzer.Analyze）
+    // 在「每次命中」的循环里，而它又被每帧的 DrawTimingSummary 调用；一份 2000 击的
+    // 回放在 60fps 下就是 12 万次/秒，Invoke 的装箱会把界面直接拖垮。</para>
+
+    private static Func<Difficulty, double, double, double, double> _angleBoundaryNewPerfect;
+    private static Func<Difficulty, double, double, double, double> _angleBoundaryNewPure;
+
+    private static Func<HitMarginGeneral, double, double, double, double> _angleBoundaryOld;
+    private static bool _angleBoundaryProbed;
+
+    /// <summary>
+    /// 取该上下文下原版 Perfect / Pure 的**角度**边界（度）。
+    /// 返回 false 表示两种形状都没解析出来；调用方应把窗口按 0 填入，
+    /// 散点图会据此退回 25/60ms 的兜底估算（HitScatterMath.Windows）。
+    /// </summary>
+    internal static bool AngleBoundary(Difficulty difficulty, double bpmTimesSpeed,
+        double conductorPitch, double marginMult, out double perfect, out double pure)
+    {
+        perfect = 0.0;
+        pure = 0.0;
+
+        if (!_angleBoundaryProbed)
+        {
+            _angleBoundaryProbed = true;
+            try
+            {
+                MethodInfo byDifficulty = FindByArity(typeof(scrMisc), "GetAdjustedAngleBoundaryInDeg", 4,
+                    m => m.GetParameters()[0].ParameterType == typeof(Difficulty));
+                if (byDifficulty != null)
+                {
+                    _angleBoundaryNewPerfect = CompileStructFieldGetter(byDifficulty, "Perfect");
+                    _angleBoundaryNewPure = CompileStructFieldGetter(byDifficulty, "Pure");
+                }
+                else
+                {
+                    MethodInfo byMargin = FindByArity(typeof(scrMisc), "GetAdjustedAngleBoundaryInDeg", 4,
+                        m => m.GetParameters()[0].ParameterType == typeof(HitMarginGeneral));
+                    if (byMargin != null)
+                    {
+                        _angleBoundaryOld = (Func<HitMarginGeneral, double, double, double, double>)
+                            Delegate.CreateDelegate(
+                                typeof(Func<HitMarginGeneral, double, double, double, double>), byMargin);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                WarnOnce("AngleBoundary.Resolve", e);
+            }
+
+            if (_angleBoundaryNewPerfect == null && _angleBoundaryOld == null)
+                WarnOnce("AngleBoundary", new MissingMethodException("scrMisc.GetAdjustedAngleBoundaryInDeg"));
+        }
+
+        try
+        {
+            if (_angleBoundaryNewPerfect != null && _angleBoundaryNewPure != null)
+            {
+                perfect = _angleBoundaryNewPerfect(difficulty, bpmTimesSpeed, conductorPitch, marginMult);
+                pure = _angleBoundaryNewPure(difficulty, bpmTimesSpeed, conductorPitch, marginMult);
+            }
+            else if (_angleBoundaryOld != null)
+            {
+                perfect = _angleBoundaryOld(HitMarginGeneral.Perfect, bpmTimesSpeed, conductorPitch, marginMult);
+                pure = _angleBoundaryOld(HitMarginGeneral.Pure, bpmTimesSpeed, conductorPitch, marginMult);
+            }
+        }
+        catch (Exception e)
+        {
+            WarnOnce("AngleBoundary", e);
+            perfect = 0.0;
+            pure = 0.0;
+        }
+
+        return perfect > 0.0 && pure > 0.0;
+    }
+
+    /// <summary>
+    /// 把「调用 <paramref name="method"/> → 读返回值上的某个 double 字段」编译成委托。
+    ///
+    /// <para>方法体里只经由 <see cref="MethodInfo"/> 与字段名访问，源码不出现返回类型名，
+    /// 因此不含该类型的旧程序集也能编译通过——这是本兼容层的可验证性前提。
+    /// 展开后的委托等价于一次普通调用加一次字段读，可以放在每帧几十万次的循环里。</para>
+    /// </summary>
+    private static Func<Difficulty, double, double, double, double> CompileStructFieldGetter(
+        MethodInfo method, string fieldName)
+    {
+        ParameterInfo[] parameters = method.GetParameters();
+        if (parameters.Length != 4
+            || parameters[0].ParameterType != typeof(Difficulty)
+            || parameters[1].ParameterType != typeof(double)
+            || parameters[2].ParameterType != typeof(double)
+            || parameters[3].ParameterType != typeof(double))
+        {
+            return null;
+        }
+
+        ParameterExpression difficulty = Expression.Parameter(typeof(Difficulty), "difficulty");
+        ParameterExpression bpmTimesSpeed = Expression.Parameter(typeof(double), "bpmTimesSpeed");
+        ParameterExpression conductorPitch = Expression.Parameter(typeof(double), "conductorPitch");
+        ParameterExpression marginMult = Expression.Parameter(typeof(double), "marginMult");
+
+        Expression body = Expression.Field(
+            Expression.Call(method, difficulty, bpmTimesSpeed, conductorPitch, marginMult),
+            fieldName);
+
+        return Expression.Lambda<Func<Difficulty, double, double, double, double>>(
+            body, difficulty, bpmTimesSpeed, conductorPitch, marginMult).Compile();
+    }
+
+    // ── RDInput.GetMainHeldKeys() → GetMainHeldKeys(List<AnyKeyCode>) ──
+    //
+    // r150 改成「传进来填充」；r149- 是「返回一个新列表」。调用点在
+    // scrPlayer.ValidInputWasReleased 的 Postfix 上，每帧一次，同样缓存委托。
+
+    private static Action<List<AnyKeyCode>> _heldKeysFill;
+    private static Func<List<AnyKeyCode>> _heldKeysList;
+    private static bool _heldKeysProbed;
+
+    /// <summary>
+    /// 把「当前按住的主键」追加进 <paramref name="keys"/>。旧版返回的列表直接
+    /// AddRange（语义等价于新版的填充）。返回 false 表示形状没解析出来，此时
+    /// <paramref name="keys"/> 保持调用前的状态（原样为空）。
+    /// </summary>
+    internal static bool AppendMainHeldKeys(List<AnyKeyCode> keys)
+    {
+        if (keys == null)
+            return false;
+
+        if (!_heldKeysProbed)
+        {
+            _heldKeysProbed = true;
+            try
+            {
+                MethodInfo fill = FindByArity(typeof(RDInput), "GetMainHeldKeys", 1,
+                    m => m.ReturnType == typeof(void));
+                if (fill != null)
+                {
+                    _heldKeysFill = (Action<List<AnyKeyCode>>)Delegate.CreateDelegate(
+                        typeof(Action<List<AnyKeyCode>>), fill);
+                }
+                else
+                {
+                    MethodInfo list = FindByArity(typeof(RDInput), "GetMainHeldKeys", 0, null);
+                    if (list != null)
+                    {
+                        _heldKeysList = (Func<List<AnyKeyCode>>)Delegate.CreateDelegate(
+                            typeof(Func<List<AnyKeyCode>>), list);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                WarnOnce("MainHeldKeys.Resolve", e);
+            }
+
+            if (_heldKeysFill == null && _heldKeysList == null)
+                WarnOnce("MainHeldKeys", new MissingMethodException("RDInput.GetMainHeldKeys"));
+        }
+
+        try
+        {
+            if (_heldKeysFill != null)
+            {
+                _heldKeysFill(keys);
+                return true;
+            }
+
+            if (_heldKeysList != null)
+            {
+                List<AnyKeyCode> got = _heldKeysList();
+                if (got != null)
+                    keys.AddRange(got);
+                return true;
+            }
+        }
+        catch (Exception e)
+        {
+            WarnOnce("MainHeldKeys", e);
+        }
+
+        return false;
     }
 }

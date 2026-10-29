@@ -141,6 +141,14 @@ So the buffer length has to be *exactly* this frame's sample count, per channel,
 
 The mixdown capture is started when the render job starts and stopped when it ends. Silence is not treated as failure immediately: the track restarts the capture a bounded number of times (the audio callback can miss its first frames during a scene transition) and only then declares the track dead, which surfaces as a specific error message instead of a silent video with no audio.
 
+## Game version compatibility
+
+Patches are gated on the game's build number (`Releases.releaseNumber`, read reflectively): the floor is **r141**, and **r150** (3.4.0 alpha) is the verified build.
+
+Two APIs changed between 3.3.1 (the release branch, r147/r148) and 3.4.0 — `scrMisc.GetAdjustedAngleBoundaryInDeg` changed both its parameter and its return type, and `RDInput.GetMainHeldKeys` went from returning a fresh list to filling one passed in. Both are bridged at runtime by `Compat/GameCompat.cs`, so **one DLL serves both branches**.
+
+On the compile side this has been checked against three separate `Assembly-CSharp.dll` builds (r147, r148, r150), each a full rebuild from a cleaned `bin`/`obj`. On the runtime side only r150 has been exercised in-game; 3.3.1 still needs a real run.
+
 ## Tech stack
 
 - **C# / .NET Standard 2.1** for the mod assembly — the target the game's Mono runtime loads.

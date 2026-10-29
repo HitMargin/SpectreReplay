@@ -1150,6 +1150,29 @@ $knownDeviations = @(
     @{ Pat = 'data.KeybdAudio';                   File = 'SpectreState.cs'; Why = '2026-10-27 嵌入成功就不再保留旁挂 wav（否则磁盘与云端都白占一份）' }
     @{ Pat = 'File.Delete';                       File = 'SpectreState.cs'; Why = '2026-10-27 同上：删掉那份已经进了本体的 tmp.wav' }
     @{ Pat = 'tmp.wav';                           File = 'SpectreState.cs'; Why = '2026-10-27 同上：待删的临时录音文件名' }
+
+    # ── 2026-10-29 判定窗口 / 持键的跨版本兼容层 ──────────────────────────
+    # r150 把 scrMisc.GetAdjustedAngleBoundaryInDeg 的参数与返回类型一起换了
+    # （HitMarginGeneral + double → Difficulty + 泛型结构体），又把
+    # RDInput.GetMainHeldKeys 从「返回新表」改成「传参填充」。这两个成员没法直调，
+    # 只能在运行期解析；细节见 GameCompat 里那两段注释。
+    @{ Pat = 'GameCompat.AngleBoundary';  File = 'ReplayAnalyzer.cs'; Why = '2026-10-29 判定窗口改由兼容层取：r149- 与 r150 的签名互不兼容，直调必崩' }
+    @{ Pat = 'AngleBoundary.Resolve';     File = 'GameCompat.cs';     Why = '2026-10-29 角度边界兼容层解析失败时只警告一次的键名' }
+    @{ Pat = 'MainHeldKeys.Resolve';      File = 'GameCompat.cs';     Why = '2026-10-29 持键兼容层解析失败时只警告一次的键名' }
+    @{ Pat = 'Delegate.CreateDelegate';   File = 'GameCompat.cs';     Why = '2026-10-29 把解析到的 MethodInfo 缓存成强类型委托，避免每帧反射' }
+    @{ Pat = 'Expression.Call';           File = 'GameCompat.cs';     Why = '2026-10-29 用表达式树调 r150 的返回结构体方法（源码不写该类型名）' }
+    @{ Pat = 'Expression.Field';          File = 'GameCompat.cs';     Why = '2026-10-29 同上：从返回值上读 .Perfect/.Pure 字段' }
+    @{ Pat = 'Expression.Lambda';         File = 'GameCompat.cs';     Why = '2026-10-29 同上：编译成 Func<Difficulty,double,double,double,double>' }
+    @{ Pat = 'Expression.Parameter';      File = 'GameCompat.cs';     Why = '2026-10-29 同上：四个形参占位' }
+    @{ Pat = 'HitMarginGeneral.Perfect';  File = 'GameCompat.cs';     Why = '2026-10-29 r149- 的角度边界按判定档逐个调用，需要传 Perfect' }
+    @{ Pat = 'HitMarginGeneral.Pure';     File = 'GameCompat.cs';     Why = '2026-10-29 同上：传 Pure' }
+    @{ Pat = 'keys.AddRange';             File = 'GameCompat.cs';     Why = '2026-10-29 r149- 的 GetMainHeldKeys() 返回新表，需并入调用方给的表' }
+    @{ Pat = 'm.GetParameters';           File = 'GameCompat.cs';     Why = '2026-10-29 按第一个形参的类型区分新旧两种形状' }
+    @{ Pat = 'm.ReturnType';              File = 'GameCompat.cs';     Why = '2026-10-29 用返回类型 void 认出「传参填充」那一版' }
+    @{ Pat = 'method.GetParameters';      File = 'GameCompat.cs';     Why = '2026-10-29 编译委托前校验形参形状' }
+    @{ Pat = 'parameters.Length';         File = 'GameCompat.cs';     Why = '2026-10-29 同上：形参个数校验' }
+    @{ Pat = 'RDInput.GetMainHeldKeys';   File = 'GameCompat.cs';     Why = '2026-10-29 持键兼容层解析失败时，异常消息里点名的目标方法' }
+    @{ Pat = 'System.Linq.Expressions';   File = 'GameCompat.cs';     Why = '2026-10-29 表达式树所在命名空间（见上面 Expression.* 的说明）' }
 )
 
 

@@ -22,7 +22,15 @@ namespace UiPreview
 {
     internal static class PatchTargetCheck
     {
-        private const int GameRelease = 150;
+        // 默认按 r150 判定（与 GameVersion 一致）。手工核对旧分支时可用环境变量
+        // SPECTRE_GAME_RELEASE 覆盖（例如 147）；门禁自己不设该变量，默认行为不变。
+        private static readonly int GameRelease = ResolveGameRelease();
+
+        private static int ResolveGameRelease()
+        {
+            string raw = Environment.GetEnvironmentVariable("SPECTRE_GAME_RELEASE");
+            return int.TryParse(raw, out int release) && release > 0 ? release : 150;
+        }
 
         internal static int Run(string projectRoot)
         {

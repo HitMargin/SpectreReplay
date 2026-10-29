@@ -136,8 +136,13 @@ namespace UiPreview
             //     RDInput.GetMainHeldKeys 取 keyMask 来比对 holdKeys。若这边仍灌
             //     帧粒度的 ManagedInput 状态，两套状态从源头分叉：holding 短暂为真、
             //     下一帧又被判松手 —— 长条被判 Die。
-            Expect(Has(patch, @"if\s*\(\s*ManagedInput\.NativeTakeover\s*\)\s*RDInput\.GetMainHeldKeys\(keys\)"),
+            //     r150 改了 GetMainHeldKeys 的形状（返回值 → 传参填充），调用点因此经
+            //     GameCompat 兼容层转一手。断言随之放宽到两条路都认，但补上后半段：
+            //     兼容层内部必须真的调 RDInput.GetMainHeldKeys，否则「同源」就断了。
+            Expect(Has(patch, @"if\s*\(\s*ManagedInput\.NativeTakeover\s*\)\s*(RDInput\.GetMainHeldKeys|GameCompat\.AppendMainHeldKeys)\(keys\)"),
                 "⑥b 原生接管时 holdKeys 没有取自 RDInput.GetMainHeldKeys —— 与 keyMask 不同源，长条被判松手");
+            Expect(Has(SrcUtil.Source(projectRoot, "Features/Compat/GameCompat.cs"), @"RDInput\.GetMainHeldKeys"),
+                "⑥b 兼容层里没有调 RDInput.GetMainHeldKeys —— 跨版本读取持键的源头断了");
 
             // ⑦ 时序：记账必须在游戏读输入之前。
             //    游戏读输入的链是 PlayerControl_Update → Simulated_PlayerControl_Update

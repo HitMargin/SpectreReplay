@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using SpectreReplay.Features.Compat;
 using static SpectreReplay.SpectreState;
 
 namespace SpectreReplay.Features.Replay;
@@ -49,11 +50,33 @@ internal static class Patch_RDInput
         __result = ManagedInput.Matches(inputAction, state);
     }
 
-    // ── RDInput.GetStateKeys(List<AnyKeyCode>, ButtonState) ───
+    // ── RDInput.GetStateKeys ───────────────────────────────────
     // GetMainPressKeys / GetMainHeldKeys 的实现，也是 holdKeys 的唯一来源。
     // 必须在这一层覆盖：GetStateKeys 读的是各 RDInputType 内部的 pressCount.keys /
     // heldCount.keys（在 Main 里填充），只改 GetMain 的返回值不会让这些列表有内容。
-    [SpectrePatch(typeof(RDInput), "GetStateKeys", PatchType.Postfix, Feature = FeatureKeys.Replay)]
+    //
+    // 版本分叉（r150 改了签名）：
+    //   r147–r149  List<AnyKeyCode> GetStateKeys(ButtonState state)             ← 方法内新建表后返回
+    //   r150+      void GetStateKeys(List<AnyKeyCode> keys, ButtonState state)    ← 填充调用方缓冲
+    // 与 Patch_SpecialKeys.GetSpecialInput 同一模式：各钉一半，门控跳过的那条不算失败。
+
+    // r147–r149：r147 里是 `new List<AnyKeyCode>()` 后逐项 AddRange 再返回，
+    // 所以替换 __result 不会碰到内部缓存；Clear 后填我方按键全集，语义与 r150+ 一致。
+    [SpectrePatch(typeof(RDInput), "GetStateKeys", PatchType.Postfix,
+        Feature = FeatureKeys.Replay, MaxVersion = 149)]
+    internal static void GetStateKeys_PostfixOld(ref List<AnyKeyCode> __result, ButtonState state)
+    {
+        if (!ManagedInput.Active || ManagedInput.NativeTakeover) return;
+        List<AnyKeyCode> list = __result;
+        if (list == null) list = new List<AnyKeyCode>();
+        else list.Clear();
+        ManagedInput.Append(list, state);
+        __result = list;
+    }
+
+    // r150+：直接填充调用方传进来的缓冲。
+    [SpectrePatch(typeof(RDInput), "GetStateKeys", PatchType.Postfix,
+        Feature = FeatureKeys.Replay, MinVersion = 150)]
     internal static void GetStateKeys_Postfix(List<AnyKeyCode> keys, ButtonState state)
     {
         // NativeTakeover 时放行：pressCount/heldCount 已由游戏按真实事件累积，
@@ -109,7 +132,7 @@ internal static class Patch_HoldStateInjection
             //     合成的 Label=Unknown 值进不了游戏的 heldCount。
             // 两套状态从源头分叉的后果是：holding 短暂为真、下一帧又被判松手。
             if (ManagedInput.NativeTakeover)
-                RDInput.GetMainHeldKeys(keys);
+                GameCompat.AppendMainHeldKeys(keys);
             else
                 ManagedInput.Append(keys, ButtonState.IsDown);
         }

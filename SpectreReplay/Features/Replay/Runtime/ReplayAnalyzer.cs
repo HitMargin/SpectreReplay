@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using SpectreReplay.Features.Compat;
 using static SpectreReplay.Features.Replay.ReplayKeys;
 
 namespace SpectreReplay.Features.Replay;
@@ -98,10 +99,20 @@ internal static class ReplayAnalyzer
                 samples.Add((float)ms);
                 double degToMs = (Math.PI / 180.0) * 60.0
                     / (Math.PI * pitch * bpmTimesSpeed) * 1000.0;
-                var win = scrMisc.GetAdjustedAngleBoundaryInDeg(
-                    GCS.difficulty, bpmTimesSpeed, pitch, 1.0);
-                perfectWins.Add((float)(win.Perfect * degToMs));
-                pureWins.Add((float)(win.Pure * degToMs));
+                // 形状差异（r150 起返回结构体、之前按判定档返回单个 double）由兼容层吸收。
+                // 解析不出来时填 0：HitScatterMath.Windows 见非正值会自动退回 25/60ms 兜底，
+                // 所以这里不需要让整个分析失败——误差值本身仍然是对的。
+                if (GameCompat.AngleBoundary(GCS.difficulty, bpmTimesSpeed, pitch, 1.0,
+                        out double perfectDeg, out double pureDeg))
+                {
+                    perfectWins.Add((float)(perfectDeg * degToMs));
+                    pureWins.Add((float)(pureDeg * degToMs));
+                }
+                else
+                {
+                    perfectWins.Add(0f);
+                    pureWins.Add(0f);
+                }
             }
         }
         finally

@@ -169,109 +169,6 @@ public static class Settings
     // ── CustomEvents（自定义事件：变量系统等，PACL2 谱面兼容） ──
     public static bool CustomEventsOn = false;
 
-    // ── JudgeText settings ──────────────────────────────
-    public static bool JudgeTextOn = false;
-    public static readonly string[] JudgeTextKeys =
-    {
-        "TooEarly", "VeryEarly", "EarlyPerfect", "Perfect",
-        "LatePerfect", "VeryLate", "TooLate", "Multipress",
-        "FailMiss", "FailOverload", "Auto", "OverPress",
-        // r150 起完美拆三档：XPerfect 在“显示 XPerfect”预设下单独飘字，
-        // 追加独立自定义槽（追加在尾部，旧配置按索引加载不受影响；
-        // PerfectMinus/PerfectPlus 无需槽——游戏默认回落到 Perfect 键）
-        "XPerfect"
-    };
-    public static string[] JudgeTexts = new string[JudgeTextKeys.Length];
-
-    // 显示效果：大小 / 淡出速度倍率
-    public static bool JudgeFxOn = false;
-    public static float JudgeTextSizeMult = 1f;
-    public static float JudgeTextFadeMult = 1f;
-
-    // 判定过滤：隐藏指定判定
-    public static bool JudgeFilterOn = false;
-    public static HashSet<string> JudgeHiddenMargins = new();
-
-    // 判定颜色（前 9 = 游戏配色方案，第 10 = Auto）与发光
-    public static bool JudgeColorOn = false;
-    public static readonly string[] JudgeColorKeys =
-    {
-        "tooearly", "veryearly", "earlyperfect", "perfect",
-        "lateperfect", "verylate", "toolate", "multipress",
-        "failmiss", "auto"
-    };
-    internal static readonly Color[] VanillaMarginColors = NewColorArray();
-    public static Color[] JudgeMarginColors = NewColorArray();
-    public static bool[] JudgeMarginColorsOn = new bool[VanillaMarginColors.Length];
-    public static bool JudgeGlowOn = false;
-    public static Color JudgeGlowColor = Color.black;
-
-    // 飘字描边 / XPerfect 粒子（机制研究自游戏 xPerfectBorder / xPerfectParticle：
-    // 原版 TMP Distance Field Overlay 着色器 + _OutlineTex 渐变纹理按字形高度取色）
-    public static bool JudgeTextOutlineOn = false;
-    public static float JudgeTextOutlineWidth = 0.405f;     // 游戏同款默认宽度
-    public static Color JudgeTextOutlineColor = Color.white;
-    public static bool JudgeTextOutlineGradientOn = false;  // 游戏式粉→蓝渐变替代纯色
-    public static bool JudgeTextParticleOn = true;          // false = 强制关 XPerfect 星星粒子
-
-    // ── JudgeBar settings ──────────────────────────────
-    public static bool JudgeBarOn = false;
-    // 动态窗口缩放：开 = 分区实时按难度/BPM/音调缩放（精确判定条行为）；关 = 固定原版 30/45/60 布局
-    public static bool JudgeBarDynamicOn = true;
-    public static bool JudgeBarUnlockStrict = false;
-    public static float JudgeBarAnimationDuration = 0.4f;
-    public static float JudgeBarSensitivity = 0.2f;
-    public static float JudgeBarTickLife = 3f;
-    // 判定条外沿装饰边（原版 ±60~63.2° 红边）：开关 + 颜色 + 外沿角，默认=原版
-    public static bool JudgeBarEdgeColorOn = false;
-    public static Color JudgeBarEdgeColor = new(1f, 0f, 0f, 1f);
-    public static float JudgeBarEdgeSpan = 63.2f;
-
-    // 判定 tick 描边（r150 ErrorMeterTick.tickOutline）：游戏只给 XPerfect + 特定预设
-    // 配白色描边，这里解绑——开关开 = 所有 tick 带自定义色描边
-    public static bool JudgeBarTickOutlineOn = false;
-    public static Color JudgeBarTickOutlineColor = Color.white;
-    // 底层游戏窗口三段配色（Pure/Perfect/Counted 区；档位未覆盖处露出的就是它们）
-    public static bool JudgeBarZonePureOn = false;
-    public static Color JudgeBarPureColor = new(0.37255f, 1f, 0.30588f, 1f);
-    public static bool JudgeBarZonePerfectOn = false;
-    public static Color JudgeBarPerfectColor = new(0.98824f, 1f, 0.30196f, 1f);
-    public static bool JudgeBarZoneCountedOn = false;
-    public static Color JudgeBarCountedColor = new(1f, 0.43529f, 0.30196f, 1f);
-
-    // 原版默认配色（开关关闭与"恢复默认"共用的唯一事实源）
-    internal static readonly Color JudgeBarVanillaEdge = new(1f, 0f, 0f, 1f);
-    internal static readonly Color JudgeBarVanillaPure = new(0.37255f, 1f, 0.30588f, 1f);
-    internal static readonly Color JudgeBarVanillaPerfect = new(0.98824f, 1f, 0.30196f, 1f);
-    internal static readonly Color JudgeBarVanillaCounted = new(1f, 0.43529f, 0.30196f, 1f);
-    public static bool OverloadBarOn = false;
-    public static float OverloadBarX = 0f;
-    public static float OverloadBarY = -500f;
-
-    // 判定条整体位置偏移（AJB BarPositionX/Y 同款）：叠加到 wrapperRectTransform 的
-    // anchoredPosition 上（正 = 右/上，0,0 = 原位）；游戏重排后由 Patch_MeterLayout 重锚基准
-    public static float JudgeBarPositionX = 0f;
-    public static float JudgeBarPositionY = 0f;
-
-    // 失败判定带（AJB ShowFailureJudgement 同款，默认开）：noFail 局内出现失败命中后，
-    // 判定条外沿长出紫色环 + 背景扩展 + 失败 tick 钉在环上；重开/回检查点消除
-    public static bool JudgeBarShowFailureJudgement = true;
-
-    // 紫色失败环常驻显示：不等你真的失误，环始终满幅显示（装饰/提醒用途）
-    public static bool JudgeBarFailureBandAlwaysOn = false;
-
-    // 判定条黑色背板透明度（AJB BackgroundOpacity 对应项；默认 0.4 ≈ 原版背板的观感，
-    // AJB 的 0.6 偏深，想要 AJB 观感手动调高即可）
-    public static float JudgeBarBackgroundOpacity = 0.4f;
-
-
-    // ── PlanetColors settings ───────────────────────────
-    public static bool PlanetColorOn = false;
-    public static bool[] PlanetColorPlayerOn = InitPlanetOn();
-    public static Color[] PlanetColorBase = new Color[8];
-    public static Color[][] PlanetColorParts = InitPlanetParts();
-    public static bool[][] PlanetColorPartsOn = InitPlanetPartsOn();
-
     public static bool RenderOn = true;
     // ── 实验性：确定性渲染时钟 ────────────────────────────────────────
     // 打开 = 挂 scrConductor.Update 的时间源 Transpiler（Patch_RenderClockConductor），
@@ -321,18 +218,6 @@ public static class Settings
             arr[i] = c;
         return arr;
     }
-
-    private static bool[] InitPlanetOn()
-    {
-        var arr = new bool[2];
-        for (int i = 0; i < arr.Length; i++)
-            arr[i] = true;
-        return arr;
-    }
-
-    private static Color[][] InitPlanetParts() { return new Color[2][] { new Color[6], new Color[6] }; }
-
-    private static bool[][] InitPlanetPartsOn() { return new bool[2][] { new bool[6], new bool[6] }; }
 
     // —— 启动归一化 / 键表构建 ————————————————————————
 
@@ -426,18 +311,6 @@ public static class Settings
         // 整个盖成恒等映射。
         SpectreState.save_button = (KeyCode)SaveButton;
         SpectreState.cancel_save_button = (KeyCode)CancelSaveButton;
-    }
-
-    internal static Color[] NewColorArray()
-    {
-        // 原版默认判定颜色（红橙黄绿青蓝紫白粉）
-        return new Color[10]
-        {
-            new Color(1f, 0.2f, 0.2f), new Color(1f, 0.6f, 0.2f), new Color(1f, 0.9f, 0.2f),
-            new Color(0.3f, 1f, 0.3f), new Color(0.2f, 0.8f, 1f), new Color(0.3f, 0.4f, 1f),
-            new Color(0.8f, 0.3f, 1f), new Color(1f, 0.4f, 0.8f), new Color(1f, 1f, 1f),
-            new Color(0.9f, 0.9f, 0.9f)
-        };
     }
 
     /// <summary>把当前设置立即落盘并刷新补丁开关（通用提交入口）。</summary>
