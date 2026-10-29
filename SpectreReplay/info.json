@@ -2,11 +2,11 @@
   "Id": "com.spectre.replay",
   "DisplayName": "Spectre Replay",
   "Author": "HitMargin",
-  "Version": "0.1.3",
-  "Description": "关卡录制、回放与视频渲染。正常游玩时自动记录本局按键，之后可在游戏内回放，或逐帧渲染成视频。独立模组，不依赖 Spectre。",
+  "Version": "0.1.4",
+  "Description": "关卡录制、回放与视频渲染。正常游玩时自动记录本局按键，之后可在游戏内回放，或逐帧渲染成视频。独立模组，不依赖 Spectre。支持游戏 3.3.1（正式版）与 3.4.0（alpha）。",
   "AssemblyName": "SpectreReplay.dll",
   "EntryMethod": "SpectreReplay.Main.Load",
-  "GameVersion": "3.4.0",
+  "GameVersion": "3.3.1",
   "HomePage": "https://github.com/HitMargin/SpectreReplay",
   "Repository": "https://raw.githubusercontent.com/HitMargin/SpectreReplay/master/repo.json"
 }
