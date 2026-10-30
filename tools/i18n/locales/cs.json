@@ -22,6 +22,8 @@
   "record.cancelsave": "Povolit zrušení uložení",
   "record.asyncinput": "Číst klávesy z asynchronního vstupu",
   "record.asyncinput.off": "Asynchronní vstup je ve hře vypnutý, takže tato možnost nic nedělá. Zapněte jej v nastavení hry → vstup.",
+  "replay.mirror": "Zrcadlit klávesy záznamu do systému (pro mody zobrazující klávesy)",
+  "replay.mirror.tip": "Ovlivňuje pouze mody třetích stran, které zobrazují klávesy: ty čtou systémové stisky a klávesy uvnitř záznamu tohoto modu nevidí. Nemá vliv na nahrávání, přehrávání ani hodnocení. Funguje jen tehdy, když má okno hry fokus; může kolidovat s dalším softwarem zpracovávajícím klávesy.",
   "record.keybd": "Zvuk klávesnice",
   "record.keybd.record": "Nahrávat zvuk klávesnice",
   "record.keybd.volume": "Hlasitost zvuku klávesnice",

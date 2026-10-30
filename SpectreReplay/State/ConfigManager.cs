@@ -41,6 +41,7 @@ public static class ConfigManager
         public bool KeyConvertEnabled { get; set; }
         public bool LimitKey { get; set; }
         public bool GetDataFromAsyncInput { get; set; }
+        public bool MirrorInputToOS { get; set; }
 
         public bool EffectRemoverOn { get; set; }
         public bool EffectRemoverEnableSave { get; set; }
@@ -170,6 +171,7 @@ public static class ConfigManager
                 KeyConvertEnabled = Settings.KeyConvertEnabled,
                 LimitKey = Settings.LimitKey,
                 GetDataFromAsyncInput = Settings.GetDataFromAsyncInput,
+                MirrorInputToOS = Settings.MirrorInputToOS,
 
                 EffectRemoverOn = Settings.EffectRemoverOn,
                 EffectRemoverEnableSave = Settings.EffectRemoverEnableSave,
@@ -459,6 +461,7 @@ public static class ConfigManager
                     Settings.KeyConvertEnabled = sets.Value<bool?>("KeyConvertEnabled") ?? Settings.KeyConvertEnabled;
                     Settings.LimitKey = sets.Value<bool?>("LimitKey") ?? Settings.LimitKey;
                     Settings.GetDataFromAsyncInput = sets.Value<bool?>("GetDataFromAsyncInput") ?? Settings.GetDataFromAsyncInput;
+                    Settings.MirrorInputToOS = sets.Value<bool?>("MirrorInputToOS") ?? Settings.MirrorInputToOS;
 
                     Settings.EffectRemoverOn = sets.Value<bool?>("EffectRemoverOn") ?? Settings.EffectRemoverOn;
                     Settings.EffectRemoverEnableSave = sets.Value<bool?>("EffectRemoverEnableSave") ?? Settings.EffectRemoverEnableSave;

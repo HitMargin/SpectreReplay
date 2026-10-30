@@ -22,6 +22,8 @@
   "record.cancelsave": "Cho phép huỷ lưu",
   "record.asyncinput": "Đọc phím từ đầu vào bất đồng bộ",
   "record.asyncinput.off": "Trong game đang tắt đầu vào bất đồng bộ nên tùy chọn này không có tác dụng. Hãy bật nó trong cài đặt game → đầu vào.",
+  "replay.mirror": "Đồng bộ phím của bản phát lại ra hệ thống (cho mod hiển thị phím)",
+  "replay.mirror.tip": "Chỉ ảnh hưởng đến các mod hiển thị phím của bên thứ ba: chúng đọc phím ở mức hệ thống nên không thấy phím phát lại bên trong mod này. Không ảnh hưởng đến ghi, phát lại hay chấm điểm. Chỉ hoạt động khi cửa sổ trò chơi đang được chọn; có thể xung đột với phần mềm khác xử lý bàn phím.",
   "record.keybd": "Âm thanh bàn phím",
   "record.keybd.record": "Ghi âm thanh bàn phím",
   "record.keybd.volume": "Âm lượng âm thanh bàn phím",

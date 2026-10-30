@@ -22,6 +22,8 @@
   "record.cancelsave": "Zezwalaj na anulowanie zapisu",
   "record.asyncinput": "Czytaj klawisze z wejścia asynchronicznego",
   "record.asyncinput.off": "Wejście asynchroniczne jest w grze wyłączone, więc ta opcja nic nie robi. Włącz je w ustawieniach gry → wejście.",
+  "replay.mirror": "Kopiuj klawisze powtórki do systemu (dla modów wyświetlających klawisze)",
+  "replay.mirror.tip": "Dotyczy tylko modów innych autorów wyświetlających klawisze: czytają one naciśnięcia systemowe i nie widzą wewnętrznych klawiszy powtórki tego moda. Nie wpływa na nagrywanie, odtwarzanie ani ocenę. Działa tylko wtedy, gdy okno gry jest aktywne; może kolidować z innym oprogramowaniem obsługującym klawisze.",
   "record.keybd": "Dźwięk klawiatury",
   "record.keybd.record": "Nagrywaj dźwięk klawiatury",
   "record.keybd.volume": "Głośność dźwięku klawiatury",

@@ -22,6 +22,8 @@
   "record.cancelsave": "Abbrechen des Speicherns erlauben",
   "record.asyncinput": "Tasten aus asynchroner Eingabe lesen",
   "record.asyncinput.off": "Die asynchrone Eingabe ist im Spiel deaktiviert, daher hat diese Option keine Wirkung. Aktiviere die asynchrone Eingabe in den Spieleinstellungen → Eingabe.",
+  "replay.mirror": "Replay-Tasten an das System spiegeln (für Tastenanzeige-Mods)",
+  "replay.mirror.tip": "Betrifft nur Tastenanzeige-Mods von Drittanbietern: Sie lesen Systemtastendrücke und sehen die internen Replay-Tasten dieses Mods nicht. Hat keinen Einfluss auf Aufnahme, Wiedergabe oder Bewertung. Funktioniert nur, solange das Spielfenster den Fokus hat; kann mit anderer Software, die Tasten verarbeitet, in Konflikt geraten.",
   "record.keybd": "Tastaturklang",
   "record.keybd.record": "Tastaturklang aufnehmen",
   "record.keybd.volume": "Lautstärke des Tastaturklangs",

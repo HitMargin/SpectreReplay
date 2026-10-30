@@ -22,6 +22,8 @@
   "record.cancelsave": "Permite anularea salvării",
   "record.asyncinput": "Citește tastele din intrarea asincronă",
   "record.asyncinput.off": "Intrarea asincronă este oprită în joc, deci această opțiune nu are efect. Activeaz-o în setările jocului → intrare.",
+  "replay.mirror": "Oglindește tastele reluării în sistem (pentru moduri care afișează taste)",
+  "replay.mirror.tip": "Afectează doar modurile altor autori care afișează taste: acestea citesc apăsările la nivel de sistem și nu văd tastele interne ale reluării acestui mod. Nu afectează înregistrarea, redarea sau judecarea. Funcționează doar cât timp fereastra jocului este focalizată; poate intra în conflict cu alte programe care gestionează taste.",
   "record.keybd": "Sunet de tastatură",
   "record.keybd.record": "Înregistrează sunetul de tastatură",
   "record.keybd.volume": "Volumul sunetului de tastatură",

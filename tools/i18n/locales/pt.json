@@ -22,6 +22,8 @@
   "record.cancelsave": "Permitir cancelar o salvamento",
   "record.asyncinput": "Ler teclas da entrada assíncrona",
   "record.asyncinput.off": "A entrada assíncrona está desativada no jogo, então esta opção não tem efeito. Ative a entrada assíncrona nas configurações do jogo → entrada.",
+  "replay.mirror": "Espelhar as teclas do replay no sistema (para mods de exibição de teclas)",
+  "replay.mirror.tip": "Afeta apenas os mods de exibição de teclas de terceiros: eles leem as teclas do sistema e não enxergam as teclas internas do replay deste mod. Não afeta a gravação, a reprodução nem o julgamento. Só funciona enquanto a janela do jogo está em foco; pode conflitar com outros programas que tratam teclas.",
   "record.keybd": "Som de teclado",
   "record.keybd.record": "Gravar som de teclado",
   "record.keybd.volume": "Volume do som de teclado",

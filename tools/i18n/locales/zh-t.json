@@ -22,6 +22,8 @@
   "record.cancelsave": "允許取消保存",
   "record.asyncinput": "從非同步輸入取按鍵",
   "record.asyncinput.off": "遊戲裡沒開「非同步輸入」，這一項目前不生效。請在遊戲設定 → 輸入裡開啟非同步輸入。",
+  "replay.mirror": "把回放按鍵同步到系統（供鍵位顯示模組）",
+  "replay.mirror.tip": "只影響第三方鍵位顯示模組：它們讀的是系統按鍵，看不到本模組內部的回放按鍵。不影響錄製、回放與判定。只在遊戲視窗處於焦點時生效；開啟後可能與其他按鍵軟體衝突。",
   "record.keybd": "鍵盤音",
   "record.keybd.record": "錄製鍵盤音",
   "record.keybd.volume": "鍵盤音音量",

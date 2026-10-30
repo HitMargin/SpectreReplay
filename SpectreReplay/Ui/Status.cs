@@ -69,6 +69,9 @@ namespace SpectreReplay.Ui
                     ? new Color(1f, 0.2f, 0.2f)
                     : new Color(0.2f, 0.7215686f, 0.3921569f);
 
+                // 提到游戏 UI 之上，否则切场景的黑幕会盖住它（见 RaiseAboveGameUi）。
+                RaiseAboveGameUi(n);
+
                 // ── 屏蔽提示条上的射线 ──────────────────────────────
                 // 不做这一步，弹出来的通知条会**吃掉它下面的点击**：
                 // 玩家正准备按下一个砖块，通知正好盖住，判定就没了。
@@ -163,6 +166,99 @@ namespace SpectreReplay.Ui
                 // 用 != null 而不是 ReferenceEquals 才安全。
                 if (s.Graphics[i] == null) continue;
                 s.Graphics[i].raycastTarget = s.RaycastTargets[i];
+            }
+        }
+
+        /// <summary>
+        /// 把提示条所在的 Canvas 提到游戏 UI 之上。
+        ///
+        /// <para><b>为什么需要这一步。</b>切场景时 <c>scrUIController.WipeToBlack</c> 会把
+        /// <c>transitionPanel</c>（一张全屏黑 Image）缩放铺满屏幕，0.3 秒后场景才真正
+        /// 加载。提示条在这段黑幕期间**仍然存在、动画也还在跑**，只是被黑幕挡在下面，
+        /// 玩家看不到——而「渲染失败」「存档丢失」这类提示恰恰最需要在那几秒被看见。</para>
+        ///
+        /// <para><b>取值的依据。</b>不用 32767：那是 UnityModManager 自己弹面板用的
+        /// （<c>UMM:4135</c> 用 ScreenSpaceOverlay + 32767 盖住整个游戏），压过它会让
+        /// 提示条浮在 UMM 设置页上面。这里取一个「高于游戏内所有 Canvas、低于 UMM」的
+        /// 值就够了——游戏自带的 UI 都在几百以内。</para>
+        ///
+        /// <para><b>为什么要 overrideSorting。</b>嵌套 Canvas 的 sortingOrder 默认不生效，
+        /// 必须同时把 <c>overrideSorting</c> 置真、并给它一个 GraphicRaycaster（Unity 要求
+        /// 覆盖排序的 Canvas 必须能接收射线，否则会报警告）。提示条本来就要屏蔽射线
+        /// （见 SuppressRaycasts），所以多挂一个 Raycaster 不会带来误点。</para>
+        ///
+        /// <para>只在第一次提到时打印一次实测层级，供后续核对——这条日志本身就是
+        /// 「探针」，不需要为了量一次值再单独做一版构建。</para>
+        /// </summary>
+        private const int NotificationSortingOrder = 30000;
+
+        private static bool _raised;
+
+        private static void RaiseAboveGameUi(Notification n)
+        {
+            if (_raised || n == null)
+            {
+                return;
+            }
+
+            // 提示条自带 Canvas 时提它；没有就提最近的父级 Canvas（同一套 API）。
+            Canvas canvas = n.GetComponent<Canvas>() ?? n.GetComponentInParent<Canvas>();
+            if (canvas == null)
+            {
+                // 没有 Canvas 说明它并进某个已有 canvas 一起排序——那就没得提，
+                // 记一条日志说明"这次的提示在黑幕期间可能看不见"，而不是静默失败。
+                Debug.Log("[SpectreReplay] 提示条没有独立 Canvas，无法提到黑幕之上"
+                    + "（切场景期间可能看不见，但不影响功能）");
+                _raised = true;
+                return;
+            }
+
+            try
+            {
+                int before = canvas.sortingOrder;
+                string modeBefore = canvas.renderMode.ToString();
+
+                // 记录黑幕所在的层级，便于确认「提上去了」这件事真的成立。
+                string wipeInfo = "n/a";
+                try
+                {
+                    var ui = scrUIController.instance;
+                    if (ui != null && ui.transitionPanel != null)
+                    {
+                        Canvas wipeCanvas = ui.transitionPanel.GetComponentInParent<Canvas>();
+                        if (wipeCanvas != null)
+                        {
+                            wipeInfo = "order=" + wipeCanvas.sortingOrder
+                                + " mode=" + wipeCanvas.renderMode
+                                + " sameAsNotification=" + ReferenceEquals(wipeCanvas, canvas);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // 这段只进 Player.log，用 ASCII 标记而不是中文短语：
+                    // 不然会被闸门的「硬编码玩家可见文案」检查当成界面文字。
+                    wipeInfo = "unreadable(" + ex.GetType().Name + ")";
+                }
+
+                canvas.overrideSorting = true;
+                canvas.sortingOrder = NotificationSortingOrder;
+                if (canvas.GetComponent<UnityEngine.UI.GraphicRaycaster>() == null)
+                {
+                    canvas.gameObject.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+                }
+
+                _raised = true;
+                Debug.Log("[SpectreReplay] 提示条已提到游戏 UI 之上：order "
+                    + before + " → " + NotificationSortingOrder
+                    + "（原 mode=" + modeBefore + "）；黑幕 canvas " + wipeInfo);
+            }
+            catch (Exception ex)
+            {
+                // 提不上去不该影响提示本身：它只是可能被黑幕挡住，功能没坏。
+                Debug.Log("[SpectreReplay] 提示条提层级失败（不影响功能）："
+                    + ex.GetType().Name + ": " + ex.Message);
+                _raised = true;
             }
         }
 

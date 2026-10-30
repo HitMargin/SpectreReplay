@@ -149,6 +149,10 @@ namespace SpectreReplay.Pages
                 // 玩家只会觉得"勾了没效果"。
                 // 所以这里把游戏侧的状态直接说出来，没开就明确告诉他去哪儿开。
                 DrawAsyncInputRow();
+                // 镜像到系统：与上一条相邻，因为两者都是「回放时怎么把按键交出去」的
+                // 口味选项——一个决定游戏读什么，一个决定别的软件看不看得见。
+                OnGui.Row("replay.mirror", MirrorInputToOS,
+                    v => { MirrorInputToOS = v; Commit(); }, ReplayOn);
                 // （原「界面语言跟随游戏」开关已删除：面板语言由 Ui.Loc.RefreshLanguage
                 //   始终跟随游戏，那个开关实际只影响 14 语言大表里的通知文案，
                 //   默认 true 就是对的，留着只会让人以为界面语言能单独设。）

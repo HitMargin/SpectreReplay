@@ -1194,6 +1194,7 @@ $knownDeviations = @(
     @{ Pat = 'mixdown.Diagnose';               File = 'VideoRenderJob.cs';  Why = '2026-10-29 音频判死时把完整诊断写进 Player.log，用户贴日志即可定位' }
     @{ Pat = 'rendervideo.audio_failed';       File = 'VideoRenderJob.cs';  Why = '2026-10-29 三个音频失败点收口到 NotifyAudioFailed()，共用同一行本地化标签' }
     @{ Pat = 'now.ToString';                   File = 'VideoAudioTrack.cs'; Why = '2026-10-29 静默日志里格式化当前 dsp' }
+    @{ Pat = 'Settings.MirrorInputToOS';       File = 'ConfigManager.cs';  Why = '2026-10-30 回放按键镜像到系统改为玩家可选（原为常量写死关闭），落盘/读盘各一处' }
     @{ Pat = 'sb.Append';                      File = 'VideoAudioTrack.cs'; Why = '2026-10-29 诊断串拼接（DescribeSilence / Diagnose）' }
     @{ Pat = 'sb.ToString';                    File = 'VideoAudioTrack.cs'; Why = '2026-10-29 同上：产出诊断串' }
     @{ Pat = 'Seconds.ToString';               File = 'VideoAudioTrack.cs'; Why = '2026-10-29 诊断里打印已写入音频时长' }

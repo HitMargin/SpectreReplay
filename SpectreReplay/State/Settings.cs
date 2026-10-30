@@ -31,6 +31,25 @@ public static class Settings
     public static bool CancelSave = true;
     public static bool KeybdSoundRecordActive = true;
 
+    /// <summary>
+    /// 回放时把按键**额外**镜像到操作系统（SendInput）。
+    ///
+    /// <para><b>它不参与游戏判定。</b>回放期间游戏读的是 <c>RDInput</c>，已被
+    /// 托管覆盖（见 <c>Patch_InputInjection</c>），镜像成不成功都不改变任何判定。
+    /// 这个开关存在的唯一目的，是让那些**只读 Unity <c>Input.GetKey</c> 的
+    /// 第三方键位显示模组**也能看到回放的按键——它们既收不到托管状态，
+    /// 也收不到 SkyHook 广播。</para>
+    ///
+    /// <para><b>默认关</b>：它真的朝系统发按键事件，可能和录屏/按键精灵一类软件
+    /// 抢键盘；而且只在游戏窗口聚焦时有效（<c>Application.isFocused</c>），
+    /// 切出去就静默失效。需要的人自己开。</para>
+    ///
+    /// <para>历史上的 <c>ManagedInput.DisableSendInput</c> 常量就是它：
+    /// 当时用 <c>const true</c> 写死关闭，现在改为玩家可选。判别逻辑没变——
+    /// 只在「回放中 + 窗口聚焦」时镜像。</para>
+    /// </summary>
+    public static bool MirrorInputToOS = false;
+
     public static bool KeyConvertEnabled = false;
     /// <summary>
     /// **只模拟映射列表中的按键。**

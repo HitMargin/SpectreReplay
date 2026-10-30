@@ -22,6 +22,8 @@
   "record.cancelsave": "Autoriser l'annulation de la sauvegarde",
   "record.asyncinput": "Lire les touches depuis l'entrée asynchrone",
   "record.asyncinput.off": "L'entrée asynchrone est désactivée dans le jeu, donc cette option n'a aucun effet. Activez l'entrée asynchrone dans les paramètres du jeu → entrée.",
+  "replay.mirror": "Refléter les touches du replay vers le système (pour les mods d'affichage des touches)",
+  "replay.mirror.tip": "N'affecte que les mods d'affichage des touches tiers : ils lisent les frappes système et ne voient pas les touches internes du replay de ce mod. Sans effet sur l'enregistrement, la lecture et le jugement. Ne fonctionne que lorsque la fenêtre du jeu a le focus ; peut entrer en conflit avec d'autres logiciels gérant les touches.",
   "record.keybd": "Son du clavier",
   "record.keybd.record": "Enregistrer le son du clavier",
   "record.keybd.volume": "Volume du son du clavier",

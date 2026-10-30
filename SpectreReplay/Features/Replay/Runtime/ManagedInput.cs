@@ -43,17 +43,20 @@ internal static class ManagedInput
 
     internal static bool Active => is_playing;
 
-    internal const bool DisableSendInput = true;
-
     /// <summary>
     /// 是否额外把按键镜像到操作系统（SendInput）。
     ///
     /// 这**只影响其它模组的按键显示**，与游戏输入完全无关：游戏读数已经被
     /// 托管状态覆盖，镜像成功或失败都不改变任何判定。
     /// 所以这里可以放心用「窗口聚焦」这种软条件，失败也没有后果。
+    ///
+    /// 以前这里是 <c>const bool DisableSendInput = true</c> 写死关闭；现在交给
+    /// <see cref="Settings.MirrorInputToOS"/>，理由见该字段的注释：SkyHook 广播
+    /// 与 KeyViewer 桥接都覆盖不到「只读 Unity Input 的显示模组」，那一类只能靠
+    /// 真按键事件。默认仍是关。
     /// </summary>
     internal static bool Mirror
-        => !DisableSendInput && is_playing && Application.isFocused;
+        => Settings.MirrorInputToOS && is_playing && Application.isFocused;
 
     /// <summary>回放数据里此刻是否还有键按住。</summary>
     internal static bool AnyHeld => _heldCount > 0;
