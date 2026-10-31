@@ -119,11 +119,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify.ps1
 > 直接命中 0 次、脚本 `throw`——闸门没红，是变异自己跑不起来。改完生产代码
 > 记得回头核对被它钉住的那几条变异名，`-Which` 单跑一遍。
 
-> **MUT-PORT1 走的是另一条判据。** 它改的 `KeyboardSimulation.cs` 没链进离屏
-> 套件（见 `UiPreview.csproj` 的链接清单），跑 UiPreview 永远是"0 失败"——
-> 真正的判据是 `tools\port-diff-audit.ps1`。`mutate.ps1` 按 `$portAuditMutants`
-> 自动分派（也可用 `-PortAudit` 强制），且要求审计**点名本次改的那个文件**，
-> 不只看退出码——否则"本来就有别的未登记差异"会被误当成"这条变异被检出"。
+> **MUT-PORT1 已随 port-diff-audit 一并移除（2026-10-30）。** 那套「与上游逐文件
+> 比对 + 差异挂记录」的移植保真度门禁退役了：本模组与上游 Spectre 早已大幅分叉
+> （架构、数据模型、功能集都不同），比对只剩噪音。上游仓库保留作参照，闸门继续
+> 核对它未被本模组污染，但不再做内容比对。
 
 ## 只读审计（闸门第 3 节，`-SkipAudits` 可跳过）
 
@@ -135,7 +134,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify.ps1
 | `tools\result-injection-audit.ps1` | `__result` 的目标都有返回类型（void 上配 `__result` 拿不到值） |
 | `tools\deadcode-audit.ps1` | 零调用点的静态方法，按「设计使然 / Spectre 有调用方但按裁决不补 / 自己造成的」三分，**退出码只对第三类敏感** |
 | `tools\settings-ui-audit.ps1` | 每个设置项是否有界面入口（报告型，恒 exit 0） |
-| `tools\port-diff-audit.ps1` | 移植保真度：与上游 Spectre 逐文件比对，**每处差异必须在登记表里有记录**。这是**真门禁**，挂不上的差异直接 exit 1 |
 
 审计脚本在闸门里**只印一行摘要**，出问题才贴详情（`deadcode-audit` 是报告型脚本，
 一次吐上百行，全量贴会把真正的 ✗ 埋掉）。

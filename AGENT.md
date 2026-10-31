@@ -24,7 +24,7 @@
 | 游戏基线 | ADOFAI `3.4.0`（build r150），Unity `6000.3.25f1`，UMM `0.33` | `info.json` 的 `GameVersion` |
 | 构建工具 | .NET SDK 10（`SpectreReplay.slnx` 只有新版 SDK 能开） | 仓库用 slnx |
 | 游戏依赖 | `D:/Projects/adofai-libs`（放在**仓库的上一层**，`..\..\adofai-libs`） | csproj 的 `HintPath` 全是相对路径；可用 `ADOFAI_LIBS` 覆盖 |
-| 上游参照 | `D:/Projects/Spectre` | 闸门会核对它没被污染；移植比对要用 |
+| 上游参照 | `D:/Projects/Spectre` | 闸门会核对它没被污染。**只作参照，不做内容比对**（2026-10-30 起）：两库已大幅分叉 |
 | 引用 | **全部 `Private=false`** | 输出目录只允许 `SpectreReplay.dll(+pdb)`；多一个 dll 会污染游戏 |
 | 产物 | `SpectreReplay.dll` + `info.json` | UMM 用 `info.json` 的 `EntryMethod` 找入口 |
 
@@ -64,7 +64,7 @@ tools/                    验证与工具链（对产品的改动一律先过这
   deploy.ps1              构建并部署到 UMM 模组目录
   mutate.ps1              单条变异（§4.2）
   mutate-regression.ps1   全量变异回归
-  *-audit.ps1             只读审计（补丁形状/签名/实例注入/结果注入/死代码/移植比对）
+  *-audit.ps1             只读审计（补丁形状/签名/实例注入/结果注入/死代码）
   ffmpeg-probe.ps1        探 ffmpeg 参数与编码器（需游戏自带 ffmpeg）
   convert-probe.ps1       探 键音/音频 转换路径
   UiPreview/              离线验证套件（net10.0-windows，不链接 Features/）
@@ -81,7 +81,7 @@ D:/
     adofai-libs/        mscorlib.dll System*.dll UnityEngine.dll Assembly-CSharp*.dll
                        0Harmony.dll DOTween.dll Newtonsoft.Json.dll System.IO.Compression.dll …
                        还有 source/Assembly-CSharp/（反编译源码，查游戏行为用）
-    Spectre/            上游参照（移植比对 + 闸门核对干净）
+    Spectre/            上游参照（闸门核对干净；2026-10-30 起不再做内容比对）
     SpectreReplay/      本仓库
 ```
 
@@ -146,7 +146,7 @@ powershell -File tools/i18n/gen-locdata.ps1   # 从 source.json 重新生成 Loc
 1. **闸门真的跑了**，不是「上次跑过」。用了跳过开关就要能说清跳了什么、为什么。
 2. **断言数不是 0。** 0 条断言的红绿是「没有结论」。
 3. **`✓` 行数 ≠ 判据数。** 一条检查可以打很多 ✓；覆盖面看变异，不看 ✓ 数量。
-4. **工作区干净。** 有未提交改动时，跨上游的对比（`port-diff-audit`）只能说明「两边不一样」，**不能**归因到某个修复或回归。要下因果结论先提交或 stash。
+4. **工作区干净。** 有未提交改动时跑不出可归因的结论——要下「某个修复/回归」的因果结论，先提交或 stash。
 5. **改了产品代码，就得有一条会因此变红的断言**；只改文档另说。
 
 ### 5.1 五种「假绿」（都真实发生过）
@@ -405,9 +405,8 @@ tools/i18n/gen-locdata.ps1 生成 SpectreReplay/Ui/LocData.cs（.py 等价副本
 5. **退出码 2 会伪装成「断言是假的」**，先分清是哪一种失败。
 6. **模组目录判定看是否含 `*/Info.json`**，不是看目录存在。顺序：参数 → `SRM_MODS_ROOT` → `Mods` → `UMMMods` → 默认（`_gameroot.ps1:45-65`）。本机两个目录都有模组，猜错就是「部署成功但游戏没变」。
 7. **游戏在跑 → dll 被锁 → 部署失败**；先关游戏，或用 `-SkipDeploy`。
-8. **`port-diff` 只认点号标识符/`__x`**（E-F1 未修），移植比对别只靠它。
-9. **有 4 个审计会把注释里的例子算进去**（E-F2 未修），计数偏多不代表覆盖更好。
-10. **`PatchTargetCheck` 拿不到游戏程序集时静默返回 0**（未修）——CI 上这条等于没跑。
+8. **有 4 个审计会把注释里的例子算进去**（E-F2 未修），计数偏多不代表覆盖更好。
+9. **`PatchTargetCheck` 拿不到游戏程序集时静默返回 0**（未修）——CI 上这条等于没跑。
 11. **`gen-locdata.ps1` 自己没 BOM**，`.ps1` 与 `.py` 两个生成器差 11 字节（仅头行），改一个要同步另一个。
 12. **`LocData.cs` 与 `source.json` 没有一致性检查**：手改生成物闸门不会红。
 13. **全量变异回归不在 CI**（E-F5 未修），要自己定期跑。
@@ -433,7 +432,6 @@ tools/i18n/gen-locdata.ps1 生成 SpectreReplay/Ui/LocData.cs（.py 等价副本
 | D-F2 去特效内存残留 | 未修 | 去特效期间摘掉的事件仍被持有 |
 | A-F1 `string.GetHashCode` | 跨运行时不稳定 | 别拿它做持久化键 |
 | A-F2 `.psprp` 解压无上限 | 未修 | 损坏/恶意文件可能吃满内存 |
-| E-F1 `port-diff` 只认点号标识符 | 未修 | 移植比对有盲区 |
 | E-F2 审计把注释算进去 | 未修 | 计数偏多 |
 | E-F5 变异回归不在 CI | 未修 | 断言腐烂无人发现 |
 | C-F4..C-F8 音频/ffmpeg | 部分未验 | 见 `docs/audit/C-video.md` 与源码注释 |

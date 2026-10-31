@@ -32,11 +32,6 @@ if ($Filter) { $all = $all | Where-Object { $_ -like "*$Filter*" } }
 # 反向对照（P0）单独处理：它要求全绿
 $expectGreen = @('MUT-P0', 'MUT-AR', 'MUT-BZ')
 
-# 注意：MUT-PORT1 的目标文件没链进离屏套件，跑 UiPreview 永远是"0 失败"。
-# mutate.ps1 会按 $portAuditMutants 自动分派到 tools\port-diff-audit.ps1，
-# 这里**不需要**传 -PortAudit。也**不要**因为它"不跑 UiPreview"就把它挪出回归
-# ——那正是它原先漏检（恒报"断言是假的"、全量回归卡在 40/41）的原因。
-
 $pass = New-Object System.Collections.Generic.List[string]
 $fail = New-Object System.Collections.Generic.List[string]
 $err  = New-Object System.Collections.Generic.List[string]

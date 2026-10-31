@@ -61,12 +61,10 @@ function RunAudits {
         @{ Name = 'result-injection-audit.ps1';   Label = '__result 目标均有返回类型（3 处）' }
         @{ Name = 'deadcode-audit.ps1';           Label = '零调用点静态方法（报告型）' }
         @{ Name = 'settings-ui-audit.ps1';        Label = '设置项是否有界面入口（报告型）' }
-        # port-diff-audit **是真门禁，不是报告型**：它拿一份「有意偏离上游登记表」
-        # 逐条比对，挂不上的差异直接 exit 1。加了它，"抄错上游"从此会被抓到，
-        # 而"我们有意改的"必须先在登记表里加一行（含原因）——这正是 round 59/60
-        # 立的约定。它也曾一度是孤儿工具（写完只在当轮手工跑过），见 MUT 之外的教训：
-        # 任何新脚本不加进这个表就等于没写。
-        @{ Name = 'port-diff-audit.ps1';           Label = '移植保真度（每处差异须挂修改记录）' }
+        # （port-diff-audit 已于 2026-10-30 移除：本模组与上游 Spectre 早已大幅
+        # 分叉——架构、数据模型、功能集都不同了，「逐文件比对 + 差异挂记录」
+        # 只剩噪音，不再表达任何约束。上游仓库仍保留作参照，闸门继续核对它
+        # 未被本模组污染，但不再做内容比对。）
     )
     foreach ($a in $audits) {
         $p = Join-Path $root "tools\$($a.Name)"
