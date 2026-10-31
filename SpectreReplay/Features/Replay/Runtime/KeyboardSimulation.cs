@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 namespace SpectreReplay.Features.Replay;
 
@@ -186,6 +188,7 @@ internal static class KeyboardSimulation
     private static readonly object _sentGate = new();
     private static readonly SentKey[] _sentKeys = new SentKey[512];
     private static int _sentNext;
+    private static int _diagSends;
 
     // 钩子回调通常几毫秒内到达；放宽到 150ms 是给 LL 钩子超时
     // （LowLevelHooksTimeout）留余量。放宽的代价只是「真实按键与镜像键
@@ -195,6 +198,8 @@ internal static class KeyboardSimulation
     private static void RecordSentKeys(INPUT[] inputs, uint count)
     {
         if (count == 0) return;
+        bool diag = _diagSends < 3;
+        if (diag) _diagSends++;
         long now = Stopwatch.GetTimestamp();
         lock (_sentGate)
         {
@@ -208,6 +213,15 @@ internal static class KeyboardSimulation
                 };
                 _sentNext = (_sentNext + 1) % _sentKeys.Length;
             }
+        }
+        if (diag)
+        {
+            string keys = "";
+            for (int i = 0; i < count && i < inputs.Length; i++)
+                keys += inputs[i].u.ki.wVk
+                    + (((inputs[i].u.ki.dwFlags & KEYEVENTF_KEYUP) == 0) ? "(↓) " : "(↑) ");
+            Debug.Log("[SpectreReplay][诊断] SendInput 已发 " + count + " 个: " + keys
+                + "（回声认领窗口 150ms）");
         }
     }
 
@@ -231,5 +245,36 @@ internal static class KeyboardSimulation
             }
         }
         return false;
+    }
+
+    // ── 诊断（有界）：回声认领失败时的现场还原 ─────────────────
+    // 只在镜像回放期间由抑制前缀调用，前 12 次输出钩子事件与环形缓冲
+    // 的对照——「回声没拦住」时一次测试就能看清是没到达、还是没认上。
+
+    // 返回值刻意全 ASCII（HardTextCheck 对「方法返回的字符串」按可能上界面
+    // 处理）；中文措辞由调用方在 Debug.Log 字面量里拼。
+    internal static string DescribeRecent(ushort vk, bool pressed)
+    {
+        lock (_sentGate)
+        {
+            long now = Stopwatch.GetTimestamp();
+            int inWindow = 0;
+            string nearestSameVk = null;
+            double nearestAge = double.MaxValue;
+            for (int i = 0; i < _sentKeys.Length; i++)
+            {
+                ref SentKey s = ref _sentKeys[i];
+                if (s.Stamp == 0) continue;
+                double ms = (now - s.Stamp) * 1000.0 / Stopwatch.Frequency;
+                if (ms > 150) continue;
+                inWindow++;
+                if (s.Vk == vk && ms < nearestAge)
+                {
+                    nearestAge = ms;
+                    nearestSameVk = $"same-vk vk={s.Vk} pressed={s.Pressed} age={ms:F0}ms";
+                }
+            }
+            return nearestSameVk ?? $"window={inWindow} no-vk={vk}";
+        }
     }
 }

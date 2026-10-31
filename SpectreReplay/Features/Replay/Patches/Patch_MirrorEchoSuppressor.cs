@@ -43,15 +43,26 @@ internal static class Patch_MirrorEchoSuppressor
 {
     private static bool _logged;
 
+    // 诊断（有界）：镜像回放期间的前 12 个钩子事件全量落日志——
+    // 「回声没拦住」时对照发送记录即可分辨「没到达」还是「没认上」。
+    private static int _diagLogged;
+
     [SpectrePatch(typeof(SkyHook.SkyHookManager), "HookCallback", PatchType.Prefix,
         Feature = FeatureKeys.Replay)]
     internal static bool Prefix(SkyHook.SkyHookEvent ev)
     {
+        bool pressed = ev.Type == SkyHook.EventType.KeyPressed;
+        bool sent = KeyboardSimulation.IsRecentlySentByUs(ev.Key, pressed);
+        if (ManagedInput.Mirror && _diagLogged < 12)
+        {
+            _diagLogged++;
+            Debug.Log($"[SpectreReplay][诊断] 钩子事件 Key={ev.Key} Pressed={pressed} "
+                + $"认领={sent} | " + KeyboardSimulation.DescribeRecent(ev.Key, pressed));
+        }
         // EventType 只有 KeyPressed / KeyReleased 两值，与 SendInput 的
         // KEYEVENTF_KEYUP 一一同型；Key 与我们发出去的 wVk 同一码空间
         // （AsyncInputInjector.Inject 的注释：vk 就是 SkyHook 记录的 native key）。
-        if (!KeyboardSimulation.IsRecentlySentByUs(
-                ev.Key, ev.Type == SkyHook.EventType.KeyPressed))
+        if (!sent)
         {
             return true;
         }
