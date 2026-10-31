@@ -644,47 +644,20 @@ internal static class SpectrePatchHub
         try
         {
             spec.Owner = spec.Owner ?? new Harmony(spec.Id);
-            HarmonyMethod patch = new(spec.PatchMethod);
-            // 本库 HarmonyMethod 的优先级字段拼写正常（老版本是 prioriy 拼错版）
-            if (spec.Attr.Priority != PatchPriority.None)
-                patch.priority = ResolvePriority(spec.Attr.Priority);
-            patch.before = spec.Attr.Before;
-            patch.after = spec.Attr.After;
-            // finalizer 只对 Prefix/Postfix 有意义（Transpiler 异常发生在补丁期，Finalizer 自身即兜底）
-            HarmonyMethod guard = spec.Attr.TryingCatch && spec.Attr.PatchType != PatchType.Transpiler
-                && spec.Attr.PatchType != PatchType.Finalizer
-                ? _guardMethod : null;
             int done = 0;
             List<string> failures = null;
             foreach (MethodBase target in spec.Targets)
             {
-                try
+                if (PatchOneTarget(spec, target))
                 {
-                    switch (spec.Attr.PatchType)
-                    {
-                        case PatchType.Prefix:
-                            spec.Owner.Patch(target, patch, null, null, guard);
-                            break;
-                        case PatchType.Postfix:
-                            spec.Owner.Patch(target, null, patch, null, guard);
-                            break;
-                        case PatchType.Transpiler:
-                            spec.Owner.Patch(target, null, null, patch, null);
-                            break;
-                        case PatchType.Finalizer:
-                            spec.Owner.Patch(target, null, null, null, patch);
-                            break;
-                    }
                     // 多目标（AllOverloads）时逐目标置位：后面的目标应用失败，
                     // 已挂上的也要能被卸载路径清到
                     spec.Applied = true;
                     done++;
-                    if (guard != null)
-                        _guardedMethods.Add(spec.PatchMethod);
                 }
-                catch (Exception ex)
+                else
                 {
-                    (failures ??= new List<string>()).Add(TargetLabel(target) + ": " + ex.Message);
+                    (failures ??= new List<string>()).Add(TargetLabel(target) + "（原因见上方「目标挂载失败」行）");
                 }
             }
             if (failures != null)
@@ -701,6 +674,135 @@ internal static class SpectrePatchHub
             AsyncLog.Warning("[" + LogTag + "] " + spec.Id + " → " + spec.Error);
             RecordApplyFailure(spec.Id, spec.Error);
         }
+    }
+
+    // 单目标挂载：Apply 与 EnsureApplied 共用一条路径，保证重新挂上的补丁
+    // 与首发挂载的优先级/守卫配置完全一致。返回 false 时已记日志。
+    private static bool PatchOneTarget(Spec spec, MethodBase target)
+    {
+        try
+        {
+            HarmonyMethod patch = new(spec.PatchMethod);
+            // 本库 HarmonyMethod 的优先级字段拼写正常（老版本是 prioriy 拼错版）
+            if (spec.Attr.Priority != PatchPriority.None)
+                patch.priority = ResolvePriority(spec.Attr.Priority);
+            patch.before = spec.Attr.Before;
+            patch.after = spec.Attr.After;
+            // finalizer 只对 Prefix/Postfix 有意义（Transpiler 异常发生在补丁期，Finalizer 自身即兜底）
+            HarmonyMethod guard = spec.Attr.TryingCatch && spec.Attr.PatchType != PatchType.Transpiler
+                && spec.Attr.PatchType != PatchType.Finalizer
+                ? _guardMethod : null;
+            switch (spec.Attr.PatchType)
+            {
+                case PatchType.Prefix:
+                    spec.Owner.Patch(target, patch, null, null, guard);
+                    break;
+                case PatchType.Postfix:
+                    spec.Owner.Patch(target, null, patch, null, guard);
+                    break;
+                case PatchType.Transpiler:
+                    spec.Owner.Patch(target, null, null, patch, null);
+                    break;
+                case PatchType.Finalizer:
+                    spec.Owner.Patch(target, null, null, null, patch);
+                    break;
+                default:
+                    return false;
+            }
+            if (guard != null)
+                _guardedMethods.Add(spec.PatchMethod);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AsyncLog.Warning("[" + LogTag + "] " + spec.Id + " → 目标挂载失败 " + TargetLabel(target) + ": "
+                + ex.GetType().Name + " " + ex.Message);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 运行时核对某补丁类的每条已应用声明：补丁方法是否仍在目标的**现行**
+    /// 补丁集里；不在就当场补挂，返回补挂条数（0 = 账面齐全）。顺带把每个
+    /// 目标的现行补丁名单打进日志——录制类问题（HitSnapshots=0 这类）的
+    /// 下一轮排查就靠它定性。
+    ///
+    /// <para>为什么需要它：JALib（Jipper 全家桶的公共库，启动时自动联网更新）
+    /// 的 JAPatcher 在给自家 mod 挂补丁时会按捕获的快照**重写目标方法的整套
+    /// 补丁集**（PatchUpdateWrapper / UpdatePatchInfo 三件套）。JipperResourcePack
+    /// 的 Bpm.OnHit 就压在 scrPlayer.Hit 上（两个 JAPatch）；快照取早于我们的
+    /// 挂载时，我们的前缀从方法上直接消失。2026-10-31 实测：探针显示挂载
+    /// 成功、整局一次没执行，HitSnapshots 录成 0 条（回放报「数据为空」），
+    /// 诊断四行一行都没有——前缀不在了。</para>
+    ///
+    /// <para>补挂走 Harmony 正常 <c>Patch</c>：0Harmony 的 Add 只按 owner 追加、
+    /// **不按方法去重**（Remove 只认 owner），所以「账面缺失」时补挂不会产生
+    /// 重复条目；「账面在而 detour 陈旧」的场景不能盲目重挂（会翻倍），留给
+    /// 日志名单定性后再处理。</para>
+    /// </summary>
+    public static int EnsureApplied(Type patchClass)
+    {
+        int remounted = 0;
+        lock (_lock)
+        {
+            foreach (Spec s in _specs)
+            {
+                if (s.PatchMethod == null || s.PatchMethod.DeclaringType != patchClass)
+                    continue;
+                if (!s.Applied || s.Targets == null)
+                    continue;
+                foreach (MethodBase target in s.Targets)
+                {
+                    Patches info;
+                    try { info = Harmony.GetPatchInfo(target); }
+                    catch { continue; }
+                    bool present = InfoContains(info, s.Attr.PatchType, s.PatchMethod);
+                    AsyncLog.Warning("[" + LogTag + "] " + s.Id + " → 现行补丁集 " + TargetLabel(target)
+                        + ": " + PatchList(info) + (present ? "（本补丁在列）" : "（**本补丁缺失**）"));
+                    if (present)
+                        continue;
+                    if (PatchOneTarget(s, target))
+                    {
+                        remounted++;
+                        AsyncLog.Warning("[" + LogTag + "] " + s.Id + " → 本补丁被外部摘除（JALib 重写补丁集？），已重新挂载");
+                    }
+                }
+            }
+        }
+        return remounted;
+    }
+
+    // 现行补丁集的紧凑名单：每类一行内联，给「录制前核对」日志用。
+    private static string PatchList(Patches info)
+    {
+        if (info == null) return "（无任何补丁）";
+        static string One(string kind, IReadOnlyList<Patch> arr)
+        {
+            if (arr == null || arr.Count == 0) return "";
+            return kind + "[" + string.Join(", ", arr.Select(p =>
+                (p.PatchMethod != null ? p.PatchMethod.DeclaringType.Name : "?") + "." + (p.PatchMethod?.Name ?? "?"))) + "] ";
+        }
+        string s = One("前缀", info.Prefixes) + One("后缀", info.Postfixes)
+            + One("转译", info.Transpilers) + One("收尾", info.Finalizers);
+        return s.Length == 0 ? "（无任何补丁）" : s.TrimEnd();
+    }
+
+    private static bool InfoContains(Patches info, PatchType type, MethodInfo method)
+    {
+        // 这版 0Harmony 的 Harmony.GetPatchInfo 返回 Patches（只读集合、Pascal 命名）
+        if (info == null) return false;
+        IReadOnlyList<Patch> arr = type switch
+        {
+            PatchType.Prefix => info.Prefixes,
+            PatchType.Postfix => info.Postfixes,
+            PatchType.Transpiler => info.Transpilers,
+            PatchType.Finalizer => info.Finalizers,
+            _ => null,
+        };
+        if (arr == null) return false;
+        foreach (Patch p in arr)
+            if (p.PatchMethod == method) return true;
+        return false;
     }
 
     // ── 挂载失败汇总（游戏内可见） ──────────────────────────

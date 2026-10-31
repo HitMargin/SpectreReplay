@@ -473,6 +473,16 @@ internal class Patch_StartRewind
             data.LoadedMods = string.Join("\n", Main.GetLoadedMods().Select(m => Main.mod2string(m)));
             data.DeviceId = SystemInfo.deviceUniqueIdentifier;
             data.ModVersion = Main.mod.Info.Version;
+            // **录制前核对 Hit 前缀还挂在方法上。** JALib（Jipper 全家桶公共库，
+            // 自动联网更新）的 JAPatcher 给自家 mod（JipperOverlayer 正好补丁
+            // scrPlayer.Hit）挂补丁时按捕获快照重写目标方法的整套补丁集，捕获
+            // 早于我们的挂载时我们的前缀直接消失——2026-10-31 实测：探针显示
+            // 挂载成功、整局一次没执行，HitSnapshots 录成 0 条（回放报「数据
+            // 为空」），诊断四行一行都没有。缺了当场重新挂上，返回 0 = 安静。
+            int remounted = SpectrePatchHub.EnsureApplied(typeof(Patch_Hit));
+            if (remounted > 0)
+                Debug.Log("[SpectreReplay] 录制前核对：scrPlayer.Hit 前缀被外部重写摘除，已重新挂载 "
+                    + remounted + " 条——本次录制可以继续");
             PlayActions.StartRecording();
             TriggerMessage(LocalizationManager.GetLocalizedText("note.start_recording"));
         }

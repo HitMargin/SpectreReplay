@@ -894,6 +894,24 @@ namespace UiPreview
                 "㊷ 录制诊断复位必须接在 ReplayRecorder.Start（每局录制起点）",
                 "Features\\Replay\\Runtime\\ReplayRecorder.cs",
                 s => s.Contains("Patch_Hit.ResetDiagnostics();", StringComparison.Ordinal));
+            // ㊸ 录制启动前必须运行时核对 Hit 前缀仍在目标上。2026-10-31 实测：
+            //    JALib（JRP 的公共库，自动联网更新）的 JAPatcher 按捕获快照重写
+            //    scrPlayer.Hit 的整套补丁集（JRP 的 Bpm.OnHit 两个 JAPatch 正压
+            //    在这方法上），快照取早于我们的挂载时我们的前缀直接消失——探针
+            //    显示挂载成功、整局一次没执行，HitSnapshots 录成 0 条，回放报
+            //    「数据为空」。补挂只能发生在账面缺失时：0Harmony 的 Add 只按
+            //    owner 追加不按方法去重，账面还在时重挂会翻倍。
+            fail += Check(projectRoot,
+                "㊸a 录制启动前必须 EnsureApplied(Patch_Hit)——核对并补挂被外部重写摘掉的前缀",
+                "Features\\Replay\\Patches\\Patch_Lifecycle.cs",
+                s => s.Contains("SpectrePatchHub.EnsureApplied(typeof(Patch_Hit))", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㊸b EnsureApplied 必须查现行补丁集、只补挂缺失项并落日志名单",
+                "Patch\\Shared\\SpectrePatchHub.cs",
+                s => s.Contains("public static int EnsureApplied(Type patchClass)", StringComparison.Ordinal)
+                    && s.Contains("InfoContains(info, s.Attr.PatchType, s.PatchMethod)", StringComparison.Ordinal)
+                    && s.Contains("PatchOneTarget(s, target)", StringComparison.Ordinal)
+                    && s.Contains("现行补丁集", StringComparison.Ordinal));
 
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");
