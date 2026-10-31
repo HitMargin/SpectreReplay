@@ -657,9 +657,11 @@ switch ($Which) {
     }
     'MUT-U60' {
         # ㊸a：录制前核对被拆——JALib 摘掉 Hit 前缀时无人补挂，
-        #     HitSnapshots=0 的坏回放整批复发。
+        #     HitSnapshots=0 的坏回放整批复发。调用跨三行，逐行拆除。
         Backup 'Features\Replay\Patches\Patch_Lifecycle.cs'
-        ReplaceExact 'Features\Replay\Patches\Patch_Lifecycle.cs' ('int remounted = SpectrePatchHub.EnsureApplied(typeof(Patch_Hit));') ('int remounted = 0;')
+        ReplaceExact 'Features\Replay\Patches\Patch_Lifecycle.cs' ('            SpectrePatchHub.EnsureApplied("before-record",') ('')
+        ReplaceExact 'Features\Replay\Patches\Patch_Lifecycle.cs' ('                typeof(Patch_Hit), typeof(Patch_UpdateInputConsumeAsync),') ('')
+        ReplaceExact 'Features\Replay\Patches\Patch_Lifecycle.cs' ('                typeof(Patch_PlayerControlUpdate), typeof(Patch_Won_Update));') ('')
     }
     'MUT-U61' {
         # ㊸b：核对变成永远「在列」——账面缺失也视而不见，补挂路径成死码。
@@ -698,6 +700,18 @@ switch ($Which) {
         # ㊻a：退役文案键回潮——14 语言死文案又回来一条。
         Backup 'State\LocalizationManager.cs'
         ReplaceExact 'State\LocalizationManager.cs' ('            ["note.play_error5"] = "数据异常,无法播放。飙速倍数应为:",') ('            ["note.play_error6"] = "数据异常,无法播放。编辑器内飙速模式与外部飙速模式算法不同,请从录制时的位置打开!",')
+    }
+    'MUT-U68' {
+        # ㊸b：回放前心跳被拆——JAPatcher 摘掉判定输入链的补丁时无人补挂，
+        #     回放表现为「不对劲」而不是报错。
+        Backup 'Features\Replay\Patches\Patch_Lifecycle.cs'
+        ReplaceExact 'Features\Replay\Patches\Patch_Lifecycle.cs' ('                typeof(Patch_MirrorEchoSuppressor), typeof(Patch_Hit),') ('                typeof(Patch_Hit),')
+    }
+    'MUT-U69' {
+        # ㊸d：JALib 探测变成永静——两态日志都没了，「没探测」与「不在场」
+        #     在日志里无法区分。
+        Backup 'Patch\Shared\SpectrePatchHub.cs'
+        ReplaceExact 'Patch\Shared\SpectrePatchHub.cs' ('        ReportJalibPresence();') ('')
     }
     'MUT-U25' {
         # ⑫i：把已删除的「界面语言跟随游戏」开关加回来（防回归变异）。
@@ -2075,7 +2089,7 @@ switch ($Which) {
         ReplaceExact 'Pages\Pages.cs' 'DrawDeleteFileButton(captured);' ''
     }
     default {
-        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U67）"
+        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U69）"
     }
 }
 

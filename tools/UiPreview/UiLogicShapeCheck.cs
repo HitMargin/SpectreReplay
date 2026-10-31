@@ -894,24 +894,47 @@ namespace UiPreview
                 "㊷ 录制诊断复位必须接在 ReplayRecorder.Start（每局录制起点）",
                 "Features\\Replay\\Runtime\\ReplayRecorder.cs",
                 s => s.Contains("Patch_Hit.ResetDiagnostics();", StringComparison.Ordinal));
-            // ㊸ 录制启动前必须运行时核对 Hit 前缀仍在目标上。2026-10-31 实测：
-            //    JALib（JRP 的公共库，自动联网更新）的 JAPatcher 按捕获快照重写
-            //    scrPlayer.Hit 的整套补丁集（JRP 的 Bpm.OnHit 两个 JAPatch 正压
-            //    在这方法上），快照取早于我们的挂载时我们的前缀直接消失——探针
-            //    显示挂载成功、整局一次没执行，HitSnapshots 录成 0 条，回放报
-            //    「数据为空」。补挂只能发生在账面缺失时：0Harmony 的 Add 只按
-            //    owner 追加不按方法去重，账面还在时重挂会翻倍。
+            // ㊸ 录制/回放启动前必须运行时核对关键补丁仍在目标上。2026-10-31 实测：
+            //    JALib（Jipper 全家桶公共库，自动联网更新）的 JAPatcher 按捕获
+            //    快照重写目标方法的整套补丁集（JRP 的 Bpm.OnHit 两个 JAPatch 正压
+            //    在 scrPlayer.Hit 上），快照取早于我们的挂载时我们的前缀直接消失
+            //    ——探针显示挂载成功、整局一次没执行，HitSnapshots 录成 0 条，
+            //    回放报「数据为空」。补挂只能发生在账面缺失时：0Harmony 的 Add
+            //    只按 owner 追加不按方法去重，账面还在时重挂会翻倍。
             fail += Check(projectRoot,
-                "㊸a 录制启动前必须 EnsureApplied(Patch_Hit)——核对并补挂被外部重写摘掉的前缀",
+                "㊸a 录制启动前必须核对四类录制数据来源补丁（心跳）",
                 "Features\\Replay\\Patches\\Patch_Lifecycle.cs",
-                s => s.Contains("SpectrePatchHub.EnsureApplied(typeof(Patch_Hit))", StringComparison.Ordinal));
+                s => s.Contains("EnsureApplied(\"before-record\"", StringComparison.Ordinal)
+                    && s.Contains("typeof(Patch_Hit), typeof(Patch_UpdateInputConsumeAsync)", StringComparison.Ordinal)
+                    && s.Contains("typeof(Patch_PlayerControlUpdate), typeof(Patch_Won_Update)", StringComparison.Ordinal));
             fail += Check(projectRoot,
-                "㊸b EnsureApplied 必须查现行补丁集、只补挂缺失项并落日志名单",
+                "㊸b 回放启动前必须核对五类判定输入链补丁（心跳）",
+                "Features\\Replay\\Patches\\Patch_Lifecycle.cs",
+                s => s.Contains("EnsureApplied(\"before-play\"", StringComparison.Ordinal)
+                    && s.Contains("typeof(Patch_RDInput), typeof(Patch_PlayerControlUpdate)", StringComparison.Ordinal)
+                    && s.Contains("typeof(Patch_MirrorEchoSuppressor), typeof(Patch_Hit)", StringComparison.Ordinal)
+                    && s.Contains("typeof(Patch_HoldStateInjection))", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㊸c EnsureApplied 必须查现行补丁集、只补挂缺失项并落摘要行",
                 "Patch\\Shared\\SpectrePatchHub.cs",
-                s => s.Contains("public static int EnsureApplied(Type patchClass)", StringComparison.Ordinal)
+                s => s.Contains("public static int EnsureApplied(string context, params Type[] patchClasses)", StringComparison.Ordinal)
                     && s.Contains("InfoContains(info, s.Attr.PatchType, s.PatchMethod)", StringComparison.Ordinal)
                     && s.Contains("PatchOneTarget(s, target)", StringComparison.Ordinal)
-                    && s.Contains("现行补丁集", StringComparison.Ordinal));
+                    && s.Contains("补丁核对（\" + label + \"）", StringComparison.Ordinal));
+            // ㊸d JALib 在场探测：在场与否都必须落日志（缺任何一条，日志里
+            //    「没有在场行」都无法区分「没探测」与「不在场」），且必须挂在
+            //    EnsureApplied 内（首次核对时点 = 所有 mod 已加载，Load() 时
+            //    JALib 可能还没装）。
+            fail += Check(projectRoot,
+                "㊸d JALib 在场探测必须两态落日志且挂在首次核对时点",
+                "Patch\\Shared\\SpectrePatchHub.cs",
+                // 钉**调用点**（带分号）而不是方法名：方法定义里同样有
+                // `ReportJalibPresence()`，只钉名字的话删掉调用照样全绿
+                // （MUT-U69 首轮实测——存在性判据被定义骗过）。
+                s => s.Contains("ReportJalibPresence();", StringComparison.Ordinal)
+                    && s.Contains("JALib（Jipper 全家桶公共库）在场", StringComparison.Ordinal)
+                    && s.Contains("未检测到 JALib（Jipper 公共库）", StringComparison.Ordinal)
+                    && s.Contains("AppDomain.CurrentDomain.GetAssemblies()", StringComparison.Ordinal));
             // ㊹ 「录制开始」与「游戏版本」必须在 TryStartRecording 当场戳上。
             //    StartTime/SpVersion 整条链（模型/编码器/解码器/信息页）原本都在场，
             //    唯独录制侧从来没人赋值 ⇒ 每份回放恒为 (无)/空（2026-11-01 用户

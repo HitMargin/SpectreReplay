@@ -722,10 +722,10 @@ internal static class SpectrePatchHub
     }
 
     /// <summary>
-    /// 运行时核对某补丁类的每条已应用声明：补丁方法是否仍在目标的**现行**
-    /// 补丁集里；不在就当场补挂，返回补挂条数（0 = 账面齐全）。顺带把每个
-    /// 目标的现行补丁名单打进日志——录制类问题（HitSnapshots=0 这类）的
-    /// 下一轮排查就靠它定性。
+    /// 运行时核对一组补丁类的每条已应用声明：补丁方法是否仍在目标的**现行**
+    /// 补丁集里；不在就当场补挂，返回补挂条数（0 = 账面齐全）。每次核对打
+    /// 一行摘要（全绿也打）——「核对真的跑了」本身就是判据；缺失时另落目标
+    /// 的现行补丁名单，是「谁还压在这个方法上」的现场证据。
     ///
     /// <para>为什么需要它：JALib（Jipper 全家桶的公共库，启动时自动联网更新）
     /// 的 JAPatcher 在给自家 mod 挂补丁时会按捕获的快照**重写目标方法的整套
@@ -740,36 +740,96 @@ internal static class SpectrePatchHub
     /// 重复条目；「账面在而 detour 陈旧」的场景不能盲目重挂（会翻倍），留给
     /// 日志名单定性后再处理。</para>
     /// </summary>
-    public static int EnsureApplied(Type patchClass)
+    public static int EnsureApplied(string context, params Type[] patchClasses)
     {
         int remounted = 0;
+        int specsChecked = 0;
         lock (_lock)
         {
-            foreach (Spec s in _specs)
+            foreach (Type cls in patchClasses)
             {
-                if (s.PatchMethod == null || s.PatchMethod.DeclaringType != patchClass)
-                    continue;
-                if (!s.Applied || s.Targets == null)
-                    continue;
-                foreach (MethodBase target in s.Targets)
+                foreach (Spec s in _specs)
                 {
-                    Patches info;
-                    try { info = Harmony.GetPatchInfo(target); }
-                    catch { continue; }
-                    bool present = InfoContains(info, s.Attr.PatchType, s.PatchMethod);
-                    AsyncLog.Warning("[" + LogTag + "] " + s.Id + " → 现行补丁集 " + TargetLabel(target)
-                        + ": " + PatchList(info) + (present ? "（本补丁在列）" : "（**本补丁缺失**）"));
-                    if (present)
+                    if (s.PatchMethod == null || s.PatchMethod.DeclaringType != cls)
                         continue;
-                    if (PatchOneTarget(s, target))
+                    if (!s.Applied || s.Targets == null)
+                        continue;
+                    foreach (MethodBase target in s.Targets)
                     {
-                        remounted++;
-                        AsyncLog.Warning("[" + LogTag + "] " + s.Id + " → 本补丁被外部摘除（JALib 重写补丁集？），已重新挂载");
+                        specsChecked++;
+                        Patches info;
+                        try { info = Harmony.GetPatchInfo(target); }
+                        catch { continue; }
+                        bool present = InfoContains(info, s.Attr.PatchType, s.PatchMethod);
+                        if (present)
+                            continue;
+                        // 缺失才落名单：这份名单是「谁还压在这个方法上」的现场证据
+                        AsyncLog.Warning("[" + LogTag + "] " + s.Id + " → 现行补丁集 " + TargetLabel(target)
+                            + ": " + PatchList(info) + "（**本补丁缺失**）");
+                        if (PatchOneTarget(s, target))
+                        {
+                            remounted++;
+                            AsyncLog.Warning("[" + LogTag + "] " + s.Id + " → 本补丁被外部摘除（JALib 重写补丁集？），已重新挂载");
+                        }
                     }
                 }
             }
         }
+        ReportJalibPresence();
+        // 一行核对结论，全绿也打——这是「核对真的跑了」的长期判据
+        // （2026-10-31 HitSnapshots=0 的教训：无声 = 没跑，排查方向整个带偏）。
+        // context 用 ASCII token 传（调用点在 Patch_Lifecycle，硬编码中文会被
+        // 界面文案扫描误伤），日志里翻成中文。
+        string label = context switch
+        {
+            "before-record" => "录制前",
+            "before-play" => "回放前",
+            _ => context,
+        };
+        AsyncLog.Warning("[" + LogTag + "] 补丁核对（" + label + "）：" + patchClasses.Length
+            + " 类 / " + specsChecked + " 条已应用声明 —— "
+            + (remounted > 0 ? "补挂 " + remounted + " 条" : "全部在位"));
         return remounted;
+    }
+
+    // ── JALib 在场探测（每次会话首次核对时一次）─────────────────
+    // JALib（Jipper 全家桶公共库，自动联网更新）的 JAPatcher 会给自家 mod 挂
+    // 补丁时按捕获快照**重写目标方法的整套补丁集**——2026-10-31 实测它摘掉
+    // 过 scrPlayer.Hit 的录制前缀（HitSnapshots 录成 0）。在场与否都要落日志：
+    // 「在场」= 本会话的补丁核对确有对手；「不在场」= 探测跑过且没对手。
+    // 缺任何一条，日志里「没有在场行」都无法区分「没探测」与「不在场」。
+    //
+    // 为什么不在 Load() 探测：UMM 的 mod 加载顺序不保证，JALib 可能晚于我们
+    // 装载；首次录制/回放启动时所有 mod 必然已加载，那时才是可靠时点。
+    private static bool _jalibProbed;
+    private static void ReportJalibPresence()
+    {
+        if (_jalibProbed) return;
+        _jalibProbed = true;
+        bool present = false;
+        try
+        {
+            foreach (var a in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                string n = a.GetName().Name;
+                if (n.StartsWith("JALib", StringComparison.Ordinal)
+                    || n.StartsWith("JAMod", StringComparison.Ordinal))
+                {
+                    present = true;
+                    break;
+                }
+            }
+        }
+        catch
+        {
+            // 探测失败不阻断核对本身
+        }
+        AsyncLog.Warning("[" + LogTag + "] "
+            + (present
+                ? "JALib（Jipper 全家桶公共库）在场——其 JAPatcher 会按捕获快照重写目标方法的整套补丁集"
+                  + "（2026-10-31 曾摘掉 scrPlayer.Hit 前缀致 HitSnapshots=0）；"
+                  + "补丁核对已启用，缺失当场补挂"
+                : "未检测到 JALib（Jipper 公共库）——补丁集被外部重写的风险低；补丁核对仍每次执行"));
     }
 
     // 现行补丁集的紧凑名单：每类一行内联，给「录制前核对」日志用。

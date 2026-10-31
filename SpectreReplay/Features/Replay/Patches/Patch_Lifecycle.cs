@@ -320,6 +320,20 @@ internal class Patch_StartRewind
                 + " EndTile=" + data.EndTile + " listFloors=" + fullRunTotal
                 + " => IsFullRun=" + IsFullRun + " scene=" + SceneManager.GetActiveScene().name);
 
+            // **回放前核对（与录制前同一套自愈，见 EnsureApplied 文档）。**
+            // 五类是回放判定的输入链与消费端：
+            //   RDInput = PumpInput 泵 + GetMain/GetState/GetStateKeys 覆盖
+            //   （没它回放按键进不了判定）；
+            //   PlayerControlUpdate = 快照消费（ReplayHit）+ 键盘音同步；
+            //   MirrorEchoSuppressor = 回放期物理键盘隔离（没它实键污染判定）；
+            //   Hit = HitLocked 闸门（回放期挡游戏自身的 Hit，ReplayHit 短暂
+            //   放行）；HoldStateInjection = 长按松键注入。
+            // JALib 摘掉任何一条的表现都是「回放不对劲」而不是报错，必须自愈。
+            SpectrePatchHub.EnsureApplied("before-play",
+                typeof(Patch_RDInput), typeof(Patch_PlayerControlUpdate),
+                typeof(Patch_MirrorEchoSuppressor), typeof(Patch_Hit),
+                typeof(Patch_HoldStateInjection));
+
             // **必须先 StartPlaying 再 FastForward。**
             // ReplayPlayer.Start() 会把 PlayIndex / KeyEventIndex 清零；反过来调的话，
             // FastForward 算好的游标会被紧接着清零，等于每次跳转都从文件开头重灌
@@ -483,16 +497,18 @@ internal class Patch_StartRewind
             data.LoadedMods = string.Join("\n", Main.GetLoadedMods().Select(m => Main.mod2string(m)));
             data.DeviceId = SystemInfo.deviceUniqueIdentifier;
             data.ModVersion = Main.mod.Info.Version;
-            // **录制前核对 Hit 前缀还挂在方法上。** JALib（Jipper 全家桶公共库，
-            // 自动联网更新）的 JAPatcher 给自家 mod（JipperOverlayer 正好补丁
-            // scrPlayer.Hit）挂补丁时按捕获快照重写目标方法的整套补丁集，捕获
-            // 早于我们的挂载时我们的前缀直接消失——2026-10-31 实测：探针显示
-            // 挂载成功、整局一次没执行，HitSnapshots 录成 0 条（回放报「数据
-            // 为空」），诊断四行一行都没有。缺了当场重新挂上，返回 0 = 安静。
-            int remounted = SpectrePatchHub.EnsureApplied(typeof(Patch_Hit));
-            if (remounted > 0)
-                Debug.Log("[SpectreReplay] 录制前核对：scrPlayer.Hit 前缀被外部重写摘除，已重新挂载 "
-                    + remounted + " 条——本次录制可以继续");
+            // **录制前核对关键前缀还挂在方法上。** JALib（Jipper 全家桶公共库，
+            // 自动联网更新）的 JAPatcher 给自家 mod（JipperResourcePack 的
+            // Bpm.OnHit 正好压在 scrPlayer.Hit 上）挂补丁时按捕获快照重写目标
+            // 方法的整套补丁集，捕获早于我们的挂载时我们的前缀直接消失——
+            // 2026-10-31 实测：探针显示挂载成功、整局一次没执行，HitSnapshots
+            // 录成 0 条（回放报「数据为空」）。四类都是录制数据的来源：
+            // Hit = 命中快照；UpdateInputConsumeAsync = 异步按键落账；
+            // PlayerControlUpdate = 轮询按键落账 + 键盘音基准；Won_Update =
+            // 结算画面强制同步。缺了当场重新挂上，摘要行每次必打。
+            SpectrePatchHub.EnsureApplied("before-record",
+                typeof(Patch_Hit), typeof(Patch_UpdateInputConsumeAsync),
+                typeof(Patch_PlayerControlUpdate), typeof(Patch_Won_Update));
             PlayActions.StartRecording();
             TriggerMessage(LocalizationManager.GetLocalizedText("note.start_recording"));
         }
