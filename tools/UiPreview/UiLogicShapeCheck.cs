@@ -831,12 +831,17 @@ namespace UiPreview
             //    + UnscaledDeltaPin 虚拟时钟增量」——与画面同一权威时钟。
             //    两段接线缺一就是「雨速不对」：
             //    ① 帧源必须调 InstallClockOverride（**无条件**，纯净相机/游戏画面
-            //       都要）；② 前缀必须真走 RegisterManualPrefix + 虚拟时钟读数。
+            //       都要），且必须在 surface 分支**之前**——放 CleanCamera 分支里
+            //       等于「游戏画面」来源永远走不到（2026-10-31 实测修过的错位）；
+            //       InstallCameraCapture 则只在纯净相机分支里；
+            //    ② 前缀必须真走 RegisterManualPrefix + 虚拟时钟读数。
             fail += Check(projectRoot,
-                "㊴a 帧源必须无条件调 RenderOverlayCapture.InstallClockOverride（两种来源的雨速都依赖它）",
+                "㊴a 帧源必须无条件调 RenderOverlayCapture.InstallClockOverride，且在 surface 分支之前（两种来源的雨速都依赖它）",
                 "Features\\VideoRender\\Pipeline\\VideoFrameSource.cs",
                 s => s.Contains("RenderOverlayCapture.InstallClockOverride()", StringComparison.Ordinal)
-                    && s.Contains("RenderOverlayCapture.InstallCameraCapture(", StringComparison.Ordinal));
+                    && s.Contains("RenderOverlayCapture.InstallCameraCapture(", StringComparison.Ordinal)
+                    && s.IndexOf("RenderOverlayCapture.InstallClockOverride()", StringComparison.Ordinal)
+                        < s.IndexOf("if (surface == VideoSurface.CleanCamera)", StringComparison.Ordinal));
             fail += Check(projectRoot,
                 "㊴b 雨滴时钟必须换轨到虚拟时钟（墙钟雨滴在慢放成片里是快放废片）",
                 "Features\\VideoRender\\Pipeline\\RenderOverlayCapture.cs",

@@ -102,6 +102,11 @@ internal sealed class VideoFrameSource
     internal VideoFrameSource(VideoSurface surface, int width, int height)
     {
         this.surface = surface;
+        // 雨滴时钟换轨：JRP 的 CurrentTicks 吃墙钟，渲染慢放时两种来源的
+        // 成片里雨速都不对——必须在 surface 分支**之前**装配，「游戏画面」
+        // 来源同样要吃虚拟时钟（放分支里 = 该来源永远走不到，正是修过的
+        // 错位形态，㊴a 的位置判据钉着它）。
+        RenderOverlayCapture.InstallClockOverride();
         if (surface == VideoSurface.CleanCamera)
         {
             scrCamera cam = scrCamera.instance;
@@ -133,11 +138,6 @@ internal sealed class VideoFrameSource
             cam.Bgcamstatic.targetTexture = texture;
             cam.BGcam.targetTexture = texture;
             cam.camobj.targetTexture = texture;
-
-            // 雨滴时钟换轨：JRP 的 CurrentTicks 吃墙钟，渲染慢放时两种来源的
-            // 成片里雨速都不对——会话开始即装配，与画面来源无关（见
-            // RenderOverlayCapture 的类注释）。
-            RenderOverlayCapture.InstallClockOverride();
 
             // 第三方画布 opt-in（SpectreAPI.RegisterRenderOverlay）：仅纯净相机
             // 生效——「游戏画面」拍的就是后备缓冲，画布本来就在。

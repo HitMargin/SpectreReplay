@@ -611,7 +611,7 @@ switch ($Which) {
         # ㊴a：帧源不再调雨滴时钟换轨——「游戏画面」成片里雨速全错
         #     （0.1.6 用户反馈的原缺陷）。
         Backup 'Features\VideoRender\Pipeline\VideoFrameSource.cs'
-        ReplaceExact 'Features\VideoRender\Pipeline\VideoFrameSource.cs' ('            RenderOverlayCapture.InstallClockOverride();') ('')
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoFrameSource.cs' ('        RenderOverlayCapture.InstallClockOverride();') ('')
     }
     'MUT-U55' {
         # ㊴c：雨滴时钟不再换轨虚拟钟——画布进片了，雨滴仍吃墙钟，
