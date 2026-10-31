@@ -867,6 +867,33 @@ namespace UiPreview
                 "Features\\Replay\\Patches\\Patch_MirrorEchoSuppressor.cs",
                 s => s.Contains("if (!SpectreReplay.SpectreState.is_playing || ev.Key == PauseKey)", StringComparison.Ordinal)
                     && s.Contains("return false;", StringComparison.Ordinal));
+            // ㊶ 播放失败的提示必须走 Warning（红色警告图标）。TriggerMessage 的
+            //    Info 缺省是 completeIcon——2026-10-31 用户实测：「回放数据为空，
+            //    无法播放!」顶着绿色大对勾出场，成功与失败视觉上无法区分。两处
+            //    data_empty（快照为空 / 快照跳穿）都要钉住，漏一处就复发。
+            fail += Check(projectRoot,
+                "㊶ 播放失败提示必须配 Warning 图标——两处 data_empty 都不许走 Info 绿勾",
+                "Features\\Replay\\Patches\\Patch_Playback.cs",
+                s => CountOccurrences(s, "GetLocalizedText(\"note.data_empty\"), type: NotifType.Warning") == 2);
+            // ㊷ 录制诊断必须钉在 Patch_Hit 的三道静默跳过门与首个快照上，且
+            //    ReplayRecorder.Start 复位。2026-10-31 实测一类坏回放：KeyEvents
+            //    记满整首歌、HitSnapshots 却 0 条——三道门 return true 不影响玩法
+            //    唯独不记，离线无法判定是哪一道（或前缀根本没上链）。这组日志让
+            //    下一局录制的 Player.log 直接给出答案：全无 = 前缀没触发；
+            //    「命中被跳过」= 门的问题（带现场值）；「首个快照已记」= 链路通。
+            fail += Check(projectRoot,
+                "㊷ 录制诊断四行必须钉在 Hit 前缀的三道静默门与首快照上，Start 时复位",
+                "Features\\Replay\\Patches\\Patch_Recording.cs",
+                s => s.Contains("录制诊断：Hit 前缀收到首个录制命中", StringComparison.Ordinal)
+                    && s.Contains("录制诊断：命中被跳过——data.SceneName 为 null", StringComparison.Ordinal)
+                    && s.Contains("录制诊断：命中被跳过——活动场景", StringComparison.Ordinal)
+                    && s.Contains("录制诊断：命中被跳过——命中玩家", StringComparison.Ordinal)
+                    && s.Contains("录制诊断：首个命中快照已记", StringComparison.Ordinal)
+                    && s.Contains("internal static void ResetDiagnostics()", StringComparison.Ordinal))
+                + Check(projectRoot,
+                "㊷ 录制诊断复位必须接在 ReplayRecorder.Start（每局录制起点）",
+                "Features\\Replay\\Runtime\\ReplayRecorder.cs",
+                s => s.Contains("Patch_Hit.ResetDiagnostics();", StringComparison.Ordinal));
 
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");

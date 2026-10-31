@@ -22,6 +22,29 @@ namespace SpectreReplay.Features.Replay;
 // 两条都进同一个 Record，录制逻辑不分叉。
 internal static class Patch_Hit
 {
+    // ── 录制诊断（一次性）─────────────────────────────────────────
+    // 2026-10-31 实测出一类坏回放：KeyEvents 记满整首歌、HitSnapshots 却是
+    // 0 条，播放必报「回放数据为空」。静态推演能走到 Add 的前提全部成立
+    // （玩法正常 = 吞键的门没拦；KeyEvents 在记 = is_recording 全程为真），
+    // 唯一无法离线验证的是「前缀到底有没有被调用」与三道 **静默跳过** 门
+    // （return true，玩法照常、唯独不记）。四个一次性日志把嫌疑人钉死：
+    // 录一局后看日志——一行都没有 = 前缀没上链（Harmony 挂载问题）；
+    // 有「命中被跳过」行 = 门的问题（带现场值）；有「首个快照已记」= 链路通。
+    private static bool _diagPrefixSeen;
+    private static bool _diagSceneNull;
+    private static bool _diagSceneMismatch;
+    private static bool _diagPlayerMismatch;
+    private static bool _diagFirstSnapshot;
+
+    internal static void ResetDiagnostics()
+    {
+        _diagPrefixSeen = false;
+        _diagSceneNull = false;
+        _diagSceneMismatch = false;
+        _diagPlayerMismatch = false;
+        _diagFirstSnapshot = false;
+    }
+
     // r141–r149：Hit(bool isAuto)
     [SpectrePatch(typeof(scrPlayer), "Hit", PatchType.Prefix, Feature = FeatureKeys.Replay, MaxVersion = 149)]
     internal static bool PrefixOld(scrPlayer __instance, bool isAuto = false)
@@ -51,10 +74,43 @@ internal static class Patch_Hit
                 && !GameCompat.HitInputEvent(controller.playerOne, isAuto, InputEventState.Down)) return false;
             if (!is_recording) return true;
 
+            if (!_diagPrefixSeen)
+            {
+                _diagPrefixSeen = true;
+                Debug.Log("[SpectreReplay] 录制诊断：Hit 前缀收到首个录制命中（Harmony 链路通）");
+            }
+
             if (data == null) data = new ReplayData();
-            if (data.SceneName == null) return true;
-            if (SceneManager.GetActiveScene().name != data.SceneName) return true;
-            if (__instance != controller.playerOne) return true;
+            if (data.SceneName == null)
+            {
+                if (!_diagSceneNull)
+                {
+                    _diagSceneNull = true;
+                    Debug.Log("[SpectreReplay] 录制诊断：命中被跳过——data.SceneName 为 null（StartRecording 未完成？）");
+                }
+                return true;
+            }
+            if (SceneManager.GetActiveScene().name != data.SceneName)
+            {
+                if (!_diagSceneMismatch)
+                {
+                    _diagSceneMismatch = true;
+                    Debug.Log("[SpectreReplay] 录制诊断：命中被跳过——活动场景 \""
+                        + SceneManager.GetActiveScene().name + "\" ≠ data.SceneName \"" + data.SceneName + "\"");
+                }
+                return true;
+            }
+            if (__instance != controller.playerOne)
+            {
+                if (!_diagPlayerMismatch)
+                {
+                    _diagPlayerMismatch = true;
+                    Debug.Log("[SpectreReplay] 录制诊断：命中被跳过——命中玩家 #"
+                        + __instance.GetInstanceID() + " ≠ playerOne #" + controller.playerOne.GetInstanceID()
+                        + "（r150 玩家生命周期变更？）");
+                }
+                return true;
+            }
 
             var player = controller.playerOne;
             // 显式传 controller（第 58 行已保证它与 __instance 同源）而不是无参重载：
@@ -113,6 +169,11 @@ internal static class Patch_Hit
             for (int k = 0; k < count; k++)
                 HitMarginCounts[k] = marginCounts[k];
             data.HitSnapshots.Add(item);
+            if (!_diagFirstSnapshot)
+            {
+                _diagFirstSnapshot = true;
+                Debug.Log("[SpectreReplay] 录制诊断：首个命中快照已记（floor=" + item.CurrentFloorID + "）——录制链路完整");
+            }
             return true;
         }
         catch (Exception ex)

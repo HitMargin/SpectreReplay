@@ -110,7 +110,9 @@ internal class Patch_PlayerControlUpdate
         if (hitSnapshots.Count == 0)
         {
             PlayActions.StopPlaying();
-            TriggerMessage(LocalizationManager.GetLocalizedText("note.data_empty"));
+            // type 必须给 Warning：Info 走 completeIcon，错误提示顶着绿色大对勾
+            // 出场（2026-10-31 用户实测截图），成功与失败在视觉上无法区分。
+            TriggerMessage(LocalizationManager.GetLocalizedText("note.data_empty"), type: NotifType.Warning);
             return;
         }
 
@@ -127,7 +129,7 @@ internal class Patch_PlayerControlUpdate
                 if (PlayIndex >= hitSnapshots.Count)
                 {
                     PlayActions.StopPlaying();
-                    TriggerMessage(LocalizationManager.GetLocalizedText("note.data_empty"));
+                    TriggerMessage(LocalizationManager.GetLocalizedText("note.data_empty"), type: NotifType.Warning);
                     return;
                 }
                 hc = hitSnapshots[PlayIndex];

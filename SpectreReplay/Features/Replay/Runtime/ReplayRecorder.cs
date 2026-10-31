@@ -24,6 +24,10 @@ internal static class ReplayRecorder
             LateSaveMode = false;
             IgnoreMarkFail = false;
             PrevKeyState = new byte[256];
+            // 录制诊断是「每一局第一次」语义，不清的话上一局的门状态会压住
+            // 这一局的现场（尤其「跳过」类——上一局命中过门，这一局同样的
+            // 门再犯就一声不吭了）。
+            Patch_Hit.ResetDiagnostics();
         }
     }
 
