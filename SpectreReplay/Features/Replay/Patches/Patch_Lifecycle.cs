@@ -416,6 +416,9 @@ internal class Patch_StartRewind
             }
             data.Reset();
             data.StartTime = DateTimeOffset.UtcNow;
+            // 游戏版本号：与 StartTime 同一批「整链在场、没人赋值」的缺口。
+            // 探测失败（Release == -1）时留空，不写 r-1 这种没意义的东西。
+            data.SpVersion = SpectrePatchHub.Release > 0 ? "r" + SpectrePatchHub.Release : "";
             data.StartTile = GCS.checkpointNum;
             data.SceneName = SceneManager.GetActiveScene().name;
             data.JudgeMode = GCS.difficulty.ToString();

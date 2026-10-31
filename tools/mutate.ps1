@@ -667,10 +667,11 @@ switch ($Which) {
         ReplaceExact 'Patch\Shared\SpectrePatchHub.cs' ('bool present = InfoContains(info, s.Attr.PatchType, s.PatchMethod);') ('bool present = true;')
     }
     'MUT-U62' {
-        # ㊹：录制启动不再戳 StartTime——「录制开始」整列退回 (无)
-        #     （2026-11-01 用户截图的原缺陷）。
+        # ㊹：录制启动不再戳 StartTime/SpVersion——「录制开始」「游戏版本」
+        #     整列退回 (无)/空（2026-11-01 用户两张截图的原缺陷）。
         Backup 'Features\Replay\Patches\Patch_Lifecycle.cs'
         ReplaceExact 'Features\Replay\Patches\Patch_Lifecycle.cs' ('            data.StartTime = DateTimeOffset.UtcNow;') ('')
+        ReplaceExact 'Features\Replay\Patches\Patch_Lifecycle.cs' ('            data.SpVersion = SpectrePatchHub.Release > 0 ? "r" + SpectrePatchHub.Release : "";') ('')
     }
     'MUT-U63' {
         # ⑺/㊹：FromReplayData 不再搬运 StartTime——录制侧戳了也进不了文件，

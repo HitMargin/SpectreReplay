@@ -38,6 +38,13 @@ public sealed class ReplayData
     public string DeviceId { get; set; }
     /// <summary>录制端 mod 版本。原键 ModVersion。</summary>
     public string ModVersion { get; set; }
+    /// <summary>
+    /// 录制时的游戏版本（形如 "r150"）。与 StartTime 同一批补的洞：模型有、
+    /// 编码器写、解码器读，ReplayData 上没属性、没人赋值 ⇒ 信息页
+    /// 「模组版本 / 游戏版本」的游戏版本恒为空。2026-11-01 起在
+    /// TryStartRecording 戳上；旧回放没有就是没有，界面显示为空，不伪造。
+    /// </summary>
+    public string SpVersion { get; set; }
     /// <summary>判定统计列表（形如 [0,3,17] ）。原键 JudgmentList。</summary>
     public string JudgmentList { get; set; }
     #endregion
@@ -179,6 +186,7 @@ public sealed class ReplayData
         LoadedMods = null;
         DeviceId = null;
         ModVersion = null;
+        SpVersion = null;
         JudgmentList = null;
         StartTime = null;
         StartTile = null;

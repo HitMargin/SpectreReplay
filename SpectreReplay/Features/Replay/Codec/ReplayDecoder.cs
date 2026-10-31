@@ -409,6 +409,9 @@ internal static class ReplayDecoder
         // 录制开始时间：null 照旧写 long.MinValue（信息页显示 (无)）——
         // 旧回放没有这个戳，界面不伪造。
         m.StartTime = replayData.StartTime;
+        // 游戏版本：与 StartTime 同一批补的洞。null 走 WriteStr 的空串语义
+        // （与 DeviceID 一致：字符串缺失读回来是 ""，不是 null）。
+        m.SpVersion = replayData.SpVersion;
 
         replay.KeyEvents = replayData.KeyEvents.ConvertAll(k => new KeyEvent
         {
@@ -474,6 +477,7 @@ internal static class ReplayDecoder
 
         // 与 FromReplayData 对称：读不到（旧文件）就是 null。
         replayData.StartTime = m.StartTime;
+        replayData.SpVersion = m.SpVersion;
 
         foreach (var k in replay.KeyEvents)
             replayData.KeyEvents.Add(new KeyEvent

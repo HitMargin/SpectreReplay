@@ -28,13 +28,14 @@ namespace UiPreview
         }
 
         /// <summary>
-        /// 「录制开始」时间全程往返：ReplayData → FromReplayData → 编码 → 解码 →
-        /// ToReplayData，两端必须相等；没有戳（旧回放）的 null 也必须原样到达，
-        /// 不得被半路写成 0 或 Now——信息页那条「录制开始 (无)」是**真实的没有**，
-        /// 不是丢失。
+        /// 「录制开始」与「游戏版本」全程往返：ReplayData → FromReplayData →
+        /// 编码 → 解码 → ToReplayData，两端必须相等；没有戳（旧回放）的
+        /// null 也必须按既有语义原样到达（StartTime → null，SpVersion →
+        /// ""，与 DeviceID 的字符串缺失语义一致），不得被半路写成 0 或
+        /// Now——信息页那条「录制开始 (无)」是**真实的没有**，不是丢失。
         ///
-        /// <para>背景：StartTime 原本整条链都在场（模型有、编码器写、解码器读、
-        /// 信息页显示），唯独录制侧从来没人赋值 ⇒ 每份回放恒为 (无)。这条钉住
+        /// <para>背景：这两个字段原本整条链都在场（模型有、编码器写、解码器读、
+        /// 信息页显示），唯独录制侧从来没人赋值 ⇒ 每份回放恒为 (无)/空。这条钉住
         /// 两侧映射：录制侧的赋值（TryStartRecording）由 ㊹ 另行钉住。</para>
         /// </summary>
         private static int StartTimeSurvivesReplayDataRoundTrip()
@@ -44,13 +45,19 @@ namespace UiPreview
                 var stamped = new ReplayData();
                 stamped.Reset();
                 stamped.StartTime = new DateTimeOffset(2026, 11, 1, 0, 11, 24, TimeSpan.Zero);
+                stamped.SpVersion = "r150";
                 byte[] encoded = ReplayEncoder.Encode(ReplayDecoder.FromReplayData(stamped));
                 ReplayData back = ReplayDecoder.ToReplayData(ReplayDecoder.Decode(encoded));
+                var bad = new List<string>();
                 if (back.StartTime != stamped.StartTime)
-                {
-                    Console.WriteLine("    ✗ ⑺ StartTime 往返不一致 " + back.StartTime?.ToString("O") + " vs "
+                    bad.Add("StartTime 往返不一致 " + back.StartTime?.ToString("O") + " vs "
                         + stamped.StartTime.Value.ToString("O"));
-                    return 1;
+                if (back.SpVersion != stamped.SpVersion)
+                    bad.Add("SpVersion 往返不一致 \"" + back.SpVersion + "\" vs \"" + stamped.SpVersion + "\"");
+                if (bad.Count > 0)
+                {
+                    foreach (var p in bad) Console.WriteLine("    ✗ ⑺ " + p);
+                    return bad.Count;
                 }
 
                 var bare = new ReplayData();
@@ -59,10 +66,16 @@ namespace UiPreview
                 ReplayData back2 = ReplayDecoder.ToReplayData(ReplayDecoder.Decode(encoded2));
                 if (back2.StartTime != null)
                 {
-                    Console.WriteLine("    ✗ ⑺ 无戳回放的 null 被半路伪造成了 " + back2.StartTime?.ToString("O"));
+                    Console.WriteLine("    ✗ ⑺ 无戳回放的 StartTime null 被半路伪造成了 " + back2.StartTime?.ToString("O"));
                     return 1;
                 }
-                Console.WriteLine("    ✓ ⑺ StartTime 往返保真（有戳/无戳两态）");
+                if (back2.SpVersion != "")
+                {
+                    Console.WriteLine("    ✗ ⑺ 无戳回放的 SpVersion 落盘后应是空串（DeviceID 同语义），实际 \""
+                        + back2.SpVersion + "\"");
+                    return 1;
+                }
+                Console.WriteLine("    ✓ ⑺ StartTime/SpVersion 往返保真（有戳/无戳两态）");
                 return 0;
             }
             catch (Exception ex)
