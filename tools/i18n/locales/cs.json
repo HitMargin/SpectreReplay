@@ -342,8 +342,6 @@
   "render.tail.tip": "Další sekundy nahrávané po konci úrovně, aby se zachovala závěrečná animace.",
   "render.surface.tip": "Zdroj snímků. Čistá kamera nemá UI a má libovolné rozlišení; obrazovka hry obsahuje UI a sleduje okno.",
   "render.cursor.tip": "Kreslí kurzor myši do videa. Nově nahrané replayy ukládají i dráhu kurzoru, která se při renderu přehrává podle časové osy skladby — je synchronní s obrazem a nezávislá na rychlosti renderu. Starší replayy dráhu nemají a použijí živý kurzor z doby renderu (jeho tempo odpovídá rychlosti renderu). Skrytý kurzor se nekreslí.",
-  "render.keyviewer": "Překrytí zobrazovače kláves ve vykresleném videu (včetně deště)",
-  "render.keyviewer.tip": "Skládá plátno zobrazovače kláves do vykresleného videa; rychlost deště následuje herní čas (stejné hodiny jako obraz, bez vlivu rychlosti renderování). Vyžaduje JipperKeyViewer; déšť vyžaduje JipperResourcePack. Bez účinku, pokud nejsou nainstalovány. Náhled na obrazovce zobrazuje také klávesy, shodně s videem.",
   "render.codec.tip": "Volba kodéru. Nejrychlejší preferuje kódování na GPU a při neúspěšné kontrole se vrací k CPU; řádek níže ukazuje, který se skutečně používá.",
   "render.quality.tip": "Kvalita kódování. Vyšší dává větší soubory a mírně delší vykreslování.",
   "render.format.tip": "Kontejner výstupního souboru. mp4 je nejkompatibilnější; webm je menší, ale vyžaduje překódování.",

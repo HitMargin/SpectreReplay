@@ -342,8 +342,6 @@
   "render.tail.tip": "Zusätzliche Sekunden, die nach dem Levelende aufgezeichnet werden, um die Outro-Animation zu behalten.",
   "render.surface.tip": "Bildquelle. Die saubere Kamera hat keine UI und beliebige Auflösung; der Spielbildschirm enthält die UI und folgt dem Fenster.",
   "render.cursor.tip": "Zeichnet den Mauszeiger ins Video. Neu aufgenommene Replays speichern auch die Zeigerbahn, die beim Rendern entlang der Song-Timeline wiedergegeben wird — synchron zum Bild und unabhängig von der Rendergeschwindigkeit. Ältere Replays haben keine Bahn und greifen auf den Live-Zeiger zur Renderzeit zurück (sein Tempo folgt der Rendergeschwindigkeit). Ein ausgeblendeter Zeiger wird nicht gezeichnet.",
-  "render.keyviewer": "Tastaturanzeige ins gerenderte Video einblenden (mit Regen)",
-  "render.keyviewer.tip": "Bindet die Tastaturanzeige-Leinwand in das gerenderte Video ein; die Regengeschwindigkeit folgt der Spielzeit (gleiche Uhr wie das Bild, unabhängig von der Rendergeschwindigkeit). Erfordert JipperKeyViewer; der Regen benötigt JipperResourcePack. Ohne Wirkung, falls nicht installiert. Die Bildschirmvorschau zeigt die Tastaturanzeige ebenfalls, passend zum Video.",
   "render.codec.tip": "Encoder-Auswahl. „Schnellste“ bevorzugt GPU-Encoding und fällt bei fehlgeschlagener Prüfung auf CPU zurück; die Zeile darunter zeigt, welcher tatsächlich verwendet wird.",
   "render.quality.tip": "Kodierqualität. Höher ergibt größere Dateien und etwas längere Renderzeiten.",
   "render.format.tip": "Container für die Ausgabedatei. mp4 ist am kompatibelsten; webm ist kleiner, erfordert aber eine Neukodierung.",

@@ -1,4 +1,4 @@
-[
+﻿[
  {
   "key": "page.record",
   "zh": "录制",
@@ -1703,16 +1703,6 @@
   "key": "render.cursor.tip",
   "zh": "把鼠标指针画进成片。新录制的回放会一并记下指针轨迹，渲染时按歌曲时间回放——与画面同源，不受渲染速度与波动影响；旧回放没有轨迹，回落到渲染时的活体指针（快慢随渲染速度波动）。指针被系统隐藏时不画。",
   "en": "Draw the mouse cursor into the video. Newly recorded replays also store a cursor track, replayed along the song timeline on render — in sync with the picture and unaffected by render speed. Older replays have no track and fall back to the live cursor at render time, whose pacing follows render speed. A hidden cursor is not drawn."
- },
- {
-  "key": "render.keyviewer",
-  "zh": "渲染时叠加键位显示（含雨滴）",
-  "en": "Overlay key viewer in rendered video (with rain)"
- },
- {
-  "key": "render.keyviewer.tip",
-  "zh": "把键位显示画布合成进渲染视频，雨滴速度跟随游戏时间（与画面同一时钟，不随渲染快慢波动）。需要安装 JipperKeyViewer，雨滴需要 JipperResourcePack；未安装时本项无效果。渲染期间屏幕预览也会显示键显，与成片一致。",
-  "en": "Composites the key viewer canvas into the rendered video; rain speed follows game time (same clock as the picture, unaffected by render speed). Requires JipperKeyViewer; rain needs JipperResourcePack. No effect if not installed. The on-screen preview also shows the key viewer, matching the video."
  },
  {
   "key": "render.codec.tip",

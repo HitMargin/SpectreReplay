@@ -821,42 +821,36 @@ namespace UiPreview
                 "㊳ OnGui 行助手布局宽度不许写死(重映射行 Delete 折行被拦腰裁断)",
                 "Ui\\OnGui.cs",
                 s => NoNumericLayoutWidth(s));
-            // ㊴ 键位显示合成（渲染选项 → 帧源 → 虚拟时钟换轨）三段接线。
+            // ㊴ 渲染期雨滴时钟换轨（RenderOverlayCapture）。
             //
-            //    render.cursor（㉝）的同族形态：界面上加一行、Settings 加个字段，
-            //    两边编译过但中间没人接线——「有开关、有说明、没实现」。
-            //    背景是 0.1.6 用户观察：键显/雨滴在 ScreenSpaceOverlay 画布上，
-            //    相机 RT 取像永远拍不到；且雨滴动画吃 JRP 的墙钟时钟，直接合成
-            //    进慢放视频全是快放废片。两条断言分别钉住：
-            //    ① 界面行回调真的写 RenderKeyViewerOverlay；
-            //    ② 帧源真的调 KeyViewerOverlayCapture.Install/Restore（画布切
-            //       ScreenSpaceCamera 挂渲染相机，Overlay 不切模式拍不到）；
-            //    ③ 捕获类必须把 JRP 的 CurrentTicks 换轨到 UnscaledDeltaPin 虚拟
-            //       时钟（RegisterManualPrefix）——少了它，画布进片了雨滴也是
-            //       墙钟快放废片。
+            //    0.1.6 用户观察：JRP 雨滴动画吃 KeyViewer.CurrentTicks——Stopwatch
+            //    墙钟；渲染期游戏时间钉到虚拟时钟后，「游戏画面」来源的成片里
+            //    雨滴全是快放废片（屏幕观察：渲染时雨速不变）。
+            //    修法与画面来源无关：会话开始即给 CurrentTicks 挂手工前缀
+            //    （PatchManager.RegisterManualPrefix），渲染期返回「Stopwatch 锚点
+            //    + UnscaledDeltaPin 虚拟时钟增量」——与画面同一权威时钟。
+            //    两段接线缺一就是「雨速不对」：
+            //    ① 帧源必须调 InstallClockOverride（**无条件**，纯净相机/游戏画面
+            //       都要）；② 前缀必须真走 RegisterManualPrefix + 虚拟时钟读数。
             fail += Check(projectRoot,
-                "㊴a 渲染选项里的键位显示行必须接到 Settings.RenderKeyViewerOverlay",
-                "Pages\\Pages.cs",
-                s => s.Contains("OnGui.Row(\"render.keyviewer\", RenderKeyViewerOverlay", StringComparison.Ordinal));
-            fail += Check(projectRoot,
-                "㊴b 帧源必须调 KeyViewerOverlayCapture.Install/Restore（Overlay 不切模式拍不到）",
+                "㊴a 帧源必须无条件调 RenderOverlayCapture.InstallClockOverride（两种来源的雨速都依赖它）",
                 "Features\\VideoRender\\Pipeline\\VideoFrameSource.cs",
-                s => s.Contains("KeyViewerOverlayCapture.Install(", StringComparison.Ordinal)
-                    && s.Contains("KeyViewerOverlayCapture.Restore(", StringComparison.Ordinal));
+                s => s.Contains("RenderOverlayCapture.InstallClockOverride()", StringComparison.Ordinal)
+                    && s.Contains("RenderOverlayCapture.InstallCameraCapture(", StringComparison.Ordinal));
             fail += Check(projectRoot,
-                "㊴c 键显时钟必须换轨到虚拟时钟（墙钟雨滴在慢放视频里是快放废片）",
-                "Features\\VideoRender\\Pipeline\\KeyViewerOverlayCapture.cs",
+                "㊴b 雨滴时钟必须换轨到虚拟时钟（墙钟雨滴在慢放成片里是快放废片）",
+                "Features\\VideoRender\\Pipeline\\RenderOverlayCapture.cs",
                 s => s.Contains("PatchManager.RegisterManualPrefix", StringComparison.Ordinal)
                     && s.Contains("UnscaledDeltaPin.CurrentUnscaledF", StringComparison.Ordinal));
             // ㊵ 开放 API：其它 mod 的画布经 SpectreAPI 登记进同一注册表。
-            //    门面必须真转发到注册表（KeyViewerOverlayCapture 的
+            //    门面必须真转发到注册表（RenderOverlayCapture 的
             //    RegisterExternal/UnregisterExternal）——只加门面不接线，
             //    别人登记了画布也进不了片（有开关、没实现的 API 版）。
             fail += Check(projectRoot,
                 "㊵ SpectreAPI 的画布登记必须真转发到合成注册表（Register/Unregister 成对）",
                 "State\\SpectreAPI.cs",
-                s => s.Contains("KeyViewerOverlayCapture.RegisterExternal(canvas)", StringComparison.Ordinal)
-                    && s.Contains("KeyViewerOverlayCapture.UnregisterExternal(canvas)", StringComparison.Ordinal));
+                s => s.Contains("RenderOverlayCapture.RegisterExternal(canvas)", StringComparison.Ordinal)
+                    && s.Contains("RenderOverlayCapture.UnregisterExternal(canvas)", StringComparison.Ordinal));
 
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");

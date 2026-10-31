@@ -602,29 +602,28 @@ switch ($Which) {
         ReplaceExact 'Features\Replay\Runtime\KeyboardSimulation.cs' ('        RecordSentKeys(inputs, result);') ('')
     }
     'MUT-U53' {
-        # ㊴b：帧源不再调键显合成——画布留在 Overlay，相机 RT 永远拍不到，
-        #     「渲染时叠加键位显示」整个没效果。
+        # ㊴a：纯净相机不再启用第三方画布 opt-in——SpectreAPI 登记的画布
+        #     进不了纯净相机成片。
         Backup 'Features\VideoRender\Pipeline\VideoFrameSource.cs'
-        ReplaceExact 'Features\VideoRender\Pipeline\VideoFrameSource.cs' ('                KeyViewerOverlayCapture.Install(cam.camobj);') ('')
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoFrameSource.cs' ('            RenderOverlayCapture.InstallCameraCapture(cam.camobj);') ('')
     }
     'MUT-U54' {
-        # ㊴a：键位显示行错接到别的设置字段——开关看着能点，渲染永远用
-        #     别人的值。用编译合法的形态（接 RenderCursorOn），证明红来自
-        #     判据而不是编译错误。
-        Backup 'Pages\Pages.cs'
-        ReplaceExact 'Pages\Pages.cs' ('            OnGui.Row("render.keyviewer", RenderKeyViewerOverlay,') ('            OnGui.Row("render.keyviewer", RenderCursorOn,')
+        # ㊴a：帧源不再调雨滴时钟换轨——「游戏画面」成片里雨速全错
+        #     （0.1.6 用户反馈的原缺陷）。
+        Backup 'Features\VideoRender\Pipeline\VideoFrameSource.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoFrameSource.cs' ('            RenderOverlayCapture.InstallClockOverride();') ('')
     }
     'MUT-U55' {
         # ㊴c：雨滴时钟不再换轨虚拟钟——画布进片了，雨滴仍吃墙钟，
         #     慢放视频里全是快放废片。
-        Backup 'Features\VideoRender\Pipeline\KeyViewerOverlayCapture.cs'
-        ReplaceExact 'Features\VideoRender\Pipeline\KeyViewerOverlayCapture.cs' ('            PatchManager.RegisterManualPrefix(clockTarget, clockPrefix);') ('')
+        Backup 'Features\VideoRender\Pipeline\RenderOverlayCapture.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\RenderOverlayCapture.cs' ('            PatchManager.RegisterManualPrefix(clockTarget, clockPrefix);') ('')
     }
     'MUT-U56' {
         # ㊵：SpectreAPI 门面只加方法不转发——其它 mod 登记了画布也进不了片
         #     （「有开关、没实现」的 API 版）。
         Backup 'State\SpectreAPI.cs'
-        ReplaceExact 'State\SpectreAPI.cs' ('        => Features.VideoRender.KeyViewerOverlayCapture.RegisterExternal(canvas);') ('        => Features.VideoRender.KeyViewerOverlayCapture.RegisterExternal(null);')
+        ReplaceExact 'State\SpectreAPI.cs' ('        => Features.VideoRender.RenderOverlayCapture.RegisterExternal(canvas);') ('        => Features.VideoRender.RenderOverlayCapture.RegisterExternal(null);')
     }
     'MUT-U25' {
         # ⑫i：把已删除的「界面语言跟随游戏」开关加回来（防回归变异）。

@@ -1,26 +1,19 @@
-// 渲染期把 Overlay 画布合成进成片：内置登记键显画布（Jipper KeyViewer，
-// 含 JRP 雨滴），并通过 SpectreAPI.RegisterRenderOverlay 向其它 mod 开放。
+// 渲染期 overlay 时钟换轨 + 第三方画布 opt-in 进片。
 //
-// 键显画布是 ScreenSpaceOverlay（反编译 JKV BuildOverlay：renderMode 0 /
-// sortingOrder 2），由 Unity 直接合成到后备缓冲——我们的成片从相机
-// RenderTexture 逐帧取像，Overlay 永远拍不到。0.1.6 用户观察：
-// 渲染时雨滴在屏幕上照下，成片里没有。
+// 背景（0.1.6 用户观察）：「游戏画面」来源拍的是后备缓冲，键显/雨滴本来
+// 就在片里——但 JRP 雨滴动画吃 KeyViewer.CurrentTicks（Stopwatch 墙钟），
+// 渲染期游戏时间被钉到虚拟时钟后，片里的雨滴全是快放废片（用户观察：
+// 渲染时雨速不变）。修法：渲染会话内给 CurrentTicks 挂手工前缀
+// （PatchManager.RegisterManualPrefix；目标是外部 mod 的属性 getter，
+// JRP 未安装就整段跳过），返回「锚点 + UnscaledDeltaPin 虚拟时钟增量」
+// ——与画面同一个权威时钟，雨速与歌曲同步。**与画面来源无关**：
+// 纯净相机 / 游戏画面两种来源都在会话开始时装配。
 //
-// 修法两层，缺一不可：
-//   · 画布进片：渲染会话内把画布临时切到 ScreenSpaceCamera、worldCamera
-//     指向主渲染相机（camMain），排序拉到场景之上；结束恢复 Overlay。
-//     副作用是良性的：预览相机把 RT 贴回屏幕，屏幕上的画面与成片一致。
-//   · 时钟换轨：雨滴/KPS 全部吃 JRP 的 KeyViewer.CurrentTicks——Stopwatch
-//     墙钟（用户观察：渲染时雨速不变）。渲染期游戏时间被钉到虚拟时钟后，
-//     墙钟动画在慢放视频里全是快放废片。给 CurrentTicks 挂手工前缀
-//     （PatchManager.RegisterManualPrefix；目标是外部 mod 的属性 getter，
-//     JRP 未安装就整段跳过），渲染期返回「锚点 + 虚拟时钟增量」
-//     （UnscaledDeltaPin——与画面同一个权威时钟）。
-//
-// **开放 API**：其它 mod 经 SpectreAPI.RegisterRenderOverlay / Unregister-
-// RenderOverlay 登记自己的画布（standing intent，跨渲染会话保留）。
-// 契约写在 SpectreAPI 的方法注释里：游戏时间驱动的动画在片里速度正确，
-// 墙钟驱动的动画需自行换轨——JRP 的雨滴由本类内置处理。
+// 第三方画布 opt-in（SpectreAPI.RegisterRenderOverlay）：「纯净相机」来源
+// 默认干净（键显/第三方 UI 一律不进片），别的 mod 显式登记自己的 Canvas
+// 才会在纯净相机渲染时临时切 ScreenSpaceCamera 挂上渲染相机（order 30000
+// 压过场景），会话结束恢复；「游戏画面」来源拍的就是后备缓冲，登记与否
+// 画布本来就在，切模式反而是双重绘制，故不适用。
 //
 // 时钟域：JRP 全程用 Stopwatch 域做差（ToStopwatchTicks 把事件时间换算进
 // 同一域），锚点取 Stopwatch.GetTimestamp()，增量乘 Stopwatch.Frequency
@@ -40,10 +33,10 @@ using Debug = UnityEngine.Debug;
 
 namespace SpectreReplay.Features.VideoRender;
 
-internal static class KeyViewerOverlayCapture
+internal static class RenderOverlayCapture
 {
-    private const string CanvasName = "Jipper KeyViewer";
-    // 与 Status 提示条同一档（order 100 → 30000）：压过场景与其它 UI。
+    // 第三方画布在纯净相机里的排序：与 Status 提示条同一档
+    // （order 100 → 30000），压过场景与其它 UI。
     private const int OverlayOrder = 30000;
 
     private sealed class Entry
@@ -53,7 +46,6 @@ internal static class KeyViewerOverlayCapture
         public Camera OldWorldCamera;
         public int OldSortingOrder;
         public bool Switched;      // 已切到 ScreenSpaceCamera
-        public bool External;      // SpectreAPI 登记（跨会话保留）；false = JKV 自动登记（跟随设置）
     }
 
     private static readonly List<Entry> entries = new();
@@ -61,34 +53,39 @@ internal static class KeyViewerOverlayCapture
 
     private static System.Reflection.MethodInfo clockTarget;
     private static readonly System.Reflection.MethodInfo clockPrefix
-        = AccessTools.Method(typeof(KeyViewerOverlayCapture), nameof(CurrentTicksPrefix));
+        = AccessTools.Method(typeof(RenderOverlayCapture), nameof(CurrentTicksPrefix));
     private static long anchorStopwatchTicks;
     private static double anchorVirtualSeconds;
     private static bool anchorTaken;
 
-    /// <summary>渲染会话开始时调一次。mainCamera = 承载成片的主渲染相机。</summary>
-    internal static void Install(Camera mainCamera)
+    /// <summary>
+    /// 渲染会话开始时调一次（**与画面来源无关**，两种来源都必须）——
+    /// JRP 雨滴吃墙钟，不换轨的话「游戏画面」成片里雨速全是错的。
+    /// </summary>
+    internal static void InstallClockOverride()
+    {
+        InstallClockPatch();
+    }
+
+    /// <summary>
+    /// 仅「纯净相机」来源调：启用第三方画布的 opt-in 合成（切模式在此生效）。
+    /// </summary>
+    internal static void InstallCameraCapture(Camera mainCamera)
     {
         captureCamera = mainCamera;
-        // JKV 自动登记跟随设置开关；外部登记是别的 mod 的 standing intent，
-        // 不受本模组设置影响。
-        if (Settings.RenderKeyViewerOverlay) EnsureAutoRegistered();
-        else RemoveAuto();
-        InstallClockPatch();
         ReapplyIfNeeded();
     }
 
-    /// <summary>每帧调：登记的画布被重建（mod 改设置/切场景）时重新查找套用。</summary>
+    /// <summary>每帧调（仅纯净相机生效）：登记的画布被重建时重新查找套用。</summary>
     internal static void ReapplyIfNeeded()
     {
         if (captureCamera == null) return;
-        EnsureAutoRegistered();
         for (int i = entries.Count - 1; i >= 0; i--)
         {
             Entry e = entries[i];
             if (e.Canvas == null)
             {
-                // 画布随场景/mod 卸载销毁：外部登记一并除名（持有已无意义）
+                // 画布随场景/mod 卸载销毁：登记一并除名（持有已无意义）
                 entries.RemoveAt(i);
                 continue;
             }
@@ -105,7 +102,7 @@ internal static class KeyViewerOverlayCapture
         }
     }
 
-    /// <summary>渲染会话结束时调一次（幂等）。已切换的画布恢复原样；外部登记保留。</summary>
+    /// <summary>渲染会话结束时调一次（幂等，两种来源都调）。时钟补丁卸载、已切换的画布恢复。</summary>
     internal static void Restore()
     {
         UninstallClockPatch();
@@ -133,7 +130,7 @@ internal static class KeyViewerOverlayCapture
     internal static void RegisterExternal(Canvas canvas)
     {
         if (canvas == null || entries.Any(e => e.Canvas == canvas)) return;
-        entries.Add(new Entry { Canvas = canvas, External = true });
+        entries.Add(new Entry { Canvas = canvas });
         ReapplyIfNeeded();
     }
 
@@ -142,47 +139,7 @@ internal static class KeyViewerOverlayCapture
         for (int i = entries.Count - 1; i >= 0; i--)
         {
             Entry e = entries[i];
-            if (!e.External || e.Canvas != canvas) continue;
-            if (e.Switched)
-            {
-                try
-                {
-                    e.Canvas.sortingOrder = e.OldSortingOrder;
-                    e.Canvas.renderMode = e.OldMode;
-                    e.Canvas.worldCamera = e.OldWorldCamera;
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogException(ex);
-                }
-            }
-            entries.RemoveAt(i);
-        }
-    }
-
-    // JKV 自动登记：按设置开关增删。画布此刻可能还没建（JKV 晚建/重建），
-    // 找不到就留空，Reapply 每帧重试。
-    private static void EnsureAutoRegistered()
-    {
-        for (int i = entries.Count - 1; i >= 0; i--)
-        {
-            if (entries[i].External) continue;
-            if (entries[i].Canvas == null) entries.RemoveAt(i);   // 销毁的自动登记除名
-        }
-        if (entries.Any(e => !e.External)) return;
-        GameObject go = GameObject.Find(CanvasName);
-        if (go == null) return;
-        Canvas found = go.GetComponent<Canvas>();
-        if (found == null) return;
-        entries.Add(new Entry { Canvas = found, External = false });
-    }
-
-    private static void RemoveAuto()
-    {
-        for (int i = entries.Count - 1; i >= 0; i--)
-        {
-            Entry e = entries[i];
-            if (e.External) continue;
+            if (e.Canvas != canvas) continue;
             if (e.Switched)
             {
                 try
@@ -210,8 +167,8 @@ internal static class KeyViewerOverlayCapture
             clockTarget = AccessTools.PropertyGetter(kv, "CurrentTicks");
             if (clockTarget == null)
             {
-                Debug.LogWarning("[SpectreReplay] 键显时钟换轨未生效：JRP 的 CurrentTicks 属性形状变了"
-                    + "（雨滴在成片里将跟随墙钟，速度不对）");
+                Debug.LogWarning("[SpectreReplay] 雨滴时钟换轨未生效：JRP 的 CurrentTicks 属性形状变了"
+                    + "（游戏画面来源的成片里雨滴将跟随墙钟，速度不对）");
                 return;
             }
             PatchManager.RegisterManualPrefix(clockTarget, clockPrefix);
