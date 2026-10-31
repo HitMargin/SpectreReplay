@@ -596,10 +596,11 @@ switch ($Which) {
         ReplaceExact 'Features\Replay\Runtime\ReplayPlayer.cs' ('        bool sendInput = ManagedInput.Mirror && (!asyncInject || suppressorArmed);') ('        bool sendInput = ManagedInput.Mirror && !asyncInject;')
     }
     'MUT-U52' {
-        # ⑪c：SendInputs 不再登记发出的键——抑制补丁在钩子线程认领不到
-        #     回声，SendInput 回声与合成事件一起进 keyQueue，double press 回归。
-        Backup 'Features\Replay\Runtime\KeyboardSimulation.cs'
-        ReplaceExact 'Features\Replay\Runtime\KeyboardSimulation.cs' ('        RecordSentKeys(inputs, result);') ('')
+        # ⑪c/㊵b：隔离前缀不吞事件——return false 换成 return true，
+        #     物理键盘（镜像回声 / kv 再注入 / 实键）照旧直达判定，
+        #     概率性多判定回归（2026-10-31 用户实测的第二版原缺陷）。
+        Backup 'Features\Replay\Patches\Patch_MirrorEchoSuppressor.cs'
+        ReplaceExact 'Features\Replay\Patches\Patch_MirrorEchoSuppressor.cs' ('        return false;') ('        return true;')
     }
     'MUT-U53' {
         # ㊴a：纯净相机不再启用第三方画布 opt-in——SpectreAPI 登记的画布
@@ -626,10 +627,10 @@ switch ($Which) {
         ReplaceExact 'State\SpectreAPI.cs' ('        => Features.VideoRender.RenderOverlayCapture.RegisterExternal(canvas);') ('        => Features.VideoRender.RenderOverlayCapture.RegisterExternal(null);')
     }
     'MUT-U57' {
-        # ㊵b：回放键不再吞——JKV 键位模拟对合成事件的再广播直达判定，
-        #     多判定回归（2026-10-31 用户确认）。
+        # ㊵b：Esc 例外被拆——全吞设计的唯一放行键悄悄消失，回放期
+        #     暂停失灵（玩家只能 Alt+F4）。
         Backup 'Features\Replay\Patches\Patch_MirrorEchoSuppressor.cs'
-        ReplaceExact 'Features\Replay\Patches\Patch_MirrorEchoSuppressor.cs' ('        if (replayKey)') ('        if (false)')
+        ReplaceExact 'Features\Replay\Patches\Patch_MirrorEchoSuppressor.cs' ('        if (!SpectreReplay.SpectreState.is_playing || ev.Key == PauseKey)') ('        if (!SpectreReplay.SpectreState.is_playing || ev.Key == 999)')
     }
     'MUT-U25' {
         # ⑫i：把已删除的「界面语言跟随游戏」开关加回来（防回归变异）。

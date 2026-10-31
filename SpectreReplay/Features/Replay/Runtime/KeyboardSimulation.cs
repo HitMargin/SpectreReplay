@@ -1,8 +1,6 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Text;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 
@@ -158,123 +156,14 @@ internal static class KeyboardSimulation
             // 注意：UIPI 失败**不**关闭 SendInput。它可能只是这一批被拒；
             // 关掉它等于让"原本能用的"也失效，损失远大于收益。
             int err = Marshal.GetLastWin32Error();
-            UnityEngine.Debug.LogWarning($"[SpectreReplay] SendInput 部分失败：已处理 {result}/{inputs.Length} 个按键"
+            Debug.LogWarning($"[SpectreReplay] SendInput 部分失败：已处理 {result}/{inputs.Length} 个按键"
                 + $"（Win32 错误码 {err}"
                 + (err == 5 ? " = ERROR_ACCESS_DENIED：游戏与注入进程的权限级别不一致，"
                             + "请用相同权限（通常都提权或都不提权）运行游戏" : "")
                 + "）");
         }
-        // **登记本批实际注入的按键**（部分失败时只记前 result 个——没打出去的
-        // 键不会有回声）。这是 Patch_MirrorEchoSuppressor 在钩子回调里认领
-        // 「我们自己发的系统按键」的唯一凭据：SendInput 与合成事件注入并存时
-        // （MirrorInputToOS 开 + 异步广播在走），OS 级按键会被 SkyHook 的全局
-        // 钩子再捕一次，不掐掉就与合成事件一起进 keyQueue——同一颗键判两遍。
-        RecordSentKeys(inputs, result);
-    }
-
-    // ── 回声登记（写：主线程 SendInputs；读：钩子原生线程的补丁前缀） ──
-    //
-    // 两个线程之间就这一份交接，每秒至多几十个事件，一把锁足够。
-    // SkyHookEvent 没有 extra-info 字段（只有 Time/Type/Label/Key），
-    // 回声只能按「键码 + 方向 + 时间窗」认领。
-
-    private struct SentKey
-    {
-        internal ushort Vk;
-        internal bool Pressed;
-        internal long Stamp;   // Stopwatch.GetTimestamp()，单调钟
-    }
-
-    private static readonly object _sentGate = new();
-    private static readonly SentKey[] _sentKeys = new SentKey[512];
-    private static int _sentNext;
-    private static int _diagSends;
-
-    // 钩子回调通常几毫秒内到达；放宽到 150ms 是给 LL 钩子超时
-    // （LowLevelHooksTimeout）留余量。放宽的代价只是「真实按键与镜像键
-    // 同码同向且落窗内」被一并吞掉——回放期间玩家的实键不参与判定，可接受。
-    private static readonly long SentWindowTicks = (long)(Stopwatch.Frequency * 0.15);
-
-    private static void RecordSentKeys(INPUT[] inputs, uint count)
-    {
-        if (count == 0) return;
-        bool diag = _diagSends < 3;
-        if (diag) _diagSends++;
-        long now = Stopwatch.GetTimestamp();
-        lock (_sentGate)
-        {
-            for (int i = 0; i < count && i < inputs.Length; i++)
-            {
-                _sentKeys[_sentNext] = new SentKey
-                {
-                    Vk = inputs[i].u.ki.wVk,
-                    Pressed = (inputs[i].u.ki.dwFlags & KEYEVENTF_KEYUP) == 0,
-                    Stamp = now,
-                };
-                _sentNext = (_sentNext + 1) % _sentKeys.Length;
-            }
-        }
-        if (diag)
-        {
-            string keys = "";
-            for (int i = 0; i < count && i < inputs.Length; i++)
-                keys += inputs[i].u.ki.wVk
-                    + (((inputs[i].u.ki.dwFlags & KEYEVENTF_KEYUP) == 0) ? "(↓) " : "(↑) ");
-            Debug.Log("[SpectreReplay][诊断] SendInput 已发 " + count + " 个: " + keys
-                + "（回声认领窗口 150ms）");
-        }
-    }
-
-    /// <summary>钩子线程查询：这条事件是不是我们刚用 SendInput 发的。
-    /// 顺带清理窗口外的旧记录，稳态下数组几乎恒空。</summary>
-    internal static bool IsRecentlySentByUs(ushort vk, bool pressed)
-    {
-        long now = Stopwatch.GetTimestamp();
-        lock (_sentGate)
-        {
-            for (int i = 0; i < _sentKeys.Length; i++)
-            {
-                ref SentKey s = ref _sentKeys[i];
-                if (s.Stamp == 0 || s.Vk != vk || s.Pressed != pressed) continue;
-                if (now - s.Stamp > SentWindowTicks)
-                {
-                    s.Stamp = 0;
-                    continue;
-                }
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // ── 诊断（有界）：回声认领失败时的现场还原 ─────────────────
-    // 只在镜像回放期间由抑制前缀调用，前 12 次输出钩子事件与环形缓冲
-    // 的对照——「回声没拦住」时一次测试就能看清是没到达、还是没认上。
-
-    // 返回值刻意全 ASCII（HardTextCheck 对「方法返回的字符串」按可能上界面
-    // 处理）；中文措辞由调用方在 Debug.Log 字面量里拼。
-    internal static string DescribeRecent(ushort vk, bool pressed)
-    {
-        lock (_sentGate)
-        {
-            long now = Stopwatch.GetTimestamp();
-            int inWindow = 0;
-            string nearestSameVk = null;
-            double nearestAge = double.MaxValue;
-            for (int i = 0; i < _sentKeys.Length; i++)
-            {
-                ref SentKey s = ref _sentKeys[i];
-                if (s.Stamp == 0) continue;
-                double ms = (now - s.Stamp) * 1000.0 / Stopwatch.Frequency;
-                if (ms > 150) continue;
-                inWindow++;
-                if (s.Vk == vk && ms < nearestAge)
-                {
-                    nearestAge = ms;
-                    nearestSameVk = $"same-vk vk={s.Vk} pressed={s.Pressed} age={ms:F0}ms";
-                }
-            }
-            return nearestSameVk ?? $"window={inWindow} no-vk={vk}";
-        }
+        // 回声不需要登记：回放期间 Patch_MirrorEchoSuppressor 把钩子事件
+        // **整体**吞掉（Esc 除外），不靠认领——第一版按「发送记录认领」有
+        // 先天竞态（回声在钩子线程送达时主线程可能还没走到登记），概率性漏。
     }
 }

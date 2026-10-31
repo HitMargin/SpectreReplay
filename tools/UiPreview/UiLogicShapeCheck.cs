@@ -856,17 +856,17 @@ namespace UiPreview
                 "State\\SpectreAPI.cs",
                 s => s.Contains("RenderOverlayCapture.RegisterExternal(canvas)", StringComparison.Ordinal)
                     && s.Contains("RenderOverlayCapture.UnregisterExternal(canvas)", StringComparison.Ordinal));
-            // ㊵b 回放期钩子里的回放键必须吞掉。用户确认：JRP+JKV 并存时回放
-            //    多判定一次——JKV 的按键模拟把合成事件当真键再注入 OS 层，
-            //    钩子收到 → KeyUpdated → 游戏判第二次（第二判「大慢/太快」
-            //    随模拟时机抖动）。合成事件不经 HookCallback，按回放键集吞掉
-            //    的永远不会是判定正主。
+            // ㊵b 回放期用户的物理键盘必须整体退出判定（Esc 除外）。用户确认：
+            //    JRP+JKV 并存时回放多判定一次——按下 JRP/JKV 配置的按键就会
+            //    直达游戏判定（镜像回声、JKV 键位模拟、实键，条条通）。合成
+            //    事件不经 HookCallback，全吞的永远不会是判定正主；kv 显示走
+            //    KeyUpdated 合成广播不受影响。第一版只吞「回放键集」——用户
+            //    实按的其它键照样漏进去，概率性多按（实测）。
             fail += Check(projectRoot,
-                "㊵b 回放期钩子里的回放键必须按回放键集吞掉（JKV 模拟再广播会多判一次）",
+                "㊵b 回放期物理键盘必须整体隔离（Esc 除外）——任何钩子按键都会污染判定",
                 "Features\\Replay\\Patches\\Patch_MirrorEchoSuppressor.cs",
-                s => s.Contains("if (replayKey)", StringComparison.Ordinal)
-                    && s.Contains("ReplayPlayer.ReplayKeySet.Contains(ev.Key)", StringComparison.Ordinal)
-                    && s.Contains("SpectreReplay.SpectreState.is_playing", StringComparison.Ordinal));
+                s => s.Contains("if (!SpectreReplay.SpectreState.is_playing || ev.Key == PauseKey)", StringComparison.Ordinal)
+                    && s.Contains("return false;", StringComparison.Ordinal));
 
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");

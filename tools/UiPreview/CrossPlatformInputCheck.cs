@@ -231,13 +231,13 @@ namespace UiPreview
                 "⑪c 镜像退回了无条件互斥 —— 异步开着时镜像整个没效果（2026-10-30 用户反馈的原缺陷）");
             string suppressor = SrcUtil.Source(projectRoot, "Features/Replay/Patches/Patch_MirrorEchoSuppressor.cs");
             Expect(Has(suppressor, @"typeof\(SkyHook\.SkyHookManager\)\s*,\s*""HookCallback""\s*,\s*PatchType\.Prefix"),
-                "⑪c 回声抑制没打在 HookCallback 上 —— 那是 keyQueue 与 KeyUpdated 的共同入口，掐在别处必漏");
-            Expect(suppressor.Contains("IsRecentlySentByUs(") && suppressor.Contains("return false"),
-                "⑪c 抑制前缀没有按回声登记认领并跳过原方法 —— 等于没抑制");
-            // 判据钉**调用点实参**（inputs, result），不是方法名：删调用点、留定义
-            // 的半修形态会让「方法名出现过」的宽判据照样全绿（U52 首轮实测）。
-            Expect(kbsim.Contains("RecordSentKeys(inputs, result)"),
-                "⑪c SendInputs 没有登记发出的键 —— 抑制补丁在钩子线程认领不到回声，double press 回归");
+                "⑪c 回声隔离没打在 HookCallback 上 —— 那是 keyQueue 与 KeyUpdated 的共同入口，掐在别处必漏");
+            // 2026-10-31 第二版：认领机制（发送记录环形缓冲）整体退役——它有先天
+            // 竞态（回声在钩子线程送达时主线程可能还没走到登记），概率性漏。
+            // 现在的形态是回放期**全吞**（Esc 除外），由 ㊵b 钉住。
+            Expect(suppressor.Contains("SpectreReplay.SpectreState.is_playing", StringComparison.Ordinal)
+                && suppressor.Contains("return false", StringComparison.Ordinal),
+                "⑪c 回声隔离没有按回放状态吞钩子事件 —— 等于没隔离");
 
 
             // ⑫ 「播放一瞬间全部模拟完」。三次实测里最严重的一类：不是不动，是
