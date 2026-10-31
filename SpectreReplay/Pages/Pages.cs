@@ -1778,6 +1778,13 @@ namespace SpectreReplay.Pages
             // 所以打开时由 CursorOverlay 在像素层画一个上去。
             OnGui.Row("render.cursor", RenderCursorOn,
                 v => { RenderCursorOn = v; Commit(); });
+            // 键位显示合成开关：对应 **Settings.RenderKeyViewerOverlay**。
+            // 与鼠标指针同一族（成片里有什么）。键显画布是 Overlay，相机拍不到，
+            // 打开时由 KeyViewerOverlayCapture 在渲染期临时切 ScreenSpaceCamera
+            // 挂上渲染相机，并把雨滴时钟换轨到虚拟时钟；JipperKeyViewer
+            // 未安装时该开关无效果（帧源里找不到那块画布）。
+            OnGui.Row("render.keyviewer", RenderKeyViewerOverlay,
+                v => { RenderKeyViewerOverlay = v; Commit(); });
             OnGui.RowDropdown("render.codec", new[]
             {
                 Loc.T("render.codec.auto"), Loc.T("render.codec.fastest"),

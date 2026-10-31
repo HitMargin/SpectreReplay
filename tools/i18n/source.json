@@ -1705,6 +1705,16 @@
   "en": "Draw the mouse cursor into the video. Newly recorded replays also store a cursor track, replayed along the song timeline on render — in sync with the picture and unaffected by render speed. Older replays have no track and fall back to the live cursor at render time, whose pacing follows render speed. A hidden cursor is not drawn."
  },
  {
+  "key": "render.keyviewer",
+  "zh": "渲染时叠加键位显示（含雨滴）",
+  "en": "Overlay key viewer in rendered video (with rain)"
+ },
+ {
+  "key": "render.keyviewer.tip",
+  "zh": "把键位显示画布合成进渲染视频，雨滴速度跟随游戏时间（与画面同一时钟，不随渲染快慢波动）。需要安装 JipperKeyViewer，雨滴需要 JipperResourcePack；未安装时本项无效果。渲染期间屏幕预览也会显示键显，与成片一致。",
+  "en": "Composites the key viewer canvas into the rendered video; rain speed follows game time (same clock as the picture, unaffected by render speed). Requires JipperKeyViewer; rain needs JipperResourcePack. No effect if not installed. The on-screen preview also shows the key viewer, matching the video."
+ },
+ {
   "key": "render.codec.tip",
   "zh": "编码器选择。「最快」优先用显卡硬件编码，探测失败会退回 CPU——速度差一个数量级，实际用的那个在下面那行显示。",
   "en": "Encoder choice. Fastest prefers GPU encoding and falls back to CPU when probing fails; the row below shows which one is actually in use."

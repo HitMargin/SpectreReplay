@@ -601,6 +601,25 @@ switch ($Which) {
         Backup 'Features\Replay\Runtime\KeyboardSimulation.cs'
         ReplaceExact 'Features\Replay\Runtime\KeyboardSimulation.cs' ('        RecordSentKeys(inputs, result);') ('')
     }
+    'MUT-U53' {
+        # ㊴b：帧源不再调键显合成——画布留在 Overlay，相机 RT 永远拍不到，
+        #     「渲染时叠加键位显示」整个没效果。
+        Backup 'Features\VideoRender\Pipeline\VideoFrameSource.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoFrameSource.cs' ('                KeyViewerOverlayCapture.Install(cam.camobj);') ('')
+    }
+    'MUT-U54' {
+        # ㊴a：键位显示行错接到别的设置字段——开关看着能点，渲染永远用
+        #     别人的值。用编译合法的形态（接 RenderCursorOn），证明红来自
+        #     判据而不是编译错误。
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' ('            OnGui.Row("render.keyviewer", RenderKeyViewerOverlay,') ('            OnGui.Row("render.keyviewer", RenderCursorOn,')
+    }
+    'MUT-U55' {
+        # ㊴c：雨滴时钟不再换轨虚拟钟——画布进片了，雨滴仍吃墙钟，
+        #     慢放视频里全是快放废片。
+        Backup 'Features\VideoRender\Pipeline\KeyViewerOverlayCapture.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\KeyViewerOverlayCapture.cs' ('            PatchManager.RegisterManualPrefix(clockTarget, clockPrefix);') ('')
+    }
     'MUT-U25' {
         # ⑫i：把已删除的「界面语言跟随游戏」开关加回来（防回归变异）。
         #      用单引号字符串拼出双引号，避免在 here-string 外层写转义。
@@ -1977,7 +1996,7 @@ switch ($Which) {
         ReplaceExact 'Pages\Pages.cs' 'DrawDeleteFileButton(captured);' ''
     }
     default {
-        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U52）"
+        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U55）"
     }
 }
 

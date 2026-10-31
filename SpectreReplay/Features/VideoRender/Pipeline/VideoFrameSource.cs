@@ -134,6 +134,17 @@ internal sealed class VideoFrameSource
             cam.BGcam.targetTexture = texture;
             cam.camobj.targetTexture = texture;
 
+            // 键位显示合成（Settings.RenderKeyViewerOverlay）：键显画布是
+            // ScreenSpaceOverlay，相机拍不到；开着时渲染会话内临时切
+            // ScreenSpaceCamera 挂到主渲染相机，并把 JRP 雨滴时钟换轨到
+            // 虚拟时钟（墙钟雨滴在慢放视频里是快放废片）。一次性安装，
+            // 直接读 Settings——无需走 DrawCursor 那种作业传递（Grab 与
+            // TryTake 分处两段才需要）。
+            if (Settings.RenderKeyViewerOverlay)
+            {
+                KeyViewerOverlayCapture.Install(cam.camobj);
+            }
+
             // **捕获期间屏幕必须还有东西在画。** 三台相机被劫持到我们的
             // RenderTexture 之后，屏幕上没有任何相机清屏：世界冻在最后一帧，
             // 而 IMGUI 每帧照常往上叠，半透明菜单一层层累加 ⇒ 越叠越亮、
@@ -173,6 +184,10 @@ internal sealed class VideoFrameSource
     {
         if (surface == VideoSurface.WholeScreen)
             ScreenCapture.CaptureScreenshotIntoRenderTexture(texture);
+        // 键显画布被重建（JKV 改设置/切场景）就重新套用切模式；空查每帧一次，
+        // 代价可忽略。取像请求在相机渲染之后发出——画布随 camMain 进 RT，
+        // 与场景同一趟，无需额外同步。
+        KeyViewerOverlayCapture.ReapplyIfNeeded();
         AsyncGPUReadbackRequest request = AsyncGPUReadback.Request(
             texture, 0, TextureFormat.RGBA32, _ => { });
         Flight flight = new Flight { Index = index, Request = request };
@@ -344,6 +359,9 @@ internal sealed class VideoFrameSource
             previewCamera = null;
         }
         if (surface != VideoSurface.CleanCamera) return;
+        // 键显画布先恢复 Overlay：与相机还原同一次调用，避免中间出现
+        // 「相机已写屏幕、键显还挂在我们的相机上」的混合帧。
+        KeyViewerOverlayCapture.Restore();
         // 逐项兜底：相机可能在渲染途中被销毁，任一抛异常都不能带走后面两台。
         // **用构造时抓到的引用**，不是 scrCamera.instance —— 渲染中切过场景的话，
         // instance 已经是新相机，照它还原会打偏，旧相机永远留在我们的纹理上。

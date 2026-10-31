@@ -342,6 +342,8 @@
   "render.tail.tip": "Secunde suplimentare înregistrate după terminarea nivelului, pentru a păstra animația de final.",
   "render.surface.tip": "Sursa cadrelor. Camera curată nu are UI și are orice rezoluție; ecranul jocului include UI și urmează fereastra.",
   "render.cursor.tip": "Desenează cursorul mouse-ului în videoclip. Replay-urile înregistrate recent salvează și traiectoria cursorului, reprodusă de-a lungul liniei de timp a piesei — sincronizată cu imaginea și independentă de viteza de randare. Replay-urile mai vechi nu au traiectorie și revin la cursorul live din momentul randării (ritmul urmează viteza de randare). Un cursor ascuns nu este desenat.",
+  "render.keyviewer": "Suprapune vizualizatorul de taste în videoclipul randat (cu ploaie)",
+  "render.keyviewer.tip": "Compune pânza vizualizatorului de taste în videoclipul randat; viteza ploii urmărește timpul jocului (același ceas ca imaginea, neafectat de viteza randării). Necesită JipperKeyViewer; ploaia necesită JipperResourcePack. Fără efect dacă nu sunt instalate. Previzualizarea pe ecran afișează și ea vizualizatorul, identic cu videoclipul.",
   "render.codec.tip": "Alegerea codificatorului. Cel mai rapid preferă codificarea pe GPU și revine la CPU când detectarea eșuează; rândul de mai jos arată care este folosit efectiv.",
   "render.quality.tip": "Calitatea codificării. Mai ridicată dă fișiere mai mari și randări puțin mai lungi.",
   "render.format.tip": "Containerul fișierului de ieșire. mp4 este cel mai compatibil; webm e mai mic, dar necesită recodificare.",

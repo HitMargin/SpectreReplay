@@ -342,6 +342,8 @@
   "render.tail.tip": "Số giây ghi thêm sau khi màn kết thúc, để giữ hoạt ảnh kết.",
   "render.surface.tip": "Nguồn khung hình. Camera sạch không có UI và độ phân giải tùy ý; màn hình game có UI và theo cửa sổ.",
   "render.cursor.tip": "Vẽ con trỏ chuột vào video. Các replay ghi mới cũng lưu cả quỹ đạo con trỏ, phát lại theo dòng thời gian của bài hát — đồng bộ với hình ảnh và không bị ảnh hưởng bởi tốc độ render. Replay cũ không có quỹ đạo nên dùng con trỏ thực tại thời điểm render (nhịp đi theo tốc độ render). Con trỏ bị ẩn sẽ không được vẽ.",
+  "render.keyviewer": "Chèn trình xem phím vào video kết xuất (có mưa)",
+  "render.keyviewer.tip": "Ghép canvas của trình xem phím vào video kết xuất; tốc độ mưa theo thời gian trò chơi (cùng đồng hồ với hình ảnh, không bị ảnh hưởng bởi tốc độ kết xuất). Cần JipperKeyViewer; mưa cần JipperResourcePack. Không có hiệu lực nếu chưa cài đặt. Bản xem trước trên màn hình cũng hiển thị trình xem phím, khớp với video.",
   "render.codec.tip": "Chọn bộ mã hóa. Nhanh nhất ưu tiên mã hóa GPU và quay về CPU khi dò thất bại; dòng bên dưới cho biết cái nào đang thực sự dùng.",
   "render.quality.tip": "Chất lượng mã hóa. Cao hơn cho tệp lớn hơn và kết xuất lâu hơn một chút.",
   "render.format.tip": "Vật chứa của tệp đầu ra. mp4 tương thích nhất; webm nhỏ hơn nhưng cần mã hóa lại.",

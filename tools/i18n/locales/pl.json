@@ -342,6 +342,8 @@
   "render.tail.tip": "Dodatkowe sekundy nagrywane po zakończeniu poziomu, aby zachować animację wyjściową.",
   "render.surface.tip": "Źródło klatek. Czysta kamera nie ma UI i ma dowolną rozdzielczość; ekran gry zawiera UI i zależy od okna.",
   "render.cursor.tip": "Rysuje kursor myszy w wideo. Nowo nagrane replaye zapisują także trajektorię kursora, odtwarzaną wzdłuż osi czasu utworu — zsynchronizowaną z obrazem i niezależną od szybkości renderowania. Starsze replaye nie mają trajektorii i używają żywego kursora z czasu renderowania (jego tempo zależy od szybkości renderowania). Ukryty kursor nie jest rysowany.",
+  "render.keyviewer": "Nakładka podglądu klawiszy w renderowanym filmie (z deszczem)",
+  "render.keyviewer.tip": "Składa kanwę podglądu klawiszy w renderowanym filmie; prędkość deszczu podąża za czasem gry (ten sam zegar co obraz, niezależna od szybkości renderowania). Wymaga JipperKeyViewer; deszcz wymaga JipperResourcePack. Bez efektu, jeśli nie są zainstalowane. Podgląd na ekranie również pokazuje podgląd klawiszy, zgodnie z filmem.",
   "render.codec.tip": "Wybór kodera. Najszybciej preferuje kodowanie GPU i wraca do CPU, gdy wykrywanie się nie powiedzie; wiersz poniżej pokazuje, który jest faktycznie używany.",
   "render.quality.tip": "Jakość kodowania. Wyższa daje większe pliki i nieco dłuższe renderowanie.",
   "render.format.tip": "Kontener pliku wyjściowego. mp4 jest najbardziej kompatybilny; webm jest mniejszy, ale wymaga ponownego kodowania.",

@@ -211,6 +211,12 @@ public static class Settings
     public static int ConvertTarget = 0;       // 转换目标容器：0 mp4 1 mkv 2 webm 3 mov
     public static float RenderTailSeconds = 3f;
     public static bool RenderCursorOn = false;
+    // 渲染时把键位显示画布（Jipper KeyViewer，含 JRP 雨滴）合成进成片。
+    // **默认关**：把外部 mod 的 UI 画进视频属于作者口味，不该替玩家决定。
+    // 两层缺一不可（见 KeyViewerOverlayCapture）：画布临时切 ScreenSpaceCamera
+    // 挂上渲染相机（Overlay 永远拍不到），雨滴时钟换轨到虚拟时钟——
+    // 否则慢放视频里雨滴全是墙钟快放废片。
+    public static bool RenderKeyViewerOverlay = false;
     // 是否允许在渲染途中按一个快捷键**提前结束**，把「从开始渲染到按键那一刻」
     // 的画面导出——也就是渲染不再受回放文件长度限制。
     //

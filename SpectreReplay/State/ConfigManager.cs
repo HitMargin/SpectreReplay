@@ -110,6 +110,7 @@ public static class ConfigManager
         public bool render_on { get; set; }
         public bool render_clock_on { get; set; }
         public bool render_cursor_on { get; set; }
+        public bool render_keyviewer_on { get; set; }
         public bool render_stop_on { get; set; }
         public int render_stop_key { get; set; }
         /// <summary>提示条停留秒数（见 Settings.NotificationSeconds）。</summary>
@@ -238,6 +239,7 @@ public static class ConfigManager
                 render_on = Settings.RenderOn,
                 render_clock_on = Settings.RenderClockOn,
                 render_cursor_on = Settings.RenderCursorOn,
+                render_keyviewer_on = Settings.RenderKeyViewerOverlay,
                 render_stop_on = Settings.RenderStopOn,
                 render_stop_key = Settings.RenderStopKey,
                 notification_seconds = Settings.NotificationSeconds,
@@ -538,6 +540,7 @@ public static class ConfigManager
                     Settings.RenderOn = ints.Value<bool?>("render_on") ?? Settings.RenderOn;
                     Settings.RenderClockOn = ints.Value<bool?>("render_clock_on") ?? Settings.RenderClockOn;
                     Settings.RenderCursorOn = ints.Value<bool?>("render_cursor_on") ?? Settings.RenderCursorOn;
+                    Settings.RenderKeyViewerOverlay = ints.Value<bool?>("render_keyviewer_on") ?? Settings.RenderKeyViewerOverlay;
                     Settings.RenderStopOn = ints.Value<bool?>("render_stop_on") ?? Settings.RenderStopOn;
                     // 键值不 Clamp：它是 KeyCode 数值域，合法集合由 Enum.IsDefined
                     // 在轮询处把关（见 VideoRenderJob.StopRequestedByHotkey）。
