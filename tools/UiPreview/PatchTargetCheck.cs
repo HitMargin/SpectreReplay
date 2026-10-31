@@ -52,6 +52,18 @@ namespace UiPreview
                 return 1;
             }
 
+            // SkyHook.Unity.dll 是独立程序集（异步输入的钩子层）：镜像回声抑制
+            // 补丁打在它的 SkyHookManager.HookCallback 上。目标解析要两个程序集
+            // 都试，否则这条补丁会被误判成「目标类型不存在」——那是检查器自己的
+            // 盲区，不是补丁挂不上。
+            Assembly skyHook = null;
+            string skyDll = Path.Combine(Path.GetDirectoryName(dll), "SkyHook.Unity.dll");
+            if (File.Exists(skyDll))
+            {
+                try { skyHook = Assembly.LoadFrom(skyDll); }
+                catch (Exception ex) { Console.WriteLine("    · SkyHook.Unity.dll 加载失败（按缺失处理）：" + ex.Message); }
+            }
+
             // 扫主项目源码收集 [SpectrePatch(...)] 声明
             var specs = CollectSpecs(projectRoot);
             if (specs.Count == 0)
@@ -88,7 +100,7 @@ namespace UiPreview
                 if (s.MinVersion > 0 && GameRelease < s.MinVersion) { skipped++; continue; }
                 if (s.MaxVersion > 0 && GameRelease > s.MaxVersion) { skipped++; continue; }
 
-                Type t = game.GetType(s.ClassName);
+                Type t = game.GetType(s.ClassName) ?? skyHook?.GetType(s.ClassName);
                 if (t == null)
                 {
                     // **补一次按简单名查找。** 源码里写的是 typeof(LevelData)，
@@ -97,6 +109,10 @@ namespace UiPreview
                     // 只查全名就会误判成"目标类型不存在"——那是检查器自己的盲区，
                     // 不是补丁挂不上。按简单名扫一遍兜底，重名时优先取唯一的那个。
                     t = FindTypeBySimpleName(game, s.ClassName);
+                }
+                if (t == null && skyHook != null)
+                {
+                    t = FindTypeBySimpleName(skyHook, s.ClassName);
                 }
                 if (t == null)
                 {

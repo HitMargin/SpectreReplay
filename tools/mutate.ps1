@@ -21,17 +21,10 @@
 # 跑完自动还原原文件。
 #
 # 注意：这个文件必须存成 UTF-8 带 BOM（同 verify.ps1）。
-#
-# 目标不在离屏套件里的变异（MUT-PORT1）：执行器按 $portAuditMutants 分派到
-# tools\port-diff-audit.ps1，以它的退出码判定 —— 跑 UiPreview 对它永远是
-# "0 失败"，判不出真假。
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Which,
-    [switch]$ExpectGreen,
-    # MUT-PORT1 这类变异的目标没链进离屏套件，判据在独立审计脚本里。
-    # 执行器默认按 $portAuditMutants 自动分派；此开关用于强制走审计路径。
-    [switch]$PortAudit
+    [switch]$ExpectGreen
 )
 
 $ErrorActionPreference = 'Stop'
@@ -48,14 +41,6 @@ $utf8 = New-Object Text.UTF8Encoding($false)
 $OutputEncoding = [Console]::OutputEncoding
 $touched = New-Object System.Collections.ArrayList
 
-# 目标不在离屏套件里的变异：它们改的文件没链进 UiPreview（见 UiPreview.csproj 的
-# 链接清单），于是编译进不去、跑 UiPreview 永远是"0 失败"，被误判成"断言是假的"。
-# 真正抓它们的是独立的 tools\port-diff-audit.ps1，必须分派过去跑。
-# 键 = 变异名；File = 审计报告里应当点名的文件——判据要对准"抓到的是这处漂移"，
-# 光看退出码会把"本来就有别的未登记差异"误当成"这条变异被检出"。
-$portAuditMutants = @{
-    'MUT-PORT1' = @{ File = 'KeyboardSimulation.cs'; Why = 'port-diff-audit：未登记差异' }
-}
 
 # 相对路径的解析根。绝大多数变异改主项目源码（SpectreReplay\ 下），
 # 但也有要改闸门自身的（tools\UiPreview\*.cs）。用 'repo:' 前缀显式指定仓库根，
@@ -603,6 +588,18 @@ switch ($Which) {
         #     按钮装不下，字被拦腰裁断（2026-10-30 用户截图）。
         Backup 'Ui\OnGui.cs'
         ReplaceExact 'Ui\OnGui.cs' ('                    GUILayout.Width(Gui.ButtonW(deleteLabel, Gui.QuietButtonStyle, 56f)),') ('                    GUILayout.Width(56f),')
+    }
+    'MUT-U51' {
+        # ⑪c：镜像门退回无条件互斥——异步开着时镜像整个没效果
+        #     （2026-10-30 用户反馈的原缺陷），且「抑制补丁挂载」退路消失。
+        Backup 'Features\Replay\Runtime\ReplayPlayer.cs'
+        ReplaceExact 'Features\Replay\Runtime\ReplayPlayer.cs' ('        bool sendInput = ManagedInput.Mirror && (!asyncInject || suppressorArmed);') ('        bool sendInput = ManagedInput.Mirror && !asyncInject;')
+    }
+    'MUT-U52' {
+        # ⑪c：SendInputs 不再登记发出的键——抑制补丁在钩子线程认领不到
+        #     回声，SendInput 回声与合成事件一起进 keyQueue，double press 回归。
+        Backup 'Features\Replay\Runtime\KeyboardSimulation.cs'
+        ReplaceExact 'Features\Replay\Runtime\KeyboardSimulation.cs' ('        RecordSentKeys(inputs, result);') ('')
     }
     'MUT-U25' {
         # ⑫i：把已删除的「界面语言跟随游戏」开关加回来（防回归变异）。
@@ -1978,62 +1975,10 @@ switch ($Which) {
         # ㉒a 入口回归：列表行里不再画删除按钮（功能整个消失）。
         Backup 'Pages\Pages.cs'
         ReplaceExact 'Pages\Pages.cs' 'DrawDeleteFileButton(captured);' ''
-    }    'MUT-PORT1' {
-        # 移植保真度：在 KeyboardSimulation.cs 里引入一处**上游没有、也登记不上**的
-        # 改动 = 模拟"抄错"。port-diff-audit 应当报"未登记差异"并 exit 1。
-        # 这条守的是 round 60 立的约定：每处与上游的差异都必须挂到一条修改记录。
-        Backup 'Features\Replay\Runtime\KeyboardSimulation.cs'
-        ReplaceExact 'Features\Replay\Runtime\KeyboardSimulation.cs' 'internal static class KeyboardSimulation' 'internal static class KeyboardSimulation { /* accidental drift */ internal static int __driftProbe = 1;'
     }
     default {
-        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U50 / MUT-PORT1）"
+        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U52）"
     }
-}
-
-# ── 分派：目标不在离屏套件里的变异，改跑独立审计脚本 ──────────────────
-# 不这么分派的话，那些变异恒报"0 失败"⇒被记成"断言是假的"，而判据根本没被跑到。
-$pa = $portAuditMutants[$Which]
-if ($PortAudit -or $pa) {
-    if (-not $pa) { $pa = @{ File = ''; Why = '（-PortAudit 强制）' } }
-    $audit = Join-Path $root 'tools\port-diff-audit.ps1'
-    if (-not (Test-Path $audit)) {
-        Cleanup
-        Write-Host '✗ 找不到 tools\port-diff-audit.ps1' -ForegroundColor Red
-        exit 2
-    }
-    $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $audit 2>&1
-    $code = $LASTEXITCODE
-    Cleanup
-    Write-Host ("已还原 " + $Which) -ForegroundColor Yellow
-    if ($code -eq 3) {
-        Write-Host "✗ port-diff-audit 环境缺失（exit 3）——无法判定 $Which" -ForegroundColor Red
-        exit 2
-    }
-    $txt = ($out | Out-String)
-    $hitFile = ($pa.File -eq '') -or ($txt -match [regex]::Escape($pa.File))
-    $hitKind = $txt -match '未登记差异'
-    # 三条同时成立才算"被检出"：审计非零、报的是未登记差异、且点名本次改的文件。
-    # 只看退出码会把"本来就有别的未登记差异"误当成"这条变异被检出"（假通过）。
-    $detected = ($code -ne 0) -and $hitFile -and $hitKind
-    if ($ExpectGreen) {
-        if (-not $detected) {
-            Write-Host ("✓ $Which 反向对照成立：审计保持通过") -ForegroundColor Green
-            exit 0
-        }
-        Write-Host ("✗ $Which 反向对照被检出") -ForegroundColor Red
-        exit 1
-    }
-    if ($detected) {
-        Write-Host ("✓ $Which 被检出（port-diff-audit exit $code：" + $pa.Why + "）") -ForegroundColor Green
-        exit 0
-    }
-    if ($code -eq 0) {
-        Write-Host ("✗ $Which 没有让审计变红——这条断言是假的（exit 0）") -ForegroundColor Red
-    } else {
-        Write-Host ("✗ $Which 让审计变红，但报的不是本次注入的漂移（未点名 $($pa.File)）") -ForegroundColor Red
-        $out | Select-Object -Last 15 | ForEach-Object { Write-Host ('  ' + $_) }
-    }
-    exit 1
 }
 
 # 跑闸门

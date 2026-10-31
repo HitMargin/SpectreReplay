@@ -12,6 +12,10 @@ internal static class ReplayPlayer
     // 复用列表，避免 PlayKeyboardEvent 每帧分配 List<INPUT>
     private static readonly List<KeyboardSimulation.INPUT> _inputBuffer = new List<KeyboardSimulation.INPUT>(256);
 
+    // 镜像退回互斥只警告一次：这行日志是「开了 MirrorInputToOS 却没效果」时
+    // 玩家能拿到的唯一线索（铁律：没挂上必须能看见）。
+    private static bool _loggedMirrorFallback;
+
     internal static void Start()
     {
         if (!is_playing && !ApiBlockPlaying)
@@ -365,9 +369,21 @@ internal static class ReplayPlayer
         var inputs = _inputBuffer;
         inputs.Clear();
         bool asyncInject = AsyncInputInjector.Injectable && AsyncInputInjector.Healthy;
-        // SendInput 与**真正在灌**的那条互斥：只要异步广播在走就不发 OS 级按键
-        // （SkyHook 会把 SendInput 的键再捕一次，同一颗键算两遍）。
-        bool sendInput = ManagedInput.Mirror && !asyncInject;
+        // SendInput（镜像显示）与合成事件注入**并存**：OS 级按键是给只读
+        // Unity Input 的显示模组看的。它的回声会被 SkyHook 钩子再捕一次，
+        // Patch_MirrorEchoSuppressor 在 HookCallback 入口把回声掐掉，判定
+        // 只认合成事件一份。抑制补丁没挂上（游戏改形状/挂载失败）时退回
+        // 互斥——宁可显示模组失明，不能同一颗键判两遍。
+        // 挂载状态必须查 SpectrePatchHub（属性补丁的登记册）；PatchManager
+        // 的挂载集只记手工补丁类，查那边恒 false（2026-10-30 实测的错账）。
+        bool suppressorArmed = PatchShared.SpectrePatchHub.IsApplied(typeof(Patch_MirrorEchoSuppressor));
+        bool sendInput = ManagedInput.Mirror && (!asyncInject || suppressorArmed);
+        if (ManagedInput.Mirror && asyncInject && !suppressorArmed && !_loggedMirrorFallback)
+        {
+            _loggedMirrorFallback = true;
+            Debug.LogWarning("[SpectreReplay] 镜像到 OS 未生效：回声抑制补丁未挂载，"
+                + "退回互斥（防止同一颗键判两遍）");
+        }
         while (KeyEventIndex < data.KeyEvents.Count
             && pumped < MaxEventsPerFrame
             && songPosition >= data.KeyEvents[KeyEventIndex].SongPosition)

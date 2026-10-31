@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using UnityEngine;
 
@@ -155,11 +156,80 @@ internal static class KeyboardSimulation
             // 注意：UIPI 失败**不**关闭 SendInput。它可能只是这一批被拒；
             // 关掉它等于让"原本能用的"也失效，损失远大于收益。
             int err = Marshal.GetLastWin32Error();
-            Debug.LogWarning($"[SpectreReplay] SendInput 部分失败：已处理 {result}/{inputs.Length} 个按键"
+            UnityEngine.Debug.LogWarning($"[SpectreReplay] SendInput 部分失败：已处理 {result}/{inputs.Length} 个按键"
                 + $"（Win32 错误码 {err}"
                 + (err == 5 ? " = ERROR_ACCESS_DENIED：游戏与注入进程的权限级别不一致，"
                             + "请用相同权限（通常都提权或都不提权）运行游戏" : "")
                 + "）");
         }
+        // **登记本批实际注入的按键**（部分失败时只记前 result 个——没打出去的
+        // 键不会有回声）。这是 Patch_MirrorEchoSuppressor 在钩子回调里认领
+        // 「我们自己发的系统按键」的唯一凭据：SendInput 与合成事件注入并存时
+        // （MirrorInputToOS 开 + 异步广播在走），OS 级按键会被 SkyHook 的全局
+        // 钩子再捕一次，不掐掉就与合成事件一起进 keyQueue——同一颗键判两遍。
+        RecordSentKeys(inputs, result);
+    }
+
+    // ── 回声登记（写：主线程 SendInputs；读：钩子原生线程的补丁前缀） ──
+    //
+    // 两个线程之间就这一份交接，每秒至多几十个事件，一把锁足够。
+    // SkyHookEvent 没有 extra-info 字段（只有 Time/Type/Label/Key），
+    // 回声只能按「键码 + 方向 + 时间窗」认领。
+
+    private struct SentKey
+    {
+        internal ushort Vk;
+        internal bool Pressed;
+        internal long Stamp;   // Stopwatch.GetTimestamp()，单调钟
+    }
+
+    private static readonly object _sentGate = new();
+    private static readonly SentKey[] _sentKeys = new SentKey[512];
+    private static int _sentNext;
+
+    // 钩子回调通常几毫秒内到达；放宽到 150ms 是给 LL 钩子超时
+    // （LowLevelHooksTimeout）留余量。放宽的代价只是「真实按键与镜像键
+    // 同码同向且落窗内」被一并吞掉——回放期间玩家的实键不参与判定，可接受。
+    private static readonly long SentWindowTicks = (long)(Stopwatch.Frequency * 0.15);
+
+    private static void RecordSentKeys(INPUT[] inputs, uint count)
+    {
+        if (count == 0) return;
+        long now = Stopwatch.GetTimestamp();
+        lock (_sentGate)
+        {
+            for (int i = 0; i < count && i < inputs.Length; i++)
+            {
+                _sentKeys[_sentNext] = new SentKey
+                {
+                    Vk = inputs[i].u.ki.wVk,
+                    Pressed = (inputs[i].u.ki.dwFlags & KEYEVENTF_KEYUP) == 0,
+                    Stamp = now,
+                };
+                _sentNext = (_sentNext + 1) % _sentKeys.Length;
+            }
+        }
+    }
+
+    /// <summary>钩子线程查询：这条事件是不是我们刚用 SendInput 发的。
+    /// 顺带清理窗口外的旧记录，稳态下数组几乎恒空。</summary>
+    internal static bool IsRecentlySentByUs(ushort vk, bool pressed)
+    {
+        long now = Stopwatch.GetTimestamp();
+        lock (_sentGate)
+        {
+            for (int i = 0; i < _sentKeys.Length; i++)
+            {
+                ref SentKey s = ref _sentKeys[i];
+                if (s.Stamp == 0 || s.Vk != vk || s.Pressed != pressed) continue;
+                if (now - s.Stamp > SentWindowTicks)
+                {
+                    s.Stamp = 0;
+                    continue;
+                }
+                return true;
+            }
+        }
+        return false;
     }
 }

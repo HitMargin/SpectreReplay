@@ -317,6 +317,32 @@ internal static class SpectrePatchHub
         }
     }
 
+    /// <summary>
+    /// 按补丁类查询挂载状态：该类下每一条 [SpectrePatch] 声明都已应用才算真。
+    /// 运行时门控用（镜像回声抑制的退路，见 Patch_MirrorEchoSuppressor）。
+    ///
+    /// **为什么不在 PatchManager 上查**：`_appliedPatches` 只登记
+    /// <c>RegisterPatch</c> 的手工补丁类；属性补丁走本 Hub 自己的
+    /// <see cref="Spec.Applied"/>，两本账互不相通——2026-10-30 实测，
+    /// 查错了账本会让镜像门永远退回互斥（日志 1250 行 vs 156 行的矛盾）。
+    /// 类下一条声明都收集不到时按「未挂载」处理，门控退回保守路径。
+    /// </summary>
+    public static bool IsApplied(Type patchClass)
+    {
+        lock (_lock)
+        {
+            bool any = false;
+            foreach (Spec s in _specs)
+            {
+                if (s.PatchMethod == null || s.PatchMethod.DeclaringType != patchClass)
+                    continue;
+                any = true;
+                if (!s.Applied) return false;
+            }
+            return any;
+        }
+    }
+
     // —— 解析 ————————————————————————————————————————————
 
     private static void Resolve(Spec spec)

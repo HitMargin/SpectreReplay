@@ -22,6 +22,11 @@ if (-not (Test-Path $asmPath)) {
     exit 3
 }
 $asm = [Reflection.Assembly]::LoadFrom($asmPath)
+# SkyHook.Unity.dll 是独立程序集（异步输入的钩子层）：镜像回声抑制补丁打在
+# 它的 SkyHookManager.HookCallback 上。目标解析必须两个程序集都试，否则这条
+# 补丁会被判成「目标类型/方法未找到」——那是审计误判，不是补丁写错。
+$asmSkyPath = Join-Path $libs 'SkyHook.Unity.dll'
+$asmSky = if (Test-Path $asmSkyPath) { [Reflection.Assembly]::LoadFrom($asmSkyPath) } else { $null }
 # 读不到源目录时 Get-ChildItem 会去递归遍历父目录、在无关路径抛 AccessDenied
 # （round 38 实测），报错指不到"路径指错了"这个根因。先在此处拦住。
 if (-not (Test-Path $src)) {
@@ -95,8 +100,9 @@ foreach ($f in $files) {
         if (-not $byName) { continue }
         if ($ordinary.Count -eq 0) { continue }
 
-        # 反射真程序集
+        # 反射真程序集（Assembly-CSharp 优先，SkyHook.Unity 兜底）
         $type = $asm.GetType($typeName)
+        if (-not $type -and $asmSky) { $type = $asmSky.GetType($typeName) }
         $verdict = '目标类型/方法未找到'
         if ($type) {
             # **属性也算目标。** 形如 songposition_minusi 是 scrConductor 的属性，

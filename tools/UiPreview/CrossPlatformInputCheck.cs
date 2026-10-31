@@ -196,7 +196,7 @@ namespace UiPreview
             Expect(patch.Split(new[] { "ManagedInput.NativeTakeover" }, StringSplitOptions.None).Length - 1 >= 3,
                 "⑪ 三个 RDInput 覆盖点没有全部联动 —— 漏掉的那个会在原生链下重复计数");
 
-            // ⑪b 回放侧必须自己也在用同一条判据，并且**两条路互斥**。
+            // ⑪b 回放侧必须自己也在用同一条判据。
             //    注入判据必须是 **Injectable**，不能是 Usable。
             //    Usable 额外要求 asyncKeyboard.isActive（只在 PlayerControl 为真），
             //    而 KeyUpdated 的消费者不只是游戏——JipperResourcePack 直接订阅
@@ -207,8 +207,37 @@ namespace UiPreview
                 "⑪b ReplayPlayer 的 asyncInject 没有看 Injectable && Healthy —— 非 PlayerControl 状态下键位显示模组会整段失明");
             Expect(!Has(player, @"asyncInject\s*=\s*AsyncInputInjector\.Usable"),
                 "⑪b asyncInject 用了 Usable —— 它要求 asyncKeyboard.isActive，只在 PlayerControl 为真，会把广播一起掐掉");
-            Expect(Has(player, @"sendInput\s*=\s*ManagedInput\.Mirror\s*&&\s*!asyncInject"),
-                "⑪b SendInput 没有与异步链互斥 —— 同一颗键会被算两次（SkyHook 会把注入键再捕一次）");
+
+            // ⑪c 镜像与异步广播**并存**（2026-10-30 用户反馈：异步开着时镜像
+            //     完全没效果，界面又毫无提示）。旧实现把两者互斥——SendInput 的
+            //     回声会被 SkyHook 全局钩子再捕一次，与合成事件一起进 keyQueue，
+            //     同一颗键判两遍（实测 double press）。现在的分层：SendInput 照发
+            //     （只读 Unity Input 的显示模组靠它），回声由 Patch_MirrorEchoSuppressor
+            //     在 HookCallback 入口掐掉——那是 keyQueue 与 KeyUpdated 的共同
+            //     入口，掐在别处必漏一半——判定只认合成事件一份。
+            //     正确性押在两件事上，缺一就是「回放判两遍」：
+            //     ① 镜像门必须带「抑制补丁已挂载」的退路，且查询必须走
+            //        **SpectrePatchHub**：属性补丁的登记册在 Hub 的 spec.Applied，
+            //        PatchManager 的挂载集只记 RegisterPatch 的手工补丁类，
+            //        查那边恒 false，镜像永远退回互斥——2026-10-30 实测的错账
+            //        （日志 156 行「已挂载」 vs 1250 行「未挂载」的矛盾就是它）；
+            //     ② SendInputs 必须登记发出的键——那是抑制补丁在钩子线程认领
+            //        回声的唯一凭据（SkyHookEvent 没有 extra-info 字段）。
+            Expect(Has(player, @"bool suppressorArmed\s*=\s*PatchShared\.SpectrePatchHub\.IsApplied\(typeof\(Patch_MirrorEchoSuppressor\)\)"),
+                "⑪c 镜像门的挂载查询没走 SpectrePatchHub（查 PatchManager 恒 false）—— 异步开着时镜像整个没效果");
+            Expect(Has(player, @"sendInput\s*=\s*ManagedInput\.Mirror\s*&&\s*\(!asyncInject\s*\|\|\s*suppressorArmed\)"),
+                "⑪c 镜像门没有按 suppressorArmed 退路 —— 抑制补丁失效还发 SendInput，同一颗键判两遍");
+            Expect(!Has(player, @"sendInput\s*=\s*ManagedInput\.Mirror\s*&&\s*!asyncInject"),
+                "⑪c 镜像退回了无条件互斥 —— 异步开着时镜像整个没效果（2026-10-30 用户反馈的原缺陷）");
+            string suppressor = SrcUtil.Source(projectRoot, "Features/Replay/Patches/Patch_MirrorEchoSuppressor.cs");
+            Expect(Has(suppressor, @"typeof\(SkyHook\.SkyHookManager\)\s*,\s*""HookCallback""\s*,\s*PatchType\.Prefix"),
+                "⑪c 回声抑制没打在 HookCallback 上 —— 那是 keyQueue 与 KeyUpdated 的共同入口，掐在别处必漏");
+            Expect(suppressor.Contains("IsRecentlySentByUs(") && suppressor.Contains("return false"),
+                "⑪c 抑制前缀没有按回声登记认领并跳过原方法 —— 等于没抑制");
+            // 判据钉**调用点实参**（inputs, result），不是方法名：删调用点、留定义
+            // 的半修形态会让「方法名出现过」的宽判据照样全绿（U52 首轮实测）。
+            Expect(kbsim.Contains("RecordSentKeys(inputs, result)"),
+                "⑪c SendInputs 没有登记发出的键 —— 抑制补丁在钩子线程认领不到回声，double press 回归");
 
 
             // ⑫ 「播放一瞬间全部模拟完」。三次实测里最严重的一类：不是不动，是
@@ -321,7 +350,7 @@ namespace UiPreview
             // ⑫a 的就绪判据现在在 CurrentSongPosition 里（PumpInput 已不再自行算时钟）。
 
             if (fail == 0)
-                Console.WriteLine("    ✓ 跨平台输入的 14 组判据都成立");
+                Console.WriteLine("    ✓ 跨平台输入的 15 组判据都成立");
             return fail;
         }
     }
