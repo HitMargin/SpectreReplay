@@ -1,4 +1,4 @@
-# 从 tools/i18n/source.json + tools/i18n/locales/*.json 生成 SpectreReplay/Ui/LocData.cs。
+﻿# 从 tools/i18n/source.json + tools/i18n/locales/*.json 生成 SpectreReplay/Ui/LocData.cs。
 #
 # 这是 gen-locdata.py 的 PowerShell 移植版（本机没有 Python，只有 Store 的转发存根）。
 # 逻辑与原脚本逐行对应，包括：

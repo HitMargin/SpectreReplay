@@ -1,6 +1,6 @@
 ﻿// 界面文案数据：14 种语言 × 429 个键。
 //
-// **本文件由 _gen_locdata.py 生成，不要手改。** 改文案请改 `tools/i18n/source.json`
+// **本文件由 tools/i18n/gen-locdata.ps1 生成，不要手改。** 改文案请改 `tools/i18n/source.json`
 // 或 `tools/i18n/locales/<lang>.json` 后重新生成——手改会在下次生成时被覆盖，
 // 而且很容易只改到一种语言，留下「这里怎么还是英文」的下一个坑。
 //
@@ -42,7 +42,7 @@ namespace SpectreReplay.Ui
                     ["record.asyncinput"] = "从异步输入取按键",
                     ["record.asyncinput.off"] = "游戏里没开「异步输入」，这一项现在不生效。请在游戏设置 → 输入里打开异步输入。",
                     ["replay.mirror"] = "把回放按键同步到系统（供键位显示模组）",
-                    ["replay.mirror.tip"] = "只影响第三方键位显示模组：它们读的是系统按键，看不到本模组内部的回放按键。不影响录制、回放与判定。只在游戏窗口处于焦点时生效；开启后可能与其他按键软件冲突。",
+                    ["replay.mirror.tip"] = "只影响第三方键位显示模组：它们读的是系统按键，看不到本模组内部的回放按键。不影响录制、回放与判定。仅 Windows 有效（其它平台静默无效）。只在游戏窗口处于焦点时生效；开启后可能与其他按键软件冲突。",
                     ["record.keybd"] = "键盘音",
                     ["record.keybd.record"] = "录制键盘音",
                     ["record.keybd.volume"] = "键盘音音量",
@@ -906,7 +906,7 @@ namespace SpectreReplay.Ui
                     ["record.asyncinput"] = "Read keys from async input",
                     ["record.asyncinput.off"] = "Async input is off in the game, so this option has no effect. Enable async input in the game's settings → input.",
                     ["replay.mirror"] = "Mirror replay keys to the OS (for key display mods)",
-                    ["replay.mirror.tip"] = "Only affects third-party key display mods: they read OS keystrokes and cannot see this mod's internal replay keys. Does not affect recording, playback or judgement. Works only while the game window is focused; may conflict with other key-handling software.",
+                    ["replay.mirror.tip"] = "Only affects third-party key display mods: they read OS keystrokes and cannot see this mod's internal replay keys. Does not affect recording, playback or judgement. Windows only (silently inert elsewhere). Works only while the game window is focused; may conflict with other key-handling software.",
                     ["record.keybd"] = "Keyboard sound",
                     ["record.keybd.record"] = "Record keyboard sound",
                     ["record.keybd.volume"] = "Keyboard sound volume",

@@ -111,8 +111,8 @@
  },
  {
   "key": "replay.mirror.tip",
-  "zh": "只影响第三方键位显示模组：它们读的是系统按键，看不到本模组内部的回放按键。不影响录制、回放与判定。只在游戏窗口处于焦点时生效；开启后可能与其他按键软件冲突。",
-  "en": "Only affects third-party key display mods: they read OS keystrokes and cannot see this mod's internal replay keys. Does not affect recording, playback or judgement. Works only while the game window is focused; may conflict with other key-handling software."
+  "zh": "只影响第三方键位显示模组：它们读的是系统按键，看不到本模组内部的回放按键。不影响录制、回放与判定。仅 Windows 有效（其它平台静默无效）。只在游戏窗口处于焦点时生效；开启后可能与其他按键软件冲突。",
+  "en": "Only affects third-party key display mods: they read OS keystrokes and cannot see this mod's internal replay keys. Does not affect recording, playback or judgement. Windows only (silently inert elsewhere). Works only while the game window is focused; may conflict with other key-handling software."
  },
  {
   "key": "record.keybd",
