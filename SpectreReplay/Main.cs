@@ -157,6 +157,10 @@ namespace SpectreReplay
                         && (Settings.AllowedKeyboardSpecialKeys.Count > 0
                             || Settings.AllowedAsyncSpecialKeys.Count > 0));
                 SpectrePatchHub.Refresh();
+                // Harmony 运行时取证：本机双加载器（MelonLoader 2.10.2 + UMM
+                // 2.3.6）共存，「挂载成功但链/核对看不到」的分裂形态只有运行时
+                // 能定案。紧贴首次 Refresh 执行 = 与神秘时刻同窗。查清后退役。
+                Features.Compat.HarmonyForensics.Run();
 
                 SpectreState.SetGetKeyAsyncEnabled(Settings.ReplayOn && Settings.GetDataFromAsyncInput);
                 SpectreState.data = new ReplayData();
