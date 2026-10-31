@@ -42,6 +42,7 @@ namespace SpectreReplay.Features.Replay;
 internal static class Patch_MirrorEchoSuppressor
 {
     private static bool _logged;
+    private static bool _dropLogged;
 
     // 诊断（有界）：镜像回放期间的前 12 个钩子事件全量落日志——
     // 「回声没拦住」时对照发送记录即可分辨「没到达」还是「没认上」。
@@ -53,11 +54,29 @@ internal static class Patch_MirrorEchoSuppressor
     {
         bool pressed = ev.Type == SkyHook.EventType.KeyPressed;
         bool sent = KeyboardSimulation.IsRecentlySentByUs(ev.Key, pressed);
+        // **回放键一律吞**（判定正主是合成事件，不经 HookCallback，见下）：
+        // 回放期间钩子里出现的回放键，来源是镜像回声，或 JKV 键位模拟对
+        // 合成事件的再广播——合成事件经 KeyUpdated 广播喂 kv 显示，JKV 的
+        // 按键模拟把它们当真键再注入一次 OS 层，钩子收到 → KeyUpdated →
+        // 游戏判第二次（2026-10-31 用户确认的多判定，第二判「大慢/太快」
+        // 随模拟时机抖动）。
+        bool replayKey = SpectreReplay.SpectreState.is_playing
+            && ReplayPlayer.ReplayKeySet.Contains(ev.Key);
         if (ManagedInput.Mirror && _diagLogged < 12)
         {
             _diagLogged++;
             Debug.Log($"[SpectreReplay][诊断] 钩子事件 Key={ev.Key} Pressed={pressed} "
-                + $"认领={sent} | " + KeyboardSimulation.DescribeRecent(ev.Key, pressed));
+                + $"认领={sent} 回放键={replayKey} | " + KeyboardSimulation.DescribeRecent(ev.Key, pressed));
+        }
+        if (replayKey)
+        {
+            if (!_dropLogged)
+            {
+                _dropLogged = true;
+                Debug.Log("[SpectreReplay] 已在钩子入口吞掉回放键事件（镜像回声与 JKV 键位模拟"
+                    + "都拦在这里；判定只认合成事件，kv 显示走 KeyUpdated 广播不受影响）");
+            }
+            return false;
         }
         // EventType 只有 KeyPressed / KeyReleased 两值，与 SendInput 的
         // KEYEVENTF_KEYUP 一一同型；Key 与我们发出去的 wVk 同一码空间

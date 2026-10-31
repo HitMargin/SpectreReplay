@@ -856,6 +856,17 @@ namespace UiPreview
                 "State\\SpectreAPI.cs",
                 s => s.Contains("RenderOverlayCapture.RegisterExternal(canvas)", StringComparison.Ordinal)
                     && s.Contains("RenderOverlayCapture.UnregisterExternal(canvas)", StringComparison.Ordinal));
+            // ㊵b 回放期钩子里的回放键必须吞掉。用户确认：JRP+JKV 并存时回放
+            //    多判定一次——JKV 的按键模拟把合成事件当真键再注入 OS 层，
+            //    钩子收到 → KeyUpdated → 游戏判第二次（第二判「大慢/太快」
+            //    随模拟时机抖动）。合成事件不经 HookCallback，按回放键集吞掉
+            //    的永远不会是判定正主。
+            fail += Check(projectRoot,
+                "㊵b 回放期钩子里的回放键必须按回放键集吞掉（JKV 模拟再广播会多判一次）",
+                "Features\\Replay\\Patches\\Patch_MirrorEchoSuppressor.cs",
+                s => s.Contains("if (replayKey)", StringComparison.Ordinal)
+                    && s.Contains("ReplayPlayer.ReplayKeySet.Contains(ev.Key)", StringComparison.Ordinal)
+                    && s.Contains("SpectreReplay.SpectreState.is_playing", StringComparison.Ordinal));
 
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");

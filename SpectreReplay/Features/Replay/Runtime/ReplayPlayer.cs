@@ -16,6 +16,13 @@ internal static class ReplayPlayer
     // 玩家能拿到的唯一线索（铁律：没挂上必须能看见）。
     private static bool _loggedMirrorFallback;
 
+    // 当前回放文件里出现过的全部键（已过键位映射）。供钩子过滤器
+    // （Patch_MirrorEchoSuppressor）识别「这个钩子事件是回放键」：
+    // 回放期间钩子里出现的回放键，来源是镜像回声或 JKV 键位模拟对合成
+    // 事件的再广播（2026-10-31 用户确认的多判定），一律吞掉——合成事件
+    // 不经过 HookCallback，吞掉的永远不会是判定正主。
+    internal static readonly HashSet<ushort> ReplayKeySet = new HashSet<ushort>();
+
     internal static void Start()
     {
         if (!is_playing && !ApiBlockPlaying)
@@ -24,6 +31,17 @@ internal static class ReplayPlayer
             CurrKeyState = new byte[256];
             ManagedInput.Clear();
             PlayIndex = 0;
+            ReplayKeySet.Clear();
+            if (data != null)
+            {
+                foreach (var k in data.KeyEvents)
+                {
+                    ushort vk = k.KeyCode < Settings.key_code_convert.Length
+                        ? Settings.key_code_convert[k.KeyCode]
+                        : (ushort)0;
+                    if (vk != 0) ReplayKeySet.Add(vk);
+                }
+            }
             // **这里必须从 0 开始，不能按 songposition_minusi 对齐。**
             // 那一刻 songposition_minusi 还是上一局遗留的陈旧值（Rewind() 只重置
             // dspTimeSong / crotchetAtStart，不碰 _songposition_minusi，
