@@ -28,6 +28,7 @@ using System;
 using System.Diagnostics;
 using HarmonyLib;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 namespace SpectreReplay.Features.VideoRender;
 
