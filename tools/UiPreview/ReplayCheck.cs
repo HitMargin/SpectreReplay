@@ -22,8 +22,54 @@ namespace UiPreview
             fail += RoundTrip("⑷ 只有命中无按键", Sample(3, 3, 0));
             fail += RejectsGarbage();
             fail += DecodesV1HitSnapshots();
+            fail += StartTimeSurvivesReplayDataRoundTrip();
             if (fail == 0) Console.WriteLine("    ✓ 回放格式往返全部一致");
             return fail;
+        }
+
+        /// <summary>
+        /// 「录制开始」时间全程往返：ReplayData → FromReplayData → 编码 → 解码 →
+        /// ToReplayData，两端必须相等；没有戳（旧回放）的 null 也必须原样到达，
+        /// 不得被半路写成 0 或 Now——信息页那条「录制开始 (无)」是**真实的没有**，
+        /// 不是丢失。
+        ///
+        /// <para>背景：StartTime 原本整条链都在场（模型有、编码器写、解码器读、
+        /// 信息页显示），唯独录制侧从来没人赋值 ⇒ 每份回放恒为 (无)。这条钉住
+        /// 两侧映射：录制侧的赋值（TryStartRecording）由 ㊹ 另行钉住。</para>
+        /// </summary>
+        private static int StartTimeSurvivesReplayDataRoundTrip()
+        {
+            try
+            {
+                var stamped = new ReplayData();
+                stamped.Reset();
+                stamped.StartTime = new DateTimeOffset(2026, 11, 1, 0, 11, 24, TimeSpan.Zero);
+                byte[] encoded = ReplayEncoder.Encode(ReplayDecoder.FromReplayData(stamped));
+                ReplayData back = ReplayDecoder.ToReplayData(ReplayDecoder.Decode(encoded));
+                if (back.StartTime != stamped.StartTime)
+                {
+                    Console.WriteLine("    ✗ ⑺ StartTime 往返不一致 " + back.StartTime?.ToString("O") + " vs "
+                        + stamped.StartTime.Value.ToString("O"));
+                    return 1;
+                }
+
+                var bare = new ReplayData();
+                bare.Reset();
+                byte[] encoded2 = ReplayEncoder.Encode(ReplayDecoder.FromReplayData(bare));
+                ReplayData back2 = ReplayDecoder.ToReplayData(ReplayDecoder.Decode(encoded2));
+                if (back2.StartTime != null)
+                {
+                    Console.WriteLine("    ✗ ⑺ 无戳回放的 null 被半路伪造成了 " + back2.StartTime?.ToString("O"));
+                    return 1;
+                }
+                Console.WriteLine("    ✓ ⑺ StartTime 往返保真（有戳/无戳两态）");
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("    ✗ ⑺ 抛异常 " + ex.GetType().Name + ": " + ex.Message);
+                return 1;
+            }
         }
 
         private static int RoundTrip(string name, Replay src)

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace SpectreReplay.Features.Replay;
@@ -95,6 +96,14 @@ public sealed class ReplayData
     public double? KeybdSoundStartTick { get; set; }
     #endregion
 
+    /// <summary>
+    /// 录制开始的墙钟时间（UTC）。原版字段从移植前就没人在录制侧赋值——模型有、
+    /// 编码器写、解码器读、信息页显示，唯独没人戳时间 ⇒ 所有回放的「录制开始」
+    /// 恒为 (无)。2026-11-01 起在 TryStartRecording 戳上；旧回放没有就是没有，
+    /// 界面继续显示 (无)，不伪造。
+    /// </summary>
+    public DateTimeOffset? StartTime { get; set; }
+
     /// <summary>按键事件流。旧名 KeyEvent_list。</summary>
     public List<KeyEvent> KeyEvents { get; set; } = [];
 
@@ -171,6 +180,7 @@ public sealed class ReplayData
         DeviceId = null;
         ModVersion = null;
         JudgmentList = null;
+        StartTime = null;
         StartTile = null;
         EndTile = null;
         FloorHash = null;

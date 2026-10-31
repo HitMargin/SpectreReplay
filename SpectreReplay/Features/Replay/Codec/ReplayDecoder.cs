@@ -406,6 +406,10 @@ internal static class ReplayDecoder
         m.MaximumUsedKeys = replayData.MaximumUsedKeys ?? 0;
         m.JudgmentList = replayData.JudgmentList ?? "";
 
+        // 录制开始时间：null 照旧写 long.MinValue（信息页显示 (无)）——
+        // 旧回放没有这个戳，界面不伪造。
+        m.StartTime = replayData.StartTime;
+
         replay.KeyEvents = replayData.KeyEvents.ConvertAll(k => new KeyEvent
         {
             KeyCode = k.KeyCode,
@@ -467,6 +471,9 @@ internal static class ReplayDecoder
         replayData.PercentXacc = m.PercentXacc;
         replayData.MaximumUsedKeys = m.MaximumUsedKeys;
         replayData.JudgmentList = m.JudgmentList;
+
+        // 与 FromReplayData 对称：读不到（旧文件）就是 null。
+        replayData.StartTime = m.StartTime;
 
         foreach (var k in replay.KeyEvents)
             replayData.KeyEvents.Add(new KeyEvent

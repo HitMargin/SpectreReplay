@@ -912,6 +912,15 @@ namespace UiPreview
                     && s.Contains("InfoContains(info, s.Attr.PatchType, s.PatchMethod)", StringComparison.Ordinal)
                     && s.Contains("PatchOneTarget(s, target)", StringComparison.Ordinal)
                     && s.Contains("现行补丁集", StringComparison.Ordinal));
+            // ㊹ 「录制开始」必须在 TryStartRecording 当场戳上。StartTime 整条链
+            //    （模型/编码器/解码器/信息页）原本都在场，唯独录制侧从来没人赋值
+            //    ⇒ 每份回放的「录制开始」恒为 (无)（2026-11-01 用户截图）。钉在
+            //    data.Reset() 之后：Reset 会清掉它，戳晚了会被下一局残留顶掉。
+            fail += Check(projectRoot,
+                "㊹ 录制启动必须当场戳 StartTime——整链在场但没人赋值的字段就是永远空着",
+                "Features\\Replay\\Patches\\Patch_Lifecycle.cs",
+                s => s.Contains("data.Reset();", StringComparison.Ordinal)
+                    && s.Contains("data.StartTime = DateTimeOffset.UtcNow;", StringComparison.Ordinal));
 
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");

@@ -415,6 +415,7 @@ internal class Patch_StartRewind
                 return;
             }
             data.Reset();
+            data.StartTime = DateTimeOffset.UtcNow;
             data.StartTile = GCS.checkpointNum;
             data.SceneName = SceneManager.GetActiveScene().name;
             data.JudgeMode = GCS.difficulty.ToString();
