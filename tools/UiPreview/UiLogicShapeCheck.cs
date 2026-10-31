@@ -940,6 +940,18 @@ namespace UiPreview
                 "Features\\Replay\\Patches\\Patch_Lifecycle.cs",
                 s => s.Contains("if (data.StructureHash.HasValue)", StringComparison.Ordinal)
                     && s.Contains("structureHash != data.StructureHash.Value", StringComparison.Ordinal));
+            // ㊻ 退役的校验不得留尸体（2026-11-01 清理）：官方/自制不匹配与
+            //    「编辑器飙速模式」两道检查早被禁用，只剩空 if 壳 + 一条 14 语言
+            //    全量维护的死文案。判据钉「彻底不在」：键与空壳条件谁回来了都红。
+            fail += Check(projectRoot,
+                "㊻a 退役的编辑器飙速提示键不得回潮",
+                "State\\LocalizationManager.cs",
+                s => !s.Contains("play_error6", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㊻b 被禁用校验的空 if 壳不得回潮",
+                "Features\\Replay\\Patches\\Patch_Lifecycle.cs",
+                s => !s.Contains("data.IsOfficialLevel != ADOBase.isOfficialLevel", StringComparison.Ordinal)
+                    && !s.Contains("data.SpeedTrailMode == true || data.QuickPitched == true", StringComparison.Ordinal));
 
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");

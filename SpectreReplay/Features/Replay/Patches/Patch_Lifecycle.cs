@@ -157,11 +157,6 @@ internal class Patch_StartRewind
                         "players=" + scrPlayerManager.instance.players.Count());
                     return;
                 }
-                if (data.IsOfficialLevel != ADOBase.isOfficialLevel)
-                {
-                    // TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error1") + data.SongName, 3f, NotifType.Warning);
-                    // return;
-                }
                 if (data.IsOfficialLevel == true)
                 {
                     // if (data.SceneName != SceneManager.GetActiveScene().name)
@@ -234,14 +229,6 @@ internal class Patch_StartRewind
                     Reject(LocalizationManager.GetLocalizedText("note.play_error4") + data.StartTile,
                         "checkpointNum=" + GCS.checkpointNum + " < StartTile=" + data.StartTile);
                     return;
-                }
-                if (data.SpeedTrailMode == true || data.QuickPitched == true)
-                {
-                    // if (data.SceneName != SceneManager.GetActiveScene().name)
-                    // {
-                    //     TriggerMessage(LocalizationManager.GetLocalizedText("note.play_error6"), 3f, NotifType.Warning);
-                    //     return;
-                    // }
                 }
                 double expectedSpeed = 1.0;
                 double actualSpeed = 1.0;
