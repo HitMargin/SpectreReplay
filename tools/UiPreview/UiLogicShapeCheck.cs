@@ -923,6 +923,23 @@ namespace UiPreview
                 s => s.Contains("data.Reset();", StringComparison.Ordinal)
                     && s.Contains("data.StartTime = DateTimeOffset.UtcNow;", StringComparison.Ordinal)
                     && s.Contains("data.SpVersion = SpectrePatchHub.Release > 0", StringComparison.Ordinal));
+            // ㊺ 结构校验（StructureHash）：楼层校验只盖 angleData，而长按/多压/
+            //    行星数/自由漫游/倒计时 tick 全部来自事件表（游戏载入路径
+            //    scnGame.cs:498/586/717/1212）——只改事件不动角度的谱面改动
+            //    楼层校验看不出来，回放会照播而楼层结构已经变了。录制必须算
+            //    并存，播放必须在 HasValue 时比对（旧回放没有字段 = 没有记录，
+            //    不能当成「结构一致」）。
+            fail += Check(projectRoot,
+                "㊺a 录制必须计算并存 StructureHash（事件表产物的按楼层哈希）",
+                "Features\\Replay\\Patches\\Patch_Lifecycle.cs",
+                s => s.Contains("data.StructureHash = ComputeFloorStructureHash();", StringComparison.Ordinal)
+                    && s.Contains("private static int ComputeFloorStructureHash()", StringComparison.Ordinal)
+                    && s.Contains("f.holdLength).Append('|')", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㊺b 播放必须在 StructureHash.HasValue 时比对现算值——没有记录不是结构一致",
+                "Features\\Replay\\Patches\\Patch_Lifecycle.cs",
+                s => s.Contains("if (data.StructureHash.HasValue)", StringComparison.Ordinal)
+                    && s.Contains("structureHash != data.StructureHash.Value", StringComparison.Ordinal));
 
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");

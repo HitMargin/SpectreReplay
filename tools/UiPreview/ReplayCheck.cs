@@ -23,6 +23,7 @@ namespace UiPreview
             fail += RejectsGarbage();
             fail += DecodesV1HitSnapshots();
             fail += StartTimeSurvivesReplayDataRoundTrip();
+            fail += StructureHashTailRoundTrip();
             if (fail == 0) Console.WriteLine("    ✓ 回放格式往返全部一致");
             return fail;
         }
@@ -81,6 +82,42 @@ namespace UiPreview
             catch (Exception ex)
             {
                 Console.WriteLine("    ✗ ⑺ 抛异常 " + ex.GetType().Name + ": " + ex.Message);
+                return 1;
+            }
+        }
+
+        /// <summary>
+        /// 结构校验段（尾部可选段）两态往返：有值 → 编码写段、解码读回相等；
+        /// 无值 → 一个字节不写、解码得 null。「段不存在」必须是「没有记录」
+        /// 的唯一表示——两态都写出值或都有段都是错的。
+        /// </summary>
+        private static int StructureHashTailRoundTrip()
+        {
+            try
+            {
+                var with = Sample(2, 2, 4);
+                with.StructureHash = -12345;
+                Replay back = ReplayDecoder.Decode(ReplayEncoder.Encode(with));
+                if (back.StructureHash != with.StructureHash)
+                {
+                    Console.WriteLine("    ✗ ⑻ 有值态往返不一致 " + back.StructureHash?.ToString()
+                        + " vs " + with.StructureHash);
+                    return 1;
+                }
+
+                var without = Sample(2, 2, 4);
+                Replay back2 = ReplayDecoder.Decode(ReplayEncoder.Encode(without));
+                if (back2.StructureHash != null)
+                {
+                    Console.WriteLine("    ✗ ⑻ 无值态不该有段，却解出 " + back2.StructureHash);
+                    return 1;
+                }
+                Console.WriteLine("    ✓ ⑻ 结构校验段往返（有值/无值两态）");
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("    ✗ ⑻ 抛异常 " + ex.GetType().Name + ": " + ex.Message);
                 return 1;
             }
         }

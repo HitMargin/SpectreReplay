@@ -37,6 +37,7 @@ internal static class ReplayDecoder
         replay.CursorTrack = ReadCursorTrackIfPresent(r);
         replay.KeybdAudio = ReadKeybdAudioIfPresent(r);
         replay.KeybdPrefs = ReadKeybdPrefsIfPresent(r);
+        replay.StructureHash = ReadStructureHashIfPresent(r);
         return replay;
     }
 
@@ -357,6 +358,35 @@ internal static class ReplayDecoder
         };
     }
 
+    /// <summary>
+    /// 尾部可选段：结构校验（位于键盘音覆盖段之后）。
+    ///
+    /// <para>探测失败（旧文件、或写入端没值）一律**回退流位置**并返回 null
+    /// ——与 KeybdAudio/KeybdPrefs 段同一套约定：段不存在不是错误，播放侧
+    /// 据此跳过结构校验。段版本显式上界，未来版本按 v1 解析会把后续字节
+    /// 读成垃圾，宁可明确拒绝。</para>
+    /// </summary>
+    private static int? ReadStructureHashIfPresent(BinaryReader r)
+    {
+        // 魔数 8 + 段版本 4 + 负载 4
+        const int HeadLen = 8 + 4 + 4;
+        long remaining = r.BaseStream.Length - r.BaseStream.Position;
+        if (remaining < HeadLen)
+            return null;
+        long start = r.BaseStream.Position;
+        var magic = r.ReadUInt64();
+        if (magic != ReplayConstants.MagicStructureHash)
+        {
+            r.BaseStream.Position = start;
+            return null;
+        }
+        var ver = r.ReadInt32();
+        if (ver > ReplayConstants.StructureHashVersion)
+            throw new InvalidDataException(
+                $"StructureHash version {ver} too new (known: {ReplayConstants.StructureHashVersion})");
+        return r.ReadInt32();
+    }
+
     public static Replay FromReplayData(ReplayData replayData)
     {
         if (replayData == null) return null;
@@ -386,6 +416,9 @@ internal static class ReplayDecoder
         m.FloorHash = replayData.FloorHash ?? 0;
         m.SpeedHash = replayData.SpeedHash ?? 0;
         m.TimeHash = replayData.TimeHash ?? 0;
+
+        // 结构校验走尾部可选段，null = 不写段（旧回放语义，播放侧跳过比对）。
+        replay.StructureHash = replayData.StructureHash;
         m.Pitch = replayData.Pitch ?? 0;
         m.LevelID = replayData.LevelId ?? 0;
         m.AudioBufferSize = replayData.AudioBufferSize ?? 0;
@@ -453,6 +486,9 @@ internal static class ReplayDecoder
         replayData.FloorHash = m.FloorHash;
         replayData.SpeedHash = m.SpeedHash;
         replayData.TimeHash = m.TimeHash;
+
+        // 与 FromReplayData 对称：段不存在（旧文件）就是 null，播放侧跳过校验。
+        replayData.StructureHash = replay.StructureHash;
         replayData.Pitch = m.Pitch;
         replayData.LevelId = m.LevelID;
         replayData.AudioBufferSize = m.AudioBufferSize;

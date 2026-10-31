@@ -60,6 +60,12 @@ public sealed class ReplayData
     public int? SpeedHash { get; set; }
     /// <summary>时间事件表哈希。原键 time_hash。</summary>
     public int? TimeHash { get; set; }
+    /// <summary>
+    /// 结构校验（2026-11-01 新增，旧回放没有 → null）：按楼层序列拼
+    /// 长按/多压/行星数/自由漫游/倒计时 tick 的哈希。楼层校验只盖角度
+    /// 数据，这些来自事件表的属性改了它看不出来。
+    /// </summary>
+    public int? StructureHash { get; set; }
     /// <summary>音高。原键 pitch。</summary>
     public int? Pitch { get; set; }
     /// <summary>关卡 ID。原键 levelID。</summary>
@@ -194,6 +200,7 @@ public sealed class ReplayData
         FloorHash = null;
         SpeedHash = null;
         TimeHash = null;
+        StructureHash = null;
         Pitch = null;
         LevelId = null;
         AudioBufferSize = null;

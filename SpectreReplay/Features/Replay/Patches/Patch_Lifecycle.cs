@@ -190,6 +190,20 @@ internal class Patch_StartRewind
                         + data.FloorHash + " 现=" + floorHash);
                     return;
                 }
+                // 结构校验：旧回放没有这个字段（尾部可选段，2026-11-01 引入），
+                // HasValue 才比对——「没有记录」不能当成「结构一致」。
+                if (data.StructureHash.HasValue)
+                {
+                    int structureHash = ComputeFloorStructureHash();
+                    if (structureHash != data.StructureHash.Value)
+                    {
+                        Reject(LocalizationManager.GetLocalizedText("note.play_error2"));
+                        Debug.Log("[SpectreReplay]   细节 structureHash: 录="
+                            + data.StructureHash.Value + " 现=" + structureHash
+                            + "（谱面的事件表变过：长按/多压/行星数/自由漫游/倒计时）");
+                        return;
+                    }
+                }
                 if (!ADOBase.isOfficialLevel
                     && (data.Pitch != scnGame.instance.levelData.pitch
                         || data.Bpm != (double)scnGame.instance.levelData.bpm))
@@ -442,6 +456,11 @@ internal class Patch_StartRewind
             }
             data.SpeedHash = ComputeDoubleListHash(speeds);
             data.TimeHash = ComputeTimeListHash(times);
+            // 结构校验：长按/多压/行星数/自由漫游/倒计时 tick 全部来自**事件表**
+            // （游戏载入路径 scnGame.cs:498/586/717/1212），不在 angleData 里——
+            // 楼层校验对「只改事件不动角度」的谱面改动是瞎的。按楼层序列拼这些
+            // 事件产物，播放时与现算值比对（旧回放没有此字段则跳过）。
+            data.StructureHash = ComputeFloorStructureHash();
             data.LevelPath = "";
             if (ADOBase.isOfficialLevel)
             {
@@ -554,6 +573,35 @@ internal class Patch_StartRewind
         _hashBuilder.Clear();
         foreach (var d in values)
             _hashBuilder.Append(d.ToString("F4", System.Globalization.CultureInfo.InvariantCulture));
+        return _hashBuilder.ToString().GetHashCode();
+    }
+
+    /// <summary>
+    /// 结构校验：按楼层序列拼「事件表产物的判定相关属性」的哈希。
+    ///
+    /// <para>覆盖范围与理由（游戏载入路径实测，scnGame.cs）：
+    /// holdLength ← 事件 duration（:498）；tapsNeeded ← 事件 taps（:1212）；
+    /// numPlanets ← 行星数事件（:586）；freeroam / freeroamRegion /
+    /// freeroamEndEarlyBeats ← 自由漫游事件（:717），其中 EndEarlyBeats 还进
+    /// 命中时点的 lastHit 计算（scrController.cs:2876）；countdownTicks ← 倒计时
+    /// 事件。速度值（floor.speed × 方向）与进入时刻已由 SpeedHash/TimeHash
+    /// 单独盖住，这里不重复。全部是 int，确定性源自关卡文件本身。</para>
+    /// </summary>
+    private static int ComputeFloorStructureHash()
+    {
+        _hashBuilder.Clear();
+        var floors = ADOBase.lm.listFloors;
+        for (int i = 0; i < floors.Count; i++)
+        {
+            var f = floors[i];
+            _hashBuilder.Append(f.holdLength).Append('|')
+                .Append(f.tapsNeeded).Append('|')
+                .Append(f.numPlanets).Append('|')
+                .Append(f.freeroam ? 1 : 0).Append('|')
+                .Append(f.freeroamRegion).Append('|')
+                .Append(f.freeroamEndEarlyBeats).Append('|')
+                .Append(f.countdownTicks).Append('\n');
+        }
         return _hashBuilder.ToString().GetHashCode();
     }
 }

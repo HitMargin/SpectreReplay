@@ -30,6 +30,10 @@ internal static class ReplayEncoder
             // 音频段都读不到，因而绝不会读到它。没有覆盖值时一个字节都不写——
             // 与音频段同一约定（「段不存在」就是「没有覆盖值」）。
             WriteKeybdPrefs(writer, replay.KeybdPrefs);
+            // 结构校验段排在覆盖段之后：更晚出现的尾部段，旧构建读不到。
+            // 没有值时（旧数据容器）一个字节都不写——「段不存在」就是
+            // 「这份回放没有结构校验」，播放侧跳过比对。
+            WriteStructureHash(writer, replay.StructureHash);
         }
 
         var compressed = ReplayCompression.Compress(ms.ToArray());
@@ -129,6 +133,18 @@ internal static class ReplayEncoder
             w.Write(s.X);
             w.Write(s.Y);
         }
+    }
+
+    /// <summary>
+    /// 写结构校验段（尾部可选段，位于键盘音覆盖段之后）。没有值时一个字节
+    /// 都不写——「段不存在」就是「没有结构校验」，与音频/覆盖段同一约定。
+    /// </summary>
+    private static void WriteStructureHash(BinaryWriter w, int? structureHash)
+    {
+        if (!structureHash.HasValue) return;
+        w.Write(ReplayConstants.MagicStructureHash);
+        w.Write(ReplayConstants.StructureHashVersion);
+        w.Write(structureHash.Value);
     }
 
     /// <summary>

@@ -27,6 +27,16 @@ public class Replay
     /// </summary>
     public KeybdPrefs KeybdPrefs { get; set; }
     /// <summary>
+    /// 结构校验（容器尾部的可选段；旧文件没有 → null，播放侧跳过校验）。
+    ///
+    /// <para>楼层校验（FloorHash）只盖 angleData——角度序列。而长按（SetHold 的
+    /// duration）、多压（taps）、自由漫游（freeroam 区）、行星数、倒计时 tick
+    /// 全部来自**事件表**（游戏载入路径 scnGame.cs:498/717/586 等），不在角度
+    /// 数据里：只改事件不动角度的谱面改动，楼层校验看不出来，回放会照播而
+    /// 楼层结构已经变了。本哈希按楼层序列拼这些事件产物，补上这个盲区。</para>
+    /// </summary>
+    public int? StructureHash { get; set; }
+    /// <summary>
     /// When this replay ended (UTC). Must be serialized in <see cref="ReplayEncoder"/> and <see cref="ReplayDecoder"/>
     /// to persist across save/load. Written as an ISO 8601 string in metadata.
     /// </summary>

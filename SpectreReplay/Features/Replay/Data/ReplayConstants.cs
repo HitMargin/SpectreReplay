@@ -52,4 +52,10 @@ internal static class ReplayConstants
 
     public const string Extension = ".sprp";
     public const string ExtensionNoEncrypt = ".psprp";
+
+    // 结构校验段：追加在键盘音覆盖段之后，同属「尾部可选段」。旧构建连覆盖段
+    // 都读不到，更碰不到这一段；新构建没有这一段时跳过结构校验（旧回放语义）。
+    // 魔数按流内小端拼出 "StruHash"。
+    public const ulong MagicStructureHash = 0x6873_6148_7572_7453;
+    public const int StructureHashVersion = 1;
 }
