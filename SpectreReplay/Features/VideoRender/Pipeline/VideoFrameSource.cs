@@ -134,16 +134,12 @@ internal sealed class VideoFrameSource
             cam.BGcam.targetTexture = texture;
             cam.camobj.targetTexture = texture;
 
-            // 键位显示合成（Settings.RenderKeyViewerOverlay）：键显画布是
-            // ScreenSpaceOverlay，相机拍不到；开着时渲染会话内临时切
-            // ScreenSpaceCamera 挂到主渲染相机，并把 JRP 雨滴时钟换轨到
-            // 虚拟时钟（墙钟雨滴在慢放视频里是快放废片）。一次性安装，
-            // 直接读 Settings——无需走 DrawCursor 那种作业传递（Grab 与
-            // TryTake 分处两段才需要）。
-            if (Settings.RenderKeyViewerOverlay)
-            {
-                KeyViewerOverlayCapture.Install(cam.camobj);
-            }
+            // 键位显示合成与开放 API：Install 无条件调用——JipperKeyViewer
+            // 画布是否登记由 Settings.RenderKeyViewerOverlay 决定（Install 内
+            // 判定），其它 mod 经 SpectreAPI.RegisterRenderOverlay 登记的画布
+            // 不受本模组设置影响（那是它们的 standing intent）。JRP 雨滴时钟
+            // 的换轨也在这里一并装配。
+            KeyViewerOverlayCapture.Install(cam.camobj);
 
             // **捕获期间屏幕必须还有东西在画。** 三台相机被劫持到我们的
             // RenderTexture 之后，屏幕上没有任何相机清屏：世界冻在最后一帧，

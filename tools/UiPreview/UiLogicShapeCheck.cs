@@ -848,6 +848,15 @@ namespace UiPreview
                 "Features\\VideoRender\\Pipeline\\KeyViewerOverlayCapture.cs",
                 s => s.Contains("PatchManager.RegisterManualPrefix", StringComparison.Ordinal)
                     && s.Contains("UnscaledDeltaPin.CurrentUnscaledF", StringComparison.Ordinal));
+            // ㊵ 开放 API：其它 mod 的画布经 SpectreAPI 登记进同一注册表。
+            //    门面必须真转发到注册表（KeyViewerOverlayCapture 的
+            //    RegisterExternal/UnregisterExternal）——只加门面不接线，
+            //    别人登记了画布也进不了片（有开关、没实现的 API 版）。
+            fail += Check(projectRoot,
+                "㊵ SpectreAPI 的画布登记必须真转发到合成注册表（Register/Unregister 成对）",
+                "State\\SpectreAPI.cs",
+                s => s.Contains("KeyViewerOverlayCapture.RegisterExternal(canvas)", StringComparison.Ordinal)
+                    && s.Contains("KeyViewerOverlayCapture.UnregisterExternal(canvas)", StringComparison.Ordinal));
 
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");

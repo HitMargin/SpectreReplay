@@ -14,7 +14,7 @@ namespace SpectreReplay.API;
 public static class SpectreAPI
 {
     /// <summary>API 版本；软依赖 mod 反射探测能力用。新增成员 = 次版本号 +1。</summary>
-    public const string ApiVersion = "0.4";
+    public const string ApiVersion = "0.5";
 
     // ── 生命周期事件 ─────────────────────────────────────────────
 
@@ -231,6 +231,26 @@ public static class SpectreAPI
     /// 当前是否有渲染作业在跑。
     /// </summary>
     public static bool IsRendering => Features.VideoRender.VideoRender.Active;
+
+    // ── 渲染叠加（把你的画布合成进成片） ────────────────────────
+
+    /// <summary>
+    /// 把你的画布合成进渲染视频（逐帧渲染时随相机取像）。主线程调用。
+    ///
+    /// 契约：渲染会话内画布会被临时切到 ScreenSpaceCamera 挂上渲染相机，
+    /// 会话结束恢复原样；登记是 standing intent，跨渲染会话保留，画布销毁
+    /// 自动除名，重复登记无副作用。你的动画若由游戏时间驱动
+    /// （Time.time / Animator / 组件动画）在片里速度正确；由墙钟驱动的动画
+    /// （DateTime/Stopwatch）在慢放视频里会偏快——JRP 的雨滴由本模组内置
+    /// 换轨，无需你处理。「渲染时叠加键位显示」设置只管键显画布本身，
+    /// 与此处登记互不影响。
+    /// </summary>
+    public static void RegisterRenderOverlay(Canvas canvas)
+        => Features.VideoRender.KeyViewerOverlayCapture.RegisterExternal(canvas);
+
+    /// <summary>撤销 <see cref="RegisterRenderOverlay"/> 的登记（已切开的画布立即恢复）。</summary>
+    public static void UnregisterRenderOverlay(Canvas canvas)
+        => Features.VideoRender.KeyViewerOverlayCapture.UnregisterExternal(canvas);
 
     /// <summary>
     /// 渲染进度快照（随时可读；建议主线程）。Active=false 时仍可读到上次失败的 LastError。
