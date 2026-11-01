@@ -137,6 +137,14 @@ internal class Patch_StartRewind
                 + " RecordMode=" + RecordMode + " is_playing=" + is_playing + "）");
             if (!DebugMode || !debug_skip_Verification)
             {
+                // fail-open 的落点（同 TryStartRecording）：核心补丁真挂不上
+                // （Error 而非版本跳过）就拒绝播放——播一半断链比不播更糟。
+                if (!SpectrePatchHub.IsAvailable(FeatureKeys.Replay))
+                {
+                    Reject(LocalizationManager.GetLocalizedText("note.patches_broken"),
+                        "ReplayPatchUnavailable");
+                    return;
+                }
                 if (DataIntegrity.Check())
                 {
                     Reject(LocalizationManager.GetLocalizedText("note.play_error7"), "DataIntegrity");
@@ -480,6 +488,20 @@ internal class Patch_StartRewind
     {
         try
         {
+            // **fail-open 的落点（2026-11-02 用户裁定）。**版本新不停用；但核心
+            // 补丁实际挂载失败（签名变了 Resolve/Apply 报 Error）时必须拦——
+            // 硬着头皮录出来的回放整份是坏的。IsAvailable 对 feature 关闭/
+            // 版本分叉跳过的 spec 都算可用，只有真 Error 才拦。
+            // 局部变量命名是给 ㊿a 的判据锚：录制/播放两个门共享 IsAvailable
+            // 文本，变异验证需要一个只属于录制门的标识。
+            bool replayPatchesUsable = SpectrePatchHub.IsAvailable(FeatureKeys.Replay);
+            if (!replayPatchesUsable)
+            {
+                TriggerMessage(LocalizationManager.GetLocalizedText("note.patches_broken"),
+                    type: NotifType.Warning);
+                Debug.Log("[SpectreReplay] 录制拒绝：Replay 核心补丁存在挂载错误（见探针日志）");
+                return;
+            }
             if (data == null) data = new ReplayData();
             if (LateSaveMode)
             {

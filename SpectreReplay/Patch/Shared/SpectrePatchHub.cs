@@ -78,6 +78,15 @@ internal static class SpectrePatchHub
     // 宿主已验证的游戏 build
     internal static int VerifiedBuild;
     internal static bool Verified => Release == VerifiedBuild;
+    // **版本政策：正式承认 fail-open（2026-11-02 用户裁定，审计 A-F3 的结论）。**
+    // 游戏出新版本（r151+）时不做整体停用——模组继续尝试挂载、继续工作。
+    // 安全性不靠「版本号一刀切」，靠两层真实防线：
+    //   ① 每个 spec 的解析/挂载失败都会记 Error（签名变了挂不上就是 Error，
+    //      不是静默），IsAvailable(feature) 据此变假；
+    //   ② 录制/回放入口按 IsAvailable 拦截——补丁真挂不上时拒绝录/播并给
+    //      玩家明确提示（note.patches_broken），而不是产出坏数据。
+    // 即：fail-open 于「新版本」，fail-closed 于「实际挂载失败」。两者分开，
+    // 版本升级不再误伤仍能工作的功能，真正的破坏也不会漏过。
     // 日志前缀（宿主可改成自己的 mod 名）
     internal static string LogTag = "SpectrePatch";
     // **宿主命名空间——patch owner id 的前缀**。
@@ -1270,7 +1279,8 @@ internal static class SpectrePatchHub
             + "，已验证 r" + VerifiedBuild + "，" + ok + "/" + total + " 就绪");
         if (!Verified)
             AsyncLog.Warning("[" + LogTag + "] 当前游戏版本未验证（r" + Release
-                + " ≠ r" + VerifiedBuild + "），如遇异常请反馈日志");
+                + " ≠ r" + VerifiedBuild + "）：fail-open 继续挂载，个别补丁挂不上会各自报错，"
+                + "录制/回放入口按可用性拦截");
         foreach (Spec s in failed)
             AsyncLog.Warning("[" + LogTag + "]   ✗ " + s.Id + " → " + s.Error);
     }

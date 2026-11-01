@@ -1045,6 +1045,23 @@ namespace UiPreview
                 s => s.Contains("MaxRecords = 1_000_000", StringComparison.Ordinal)
                     && s.Contains("if (raw > MaxRecords)", StringComparison.Ordinal)
                     && s.Contains("exceeds absolute cap", StringComparison.Ordinal));
+            // ㊿ 版本政策（审计 A-F3，用户裁定）：fail-open 于新版本——不做整体
+            //    停用；fail-closed 于实际挂载失败——录制/回放入口按 IsAvailable
+            //    拦截并给玩家明确提示。两个门共享 IsAvailable 文本：录制门有独
+            //    立局部变量可钉，播放门靠「Reject 标记前 240 字符内必有门」的
+            //    邻接窗口钉——只盯共享文本谁也抓不住另一头的变异。
+            fail += Check(projectRoot,
+                "㊿a 录制入口必须按 IsAvailable(Replay) 拦截挂载失败（独立局部变量门）",
+                "Features\\Replay\\Patches\\Patch_Lifecycle.cs",
+                s => s.Contains("bool replayPatchesUsable = SpectrePatchHub.IsAvailable(FeatureKeys.Replay);", StringComparison.Ordinal)
+                    && s.Contains("if (!replayPatchesUsable)", StringComparison.Ordinal)
+                    && s.Contains("note.patches_broken", StringComparison.Ordinal)
+                    && s.Contains("录制拒绝：Replay 核心补丁存在挂载错误", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㊿b 播放入口必须按 IsAvailable(Replay) 拦截挂载失败（邻接窗口钉门）",
+                "Features\\Replay\\Patches\\Patch_Lifecycle.cs",
+                s => GateNear(s, "\"ReplayPatchUnavailable\"",
+                    "if (!SpectrePatchHub.IsAvailable(FeatureKeys.Replay))"));
 
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");
@@ -2571,6 +2588,20 @@ namespace UiPreview
             string body = s.Substring(at, end - at);
             return body.Contains("_smallC.CalcSize", StringComparison.Ordinal)
                 && !body.Contains("- 132f", StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// 邻接窗口判定：<paramref name="marker"/> 首次出现位置之前的 240 个字符
+        /// 内必须出现 <paramref name="gate"/>。给「两个门共享同一文本」的场景用
+        /// ——只 Contains 共享文本时，另一头的门会替被变异的门供给判据（U75
+        /// 首轮实测的假绿），窗口把判据钉到具体某一门的现场。
+        /// </summary>
+        private static bool GateNear(string s, string marker, string gate)
+        {
+            int at = s.IndexOf(marker, StringComparison.Ordinal);
+            if (at <= 0) return false;
+            int from = Math.Max(0, at - 240);
+            return s.Substring(from, at - from).IndexOf(gate, StringComparison.Ordinal) >= 0;
         }
 
         private static int Check(string projectRoot, string name, string rel,
