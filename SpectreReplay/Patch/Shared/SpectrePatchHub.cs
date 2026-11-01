@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -692,22 +693,31 @@ internal static class SpectrePatchHub
             HarmonyMethod guard = spec.Attr.TryingCatch && spec.Attr.PatchType != PatchType.Transpiler
                 && spec.Attr.PatchType != PatchType.Finalizer
                 ? _guardMethod : null;
+            MethodInfo replacement;
             switch (spec.Attr.PatchType)
             {
                 case PatchType.Prefix:
-                    spec.Owner.Patch(target, patch, null, null, guard);
+                    replacement = spec.Owner.Patch(target, patch, null, null, guard);
                     break;
                 case PatchType.Postfix:
-                    spec.Owner.Patch(target, null, patch, null, guard);
+                    replacement = spec.Owner.Patch(target, null, patch, null, guard);
                     break;
                 case PatchType.Transpiler:
-                    spec.Owner.Patch(target, null, null, patch, null);
+                    replacement = spec.Owner.Patch(target, null, null, patch, null);
                     break;
                 case PatchType.Finalizer:
-                    spec.Owner.Patch(target, null, null, null, patch);
+                    replacement = spec.Owner.Patch(target, null, null, null, patch);
                     break;
                 default:
                     return false;
+            }
+            // 桥接世界的落点 ProxyPatch 失败时**返回 null 而不抛**（HarmonyX 拒绝、
+            // 转译桥失败等），原生世界正常挂载也总有 replacement。null 必须当失败，
+            // 否则 Applied 翻真、下次核对永远等不到补上。
+            if (replacement == null)
+            {
+                AsyncLog.Warning("[" + LogTag + "] " + spec.Id + " → 挂载返回空（HarmonyX 拒绝或桥接降级失败）");
+                return false;
             }
             if (guard != null)
                 _guardedMethods.Add(spec.PatchMethod);
@@ -744,6 +754,7 @@ internal static class SpectrePatchHub
     {
         int remounted = 0;
         int specsChecked = 0;
+        bool bridge = TryGetHarmonyXReader(out _);
         lock (_lock)
         {
             foreach (Type cls in patchClasses)
@@ -757,19 +768,31 @@ internal static class SpectrePatchHub
                     foreach (MethodBase target in s.Targets)
                     {
                         specsChecked++;
-                        Patches info;
-                        try { info = Harmony.GetPatchInfo(target); }
-                        catch { continue; }
-                        bool present = InfoContains(info, s.Attr.PatchType, s.PatchMethod);
+                        // 桥接世界优先：UMMBridge 把 Harmony.Patch 重写到 HarmonyX，
+                        // 那里的账 GetPatchInfo（0Harmony_UMM）看不见
+                        bool present = BridgeContains(target, s.PatchMethod, s.Attr.PatchType);
+                        if (!present)
+                        {
+                            // 0Harmony_UMM 账本兜底：转译补丁在桥接禁用转译时走
+                            // InvokeNativePatch 落回本世界，只有这里查得到
+                            Patches info;
+                            try { info = Harmony.GetPatchInfo(target); }
+                            catch { continue; }
+                            present = InfoContains(info, s.Attr.PatchType, s.PatchMethod);
+                            if (!present && !bridge)
+                            {
+                                // 非桥接环境的现场证据：谁还压在这个方法上。
+                                // 桥接环境下这本账里没有我们的补丁是常态，打了只会误导
+                                AsyncLog.Warning("[" + LogTag + "] " + s.Id + " → 现行补丁集 " + TargetLabel(target)
+                                    + ": " + PatchList(info) + "（**本补丁缺失**）");
+                            }
+                        }
                         if (present)
                             continue;
-                        // 缺失才落名单：这份名单是「谁还压在这个方法上」的现场证据
-                        AsyncLog.Warning("[" + LogTag + "] " + s.Id + " → 现行补丁集 " + TargetLabel(target)
-                            + ": " + PatchList(info) + "（**本补丁缺失**）");
                         if (PatchOneTarget(s, target))
                         {
                             remounted++;
-                            AsyncLog.Warning("[" + LogTag + "] " + s.Id + " → 本补丁被外部摘除（JALib 重写补丁集？），已重新挂载");
+                            AsyncLog.Warning("[" + LogTag + "] " + s.Id + " → 本补丁在核对账本中缺失，已重新挂载");
                         }
                     }
                 }
@@ -786,10 +809,84 @@ internal static class SpectrePatchHub
             "before-play" => "回放前",
             _ => context,
         };
-        AsyncLog.Warning("[" + LogTag + "] 补丁核对（" + label + "）：" + patchClasses.Length
-            + " 类 / " + specsChecked + " 条已应用声明 —— "
+        AsyncLog.Warning("[" + LogTag + "] 补丁核对（" + label + (bridge ? " · 桥接" : "") + "）："
+            + patchClasses.Length + " 类 / " + specsChecked + " 条已应用声明 —— "
             + (remounted > 0 ? "补挂 " + remounted + " 条" : "全部在位"));
         return remounted;
+    }
+
+    // ── UMMBridge 双 Harmony 世界 ────────────────────────────────
+    // 本机 MelonLoader 与 UMM 双加载器共存时，Plugins\UMMBridge.dll 在装载
+    // mod 程序集时做 IL 重写：所有 Harmony.Patch 调用 → Bridge.ProxyPatch →
+    // 落在 MelonLoader 的 HarmonyX（0Harmony 2.10.2，存储 = PatchManager.
+    // PatchInfos 活对象）。而本 Hub 的 Harmony.GetPatchInfo 读的是 UMM 改名
+    // 内嵌的 0Harmony_UMM（2.3.6，HarmonySharedState 序列化字典）——**两本
+    // 互不相通的账**（2026-11-01 取证实锤：写→读 roundtrip ★分裂，
+    // GetAllPatchedMethods 28 条全在 0Harmony_UMM 账本，HarmonyX 账本查不到）。
+    //
+    // 后果与修法：核对「补丁在不在」必须查 HarmonyX 的账——否则每次录制/
+    // 回放启动都误判缺失并经 ProxyPatch 重复挂载：同一前缀在同一 owner
+    // （UMMBridge.Proxy.<类型名>）下按次追加、无去重，N 次启动 = 每帧执行
+    // N 遍（快照消费加倍 = 回放快进；隔离/落账翻倍）。转译补丁例外：桥接
+    // 禁用转译桥时 ProxyPatch 走 InvokeNativePatch 落回 0Harmony_UMM 世界，
+    // 所以 presence 判定两本账都查、命中任一即可。
+    private static MethodInfo _harmonyXGetPatchInfo;
+    private static bool _harmonyXProbed;
+
+    private static bool TryGetHarmonyXReader(out MethodInfo getPatchInfo)
+    {
+        if (!_harmonyXProbed)
+        {
+            _harmonyXProbed = true;
+            foreach (Assembly a in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                // HarmonyX（2.10+）的特征：程序集名 0Harmony 且有 PatchManager。
+                // UMM 的 0Harmony_UMM（2.3.6）没有这个类型，不会误绑。
+                if (a.GetName().Name != "0Harmony") continue;
+                MethodInfo m = a.GetType("HarmonyLib.PatchManager") == null
+                    ? null
+                    : a.GetType("HarmonyLib.Harmony")
+                        ?.GetMethod("GetPatchInfo", new[] { typeof(MethodBase) });
+                if (m == null) continue;
+                _harmonyXGetPatchInfo = m;
+                AsyncLog.Warning("[" + LogTag + "] 检测到 UMMBridge 双 Harmony 桥（MelonLoader HarmonyX 与 0Harmony_UMM 各一本账）——补丁核对改查 HarmonyX 账本");
+                break;
+            }
+        }
+        getPatchInfo = _harmonyXGetPatchInfo;
+        return getPatchInfo != null;
+    }
+
+    // HarmonyX 账本里某目标的某补丁方法在不在。经反射调 2.10 的
+    // Harmony.GetPatchInfo（与 Bridge 自身读账同一条路），再比对 PatchMethod。
+    private static bool BridgeContains(MethodBase target, MethodInfo patchMethod, PatchType type)
+    {
+        if (!TryGetHarmonyXReader(out MethodInfo getPatchInfo)) return false;
+        object patches;
+        try { patches = getPatchInfo.Invoke(null, new object[] { target }); }
+        catch { return false; }
+        if (patches == null) return false;
+        string prop = type switch
+        {
+            PatchType.Prefix => "Prefixes",
+            PatchType.Postfix => "Postfixes",
+            PatchType.Transpiler => "Transpilers",
+            PatchType.Finalizer => "Finalizers",
+            _ => null,
+        };
+        if (prop == null) return false;
+        // 两代 0Harmony 的 Patches.* 都是 readonly 字段（不是属性），一律按字段取
+        FieldInfo list = patches.GetType().GetField(prop,
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        if (list?.GetValue(patches) is not IEnumerable coll) return false;
+        foreach (object p in coll)
+        {
+            // Patch.PatchMethod：2.x 两代同名（2.10 为属性，2.3.6 为属性），字段兜底
+            object m = p.GetType().GetProperty("PatchMethod")?.GetValue(p)
+                ?? p.GetType().GetField("PatchMethod")?.GetValue(p);
+            if (ReferenceEquals(m, patchMethod)) return true;
+        }
+        return false;
     }
 
     // ── JALib 在场探测（每次会话首次核对时一次）─────────────────

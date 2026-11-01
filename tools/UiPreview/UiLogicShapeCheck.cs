@@ -920,7 +920,21 @@ namespace UiPreview
                 s => s.Contains("public static int EnsureApplied(string context, params Type[] patchClasses)", StringComparison.Ordinal)
                     && s.Contains("InfoContains(info, s.Attr.PatchType, s.PatchMethod)", StringComparison.Ordinal)
                     && s.Contains("PatchOneTarget(s, target)", StringComparison.Ordinal)
-                    && s.Contains("补丁核对（\" + label + \"）", StringComparison.Ordinal));
+                    && s.Contains("补丁核对（\" + label", StringComparison.Ordinal));
+            // ㊸e UMMBridge 双 Harmony：桥在场时核对必须先查 HarmonyX 账本
+            //    （Patch 经 ProxyPatch 落在 MelonLoader 世界），否则每次启动都
+            //    误判缺失并重复挂载——同一前缀追加 N 份、每帧执行 N 遍。
+            fail += Check(projectRoot,
+                "㊸e 桥接世界核对必须先查 HarmonyX 账本、0Harmony_UMM 只作兜底",
+                "Patch\\Shared\\SpectrePatchHub.cs",
+                s => s.Contains("bool bridge = TryGetHarmonyXReader(out _)", StringComparison.Ordinal)
+                    && s.Contains("bool present = BridgeContains(target, s.PatchMethod, s.Attr.PatchType)", StringComparison.Ordinal)
+                    && s.Contains("present = InfoContains(info, s.Attr.PatchType, s.PatchMethod)", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㊸f 挂载返回 null 必须当失败——ProxyPatch 失败不抛异常，吞掉会永远等不到补上",
+                "Patch\\Shared\\SpectrePatchHub.cs",
+                s => s.Contains("replacement = spec.Owner.Patch(target, patch, null, null, guard)", StringComparison.Ordinal)
+                    && s.Contains("if (replacement == null)", StringComparison.Ordinal));
             // ㊸d JALib 在场探测：在场与否都必须落日志（缺任何一条，日志里
             //    「没有在场行」都无法区分「没探测」与「不在场」），且必须挂在
             //    EnsureApplied 内（首次核对时点 = 所有 mod 已加载，Load() 时
