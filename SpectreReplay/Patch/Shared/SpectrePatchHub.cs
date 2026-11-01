@@ -840,14 +840,20 @@ internal static class SpectrePatchHub
             _harmonyXProbed = true;
             foreach (Assembly a in AppDomain.CurrentDomain.GetAssemblies())
             {
-                // HarmonyX（2.10+）的特征：程序集名 0Harmony 且有 PatchManager。
-                // UMM 的 0Harmony_UMM（2.3.6）没有这个类型，不会误绑。
+                // 只考虑**别的世界**的 0Harmony：桥接环境里我们的世界叫
+                // 0Harmony_UMM（UMM 改名内嵌），名字恰好是 "0Harmony" 的就是
+                // MelonLoader 的 HarmonyX；vanilla UMM 环境唯一的 0Harmony 就是
+                // 我们的绑定目标——行为验证通过也只是重复检查，无害。
+                // **不按类型名猜布局**：同一版本号的不同构建（net35/net472）里
+                // PatchManager 的命名空间都不一样（HarmonyLib vs Public.Patching），
+                // 猜名字必翻车（2026-11-01 实测：探测静默落空，心跳退化回误判）。
+                // 唯一可靠的判据是**行为**：拿自己的空方法经正常 Patch 写一圈，
+                // 候选读者读得到才认——写落在哪个世界，哪个世界就是该查的账。
                 if (a.GetName().Name != "0Harmony") continue;
-                MethodInfo m = a.GetType("HarmonyLib.PatchManager") == null
-                    ? null
-                    : a.GetType("HarmonyLib.Harmony")
-                        ?.GetMethod("GetPatchInfo", new[] { typeof(MethodBase) });
+                MethodInfo m = a.GetType("HarmonyLib.Harmony")
+                    ?.GetMethod("GetPatchInfo", new[] { typeof(MethodBase) });
                 if (m == null) continue;
+                if (!ReaderCanSeeOurWrite(a, m)) continue;
                 _harmonyXGetPatchInfo = m;
                 AsyncLog.Warning("[" + LogTag + "] 检测到 UMMBridge 双 Harmony 桥（MelonLoader HarmonyX 与 0Harmony_UMM 各一本账）——补丁核对改查 HarmonyX 账本");
                 break;
@@ -856,6 +862,64 @@ internal static class SpectrePatchHub
         getPatchInfo = _harmonyXGetPatchInfo;
         return getPatchInfo != null;
     }
+
+    // 行为验证：经我们正常的 Patch 路径写一个一次性探针（桥接环境下这条写
+    // 会被 UMMBridge 重写进 HarmonyX），候选读者若能读到，即认定它就是
+    // 「写落点」的账本。读完立即拆（HarmonyX 世界的拆除走反射，失败也无害——
+    // 靶是我们自己的空方法，永远不会被调用）。
+    private static bool ReaderCanSeeOurWrite(Assembly hxAsm, MethodInfo getPatchInfo)
+    {
+        const string owner = "SpectreReplay:bridge-probe";
+        MethodInfo target = typeof(SpectrePatchHub).GetMethod(
+            nameof(ProbeTarget), BindingFlags.NonPublic | BindingFlags.Static);
+        MethodInfo prefix = typeof(SpectrePatchHub).GetMethod(
+            nameof(ProbePrefix), BindingFlags.NonPublic | BindingFlags.Static);
+        if (target == null || prefix == null) return false;
+        var h = new Harmony(owner);
+        try
+        {
+            h.Patch(target, prefix: new HarmonyMethod(prefix));
+            object patches = getPatchInfo.Invoke(null, new object[] { target });
+            if (patches == null) return false;
+            FieldInfo list = patches.GetType().GetField("Prefixes",
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (list?.GetValue(patches) is not IEnumerable coll) return false;
+            foreach (object p in coll)
+            {
+                object m = p.GetType().GetProperty("PatchMethod")?.GetValue(p)
+                    ?? p.GetType().GetField("PatchMethod")?.GetValue(p);
+                if (ReferenceEquals(m, prefix)) return true;
+            }
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
+        finally
+        {
+            // 拆除：桥接世界要走 HarmonyX 自己的 UnpatchAll（我们的 Unpatch 调用
+            // 不会被重写，直接调只会拆 0Harmony_UMM 的账）。失败忽略——靶永远
+            // 不会被调用，遗留探针无行为影响。
+            try
+            {
+                object hx = hxAsm.CreateInstance("HarmonyLib.Harmony", false,
+                    BindingFlags.Public | BindingFlags.Instance, null,
+                    new object[] { owner }, null, null);
+                hxAsm.GetType("HarmonyLib.Harmony")
+                    ?.GetMethod("UnpatchAll", new[] { typeof(string) })
+                    ?.Invoke(hx, new object[] { owner });
+            }
+            catch
+            {
+                // 探针遗留不影响任何行为
+            }
+        }
+    }
+
+    private static void ProbeTarget() { }
+
+    private static bool ProbePrefix() => true;
 
     // HarmonyX 账本里某目标的某补丁方法在不在。经反射调 2.10 的
     // Harmony.GetPatchInfo（与 Bridge 自身读账同一条路），再比对 PatchMethod。

@@ -935,6 +935,16 @@ namespace UiPreview
                 "Patch\\Shared\\SpectrePatchHub.cs",
                 s => s.Contains("replacement = spec.Owner.Patch(target, patch, null, null, guard)", StringComparison.Ordinal)
                     && s.Contains("if (replacement == null)", StringComparison.Ordinal));
+            // ㊸ HarmonyX 读者的认定必须靠行为验证（写一圈读一圈），不许按类型名
+            //    猜布局——同一版本号的不同构建里 PatchManager 的命名空间都不同
+            //    （net472: HarmonyLib / net35: HarmonyLib.Public.Patching），
+            //    2026-11-01 实测猜名字静默落空，心跳退化回误判补挂。
+            fail += Check(projectRoot,
+                "㊸ HarmonyX 读者必须行为验证认定，不许按类型名猜布局",
+                "Patch\\Shared\\SpectrePatchHub.cs",
+                s => s.Contains("if (!ReaderCanSeeOurWrite(a, m)) continue;", StringComparison.Ordinal)
+                    && s.Contains("nameof(ProbeTarget)", StringComparison.Ordinal)
+                    && !s.Contains("GetType(\"HarmonyLib.PatchManager\")", StringComparison.Ordinal));
             // ㊸d JALib 在场探测：在场与否都必须落日志（缺任何一条，日志里
             //    「没有在场行」都无法区分「没探测」与「不在场」），且必须挂在
             //    EnsureApplied 内（首次核对时点 = 所有 mod 已加载，Load() 时
