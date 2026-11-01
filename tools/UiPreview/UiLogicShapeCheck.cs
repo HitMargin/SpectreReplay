@@ -999,19 +999,19 @@ namespace UiPreview
                 "Features\\Replay\\Patches\\Patch_Lifecycle.cs",
                 s => !s.Contains("data.IsOfficialLevel != ADOBase.isOfficialLevel", StringComparison.Ordinal)
                     && !s.Contains("data.SpeedTrailMode == true || data.QuickPitched == true", StringComparison.Ordinal));
-            // ㊼ 进拍强制重锚（2026-11-01 用户实测：渲染在倒计时中起锚，成片
-            //    音乐比画面恒定快 0.408s）。倒计时的 songposition 走压缩时间轴，
-            //    音频按 dspTimeSong 走——起锚差值整场烙死。进 PlayerControl 第一
-            //    帧必须强制对齐；倒计时期间阈值巡检必须跳过（追压缩时间轴等于
-            //    把锚钉错）。两个分支都要在。
+            // ㊼ 渲染起锚（2026-11-01 用户实测：倒计时中起锚，成片音乐比画面
+            //    恒定快 0.408s）。倒计时里 songposition_minusi 走压缩时间轴，且
+            //    渲染期间它还被我们自己的 VideoPinSet/PinGet 钉着（读它=读自己
+            //    时间轴的回声，第一版「进拍重锚」就栽在这里——把锚往回拉 0.787s
+            //    后与阈值巡检打架）。起锚必须取 dsp 公式值=音乐实际发声的轴。
             fail += Check(projectRoot,
-                "㊼a 渲染时钟必须有进拍强制重锚——倒计时起锚的压缩时间轴偏移在此修正",
+                "㊼a 渲染起锚必须取 dsp 公式值——songposition_minusi 在倒计时里是压缩时间轴，渲染期还被自己的 Pin 补丁钉着",
                 "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
-                s => s.Contains("if (!playEntrySnapped && conductor.hasSongStarted", StringComparison.Ordinal)
-                    && s.Contains("进拍重锚", StringComparison.Ordinal)
-                    && s.Contains("anchorSongPosition = live - elapsed * pitch;", StringComparison.Ordinal));
+                s => s.Contains("double audioAnchor = (AudioSettings.dspTime - conductor.dspTimeSong", StringComparison.Ordinal)
+                    && !s.Contains("double audioAnchor = conductor.songposition_minusi;", StringComparison.Ordinal)
+                    && !s.Contains("playEntrySnapped", StringComparison.Ordinal));
             fail += Check(projectRoot,
-                "㊼b 倒计时期间必须跳过阈值巡检——追压缩时间轴就是把锚钉错",
+                "㊼b 倒计时期间必须跳过阈值巡检——不在倒计时里烧重锚次数",
                 "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
                 s => s.Contains("bool countingNow = scrController.instance != null", StringComparison.Ordinal)
                     && s.Contains("if (!countingNow)", StringComparison.Ordinal));

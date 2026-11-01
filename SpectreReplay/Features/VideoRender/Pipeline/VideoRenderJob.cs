@@ -148,8 +148,6 @@ internal sealed class VideoRenderJob : MonoBehaviour
     private bool sceneExited;
     // 锚点自愈的已重锚次数（见捕获循环里的锚点自愈段）
     private int reAnchors;
-    // 进入 PlayerControl 的第一帧强制重锚（倒计时起锚偏移的修正，见循环内说明）
-    private bool playEntrySnapped;
     // AwaitReplayAlive 用：上一帧是否已看到正的 songposition（连续两帧才算稳）
     private bool sawPositivePosition;
 
@@ -359,7 +357,15 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // 缓冲池对齐满载深度（队列容量 + 在途回读），消除编码满载期的 LOH 重复分配
         frames.SetSparePoolLimit(encoder.QueueCapacity + frames.MaxInFlight);
 
-        double audioAnchor = conductor.songposition_minusi;
+        // 起锚必须取 **dsp 公式值**（音乐实际发声的那条时间轴），不能取
+        // songposition_minusi。两者平时相等，但渲染从倒计时中起锚时
+        // （AwaitReplayAlive 的 Countdown 分支放行），songposition_minusi 走
+        // **压缩的倒计时时间轴**（countdownSpeedMultiplier），dsp 公式才是音频
+        // 的真值——2026-11-01 实测两者差 0.408s，成片音乐比画面恒定快那么多。
+        // 注意渲染期间 songposition_minusi 还被我们自己的 VideoPinSet/PinGet
+        // 钉着，读它是读自己时间轴的回声，更不能当锚。
+        double audioAnchor = (AudioSettings.dspTime - conductor.dspTimeSong
+            - (double)scrConductor.calibration_i) * conductor.song.pitch - conductor.addoffset;
 
         RenderClock clock = null;
         bool useRenderClock = RenderClockSource.TranspilerReady && Settings.RenderClockOn;
@@ -470,11 +476,11 @@ internal sealed class VideoRenderJob : MonoBehaviour
 
                 if (frameIndex < fps * 10 && reAnchors < 4)
                 {
-                    // **倒计时期间跳过阈值巡检。** 倒计时的 songposition 走压缩的
-                    // 倒计时时间轴（countdownSpeedMultiplier），与 pin 的匀速模型
-                    // 必然分叉——那是预期行为，不该在这里烧掉重锚次数，更不该
-                    // 把锚追着倒计时显示值跑（那正是 2026-11-01 实测的 0.408s
-                    // 音画恒偏的来源之一）。真正的修正由下面的进拍强制重锚做。
+                    // **倒计时期间跳过阈值巡检。** 起锚已取 dsp 公式（音频真值），
+                    // 倒计时里 pin 与 unpinnedNow 本应重合；这里的跳过只是防御——
+                    // 阈值巡检的比较源 unpinnedNow 在倒计时里语义完好，但万一出现
+                    // 分叉，追锚的时机也应该等进拍之后（倒计时里烧掉重锚次数，
+                    // 正片就没了保险）。
                     bool countingNow = scrController.instance != null
                         && scrController.instance.state == States.Countdown;
                     if (!countingNow)
@@ -492,33 +498,11 @@ internal sealed class VideoRenderJob : MonoBehaviour
                     }
                 }
 
-                // ── 进拍强制重锚（音画恒偏的唯一修正点）──────────────────────
-                // 渲染在倒计时中起锚时（AwaitReplayAlive 的 Countdown 分支放行），
-                // 锚取的是 songposition_minusi——但那个值在倒计时里走**压缩时间轴**，
-                // 而音乐的发声时刻由 dspTimeSong（dsp 公式）决定。两者在起锚时刻
-                // 差了 (multiplier-1) 相关的一段（2026-11-01 实测 0.408s），此后
-                // pin 与音频整场恒偏——成片里音乐比画面快那么多。倒计时结束、
-                // 状态进入 PlayerControl 的第一帧，songposition_minusi 已回到
-                // dsp 公式语义，此刻把锚强制对齐游戏实时位置：pin 从此与音频
-                // 同轨。两种时钟路径（转译/兜底）都成立——转译路径下读到的值
-                // 本就由渲染时钟驱动，对齐是无操作；兜底路径下读到的就是音频
-                // 真值。只做一次，且仅在有歌曲起点之后（hasSongStarted 排除
-                // 尚未开拍的等待帧）。
-                if (!playEntrySnapped && conductor.hasSongStarted
-                    && scrController.instance != null
-                    && scrController.instance.state == States.PlayerControl)
-                {
-                    playEntrySnapped = true;
-                    double live = conductor.songposition_minusi;
-                    double wantPin = anchorSongPosition + elapsed * pitch;
-                    if (Math.Abs(wantPin - live) > 0.005)
-                    {
-                        anchorSongPosition = live - elapsed * pitch;
-                        Debug.Log("[SpectreReplay] 进拍重锚: pin=" + wantPin.ToString("0.000")
-                            + "s → 游戏=" + live.ToString("0.000")
-                            + "s（倒计时起锚的压缩时间轴偏移已修正）");
-                    }
-                }
+                // 进拍强制重锚（2026-11-01 第一版）已撤销：它把 songposition_minusi
+                // 当「游戏真值」读，但渲染期间这个属性被我们自己的 VideoPinSet/
+                // PinGet 钉着——读到的是自己时间轴的回声，实测把锚往回拉 0.787s，
+                // 随后与阈值巡检打架（attempt 2 又拉回去）。正确的修法是起锚直接
+                // 取 dsp 公式值（见 audioAnchor），锚对了就不再需要任何进拍修正。
 
                 VideoRender.PinnedSongPosition = anchorSongPosition + elapsed * pitch;
                 // 视频背景确定性化：按渲染时钟/真实耗时比值连续调速（VideoPlayer

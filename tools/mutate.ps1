@@ -733,10 +733,10 @@ switch ($Which) {
         ReplaceExact 'Patch\Shared\SpectrePatchHub.cs' ('                if (!ReaderCanSeeOurWrite(a, m)) continue;') ('')
     }
     'MUT-U73' {
-        # ㊼a：进拍强制重锚被拆——倒计时起锚的 0.408s 恒偏整场烙回成片
-        #     （2026-11-01 用户实测的音画不同步）。
+        # ㊼a：起锚混入 songposition_minusi——倒计时里它是压缩时间轴值，
+        #     锚被污染，0.408s 恒偏回潮（单行锚点保持可编译，值变错）。
         Backup 'Features\VideoRender\Pipeline\VideoRenderJob.cs'
-        ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' ('                if (!playEntrySnapped && conductor.hasSongStarted') ('                if (false && conductor.hasSongStarted')
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' ('        double audioAnchor = (AudioSettings.dspTime - conductor.dspTimeSong') ('        double audioAnchor = conductor.songposition_minusi - (AudioSettings.dspTime - conductor.dspTimeSong')
     }
     'MUT-U25' {
         # ⑫i：把已删除的「界面语言跟随游戏」开关加回来（防回归变异）。
