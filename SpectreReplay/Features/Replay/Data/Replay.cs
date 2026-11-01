@@ -42,6 +42,11 @@ public class Replay
     /// 一起算出，段层面全体在场或全体缺席。
     /// </summary>
     public StableHashes HashesV2 { get; set; }
+    /// <summary>
+    /// 本局使用的检查点次数（尾部可选段；旧文件没有 → null）。xacc 官方口径
+    /// 的 0.9875^n 惩罚次数，见 <see cref="ReplayData.CheckpointsUsed"/>。
+    /// </summary>
+    public int? CheckpointsUsed { get; set; }
 
     public class StableHashes
     {

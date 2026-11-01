@@ -68,7 +68,14 @@ internal static class ReplayRecorder
                 + ex.GetType().Name + " " + ex.Message);
         }
         data.JudgmentList = "[" + string.Join(",", HitMarginCounts) + "]";
-        data.PercentXacc = ComputePercentXacc();
+        // **xacc 官方口径带检查点惩罚**（审计 D-F8）：percentXAcc =
+        // num8 * 0.9875^checkpointsUsed（scrMarginTracker.cs:216）。此前只算
+        // 分子/分母——检查点回放的 xacc 显示偏高。次数一并落盘（ChkCount 尾
+        // 段），信息页重算与将来的工具才有依据；次数为 0（全程无检查点）时
+        // 惩罚是 1，与旧行为逐位一致。
+        data.CheckpointsUsed = Math.Max(0, scrController.checkpointsUsed);
+        data.PercentXacc = ComputePercentXacc()
+            * System.Math.Pow(0.9875, data.CheckpointsUsed.Value);
         int peak = data.MaximumUsedKeys ?? 0;
         int cur = ADOBase.controller?.maximumUsedKeys ?? 0;
         data.MaximumUsedKeys = Math.Max(peak, cur);

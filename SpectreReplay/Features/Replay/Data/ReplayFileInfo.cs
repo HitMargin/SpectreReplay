@@ -200,6 +200,11 @@ internal sealed class ReplayFileInfo
         // 判定分布缺失（老文件）时才信文件里存的那个数：它是录制时的口径，
         // 早期版本分母错、全完美局会显示成 96%。能重算就重算。
         double recomputed = SpectreReplay.Features.Compat.HitMarginCompat.XAcc(info.JudgmentCounts);
+        // 重算的是「无惩罚分子/分母」——官方口径还要乘 0.9875^checkpointsUsed
+        // （scrMarginTracker.cs:216）。次数段在场才乘（新录制才有）；旧回放
+        // 不知道次数，维持原样显示（偏高是已知口径缺口，不伪造数据）。
+        if (recomputed >= 0.0 && data.CheckpointsUsed is int used && used > 0)
+            recomputed *= System.Math.Pow(0.9875, used);
         info.Xacc = recomputed >= 0.0 ? recomputed : info.PercentXacc;
     }
 

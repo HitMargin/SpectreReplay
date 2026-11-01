@@ -81,6 +81,14 @@ public sealed class ReplayData
     public int? TimeHashS { get; set; }
     /// <summary>结构（事件表产物）的稳定哈希。与 StructureHash 同一归一化输入。</summary>
     public int? StructureHashS { get; set; }
+
+    /// <summary>
+    /// 本局使用的检查点次数（官方 scrController.checkpointsUsed，2026-11-02 新增，
+    /// 旧回放没有 → null）。xacc 官方口径带 0.9875^次数 惩罚（scrMarginTracker.
+    /// cs:216）——此前只算分子/分母，检查点回放显示偏高（审计 D-F8）。存进
+    /// 文件后，事后重算与显示才有依据；null = 不知道（按无惩罚处理）。
+    /// </summary>
+    public int? CheckpointsUsed { get; set; }
     /// <summary>音高。原键 pitch。</summary>
     public int? Pitch { get; set; }
     /// <summary>关卡 ID。原键 levelID。</summary>
@@ -220,6 +228,7 @@ public sealed class ReplayData
         SpeedHashS = null;
         TimeHashS = null;
         StructureHashS = null;
+        CheckpointsUsed = null;
         Pitch = null;
         LevelId = null;
         AudioBufferSize = null;

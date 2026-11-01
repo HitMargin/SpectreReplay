@@ -25,6 +25,7 @@ namespace UiPreview
             fail += StartTimeSurvivesReplayDataRoundTrip();
             fail += StructureHashTailRoundTrip();
             fail += HashesV2TailRoundTrip();
+            fail += CheckpointsUsedTailRoundTrip();
             if (fail == 0) Console.WriteLine("    ✓ 回放格式往返全部一致");
             return fail;
         }
@@ -181,6 +182,40 @@ namespace UiPreview
             catch (Exception ex)
             {
                 Console.WriteLine("    ✗ ⑽ 抛异常 " + ex.GetType().Name + ": " + ex.Message);
+                return 1;
+            }
+        }
+
+        /// <summary>
+        /// 检查点次数段（尾部可选段）两态往返：有值 → 编码写段、解码读回相等；
+        /// 无值（旧回放）→ 一个字节不写、解码得 null——「不知道次数」只有一种
+        /// 表示，显示端据此决定是否乘 0.9875^n 惩罚（审计 D-F8）。
+        /// </summary>
+        private static int CheckpointsUsedTailRoundTrip()
+        {
+            try
+            {
+                var with = Sample(2, 2, 4);
+                with.CheckpointsUsed = 3;
+                Replay back = ReplayDecoder.Decode(ReplayEncoder.Encode(with));
+                if (back.CheckpointsUsed != 3)
+                {
+                    Console.WriteLine("    ✗ ⑾ 检查点次数往返不一致 " + back.CheckpointsUsed?.ToString());
+                    return 1;
+                }
+                var none = Sample(2, 2, 4);
+                Replay back2 = ReplayDecoder.Decode(ReplayEncoder.Encode(none));
+                if (back2.CheckpointsUsed != null)
+                {
+                    Console.WriteLine("    ✗ ⑾ 无值不该有段，却解出 " + back2.CheckpointsUsed);
+                    return 1;
+                }
+                Console.WriteLine("    ✓ ⑾ 检查点次数段（有值/无值两态）");
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("    ✗ ⑾ 抛异常 " + ex.GetType().Name + ": " + ex.Message);
                 return 1;
             }
         }

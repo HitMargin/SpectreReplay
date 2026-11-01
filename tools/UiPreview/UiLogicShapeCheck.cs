@@ -1062,6 +1062,19 @@ namespace UiPreview
                 "Features\\Replay\\Patches\\Patch_Lifecycle.cs",
                 s => GateNear(s, "\"ReplayPatchUnavailable\"",
                     "if (!SpectrePatchHub.IsAvailable(FeatureKeys.Replay))"));
+            // 51 xacc 检查点惩罚（审计 D-F8）：录制存次数并乘 0.9875^n（官方
+            //    scrMarginTracker.cs:216 口径），信息页重算时次数在场才乘——
+            //    旧回放不知道次数，不伪造。
+            fail += Check(projectRoot,
+                "51a 录制收尾必须存 checkpointsUsed 并乘官方惩罚",
+                "Features\\Replay\\Runtime\\ReplayRecorder.cs",
+                s => s.Contains("data.CheckpointsUsed = Math.Max(0, scrController.checkpointsUsed);", StringComparison.Ordinal)
+                    && s.Contains("System.Math.Pow(0.9875, data.CheckpointsUsed.Value);", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "51b 信息页重算 xacc 必须次数在场才乘惩罚——旧回放不伪造",
+                "Features\\Replay\\Data\\ReplayFileInfo.cs",
+                s => s.Contains("data.CheckpointsUsed is int used && used > 0", StringComparison.Ordinal)
+                    && s.Contains("recomputed *= System.Math.Pow(0.9875, used);", StringComparison.Ordinal));
 
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");

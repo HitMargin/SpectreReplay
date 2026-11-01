@@ -39,6 +39,7 @@ internal static class ReplayDecoder
         replay.KeybdPrefs = ReadKeybdPrefsIfPresent(r);
         replay.StructureHash = ReadStructureHashIfPresent(r);
         replay.HashesV2 = ReadHashesV2IfPresent(r);
+        replay.CheckpointsUsed = ReadCheckpointsUsedIfPresent(r);
         return replay;
     }
 
@@ -432,6 +433,30 @@ internal static class ReplayDecoder
         };
     }
 
+    /// <summary>
+    /// 尾部可选段：检查点次数（位于稳定哈希段之后）。探测失败回退流位置返回
+    /// null——段不存在 = 不知道次数，显示不乘惩罚（旧回放语义）。
+    /// </summary>
+    private static int? ReadCheckpointsUsedIfPresent(BinaryReader r)
+    {
+        const int HeadLen = 8 + 4 + 4;
+        long remaining = r.BaseStream.Length - r.BaseStream.Position;
+        if (remaining < HeadLen)
+            return null;
+        long start = r.BaseStream.Position;
+        var magic = r.ReadUInt64();
+        if (magic != ReplayConstants.MagicCheckpointsUsed)
+        {
+            r.BaseStream.Position = start;
+            return null;
+        }
+        var ver = r.ReadInt32();
+        if (ver > ReplayConstants.CheckpointsUsedVersion)
+            throw new InvalidDataException(
+                $"CheckpointsUsed version {ver} too new (known: {ReplayConstants.CheckpointsUsedVersion})");
+        return r.ReadInt32();
+    }
+
     public static Replay FromReplayData(ReplayData replayData)    {
         if (replayData == null) return null;
         var replay = new Replay();
@@ -476,6 +501,8 @@ internal static class ReplayDecoder
                 Structure = replayData.StructureHashS,
             };
         }
+
+        replay.CheckpointsUsed = replayData.CheckpointsUsed;
         m.Pitch = replayData.Pitch ?? 0;
         m.LevelID = replayData.LevelId ?? 0;
         m.AudioBufferSize = replayData.AudioBufferSize ?? 0;
@@ -555,6 +582,8 @@ internal static class ReplayDecoder
             replayData.TimeHashS = replay.HashesV2.Time;
             replayData.StructureHashS = replay.HashesV2.Structure;
         }
+
+        replayData.CheckpointsUsed = replay.CheckpointsUsed;
         replayData.Pitch = m.Pitch;
         replayData.LevelId = m.LevelID;
         replayData.AudioBufferSize = m.AudioBufferSize;

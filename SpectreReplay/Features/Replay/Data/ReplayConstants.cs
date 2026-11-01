@@ -66,4 +66,11 @@ internal static class ReplayConstants
     // 回落旧字段比较（行为不变）。魔数按流内小端拼出 "HashesV2"。
     public const ulong MagicHashesV2 = 0x3256_7365_6873_6148;
     public const int HashesV2Version = 1;
+
+    // 检查点次数段：追加在稳定哈希段之后，同属「尾部可选段」。xacc 官方口径
+    // 带 0.9875^checkpointsUsed 惩罚，次数不落盘就无法事后重算（审计 D-F8）。
+    // 没有段 = 旧回放/未知，显示不乘惩罚（保持旧行为，不伪造）。魔数按流内
+    // 小端拼出 "ChkCount"。
+    public const ulong MagicCheckpointsUsed = 0x746E_756F_436B_6843;
+    public const int CheckpointsUsedVersion = 1;
 }

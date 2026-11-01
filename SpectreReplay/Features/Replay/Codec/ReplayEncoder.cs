@@ -38,6 +38,9 @@ internal static class ReplayEncoder
             // 都在才算在场（录制时一起算出），缺任一则整段不写——「段缺席」
             // 就是「回落旧字段比较」，两种表示不并存。
             WriteHashesV2(writer, replay.HashesV2);
+            // 检查点次数段排在稳定哈希段之后：更晚出现的尾部段。没有值时
+            // 一个字节都不写——「段不存在」就是「不知道」，显示不乘惩罚。
+            WriteCheckpointsUsed(writer, replay.CheckpointsUsed);
         }
 
         var compressed = ReplayCompression.Compress(ms.ToArray());
@@ -165,6 +168,15 @@ internal static class ReplayEncoder
         w.Write(h.Speed.Value);
         w.Write(h.Time.Value);
         w.Write(h.Structure.Value);
+    }
+
+    /// <summary>写检查点次数段（尾部可选段，位于稳定哈希段之后）。null 不写。</summary>
+    private static void WriteCheckpointsUsed(BinaryWriter w, int? checkpointsUsed)
+    {
+        if (!checkpointsUsed.HasValue) return;
+        w.Write(ReplayConstants.MagicCheckpointsUsed);
+        w.Write(ReplayConstants.CheckpointsUsedVersion);
+        w.Write(checkpointsUsed.Value);
     }
 
     /// <summary>
