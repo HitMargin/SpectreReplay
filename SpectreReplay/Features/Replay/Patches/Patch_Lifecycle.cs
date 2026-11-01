@@ -173,30 +173,96 @@ internal class Patch_StartRewind
                         return;
                     }
                 }
-                int floorHash = ADOBase.isOfficialLevel
-                    ? 0
-                    : (scnGame.instance.levelData.isOldLevel
-                        ? scnGame.instance.levelData.pathData.GetHashCode()
-                        : ComputeAngleHash(scnGame.instance.levelData.angleData));
-                if (floorHash != data.FloorHash)
+                // ── 谱面哈希校验：稳定段优先，旧字段回落 ─────────────────────
+                // HashesV2 尾段在场（2026-11-02 起的新录制）→ 用 FNV-1a 稳定哈希
+                // 比对：跨 Unity/Mono 升级依旧成立，且顺带启用速度/时间表校验
+                // （旧字段里这两项一直只录不比）。段缺席（旧回放）→ 按旧字段
+                // 比较——旧值是录制当运行的 GetHashCode，只有同运行可复现，
+                // 跨运行会误判；这是既有语义，不在旧文件上变卦。
+                if (data.FloorHashS.HasValue)
                 {
-                    Reject(LocalizationManager.GetLocalizedText("note.play_error2"));
-                    Debug.Log("[SpectreReplay]   细节 floorHash: 录="
-                        + data.FloorHash + " 现=" + floorHash);
-                    return;
-                }
-                // 结构校验：旧回放没有这个字段（尾部可选段，2026-11-01 引入），
-                // HasValue 才比对——「没有记录」不能当成「结构一致」。
-                if (data.StructureHash.HasValue)
-                {
-                    int structureHash = ComputeFloorStructureHash();
-                    if (structureHash != data.StructureHash.Value)
+                    int floorHashS = ADOBase.isOfficialLevel
+                        ? 0
+                        : (scnGame.instance.levelData.isOldLevel
+                            ? 0
+                            : ComputeAngleHashS(scnGame.instance.levelData.angleData));
+                    if (floorHashS != data.FloorHashS.Value)
                     {
                         Reject(LocalizationManager.GetLocalizedText("note.play_error2"));
-                        Debug.Log("[SpectreReplay]   细节 structureHash: 录="
-                            + data.StructureHash.Value + " 现=" + structureHash
-                            + "（谱面的事件表变过：长按/多压/行星数/自由漫游/倒计时）");
+                        Debug.Log("[SpectreReplay]   细节 floorHashS: 录="
+                            + data.FloorHashS.Value + " 现=" + floorHashS);
                         return;
+                    }
+                    if (data.SpeedHashS.HasValue)
+                    {
+                        var speeds = new System.Collections.Generic.List<double>();
+                        var times = new System.Collections.Generic.List<double>();
+                        for (int i = 0; i < ADOBase.lm.listFloors.Count; i++)
+                        {
+                            if (i > 0) times.Add(ADOBase.lm.listFloors[i].entryTime - ADOBase.lm.listFloors[i - 1].entryTime);
+                            speeds.Add(ADOBase.lm.listFloors[i].speed * (ADOBase.lm.listFloors[i].isCCW ? -1f : 1f));
+                        }
+                        int speedHashS = ComputeDoubleListHashS(speeds);
+                        if (speedHashS != data.SpeedHashS.Value)
+                        {
+                            Reject(LocalizationManager.GetLocalizedText("note.play_error2"));
+                            Debug.Log("[SpectreReplay]   细节 speedHashS: 录="
+                                + data.SpeedHashS.Value + " 现=" + speedHashS);
+                            return;
+                        }
+                        if (data.TimeHashS.HasValue)
+                        {
+                            int timeHashS = ComputeTimeListHashS(times);
+                            if (timeHashS != data.TimeHashS.Value)
+                            {
+                                Reject(LocalizationManager.GetLocalizedText("note.play_error2"));
+                                Debug.Log("[SpectreReplay]   细节 timeHashS: 录="
+                                    + data.TimeHashS.Value + " 现=" + timeHashS);
+                                return;
+                            }
+                        }
+                    }
+                    if (data.StructureHashS.HasValue)
+                    {
+                        int structureHashS = ComputeFloorStructureHashS();
+                        if (structureHashS != data.StructureHashS.Value)
+                        {
+                            Reject(LocalizationManager.GetLocalizedText("note.play_error2"));
+                            Debug.Log("[SpectreReplay]   细节 structureHashS: 录="
+                                + data.StructureHashS.Value + " 现=" + structureHashS
+                                + "（谱面的事件表变过：长按/多压/行星数/自由漫游/倒计时）");
+                            return;
+                        }
+                    }
+                }
+                else
+                {
+                    int floorHash = ADOBase.isOfficialLevel
+                        ? 0
+                        : (scnGame.instance.levelData.isOldLevel
+                            ? scnGame.instance.levelData.pathData.GetHashCode()
+                            : ComputeAngleHash(scnGame.instance.levelData.angleData));
+                    if (floorHash != data.FloorHash)
+                    {
+                        Reject(LocalizationManager.GetLocalizedText("note.play_error2"));
+                        Debug.Log("[SpectreReplay]   细节 floorHash: 录="
+                            + data.FloorHash + " 现=" + floorHash);
+                        return;
+                    }
+                    // 结构校验（旧回放）：旧回放没有这个字段（尾部可选段，
+                    // 2026-11-01 引入），HasValue 才比对——「没有记录」不能当成
+                    // 「结构一致」。
+                    if (data.StructureHash.HasValue)
+                    {
+                        int structureHash = ComputeFloorStructureHash();
+                        if (structureHash != data.StructureHash.Value)
+                        {
+                            Reject(LocalizationManager.GetLocalizedText("note.play_error2"));
+                            Debug.Log("[SpectreReplay]   细节 structureHash: 录="
+                                + data.StructureHash.Value + " 现=" + structureHash
+                                + "（谱面的事件表变过：长按/多压/行星数/自由漫游/倒计时）");
+                            return;
+                        }
                     }
                 }
                 if (!ADOBase.isOfficialLevel
@@ -462,6 +528,18 @@ internal class Patch_StartRewind
             // 楼层校验对「只改事件不动角度」的谱面改动是瞎的。按楼层序列拼这些
             // 事件产物，播放时与现算值比对（旧回放没有此字段则跳过）。
             data.StructureHash = ComputeFloorStructureHash();
+            // 稳定哈希双写：新段（HashesV2 尾段）存 FNV-1a 跨运行时值；旧字段
+            // 保持运行时 GetHashCode——同运行的旧构建读新文件仍走旧字段比较。
+            // 旧关卡（isOldLevel）没有角度数组，FloorHash 用 pathData 的运行时
+            // 哈希，稳定版无从计算——四件套缺一，整段不写（回落旧字段）。
+            data.FloorHashS = ADOBase.isOfficialLevel
+                ? 0
+                : (scnGame.instance.levelData.isOldLevel
+                    ? (int?)null
+                    : ComputeAngleHashS(scnGame.instance.levelData.angleData));
+            data.SpeedHashS = ComputeDoubleListHashS(speeds);
+            data.TimeHashS = ComputeTimeListHashS(times);
+            data.StructureHashS = ComputeFloorStructureHashS();
             data.LevelPath = "";
             if (ADOBase.isOfficialLevel)
             {
@@ -561,6 +639,57 @@ internal class Patch_StartRewind
             _hashBuilder.Append(norm.ToString(CultureInfo.InvariantCulture));
         }
         return _hashBuilder.ToString().GetHashCode();
+    }
+
+    // ── 稳定哈希（FNV-1a，跨运行时不变）────────────────────────────
+    // 与旧算子共用同一套归一化（先转 InvariantCulture 文本），只是把最后的
+    // string.GetHashCode() 换成 StableHash.Of——GetHashCode 是运行时实现
+    // 细节，Unity/Mono 升级可能整体更换；FNV-1a 的规范冻结不变。
+    // 旧字段保持运行时哈希：同运行的旧构建读新文件仍走旧字段比较。
+
+    private static int ComputeAngleHashS(IEnumerable<float> angles)
+    {
+        _hashBuilder.Clear();
+        foreach (var x in angles)
+        {
+            float norm = x >= 0f ? x % 360f : 360f - -x % 360f;
+            _hashBuilder.Append(norm.ToString(CultureInfo.InvariantCulture));
+        }
+        return StableHash.Of(_hashBuilder.ToString());
+    }
+
+    private static int ComputeDoubleListHashS(IEnumerable<double> values)
+    {
+        _hashBuilder.Clear();
+        foreach (var v in values)
+            _hashBuilder.Append(v.ToString(CultureInfo.InvariantCulture));
+        return StableHash.Of(_hashBuilder.ToString());
+    }
+
+    private static int ComputeTimeListHashS(IEnumerable<double> values)
+    {
+        _hashBuilder.Clear();
+        foreach (var d in values)
+            _hashBuilder.Append(d.ToString("F4", System.Globalization.CultureInfo.InvariantCulture));
+        return StableHash.Of(_hashBuilder.ToString());
+    }
+
+    private static int ComputeFloorStructureHashS()
+    {
+        _hashBuilder.Clear();
+        var floors = ADOBase.lm.listFloors;
+        for (int i = 0; i < floors.Count; i++)
+        {
+            var f = floors[i];
+            _hashBuilder.Append(f.holdLength).Append('|')
+                .Append(f.tapsNeeded).Append('|')
+                .Append(f.numPlanets).Append('|')
+                .Append(f.freeroam ? 1 : 0).Append('|')
+                .Append(f.freeroamRegion).Append('|')
+                .Append(f.freeroamEndEarlyBeats).Append('|')
+                .Append(f.countdownTicks).Append('\n');
+        }
+        return StableHash.Of(_hashBuilder.ToString());
     }
 
     private static int ComputeDoubleListHash(IEnumerable<double> values)

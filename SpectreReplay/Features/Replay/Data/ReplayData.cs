@@ -66,6 +66,21 @@ public sealed class ReplayData
     /// 数据，这些来自事件表的属性改了它看不出来。
     /// </summary>
     public int? StructureHash { get; set; }
+
+    // ── 稳定哈希（FNV-1a，跨运行时不变）──────────────────────────
+    // 旧字段（FloorHash/SpeedHash/TimeHash/StructureHash）存的是运行时
+    // string.GetHashCode()——同一游戏构建内稳定，跨 Unity/Mono 升级可能
+    // 整体更换，届时存量回放被误判「关卡数据错误」。这四个稳定版随新录制
+    // 写入 HashesV2 尾段；播放侧段存在用稳定版，缺席回落旧字段（旧回放
+    // 语义不变）。null = 未计算（容器转换时允许缺）。
+    /// <summary>楼层角度序列的稳定哈希。与 FloorHash 同一归一化输入。</summary>
+    public int? FloorHashS { get; set; }
+    /// <summary>速度事件表的稳定哈希。与 SpeedHash 同一归一化输入。</summary>
+    public int? SpeedHashS { get; set; }
+    /// <summary>时间事件表的稳定哈希。与 TimeHash 同一归一化输入。</summary>
+    public int? TimeHashS { get; set; }
+    /// <summary>结构（事件表产物）的稳定哈希。与 StructureHash 同一归一化输入。</summary>
+    public int? StructureHashS { get; set; }
     /// <summary>音高。原键 pitch。</summary>
     public int? Pitch { get; set; }
     /// <summary>关卡 ID。原键 levelID。</summary>
@@ -201,6 +216,10 @@ public sealed class ReplayData
         SpeedHash = null;
         TimeHash = null;
         StructureHash = null;
+        FloorHashS = null;
+        SpeedHashS = null;
+        TimeHashS = null;
+        StructureHashS = null;
         Pitch = null;
         LevelId = null;
         AudioBufferSize = null;

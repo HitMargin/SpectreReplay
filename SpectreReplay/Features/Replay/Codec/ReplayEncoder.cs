@@ -34,6 +34,10 @@ internal static class ReplayEncoder
             // 没有值时（旧数据容器）一个字节都不写——「段不存在」就是
             // 「这份回放没有结构校验」，播放侧跳过比对。
             WriteStructureHash(writer, replay.StructureHash);
+            // 稳定哈希段排在结构校验段之后：更晚出现的尾部段。四个稳定哈希
+            // 都在才算在场（录制时一起算出），缺任一则整段不写——「段缺席」
+            // 就是「回落旧字段比较」，两种表示不并存。
+            WriteHashesV2(writer, replay.HashesV2);
         }
 
         var compressed = ReplayCompression.Compress(ms.ToArray());
@@ -145,6 +149,22 @@ internal static class ReplayEncoder
         w.Write(ReplayConstants.MagicStructureHash);
         w.Write(ReplayConstants.StructureHashVersion);
         w.Write(structureHash.Value);
+    }
+
+    /// <summary>
+    /// 写稳定哈希段（尾部可选段，位于结构校验段之后）。四个值齐才写——
+    /// 段的存在本身就是「用稳定哈希校验」的开关，半截段是歧义态。
+    /// </summary>
+    private static void WriteHashesV2(BinaryWriter w, Replay.StableHashes h)
+    {
+        if (h == null || !h.Floor.HasValue || !h.Speed.HasValue || !h.Time.HasValue || !h.Structure.HasValue)
+            return;
+        w.Write(ReplayConstants.MagicHashesV2);
+        w.Write(ReplayConstants.HashesV2Version);
+        w.Write(h.Floor.Value);
+        w.Write(h.Speed.Value);
+        w.Write(h.Time.Value);
+        w.Write(h.Structure.Value);
     }
 
     /// <summary>

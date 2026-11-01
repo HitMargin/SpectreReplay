@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
@@ -54,6 +54,7 @@
     <Compile Include="..\..\SpectreReplay\Features\Replay\Runtime\CursorTrackSampler.cs" Link="Real\CursorTrackSampler.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\Codec\ReplayCompression.cs" Link="Real\ReplayCompression.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\Codec\ReplayEncoder.cs" Link="Real\ReplayEncoder.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\Codec\StableHash.cs" Link="Real\StableHash.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\Codec\ReplayDecoder.cs" Link="Real\ReplayDecoder.cs" />
     
     <Compile Include="..\..\SpectreReplay\Features\Replay\Codec\ReplayCrypto.cs" Link="Real\ReplayCrypto.cs" />

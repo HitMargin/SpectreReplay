@@ -24,6 +24,7 @@ namespace UiPreview
             fail += DecodesV1HitSnapshots();
             fail += StartTimeSurvivesReplayDataRoundTrip();
             fail += StructureHashTailRoundTrip();
+            fail += HashesV2TailRoundTrip();
             if (fail == 0) Console.WriteLine("    ✓ 回放格式往返全部一致");
             return fail;
         }
@@ -118,6 +119,68 @@ namespace UiPreview
             catch (Exception ex)
             {
                 Console.WriteLine("    ✗ ⑻ 抛异常 " + ex.GetType().Name + ": " + ex.Message);
+                return 1;
+            }
+        }
+
+        /// <summary>
+        /// 稳定哈希段（尾部可选段）两态往返：四件套齐 → 编码写段、解码读回逐项
+        /// 相等；缺任一 → 一个字节不写、解码得 null（段不存在 = 回落旧字段，
+        /// 半截段是歧义态，绝不允许出现）。另验 FNV-1a 的已知向量——换运行时
+        /// 换机器，值必须恒等，这是整个「跨运行时稳定」卖点的锚。
+        /// </summary>
+        private static int HashesV2TailRoundTrip()
+        {
+            try
+            {
+                // FNV-1a 32 已知向量（规范自证）：空串 2166136261、
+                // "a" 0xE40C292C、"foobar" 0xBF9CF968。
+                var vectors = new (string s, uint want)[]
+                {
+                    ("", 2166136261u),
+                    ("a", 0xE40C292Cu),
+                    ("foobar", 0xBF9CF968u),
+                };
+                foreach (var (s, want) in vectors)
+                {
+                    int got = StableHash.Of(s);
+                    if ((uint)got != want)
+                    {
+                        Console.WriteLine("    ✗ ⑽ FNV-1a 已知向量不符 \"" + s + "\": 0x"
+                            + ((uint)got).ToString("X8") + " vs 0x" + want.ToString("X8"));
+                        return 1;
+                    }
+                }
+
+                var full = Sample(2, 2, 4);
+                full.HashesV2 = new Replay.StableHashes
+                {
+                    Floor = 123456789, Speed = -987654321, Time = int.MinValue, Structure = 42,
+                };
+                Replay back = ReplayDecoder.Decode(ReplayEncoder.Encode(full));
+                if (back.HashesV2 == null
+                    || back.HashesV2.Floor != full.HashesV2.Floor
+                    || back.HashesV2.Speed != full.HashesV2.Speed
+                    || back.HashesV2.Time != full.HashesV2.Time
+                    || back.HashesV2.Structure != full.HashesV2.Structure)
+                {
+                    Console.WriteLine("    ✗ ⑽ 稳定哈希段往返不一致或有缺项");
+                    return 1;
+                }
+
+                var none = Sample(2, 2, 4);
+                Replay back2 = ReplayDecoder.Decode(ReplayEncoder.Encode(none));
+                if (back2.HashesV2 != null)
+                {
+                    Console.WriteLine("    ✗ ⑽ 无稳定哈希不该有段，却解出了值");
+                    return 1;
+                }
+                Console.WriteLine("    ✓ ⑽ 稳定哈希段（FNV-1a 向量 + 两态往返）");
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("    ✗ ⑽ 抛异常 " + ex.GetType().Name + ": " + ex.Message);
                 return 1;
             }
         }

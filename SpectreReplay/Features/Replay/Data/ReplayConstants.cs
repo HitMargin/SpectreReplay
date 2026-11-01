@@ -58,4 +58,12 @@ internal static class ReplayConstants
     // 魔数按流内小端拼出 "StruHash"。
     public const ulong MagicStructureHash = 0x6873_6148_7572_7453;
     public const int StructureHashVersion = 1;
+
+    // 稳定哈希段：追加在结构校验段之后，同属「尾部可选段」。四个谱面校验哈希
+    // 的 FNV-1a 稳定版（Floor/Speed/Time/Structure）——旧字段里的运行时
+    // string.GetHashCode() 跨 Unity/Mono 升级可能整体变化，届时存量回放会被
+    // 误判「关卡数据错误」。段存在 → 播放侧按稳定哈希校验；缺席（旧回放）→
+    // 回落旧字段比较（行为不变）。魔数按流内小端拼出 "HashesV2"。
+    public const ulong MagicHashesV2 = 0x3256_7365_6873_6148;
+    public const int HashesV2Version = 1;
 }

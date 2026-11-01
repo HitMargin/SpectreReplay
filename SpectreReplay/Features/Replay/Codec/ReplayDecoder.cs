@@ -38,6 +38,7 @@ internal static class ReplayDecoder
         replay.KeybdAudio = ReadKeybdAudioIfPresent(r);
         replay.KeybdPrefs = ReadKeybdPrefsIfPresent(r);
         replay.StructureHash = ReadStructureHashIfPresent(r);
+        replay.HashesV2 = ReadHashesV2IfPresent(r);
         return replay;
     }
 
@@ -387,8 +388,39 @@ internal static class ReplayDecoder
         return r.ReadInt32();
     }
 
-    public static Replay FromReplayData(ReplayData replayData)
+    /// <summary>
+    /// 尾部可选段：稳定哈希四件套（位于结构校验段之后）。探测失败一律**回退
+    /// 流位置**并返回 null——段不存在 = 回落旧字段比较，不是错误。段版本显式
+    /// 上界：未来版本按 v1 解析会把 4 个 int 读错位，宁可明确拒绝。
+    /// </summary>
+    private static Replay.StableHashes ReadHashesV2IfPresent(BinaryReader r)
     {
+        // 魔数 8 + 段版本 4 + 4×int32
+        const int HeadLen = 8 + 4 + 16;
+        long remaining = r.BaseStream.Length - r.BaseStream.Position;
+        if (remaining < HeadLen)
+            return null;
+        long start = r.BaseStream.Position;
+        var magic = r.ReadUInt64();
+        if (magic != ReplayConstants.MagicHashesV2)
+        {
+            r.BaseStream.Position = start;
+            return null;
+        }
+        var ver = r.ReadInt32();
+        if (ver > ReplayConstants.HashesV2Version)
+            throw new InvalidDataException(
+                $"HashesV2 version {ver} too new (known: {ReplayConstants.HashesV2Version})");
+        return new Replay.StableHashes
+        {
+            Floor = r.ReadInt32(),
+            Speed = r.ReadInt32(),
+            Time = r.ReadInt32(),
+            Structure = r.ReadInt32(),
+        };
+    }
+
+    public static Replay FromReplayData(ReplayData replayData)    {
         if (replayData == null) return null;
         var replay = new Replay();
         var m = replay.Metadata;
@@ -419,6 +451,19 @@ internal static class ReplayDecoder
 
         // 结构校验走尾部可选段，null = 不写段（旧回放语义，播放侧跳过比对）。
         replay.StructureHash = replayData.StructureHash;
+
+        // 稳定哈希四件套：齐才成段（半截段是歧义态），缺任一则整段不写。
+        if (replayData.FloorHashS.HasValue && replayData.SpeedHashS.HasValue
+            && replayData.TimeHashS.HasValue && replayData.StructureHashS.HasValue)
+        {
+            replay.HashesV2 = new Replay.StableHashes
+            {
+                Floor = replayData.FloorHashS,
+                Speed = replayData.SpeedHashS,
+                Time = replayData.TimeHashS,
+                Structure = replayData.StructureHashS,
+            };
+        }
         m.Pitch = replayData.Pitch ?? 0;
         m.LevelID = replayData.LevelId ?? 0;
         m.AudioBufferSize = replayData.AudioBufferSize ?? 0;
@@ -489,6 +534,15 @@ internal static class ReplayDecoder
 
         // 与 FromReplayData 对称：段不存在（旧文件）就是 null，播放侧跳过校验。
         replayData.StructureHash = replay.StructureHash;
+
+        // 稳定哈希四件套：读回来拆到字段（null = 旧文件没有，回落旧字段）。
+        if (replay.HashesV2 != null)
+        {
+            replayData.FloorHashS = replay.HashesV2.Floor;
+            replayData.SpeedHashS = replay.HashesV2.Speed;
+            replayData.TimeHashS = replay.HashesV2.Time;
+            replayData.StructureHashS = replay.HashesV2.Structure;
+        }
         replayData.Pitch = m.Pitch;
         replayData.LevelId = m.LevelID;
         replayData.AudioBufferSize = m.AudioBufferSize;

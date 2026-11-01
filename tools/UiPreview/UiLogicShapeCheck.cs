@@ -1015,6 +1015,22 @@ namespace UiPreview
                 "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
                 s => s.Contains("bool countingNow = scrController.instance != null", StringComparison.Ordinal)
                     && s.Contains("if (!countingNow)", StringComparison.Ordinal));
+            // ㊽ 谱面哈希的跨运行时稳定化（审计 A-F1）：录制必须双写（旧字段保持
+            //    运行时哈希供旧构建、稳定四件套进 HashesV2 尾段），播放必须段
+            //    优先、缺席回落旧字段——只换算法不迁移，存量回放会被误判
+            //    「关卡数据错误」。
+            fail += Check(projectRoot,
+                "㊽a 录制必须双写稳定哈希（旧字段运行时值 + HashesV2 四件套）",
+                "Features\\Replay\\Patches\\Patch_Lifecycle.cs",
+                s => s.Contains("data.FloorHashS = ADOBase.isOfficialLevel", StringComparison.Ordinal)
+                    && s.Contains("data.SpeedHashS = ComputeDoubleListHashS(speeds);", StringComparison.Ordinal)
+                    && s.Contains("data.StructureHashS = ComputeFloorStructureHashS();", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㊽b 播放必须 HashesV2 在场优先、缺席回落旧字段——只认一头都是错的",
+                "Features\\Replay\\Patches\\Patch_Lifecycle.cs",
+                s => s.Contains("if (data.FloorHashS.HasValue)", StringComparison.Ordinal)
+                    && s.Contains("细节 floorHashS: 录=", StringComparison.Ordinal)
+                    && s.Contains("细节 floorHash: 录=", StringComparison.Ordinal));
 
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");

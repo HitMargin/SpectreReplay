@@ -37,6 +37,20 @@ public class Replay
     /// </summary>
     public int? StructureHash { get; set; }
     /// <summary>
+    /// 稳定哈希四件套（尾部可选段；旧文件没有 → null，播放侧回落旧字段比较）。
+    /// FNV-1a 跨运行时稳定版：<see cref="StableHash"/> 的说明。四个值在录制时
+    /// 一起算出，段层面全体在场或全体缺席。
+    /// </summary>
+    public StableHashes HashesV2 { get; set; }
+
+    public class StableHashes
+    {
+        public int? Floor;
+        public int? Speed;
+        public int? Time;
+        public int? Structure;
+    }
+    /// <summary>
     /// When this replay ended (UTC). Must be serialized in <see cref="ReplayEncoder"/> and <see cref="ReplayDecoder"/>
     /// to persist across save/load. Written as an ISO 8601 string in metadata.
     /// </summary>
