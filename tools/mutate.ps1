@@ -768,6 +768,21 @@ switch ($Which) {
         Backup 'Features\Replay\Data\ReplayFileInfo.cs'
         ReplaceExact 'Features\Replay\Data\ReplayFileInfo.cs' ('        if (recomputed >= 0.0 && data.CheckpointsUsed is int used && used > 0)') ('        if (false)')
     }
+    'MUT-U79' {
+        # 52a：NVENC 探测不再排空管道——输出超缓冲即死锁，有硬件被判无 NVENC。
+        Backup 'Features\VideoRender\Pipeline\VideoEncoder.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoEncoder.cs' ('                        probe.BeginErrorReadLine();') ('')
+    }
+    'MUT-U80' {
+        # 52b：stderr 上限被拆——失控进程刷屏变成无界内存。
+        Backup 'Features\VideoRender\Pipeline\VideoEncoder.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoEncoder.cs' ('                    if (stderr.Length > 8192)') ('                    if (false)')
+    }
+    'MUT-U81' {
+        # 52c：渲染启动门不再验能力——坏 ffmpeg 到劫持相机后才暴露。
+        Backup 'Features\VideoRender\Pipeline\VideoRender.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoRender.cs' ('        if (!VideoEncoder.VerifyEncoder(encoderPath))') ('        if (false)')
+    }
     'MUT-U25' {
         # ⑫i：把已删除的「界面语言跟随游戏」开关加回来（防回归变异）。
         #      用单引号字符串拼出双引号，避免在 here-string 外层写转义。
@@ -2144,7 +2159,7 @@ switch ($Which) {
         ReplaceExact 'Pages\Pages.cs' 'DrawDeleteFileButton(captured);' ''
     }
     default {
-        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U78）"
+        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U81）"
     }
 }
 

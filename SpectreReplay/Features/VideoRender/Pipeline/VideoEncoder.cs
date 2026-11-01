@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -44,8 +45,6 @@ internal sealed class VideoEncoder : IDisposable
     //   它意味着当前驱动没有硬件编码能力，会话内不会改变
     private static bool nvencWorks;
     private static string nvencProbedExe;
-    private static bool pathWorks;
-    private static int pathFailTick = int.MinValue;
     // File.Exists 定位缓存（调用方均在主线程）：具体路径是正结果直接复用；
     // "ffmpeg" 是 PATH 回退的负结果，进冷却期
     private static string locatedEncoder;
@@ -118,7 +117,7 @@ internal sealed class VideoEncoder : IDisposable
                 Path.Combine(gameRoot, "ffmpeg.exe")
             };
             foreach (string candidate in candidates)
-                if (File.Exists(candidate))
+                if (File.Exists(candidate) && VerifyEncoder(candidate))
                 {
                     locatedEncoder = candidate;
                     return locatedEncoder;
@@ -133,45 +132,71 @@ internal sealed class VideoEncoder : IDisposable
         return locatedEncoder;
     }
 
-    // PATH 上是否有可用的 ffmpeg（探测结果缓存）
-    internal static bool PathProbeSucceeded()
+    // ── 启动前能力校验（2026-11-02 审计）────────────────────────────
+    // File.Exists 只证明文件在，不证明能跑：坏 ffmpeg（缺 DLL、架构不符、
+    // 损坏）会被选定为编码器，直到重开关卡、劫持相机之后才在渲染中途失败
+    // ——用户白等一场。VerifyEncoder 跑一次 `-version`（成本 <100ms），
+    // 成功永久缓存；失败按 Cooling 模式 30s 冷却重试（用户装好 ffmpeg 不
+    // 用重启游戏）。输出必须排空（与 NvencWorksFor 同理），否则坏 ffmpeg
+    // 的错误刷屏会把管道写满，探测自己先死锁。
+    private static readonly Dictionary<string, bool> verifyCache = new Dictionary<string, bool>();
+    private static readonly Dictionary<string, int> verifyFailTick = new Dictionary<string, int>();
+
+    internal static bool VerifyEncoder(string exe)
     {
         lock (ProbeLock)
         {
-            if (pathWorks)
+            if (verifyCache.TryGetValue(exe, out bool ok) && ok)
                 return true;
-            if (Cooling(pathFailTick))
+            if (verifyFailTick.TryGetValue(exe, out int failTick) && Cooling(failTick))
                 return false;
+            bool works = false;
             try
             {
                 var info = new ProcessStartInfo
                 {
-                    FileName = "ffmpeg",
+                    FileName = exe,
                     Arguments = "-version",
                     UseShellExecute = false,
-                    CreateNoWindow = true
+                    CreateNoWindow = true,
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true
                 };
                 using (Process p = Process.Start(info))
                 {
-                    // WaitForExit(timeout) 返回 false 表示超时未退出，此时读 ExitCode 会抛异常；
-                    // 超时按失败计并进冷却期，稍后重试而不是整个会话判死（慢盘/杀软扫描场景）
-                    bool exited = p != null && p.WaitForExit(5000);
-                    if (!exited)
+                    if (p != null)
                     {
-                        try { p?.Kill(); } catch { }
+                        // 两个管道都必须异步排空：-version 输出很小，但坏 ffmpeg
+                        // 报的错（缺 DLL 提示、堆栈）可能不小——同步读会顺序死锁，
+                        // 不读会撑满缓冲区把进程卡死。
+                        p.ErrorDataReceived += (_, e) => { };
+                        p.OutputDataReceived += (_, e) => { };
+                        p.BeginErrorReadLine();
+                        p.BeginOutputReadLine();
+                        if (p.WaitForExit(5000))
+                            works = p.ExitCode == 0;
+                        else
+                        {
+                            try { p.Kill(); } catch { }
+                            try { p.WaitForExit(2000); } catch { }
+                        }
                     }
-                    pathWorks = exited && p.ExitCode == 0;
                 }
             }
             catch
             {
-                pathWorks = false;
+                works = false;
             }
-            if (!pathWorks)
-                pathFailTick = Environment.TickCount;
-            return pathWorks;
+            verifyCache[exe] = works;
+            verifyFailTick[exe] = works ? 0 : Environment.TickCount;
+            if (!works)
+                Debug.Log("[SpectreReplay] encoder 存在但无法执行（缺 DLL/架构不符/损坏），已跳过: " + exe);
+            return works;
         }
     }
+
+    // PATH 探测已并入 VerifyEncoder（对最终选择统一跑 -version，含 PATH 回落），
+    // 原 PathProbeSucceeded 于 2026-11-02 移除——UI 与渲染门全部改走 VerifyEncoder。
 
     internal void Begin()
     {
@@ -479,14 +504,28 @@ internal sealed class VideoEncoder : IDisposable
                 using (Process probe = Process.Start(info))
                 {
                     if (probe == null)
-                        nvencWorks = false;
-                    else if (!probe.WaitForExit(5000))
                     {
-                        try { probe.Kill(); } catch { }
                         nvencWorks = false;
                     }
                     else
-                        nvencWorks = probe.ExitCode == 0;
+                    {
+                        // **两个重定向管道都必须在等待前排空**（2026-11-02 审计）：
+                        // 探测只重定向不读取——有硬件的机器如果 ffmpeg 对
+                        // lavfi/nvenc 吐了超过管道缓冲（~4KB）的输出（驱动警告、
+                        // 多卡提示），进程卡在管道写上，WaitForExit(5000) 超时
+                        // → 被误判为无 NVENC。
+                        probe.ErrorDataReceived += (_, e) => { };
+                        probe.OutputDataReceived += (_, e) => { };
+                        probe.BeginErrorReadLine();
+                        probe.BeginOutputReadLine();
+                        if (!probe.WaitForExit(5000))
+                        {
+                            try { probe.Kill(); } catch { }
+                            nvencWorks = false;
+                        }
+                        else
+                            nvencWorks = probe.ExitCode == 0;
+                    }
                 }
             }
             catch
@@ -516,12 +555,25 @@ internal sealed class VideoEncoder : IDisposable
             RedirectStandardError = true,
             RedirectStandardOutput = true
         };
+        // stderr 收集：事件线程写、超时/失败路径读——StringBuilder 非线程安全，
+        // 全部访问走这把锁；并封顶保留**末尾** 8KB（审计 2026-11-02）：失控
+        // 进程的刷屏不该变成无界内存，而排障有用的恰恰是最后几行。
         StringBuilder stderr = new StringBuilder();
+        var stderrLock = new object();
         using (Process mux = Process.Start(info))
         {
             if (mux == null)
                 throw new InvalidOperationException("failed to start encoder");
-            mux.ErrorDataReceived += (_, e) => { if (e.Data != null) stderr.AppendLine(e.Data); };
+            mux.ErrorDataReceived += (_, e) =>
+            {
+                if (e.Data == null) return;
+                lock (stderrLock)
+                {
+                    stderr.AppendLine(e.Data);
+                    if (stderr.Length > 8192)
+                        stderr.Remove(0, stderr.Length - 8192);
+                }
+            };
             mux.OutputDataReceived += (_, e) => { };
             mux.BeginErrorReadLine();
             mux.BeginOutputReadLine();
@@ -533,11 +585,20 @@ internal sealed class VideoEncoder : IDisposable
             {
                 try { mux.Kill(); } catch { }
                 try { mux.WaitForExit(5000); } catch { }
+                string tail;
+                lock (stderrLock) { tail = stderr.ToString(); }
                 throw new TimeoutException("ffmpeg timed out after "
-                    + (RunAndWaitTimeoutMs / 60000) + " min (mux/convert)");
+                    + (RunAndWaitTimeoutMs / 60000) + " min (mux/convert)"
+                    + (tail.Length > 0 ? " stderr tail: " + tail : ""));
             }
+            // 带参 WaitForExit 返回 true 只保证进程退出；异步读取器可能还在
+            // 排最后一口管道。无参 WaitForExit 等它们排完，再读 ExitCode 与
+            // stderr——否则失败消息可能截掉最后几行真正的错误原因。
+            mux.WaitForExit();
+            string stderrText;
+            lock (stderrLock) { stderrText = stderr.ToString(); }
             if (mux.ExitCode != 0)
-                throw new InvalidOperationException("mux failed, exit code " + mux.ExitCode + ": " + stderr);
+                throw new InvalidOperationException("mux failed, exit code " + mux.ExitCode + ": " + stderrText);
         }
     }
 

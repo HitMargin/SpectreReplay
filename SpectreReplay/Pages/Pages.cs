@@ -1824,7 +1824,9 @@ namespace SpectreReplay.Pages
                 Gui.KeyValue("render.codec.current", name, Gui.DimCol);
 
                 string exe = VideoEncoder.LocateEncoder();
-                bool ready = exe != "ffmpeg" || VideoEncoder.PathProbeSucceeded();
+                // 统一走能力校验（-version，缓存）：本地坏 ffmpeg.exe 不再被
+                // File.Exists 误报成「就绪」。
+                bool ready = VideoEncoder.VerifyEncoder(exe);
                 Gui.KeyValue("render.ffmpeg",
                     Loc.T(ready ? "render.ffmpeg.ready" : "render.ffmpeg.missing"),
                     ready ? Gui.OkCol : Gui.BadCol);
@@ -1899,7 +1901,7 @@ namespace SpectreReplay.Pages
                     return;
                 }
                 string ff = VideoEncoder.LocateEncoder();
-                if (ff == "ffmpeg" && !VideoEncoder.PathProbeSucceeded())
+                if (!VideoEncoder.VerifyEncoder(ff))
                 {
                     Status.Warn("convert.err.no_ffmpeg");
                     return;

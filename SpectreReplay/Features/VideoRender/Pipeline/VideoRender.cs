@@ -112,7 +112,11 @@ internal static class VideoRender
             return;
         }
         string encoderPath = VideoEncoder.LocateEncoder();
-        if (encoderPath == "ffmpeg" && !VideoEncoder.PathProbeSucceeded())
+        // **启动前能力校验（2026-11-02 审计）**：Locate 已对本地候选跑过
+        // -version（缓存命中零成本）；这里对最终选择（含 PATH 回落）统一再
+        // 门槛一次——坏 ffmpeg 在劫持相机之前就被拦下，报「缺少 ffmpeg」
+        // 而不是渲染中途离奇失败。
+        if (!VideoEncoder.VerifyEncoder(encoderPath))
         {
             TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.ffmpeg_missing"), extra: 2f, type: NotifType.Warning);
             return;

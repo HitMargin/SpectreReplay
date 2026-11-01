@@ -1075,6 +1075,34 @@ namespace UiPreview
                 "Features\\Replay\\Data\\ReplayFileInfo.cs",
                 s => s.Contains("data.CheckpointsUsed is int used && used > 0", StringComparison.Ordinal)
                     && s.Contains("recomputed *= System.Math.Pow(0.9875, used);", StringComparison.Ordinal));
+            // 52 ffmpeg 进程边界（审计）：①NVENC 探测重定向了管道却从不排空——
+            //    输出超 ~4KB 就死锁，有硬件的机器被误判无 NVENC，排空必须先于
+            //    等待启动；②RunAndWait 的 stderr 无锁无上限、超时路径可能边写
+            //    边读；③ffmpeg 只 File.Exists 不验能力，坏编码器要到劫持相机后
+            //    才暴露——Locate/gate/UI 三处统一走 VerifyEncoder（-version）。
+            fail += Check(projectRoot,
+                "52a NVENC 探测必须在等待前启动管道排空——否则输出撑爆缓冲把探测卡死",
+                "Features\\VideoRender\\Pipeline\\VideoEncoder.cs",
+                s => IndexBefore(s, "probe.BeginErrorReadLine();", "probe.WaitForExit(5000)"));
+            fail += Check(projectRoot,
+                "52b RunAndWait 的 stderr 必须有锁和 8KB 上限，退出后无参 WaitForExit 排尾",
+                "Features\\VideoRender\\Pipeline\\VideoEncoder.cs",
+                s => s.Contains("if (stderr.Length > 8192)", StringComparison.Ordinal)
+                    && s.Contains("lock (stderrLock) { tail = stderr.ToString(); }", StringComparison.Ordinal)
+                    && s.Contains("mux.WaitForExit();", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "52c ffmpeg 必须启动前验能力——Locate 过滤坏候选，渲染/转换/ UI 三门统一 VerifyEncoder",
+                "Features\\VideoRender\\Pipeline\\VideoEncoder.cs",
+                s => s.Contains("File.Exists(candidate) && VerifyEncoder(candidate)", StringComparison.Ordinal))
+                + Check(projectRoot,
+                "52c 渲染启动门必须 VerifyEncoder",
+                "Features\\VideoRender\\Pipeline\\VideoRender.cs",
+                s => s.Contains("if (!VideoEncoder.VerifyEncoder(encoderPath))", StringComparison.Ordinal))
+                + Check(projectRoot,
+                "52c UI 的就绪显示与转换门必须 VerifyEncoder",
+                "Pages\\Pages.cs",
+                s => s.Contains("bool ready = VideoEncoder.VerifyEncoder(exe);", StringComparison.Ordinal)
+                    && s.Contains("if (!VideoEncoder.VerifyEncoder(ff))", StringComparison.Ordinal));
 
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");
@@ -2601,6 +2629,14 @@ namespace UiPreview
             string body = s.Substring(at, end - at);
             return body.Contains("_smallC.CalcSize", StringComparison.Ordinal)
                 && !body.Contains("- 132f", StringComparison.Ordinal);
+        }
+
+        /// <summary>first 的首次出现必须早于 second 的首次出现。</summary>
+        private static bool IndexBefore(string s, string first, string second)
+        {
+            int a = s.IndexOf(first, StringComparison.Ordinal);
+            int b = s.IndexOf(second, StringComparison.Ordinal);
+            return a >= 0 && b >= 0 && a < b;
         }
 
         /// <summary>
