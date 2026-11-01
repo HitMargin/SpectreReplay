@@ -999,6 +999,22 @@ namespace UiPreview
                 "Features\\Replay\\Patches\\Patch_Lifecycle.cs",
                 s => !s.Contains("data.IsOfficialLevel != ADOBase.isOfficialLevel", StringComparison.Ordinal)
                     && !s.Contains("data.SpeedTrailMode == true || data.QuickPitched == true", StringComparison.Ordinal));
+            // ㊼ 进拍强制重锚（2026-11-01 用户实测：渲染在倒计时中起锚，成片
+            //    音乐比画面恒定快 0.408s）。倒计时的 songposition 走压缩时间轴，
+            //    音频按 dspTimeSong 走——起锚差值整场烙死。进 PlayerControl 第一
+            //    帧必须强制对齐；倒计时期间阈值巡检必须跳过（追压缩时间轴等于
+            //    把锚钉错）。两个分支都要在。
+            fail += Check(projectRoot,
+                "㊼a 渲染时钟必须有进拍强制重锚——倒计时起锚的压缩时间轴偏移在此修正",
+                "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
+                s => s.Contains("if (!playEntrySnapped && conductor.hasSongStarted", StringComparison.Ordinal)
+                    && s.Contains("进拍重锚", StringComparison.Ordinal)
+                    && s.Contains("anchorSongPosition = live - elapsed * pitch;", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㊼b 倒计时期间必须跳过阈值巡检——追压缩时间轴就是把锚钉错",
+                "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
+                s => s.Contains("bool countingNow = scrController.instance != null", StringComparison.Ordinal)
+                    && s.Contains("if (!countingNow)", StringComparison.Ordinal));
 
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");

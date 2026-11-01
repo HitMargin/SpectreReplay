@@ -148,6 +148,8 @@ internal sealed class VideoRenderJob : MonoBehaviour
     private bool sceneExited;
     // 锚点自愈的已重锚次数（见捕获循环里的锚点自愈段）
     private int reAnchors;
+    // 进入 PlayerControl 的第一帧强制重锚（倒计时起锚偏移的修正，见循环内说明）
+    private bool playEntrySnapped;
     // AwaitReplayAlive 用：上一帧是否已看到正的 songposition（连续两帧才算稳）
     private bool sawPositivePosition;
 
@@ -468,15 +470,53 @@ internal sealed class VideoRenderJob : MonoBehaviour
 
                 if (frameIndex < fps * 10 && reAnchors < 4)
                 {
-                    double unpinnedNow = (AudioSettings.dspTime - conductor.dspTimeSong
-                        - (double)scrConductor.calibration_i) * pitch - conductor.addoffset;
-                    double wantPin = anchorSongPosition + elapsed * pitch;
-                    if (Math.Abs(wantPin - unpinnedNow) > 0.75)
+                    // **倒计时期间跳过阈值巡检。** 倒计时的 songposition 走压缩的
+                    // 倒计时时间轴（countdownSpeedMultiplier），与 pin 的匀速模型
+                    // 必然分叉——那是预期行为，不该在这里烧掉重锚次数，更不该
+                    // 把锚追着倒计时显示值跑（那正是 2026-11-01 实测的 0.408s
+                    // 音画恒偏的来源之一）。真正的修正由下面的进拍强制重锚做。
+                    bool countingNow = scrController.instance != null
+                        && scrController.instance.state == States.Countdown;
+                    if (!countingNow)
                     {
-                        anchorSongPosition = unpinnedNow - elapsed * pitch;
-                        reAnchors++;
-                        Debug.Log("[SpectreReplay] timeline re-anchored: was " + wantPin.ToString("0.000")
-                            + "s, game at " + unpinnedNow.ToString("0.000") + "s (attempt " + reAnchors + ")");
+                        double unpinnedNow = (AudioSettings.dspTime - conductor.dspTimeSong
+                            - (double)scrConductor.calibration_i) * pitch - conductor.addoffset;
+                        double wantPin = anchorSongPosition + elapsed * pitch;
+                        if (Math.Abs(wantPin - unpinnedNow) > 0.75)
+                        {
+                            anchorSongPosition = unpinnedNow - elapsed * pitch;
+                            reAnchors++;
+                            Debug.Log("[SpectreReplay] timeline re-anchored: was " + wantPin.ToString("0.000")
+                                + "s, game at " + unpinnedNow.ToString("0.000") + "s (attempt " + reAnchors + ")");
+                        }
+                    }
+                }
+
+                // ── 进拍强制重锚（音画恒偏的唯一修正点）──────────────────────
+                // 渲染在倒计时中起锚时（AwaitReplayAlive 的 Countdown 分支放行），
+                // 锚取的是 songposition_minusi——但那个值在倒计时里走**压缩时间轴**，
+                // 而音乐的发声时刻由 dspTimeSong（dsp 公式）决定。两者在起锚时刻
+                // 差了 (multiplier-1) 相关的一段（2026-11-01 实测 0.408s），此后
+                // pin 与音频整场恒偏——成片里音乐比画面快那么多。倒计时结束、
+                // 状态进入 PlayerControl 的第一帧，songposition_minusi 已回到
+                // dsp 公式语义，此刻把锚强制对齐游戏实时位置：pin 从此与音频
+                // 同轨。两种时钟路径（转译/兜底）都成立——转译路径下读到的值
+                // 本就由渲染时钟驱动，对齐是无操作；兜底路径下读到的就是音频
+                // 真值。只做一次，且仅在有歌曲起点之后（hasSongStarted 排除
+                // 尚未开拍的等待帧）。
+                if (!playEntrySnapped && conductor.hasSongStarted
+                    && scrController.instance != null
+                    && scrController.instance.state == States.PlayerControl)
+                {
+                    playEntrySnapped = true;
+                    double live = conductor.songposition_minusi;
+                    double wantPin = anchorSongPosition + elapsed * pitch;
+                    if (Math.Abs(wantPin - live) > 0.005)
+                    {
+                        anchorSongPosition = live - elapsed * pitch;
+                        Debug.Log("[SpectreReplay] 进拍重锚: pin=" + wantPin.ToString("0.000")
+                            + "s → 游戏=" + live.ToString("0.000")
+                            + "s（倒计时起锚的压缩时间轴偏移已修正）");
                     }
                 }
 
