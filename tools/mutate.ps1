@@ -738,6 +738,12 @@ switch ($Which) {
         Backup 'Features\VideoRender\Pipeline\VideoRenderJob.cs'
         ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' ('        double audioAnchor = (AudioSettings.dspTime - conductor.dspTimeSong') ('        double audioAnchor = conductor.songposition_minusi - (AudioSettings.dspTime - conductor.dspTimeSong')
     }
+    'MUT-U74' {
+        # ㊾b：绝对条数上限被拆——比例校验独木撑天，大密文体量的 GB 级
+        #     对象图放大回潮。
+        Backup 'Features\Replay\Codec\ReplayDecoder.cs'
+        ReplaceExact 'Features\Replay\Codec\ReplayDecoder.cs' ('        if (raw > MaxRecords)') ('        if (false)')
+    }
     'MUT-U25' {
         # ⑫i：把已删除的「界面语言跟随游戏」开关加回来（防回归变异）。
         #      用单引号字符串拼出双引号，避免在 here-string 外层写转义。

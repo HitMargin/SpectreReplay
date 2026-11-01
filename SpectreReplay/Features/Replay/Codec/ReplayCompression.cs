@@ -6,7 +6,12 @@ namespace SpectreReplay.Features.Replay;
 
 internal static class ReplayCompression
 {
-    private const long MaxDecompressed = 512L * 1024 * 1024;
+    // 解压上限从 512MB 收紧到 64MB（2026-11-02 审计 A-F2）。真实回放的解压
+    // 后大小在几百 KB 量级：709 层的 R 全程按键+快照约 12KB 压缩/数 MB 解压；
+    // 2497 层的 Kaleidoscope 也远不到 10MB。64MB 是 8 倍以上的余量——超过它
+    // 的「回放」只可能是压缩炸弹，没有正当业务。旧值 512MB 允许一个几 MB 的
+    // 未加密 .psprp 换出 GB 级内存放大。
+    private const long MaxDecompressed = 64L * 1024 * 1024;
 
     /// <summary>原文不压缩的阈值。低于它时 Brotli 的头开销比省下来的还多。</summary>
     private const int NoCompressBelow = 512;

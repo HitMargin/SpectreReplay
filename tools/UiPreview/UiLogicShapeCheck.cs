@@ -1031,6 +1031,20 @@ namespace UiPreview
                 s => s.Contains("if (data.FloorHashS.HasValue)", StringComparison.Ordinal)
                     && s.Contains("细节 floorHashS: 录=", StringComparison.Ordinal)
                     && s.Contains("细节 floorHash: 录=", StringComparison.Ordinal));
+            // ㊾ 内存放大上限（审计 A-F2）：解压上限 64MB（512MB 允许几 MB 的
+            //    未加密文件换出 GB 级内存）+ ReadCount 绝对条数上限（比例校验
+            //    挡不住大密文体量：8B 最小记录时 64MB 流可声明 800 万条）。
+            fail += Check(projectRoot,
+                "㊾a 解压上限必须收敛到 64MB——真实回放离它还有 8 倍以上余量",
+                "Features\\Replay\\Codec\\ReplayCompression.cs",
+                s => s.Contains("MaxDecompressed = 64L * 1024 * 1024", StringComparison.Ordinal)
+                    && !s.Contains("512L * 1024 * 1024", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㊾b ReadCount 必须有绝对条数上限——比例校验挡不住大密文体量",
+                "Features\\Replay\\Codec\\ReplayDecoder.cs",
+                s => s.Contains("MaxRecords = 1_000_000", StringComparison.Ordinal)
+                    && s.Contains("if (raw > MaxRecords)", StringComparison.Ordinal)
+                    && s.Contains("exceeds absolute cap", StringComparison.Ordinal));
 
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");

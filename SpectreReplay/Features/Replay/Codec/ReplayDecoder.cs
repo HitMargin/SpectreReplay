@@ -68,6 +68,15 @@ internal static class ReplayDecoder
     // count 来自文件内容，不是可信输入：负数（最高位置 1）会让 List 容量抛
     // ArgumentOutOfRangeException，巨大值会在读到数据前就 OutOfMemoryException。
     // 上界取"剩余字节数 / 单条最小字节"，既挡住垃圾值又不误伤正常大谱面。
+    //
+    // **绝对条数上限（2026-11-02 审计 A-F2）。**「剩余字节 / 最小记录长度」
+    // 是比例校验，挡不住密文体量本身大的文件：最小记录 8B（KeyEvent）时，
+    // 一份 64MB 的解压流可声明 800 万条——每条 List 摊销后约 24B+ 对象头，
+    // 实际对象图 GB 级。真实上限远低于此：最长官方曲目录满 ≈ 每秒 20 次按键
+    // × 600s = 1.2 万条；快照 ≤ 楼层数（万级）。这里统一封 100 万条——
+    // 正常谱面的 80 倍以上余量，同时把任何单段的物体图压到几十 MB 以内。
+    private const int MaxRecords = 1_000_000;
+
     private static int ReadCount(BinaryReader r, int minRecordBytes)
     {
         int raw = r.ReadInt32();
@@ -77,6 +86,9 @@ internal static class ReplayDecoder
                 throw new InvalidDataException($"Negative record count: {raw}");
             return 0;
         }
+        if (raw > MaxRecords)
+            throw new InvalidDataException(
+                $"Record count {raw} exceeds absolute cap {MaxRecords}");
         long remaining = r.BaseStream.Length - r.BaseStream.Position;
         long maxByStream = remaining / minRecordBytes;
         if (raw > maxByStream)
