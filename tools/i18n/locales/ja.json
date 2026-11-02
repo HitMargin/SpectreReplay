@@ -1,4 +1,4 @@
-﻿{
+{
  "lang": "ja",
  "entries": {
   "page.record": "録画",
@@ -46,6 +46,10 @@
   "ui.off": "オフ",
   "ui.hint": "Ctrl+F10 でパネルを開閉 · ESC で閉じる",
   "playback.current": "現在",
+  "timeline.selection": "選択範囲",
+  "timeline.enable": "タイムライン",
+  "timeline.enable.tip": "再生中に画面下部にタイムラインパネルを表示します。",
+  "timeline.floor.hint": "ブロック",
   "playback.idle": "リプレイが読み込まれていません。下のリストで「再生」を押してください。",
   "playback.idle_err": "前回の読み込みに失敗しました：{0}",
   "playback.empty": "リプレイがまだありません。レベルをプレイすると自動で保存されます。",

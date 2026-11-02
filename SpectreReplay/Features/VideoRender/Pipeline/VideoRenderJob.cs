@@ -18,6 +18,7 @@ namespace SpectreReplay.Features.VideoRender;
 internal sealed class VideoRenderJob : MonoBehaviour
 {
     private string encoderPath;
+    private VideoRender.RenderRange renderRange;
 
     private bool cancelRequested;
     private VideoFrameSource frames;
@@ -66,7 +67,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
     private bool savedAudioPause;
     private int savedCheckpointNum;
 
-    internal static VideoRenderJob Launch(string encoderPath)
+    internal static VideoRenderJob Launch(string encoderPath, VideoRender.RenderRange range)
     {
         var host = new GameObject("Spectre.VideoRenderJob");
         DontDestroyOnLoad(host);
@@ -74,6 +75,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // 不在这里直接 StartCoroutine：首个阶段会同步触发场景重载，
         // 在 OnGUI 布局中途换场景会打乱 IMGUI 布局组，推迟到下一帧 Start()
         job.encoderPath = encoderPath;
+        job.renderRange = range;
         return job;
     }
 
@@ -244,6 +246,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
     private IEnumerator Phases()
     {
         int fps = Math.Max(1, Settings.RenderFps);
+        VideoRender.RenderRange range = renderRange.Enabled ? renderRange : VideoRender.RenderRange.Full;
         // 起点 = **编辑器里当前选中的地板**，必须在下面的重启/切模式之前抓取。
         //
         // 不能用 GCS.checkpointNum：它只在 scnEditor.Play()（:7270）里被写入，
@@ -251,6 +254,8 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // 从第 0 块开始，必须「先在选中的地板上播一次、再退出」才正确。
         // 玩家真正表达意图的字段是 editor.selectedFloors。
         requestedStartFloor = ResolveRequestedStartFloor();
+        if (range.Enabled)
+            requestedStartFloor = ResolveRangeStartFloor(range);
         float tailSeconds = Mathf.Clamp(Settings.RenderTailSeconds, 0f, 15f);
         var container = (VideoEncoder.OutContainer)Mathf.Clamp(Settings.RenderOutputFormat, 0, 3);
         string outputPath = BuildOutputPath(container);
@@ -389,11 +394,15 @@ internal sealed class VideoRenderJob : MonoBehaviour
         anchorSongPosition = audioAnchor;
         clockSeconds = 0.0;
         delivered = 0;
-        VideoRender.Current.FramesTotal = EstimateFrames(fps, tailSeconds);
+        double requestedEndSong = range.Enabled ? range.EndSongPosition : ReplayEndSongPosition();
+        VideoRender.Current.FramesTotal = EstimateFrames(fps, tailSeconds, requestedEndSong);
         // 回放终点的绝对歌曲时间。**结束判定必须同时看它**，不能只等
         // is_playing 翻假——见循环里 endFrame 的说明。
         double replayEndSong = ReplayEndSongPosition();
-        replayEndSongPosition = replayEndSong;   // AbortOnPlaybackRestart 也要用
+        replayEndSongPosition = range.Enabled
+            ? Math.Min(Math.Max(range.EndSongPosition, range.StartSongPosition), replayEndSong)
+            : replayEndSong;
+        replayEndSong = replayEndSongPosition;
         if (replayEndSong <= 0.0) replayEndSong = double.MaxValue;
         captureClock = System.Diagnostics.Stopwatch.StartNew();
         VideoRender.Current.Detail = Path.GetFileName(outputPath);
@@ -406,7 +415,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // hardStop 是防死循环的保险丝，**不能比「跑到回放终点 + 60s」更紧**。
         // 原先只按 FramesTotal 算，而 FramesTotal 是估算值：估短了就会在
         // 正常收尾前把渲染判成 overrun 失败。时间轴终点是硬事实，以它为准。
-        double endSongForLimit = ReplayEndSongPosition();
+        double endSongForLimit = replayEndSongPosition;
         double anchorForLimit = anchorSongPosition;
         double pitchForLimit = conductor != null && conductor.song != null
             ? Math.Abs(conductor.song.pitch) : 1.0;
@@ -931,6 +940,26 @@ internal sealed class VideoRenderJob : MonoBehaviour
         return Input.GetKeyDown((KeyCode)key);
     }
 
+    private int ResolveRangeStartFloor(VideoRender.RenderRange range)
+    {
+        var floors = ADOBase.lm?.listFloors;
+        if (floors == null || floors.Count == 0)
+            return requestedStartFloor;
+
+        int floor = 0;
+        for (int i = 0; i < floors.Count; i++)
+        {
+            if (floors[i].entryTime <= range.StartSongPosition)
+                floor = i;
+            else
+                break;
+        }
+
+        int minFloor = SpectreState.data?.StartTile ?? 0;
+        int maxFloor = SpectreState.data?.EndTile ?? (floors.Count - 1);
+        return Mathf.Clamp(floor, Mathf.Max(0, minFloor), Mathf.Max(0, maxFloor));
+    }
+
     /// <summary>
     /// 回放终点的歌曲时间（绝对秒）。取两者较大值：
     ///   ① 谱面终点砖的 <c>entryTime</c>（<c>data.EndTile</c>，缺省用最后一砖）；
@@ -964,9 +993,9 @@ internal sealed class VideoRenderJob : MonoBehaviour
         return songEnd;
     }
 
-    private int EstimateFrames(int fps, float tailSeconds)
+    private int EstimateFrames(int fps, float tailSeconds, double endSongPosition)
     {
-        double songEnd = ReplayEndSongPosition();
+        double songEnd = endSongPosition;
         if (songEnd <= 0.0) songEnd = 60.0;
         float pitch = ADOBase.conductor?.song != null ? ADOBase.conductor.song.pitch : 1f;
         double start = ADOBase.conductor != null ? ADOBase.conductor.songposition_minusi : 0.0;

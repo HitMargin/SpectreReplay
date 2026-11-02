@@ -38,6 +38,11 @@ internal static class Patch_RDInput
         // NativeTakeover 时放行：事件已进 AsyncInputManager.keyQueue，游戏自己按 tick
         // 分组算 mainPressCount。这里再覆盖会把每个 tick 组都算成「本帧刚按下」。
         if (!ManagedInput.Active || ManagedInput.NativeTakeover) return;
+        if (TimelineController.InputCaptured)
+        {
+            __result = 0;
+            return;
+        }
         __result = ManagedInput.Count(state);
     }
 
@@ -47,6 +52,11 @@ internal static class Patch_RDInput
     internal static void GetState_Postfix(ref bool __result, InputAction inputAction, ButtonState state)
     {
         if (!ManagedInput.Active || ManagedInput.NativeTakeover || !IsGameplayAction(inputAction)) return;
+        if (TimelineController.InputCaptured)
+        {
+            __result = false;
+            return;
+        }
         __result = ManagedInput.Matches(inputAction, state);
     }
 
@@ -67,6 +77,12 @@ internal static class Patch_RDInput
     internal static void GetStateKeys_PostfixOld(ref List<AnyKeyCode> __result, ButtonState state)
     {
         if (!ManagedInput.Active || ManagedInput.NativeTakeover) return;
+        if (TimelineController.InputCaptured)
+        {
+            if (__result != null)
+                __result.Clear();
+            return;
+        }
         List<AnyKeyCode> list = __result;
         if (list == null) list = new List<AnyKeyCode>();
         else list.Clear();
@@ -84,6 +100,8 @@ internal static class Patch_RDInput
         if (!ManagedInput.Active || ManagedInput.NativeTakeover || keys == null) return;
         keys.Clear();
         ManagedInput.Append(keys, state);
+        if (TimelineController.InputCaptured)
+            keys.Clear();
     }
 
     /// <summary>

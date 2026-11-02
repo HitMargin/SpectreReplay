@@ -209,6 +209,71 @@ internal static class ReplayPlayer
         AllAutoHits = false;
     }
 
+    /// <summary>
+    /// 从任意歌曲时间继续回放。按键游标按时间二分，命中游标按目标砖块对齐。
+    /// </summary>
+    internal static bool SeekToTime(double targetSongPosition)
+    {
+        if (data == null || ADOBase.lm == null || ADOBase.lm.listFloors == null)
+            return false;
+
+        double target = targetSongPosition;
+        if (double.IsNaN(target) || double.IsInfinity(target))
+            target = 0.0;
+
+        var floors = ADOBase.lm.listFloors;
+        int targetFloor = 0;
+        for (int i = 0; i < floors.Count; i++)
+        {
+            if (floors[i].entryTime <= target)
+                targetFloor = i;
+            else
+                break;
+        }
+
+        FastForward(targetFloor);
+
+        int keyIndex = data.KeyEvents.Count;
+        for (int i = 0; i < data.KeyEvents.Count; i++)
+        {
+            if (data.KeyEvents[i].SongPosition >= target)
+            {
+                keyIndex = i;
+                break;
+            }
+        }
+        KeyEventIndex = keyIndex;
+
+        CurrKeyState = new byte[256];
+        ManagedInput.Clear();
+        for (int i = 0; i < KeyEventIndex; i++)
+        {
+            var ev = data.KeyEvents[i];
+            ushort num = ev.KeyCode < Settings.key_code_convert.Length
+                ? Settings.key_code_convert[ev.KeyCode]
+                : (ushort)0;
+            if (num == 0 || num == 27 || ManagedInput.IsModHotkey(num))
+                continue;
+            ManagedInput.Restore(num, ev.IsPressed);
+        }
+        for (int vk = 1; vk < CurrKeyState.Length; vk++)
+        {
+            if (ManagedInput.IsHeldVk((ushort)vk))
+                CurrKeyState[vk] = 128;
+        }
+
+        AllAutoHits = false;
+        return true;
+    }
+
+    internal static bool TryGetSongPosition(out double songPosition)
+    {
+        songPosition = 0.0;
+        if (!is_playing)
+            return false;
+        songPosition = CurrentSongPosition(ADOBase.conductor, out bool ready);
+        return ready;
+    }
     internal static void PlayKeyboardEvent(bool flag)
     {
         // data 为空时（回放数据尚未装载/已被清空）直接返回：本方法每帧被调用，

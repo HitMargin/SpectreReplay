@@ -26,6 +26,7 @@ namespace SpectreReplay
                 ConfigManager.LoadConfigs(Path.Combine(modEntry.Path, "Configs.json"));
                 Settings.check(modEntry.Path);
                 WavLoader.reset();
+                Ui.Timeline.TimelineOverlay.Ensure();
 
                 modEntry.OnGUI = Ui.OnGui.OnGUI;
                 modEntry.OnShowGUI = Ui.OnGui.OnShow;
@@ -95,6 +96,8 @@ namespace SpectreReplay
                 PatchManager.UnpatchAll();
                 MainThread.Uninstall();
                 AudioRecorder.StopAllMicrophones();
+                Ui.Timeline.TimelineOverlay.Destroy();
+                Features.Replay.TimelineController.Clear();
                 return true;
             }
 
@@ -104,6 +107,8 @@ namespace SpectreReplay
                 Settings.check(modEntry.Path);
                 PatchManager.Initialize(harmony);
                 MainThread.Install();
+                Ui.Timeline.TimelineOverlay.Ensure();
+                Features.VideoRender.VideoEncoder.WarmUp();
 
                 SpectrePatchHub.LogTag = "SpectreReplay";
                 SpectrePatchHub.Configure(typeof(ADOBase).Assembly,

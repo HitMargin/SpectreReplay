@@ -1,4 +1,4 @@
-﻿{
+{
  "lang": "de",
  "entries": {
   "page.record": "Aufnahme",
@@ -46,6 +46,10 @@
   "ui.off": "Aus",
   "ui.hint": "Ctrl+F10 öffnet dieses Panel · ESC schließt es",
   "playback.current": "Aktuell",
+  "timeline.selection": "Auswahl",
+  "timeline.enable": "Zeitleiste",
+  "timeline.enable.tip": "Zeigt das Zeitleisten-Panel unten auf dem Bildschirm während der Wiedergabe.",
+  "timeline.floor.hint": "Boden",
   "playback.idle": "Kein Replay geladen. Drücke unten bei einer Datei auf „Wiedergabe“.",
   "playback.idle_err": "Der letzte Ladevorgang ist fehlgeschlagen: {0}",
   "playback.empty": "Noch keine Replays. Spiele ein Level, dann wird automatisch eines gespeichert.",

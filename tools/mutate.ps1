@@ -768,6 +768,47 @@ switch ($Which) {
         Backup 'Features\Replay\Data\ReplayFileInfo.cs'
         ReplaceExact 'Features\Replay\Data\ReplayFileInfo.cs' ('        if (recomputed >= 0.0 && data.CheckpointsUsed is int used && used > 0)') ('        if (false)')
     }
+    'MUT-TL1' {
+        Backup 'Features\Replay\Patches\Patch_Lifecycle.cs'
+        ReplaceExact 'Features\Replay\Patches\Patch_Lifecycle.cs' 'TimelineController.RefreshCurrentLevel();' ''
+    }
+    'MUT-TL2' {
+        Backup 'Features\Replay\Runtime\ReplayPlayer.cs'
+        ReplaceExact 'Features\Replay\Runtime\ReplayPlayer.cs' 'FastForward(targetFloor);' 'FastForward(0);'
+    }
+    'MUT-TL3' {
+        Backup 'Ui\Timeline\TimelineOverlay.cs'
+        ReplaceExact 'Ui\Timeline\TimelineOverlay.cs' 'TimelineController.SetInputCaptured(true);' ''
+    }
+    'MUT-TL4' {
+        Backup 'Features\VideoRender\Pipeline\VideoRenderJob.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'job.renderRange = range;' ''
+    }
+    'MUT-TL5' {
+        Backup 'Features\VideoRender\Pipeline\VideoRender.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoRender.cs' 'StartRender(RenderRange.FromTimeline());' 'StartRender(RenderRange.Full);'
+    }
+    'MUT-TL7' {
+        Backup 'Features\VideoRender\Pipeline\VideoRenderJob.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'replayEndSong = replayEndSongPosition;' ''
+    }
+
+    'MUT-TL6' {
+        Backup 'Features\Replay\Patches\Patch_InputInjection.cs'
+        $ls = Lines 'Features\Replay\Patches\Patch_InputInjection.cs'
+        $n = 0
+        for ($i = 0; $i -lt $ls.Count; $i++) {
+            if ($ls[$i] -match 'internal static void GetMain_Postfix') {
+                for ($j = $i; $j -lt [Math]::Min($i + 12, $ls.Count); $j++) {
+                    if ($ls[$j] -match 'TimelineController\.InputCaptured') { $ls[$j] = '// mutated'; $n++; break }
+                }
+                break
+            }
+        }
+        if ($n -ne 1) { throw ('MUT-TL6 unexpected count=' + $n) }
+        SetLines 'Features\Replay\Patches\Patch_InputInjection.cs' $ls
+    }
+
     'MUT-U79' {
         # 52a：NVENC 探测不再排空管道——输出超缓冲即死锁，有硬件被判无 NVENC。
         Backup 'Features\VideoRender\Pipeline\VideoEncoder.cs'

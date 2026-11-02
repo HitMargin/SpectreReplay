@@ -1,4 +1,4 @@
-﻿{
+{
  "lang": "pt",
  "entries": {
   "page.record": "Gravação",
@@ -46,6 +46,10 @@
   "ui.off": "Desativado",
   "ui.hint": "Ctrl+F10 abre este painel · ESC fecha",
   "playback.current": "Atual",
+  "timeline.selection": "Seleção",
+  "timeline.enable": "Linha do tempo",
+  "timeline.enable.tip": "Mostra o painel da linha do tempo na parte inferior da tela durante a reprodução.",
+  "timeline.floor.hint": "Chão",
   "playback.idle": "Nenhum replay carregado. Pressione \"Reproduzir\" em um arquivo abaixo.",
   "playback.idle_err": "A última carga falhou: {0}",
   "playback.empty": "Ainda não há replays. Jogue uma fase e um será salvo automaticamente.",

@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using SpectreReplay.API;
+using SpectreReplay.Features.Replay;
 using static SpectreReplay.SpectreState;
 using static SpectreReplay.Features.Replay.ReplayKeys;
 
@@ -20,6 +21,36 @@ internal static class VideoRender
     /// 于是界面把「我取消了」显示成「渲染完成：xxx.mp4」。终态必须显式记录。
     /// </summary>
     internal enum Outcome { None, Completed, Failed, Canceled }
+
+    /// <summary>
+    /// 本次渲染的动态区间。未启用时保持整份回放语义。
+    /// </summary>
+    internal readonly struct RenderRange
+    {
+        internal readonly bool Enabled;
+        internal readonly double StartSongPosition;
+        internal readonly double EndSongPosition;
+
+        internal RenderRange(bool enabled, double startSongPosition, double endSongPosition)
+        {
+            Enabled = enabled;
+            StartSongPosition = startSongPosition;
+            EndSongPosition = endSongPosition;
+        }
+
+        internal static RenderRange Full => new RenderRange(false, 0.0, 0.0);
+
+        internal static RenderRange FromTimeline()
+        {
+            var state = TimelineController.State;
+            if (state.Source == null || state.Duration <= 0.0)
+                return Full;
+            var selection = state.Selection;
+            return new RenderRange(true, selection.Start, selection.End);
+        }
+    }
+
+    internal static RenderRange PendingRange = RenderRange.Full;
 
     // 渲染状态快照（全部主线程读写，无锁）
     internal sealed class Snapshot
@@ -91,6 +122,11 @@ internal static class VideoRender
     // 设置页「开始渲染」按钮入口
     internal static void StartRender()
     {
+        StartRender(RenderRange.FromTimeline());
+    }
+
+    internal static void StartRender(RenderRange range)
+    {
         if (Job != null)
             return;
         if (!Settings.RenderOn)
@@ -124,7 +160,8 @@ internal static class VideoRender
         ResetLeakedPins();
         ResetSnapshot();
         CurrentPhase = Phase.Restarting;
-        Job = VideoRenderJob.Launch(encoderPath);
+        PendingRange = range;
+        Job = VideoRenderJob.Launch(encoderPath, range);
         SpectreAPI.RaiseRenderStarted();
     }
 

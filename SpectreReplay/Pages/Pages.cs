@@ -28,7 +28,7 @@ namespace SpectreReplay.Pages
     ///      LogException + ShowModSettings = -1 + GUIUtility.ExitGUI()，
     ///      等于**整个设置面板当场消失**——玩家的感受是"点一下窗口没了"。
     /// </summary>
-    internal static class Pages
+    internal static partial class Pages
     {
         /// <summary>
         /// 当前载入的回放文件。
@@ -411,6 +411,10 @@ namespace SpectreReplay.Pages
             //
             // 真要停止注入，用 ReplayOn 总开关——它连补丁一起卸，语义干净。
             Gui.Section("playback.current", Gui.OkCol, () => DrawPlaybackState());
+
+            // 时间轴开关：隐藏/显示屏幕底部的时间轴面板。
+            OnGui.Row("timeline.enable", Settings.TimelineOn,
+                v => { Settings.TimelineOn = v; Commit(); });
 
             var files = ReplayList();
             Gui.Section("playback.files", Gui.Accent, () =>

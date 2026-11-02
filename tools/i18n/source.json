@@ -1,4 +1,4 @@
-﻿[
+[
  {
   "key": "page.record",
   "zh": "录制",
@@ -218,6 +218,26 @@
   "key": "playback.current",
   "zh": "当前",
   "en": "Current"
+ },
+ {
+  "key": "timeline.selection",
+  "zh": "选区",
+  "en": "Selection"
+ },
+ {
+  "key": "timeline.enable",
+  "zh": "时间轴面板",
+  "en": "Timeline panel"
+ },
+ {
+  "key": "timeline.floor.hint",
+  "zh": "地板",
+  "en": "Floor"
+ },
+ {
+  "key": "timeline.enable.tip",
+  "zh": "在回放时显示屏幕底部的时间轴面板，可拖动 seek 和选区循环。",
+  "en": "Show the timeline panel at the bottom of the screen during replay. Drag to seek, set selection range for looping."
  },
  {
   "key": "playback.idle",

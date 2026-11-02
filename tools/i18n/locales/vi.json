@@ -1,4 +1,4 @@
-﻿{
+{
  "lang": "vi",
  "entries": {
   "page.record": "Ghi lại",
@@ -46,6 +46,10 @@
   "ui.off": "Tắt",
   "ui.hint": "Ctrl+F10 mở bảng này · ESC đóng",
   "playback.current": "Hiện tại",
+  "timeline.selection": "Vùng chọn",
+  "timeline.enable": "Dòng thời gian",
+  "timeline.enable.tip": "Hiển thị bảng dòng thời gian ở dưới cùng màn hình khi phát lại.",
+  "timeline.floor.hint": "Ô",
   "playback.idle": "Chưa tải bản phát lại. Nhấn \"Phát lại\" ở một tệp bên dưới.",
   "playback.idle_err": "Lần tải trước thất bại: {0}",
   "playback.empty": "Chưa có bản phát lại. Hãy chơi một màn, bản ghi sẽ tự động được lưu.",

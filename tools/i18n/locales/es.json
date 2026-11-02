@@ -1,4 +1,4 @@
-﻿{
+{
  "lang": "es",
  "entries": {
   "page.record": "Grabación",
@@ -46,6 +46,10 @@
   "ui.off": "Desactivado",
   "ui.hint": "Ctrl+F10 abre este panel · ESC cierra",
   "playback.current": "Actual",
+  "timeline.selection": "Selección",
+  "timeline.enable": "Línea de tiempo",
+  "timeline.enable.tip": "Muestra el panel de línea de tiempo en la parte inferior de la pantalla durante la reproducción.",
+  "timeline.floor.hint": "Piso",
   "playback.idle": "No hay ninguna repetición cargada. Pulsa «Repetición» en un archivo de abajo.",
   "playback.idle_err": "La última carga falló: {0}",
   "playback.empty": "Aún no hay repeticiones. Juega un nivel y se guardará una automáticamente.",

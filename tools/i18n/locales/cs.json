@@ -1,4 +1,4 @@
-﻿{
+{
  "lang": "cs",
  "entries": {
   "page.record": "Nahrávání",
@@ -46,6 +46,10 @@
   "ui.off": "Vyp.",
   "ui.hint": "Ctrl+F10 otevírá tento panel · ESC zavírá",
   "playback.current": "Aktuální",
+  "timeline.selection": "Výběr",
+  "timeline.enable": "Časová osa",
+  "timeline.enable.tip": "Zobrazit panel časové osy dole na obrazovce během přehrávání.",
+  "timeline.floor.hint": "Podlaha",
   "playback.idle": "Není načten žádný záznam. Stiskněte „Přehrát“ u souboru níže.",
   "playback.idle_err": "Poslední načtení selhalo: {0}",
   "playback.empty": "Zatím žádné záznamy. Zahrajte úroveň a záznam se uloží automaticky.",

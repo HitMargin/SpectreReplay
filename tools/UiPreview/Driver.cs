@@ -38,6 +38,7 @@ namespace UiPreview
             int hardFail = HardTextCheck.Run(
                 ProjectDir);
             int replayFail = ReplayCheck.Run();
+            int timelineFail = ReplayTimelineCheck.Run();
             int wavFail = WavRoundTripCheck.Run();
             int runtimeFail = LocRuntimeCheck.Run();
             int portedFail = PortedCompletenessCheck.Run(
@@ -110,7 +111,7 @@ namespace UiPreview
                 ProjectDir);
             int orphanFail = PortedCompletenessCheck.NoOrphanChecks(
                 ProjectDir);
-            int total = locFail + hardFail + replayFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + locLangFail + pinStateFail + injectFail + logPrefixFail + scatterFail + cursorFail + cursorTrackFail + keybdAudioFail + keybdPrefsFail + crossInputFail + cloudFail + debugFail + orphanFail;
+            int total = locFail + hardFail + replayFail + timelineFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + locLangFail + pinStateFail + injectFail + logPrefixFail + scatterFail + cursorFail + cursorTrackFail + keybdAudioFail + keybdPrefsFail + crossInputFail + cloudFail + debugFail + orphanFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"

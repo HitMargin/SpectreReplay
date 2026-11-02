@@ -38,6 +38,9 @@ internal sealed class VideoEncoder : IDisposable
 
     private const int ProbeRetryMs = 30_000;
     private static readonly object ProbeLock = new object();
+    // 异步探测状态：UI 调 NvencWorksFor 时如果还没探测过，先起后台线程，
+    // 本帧返回 false（退回 libx264）不让 OnGUI 卡住。探测完后下一帧走缓存。
+    private static volatile bool _nvencProbeRunning;
     // 探测缓存策略（设置页每个 IMGUI 帧都会询问，冷却期挡住反复拉起探测进程）：
     // - PATH 定位 / PATH 探测：负结果（没找到/超时）冷却 ProbeRetryMs 后重试，
     //   用户中途安装 ffmpeg 无需重启游戏；正结果会话内有效
@@ -193,6 +196,25 @@ internal sealed class VideoEncoder : IDisposable
                 Debug.Log("[SpectreReplay] encoder 存在但无法执行（缺 DLL/架构不符/损坏），已跳过: " + exe);
             return works;
         }
+    }
+
+    /// <summary>
+    /// mod 加载时后台预热：LocateEncoder + NVENC 探测。两者都是起 ffmpeg 子进程
+    /// 并 WaitForExit(5000)，如果在 OnGUI 里首次调用会卡主线程最多 5 秒。
+    /// 提前在后台跑完写入缓存，用户进渲染页时直接命中缓存，不卡。
+    /// </summary>
+    internal static void WarmUp()
+    {
+        System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+        {
+            try
+            {
+                string exe = LocateEncoder();
+                if (exe != null)
+                    NvencWorksFor(exe);
+            }
+            catch { /* 预热失败不影响后续按需探测 */ }
+        });
     }
 
     // PATH 探测已并入 VerifyEncoder（对最终选择统一跑 -version，含 PATH 回落），
@@ -486,54 +508,62 @@ internal sealed class VideoEncoder : IDisposable
     {
         lock (ProbeLock)
         {
+            // 缓存命中：已探测过同一个 exe
             if (nvencProbedExe == exe)
                 return nvencWorks;
-            try
+            // 异步探测已在跑：本轮先退回 CPU（探测完了下一帧走缓存）
+            if (_nvencProbeRunning)
+                return false;
+            // 起后台线程探测，不在 OnGUI 里阻塞
+            _nvencProbeRunning = true;
+            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
             {
-                var info = new ProcessStartInfo
+                bool result = ProbeNvencSync(exe);
+                lock (ProbeLock)
                 {
-                    FileName = exe,
-                    Arguments = "-hide_banner -loglevel error -y -f lavfi"
-                        + " -i color=size=256x256:rate=1:duration=0.1"
-                        + " -c:v h264_nvenc -frames:v 1 -f null -",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardError = true,
-                    RedirectStandardOutput = true
-                };
-                using (Process probe = Process.Start(info))
-                {
-                    if (probe == null)
-                    {
-                        nvencWorks = false;
-                    }
-                    else
-                    {
-                        // **两个重定向管道都必须在等待前排空**（2026-11-02 审计）：
-                        // 探测只重定向不读取——有硬件的机器如果 ffmpeg 对
-                        // lavfi/nvenc 吐了超过管道缓冲（~4KB）的输出（驱动警告、
-                        // 多卡提示），进程卡在管道写上，WaitForExit(5000) 超时
-                        // → 被误判为无 NVENC。
-                        probe.ErrorDataReceived += (_, e) => { };
-                        probe.OutputDataReceived += (_, e) => { };
-                        probe.BeginErrorReadLine();
-                        probe.BeginOutputReadLine();
-                        if (!probe.WaitForExit(5000))
-                        {
-                            try { probe.Kill(); } catch { }
-                            nvencWorks = false;
-                        }
-                        else
-                            nvencWorks = probe.ExitCode == 0;
-                    }
+                    nvencWorks = result;
+                    nvencProbedExe = exe;
+                    _nvencProbeRunning = false;
                 }
-            }
-            catch
+            });
+            return false;
+        }
+    }
+
+    /// <summary>同步 NVENC 探测（后台线程调用）。与原实现相同，但从 OnGUI 移到这里。</summary>
+    private static bool ProbeNvencSync(string exe)
+    {
+        try
+        {
+            var info = new ProcessStartInfo
             {
-                nvencWorks = false;
+                FileName = exe,
+                Arguments = "-hide_banner -loglevel error -y -f lavfi"
+                    + " -i color=size=256x256:rate=1:duration=0.1"
+                    + " -c:v h264_nvenc -frames:v 1 -f null -",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true
+            };
+            using (Process probe = Process.Start(info))
+            {
+                if (probe == null) return false;
+                probe.ErrorDataReceived += (_, e) => { };
+                probe.OutputDataReceived += (_, e) => { };
+                probe.BeginErrorReadLine();
+                probe.BeginOutputReadLine();
+                if (!probe.WaitForExit(5000))
+                {
+                    try { probe.Kill(); } catch { }
+                    return false;
+                }
+                return probe.ExitCode == 0;
             }
-            nvencProbedExe = exe;
-            return nvencWorks;
+        }
+        catch
+        {
+            return false;
         }
     }
 

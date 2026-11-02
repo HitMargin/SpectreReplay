@@ -1,4 +1,4 @@
-﻿{
+{
  "lang": "zh-t",
  "entries": {
   "page.record": "錄製",
@@ -46,6 +46,10 @@
   "ui.off": "關",
   "ui.hint": "Ctrl+F10 開關介面 · ESC 關閉",
   "playback.current": "目前",
+  "timeline.selection": "選區",
+  "timeline.enable": "時間軸",
+  "timeline.enable.tip": "在回放時顯示屏幕底部的時間軸面板。",
+  "timeline.floor.hint": "地板",
   "playback.idle": "還沒載入回放。在下面的列表裡點「回放」即可。",
   "playback.idle_err": "上一次的載入失敗了：{0}",
   "playback.empty": "還沒有回放檔案。打一局關卡就會自動保存。",

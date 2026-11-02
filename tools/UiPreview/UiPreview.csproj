@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
@@ -59,6 +59,7 @@
     
     <Compile Include="..\..\SpectreReplay\Features\Replay\Codec\ReplayCrypto.cs" Link="Real\ReplayCrypto.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\Data\ReplayData.cs" Link="Real\ReplayData.cs" />
+    <Compile Include="..\..\SpectreReplay\Features\Replay\Timeline\ReplayTimeline.cs" Link="Real\ReplayTimeline.cs" />
     <Compile Include="..\..\SpectreReplay\Ui\HitScatterMath.cs" Link="Real\HitScatterMath.cs" />
     <!-- 鼠标指针合成：纯 System（只碰 byte[]），可以在离线闸门里真的画一遍再验像素。
          与 HitScatterMath 同理——逻辑放在不依赖 UnityEngine 的类里，才有机会被“真的算过”。 -->

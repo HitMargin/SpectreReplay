@@ -278,6 +278,7 @@ internal static class ReplayManager
         replayData = new ReplayData();
         WavLoader.loaded_clip = null;
         SpectreState.HasKeybdSound = false;
+        TimelineController.Clear();
     }
 
     internal static bool LoadReplay(out ReplayData replayData, string filePath, bool no_encryption = false)
@@ -285,6 +286,7 @@ internal static class ReplayManager
         if (!ReadReplayData(out replayData, filePath, no_encryption))
             return false;
         TryLoadKeybdSound(filePath, replayData);
+        TimelineController.Load(replayData, null);
         Debug.Log("replay load!");
         return true;
     }
@@ -396,6 +398,7 @@ internal static class ReplayManager
         if (!ReadReplayData(out replayData, raw, displayName, no_encryption))
             return false;
         TryLoadKeybdSoundFromMemory(replayData, wavData);
+        TimelineController.Load(replayData, null);
         Debug.Log("replay load (memory)!");
         return true;
     }

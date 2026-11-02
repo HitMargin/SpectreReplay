@@ -182,6 +182,9 @@ public static class Settings
     public static bool EditorUIHorizontalOn = false;
 
     public static bool TimelineOn = true;
+    public static float TimelinePosX = 0f;
+    public static float TimelinePosY = -68f;
+    public static float TimelineWidth = 960f;
 
     public static bool FixChartLoadOn = false;
 

@@ -1,4 +1,4 @@
-﻿{
+{
  "lang": "fr",
  "entries": {
   "page.record": "Enregistrement",
@@ -46,6 +46,10 @@
   "ui.off": "Désactivé",
   "ui.hint": "Ctrl+F10 ouvre ce panneau · ESC le ferme",
   "playback.current": "Actuel",
+  "timeline.selection": "Sélection",
+  "timeline.enable": "Chronologie",
+  "timeline.enable.tip": "Affiche le panneau de chronologie en bas de l'écran pendant la lecture.",
+  "timeline.floor.hint": "Sol",
   "playback.idle": "Aucun replay chargé. Appuyez sur « Lecture » sur un fichier ci-dessous.",
   "playback.idle_err": "Le dernier chargement a échoué : {0}",
   "playback.empty": "Aucun replay pour l'instant. Jouez un niveau et il sera sauvegardé automatiquement.",

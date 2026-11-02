@@ -1,4 +1,4 @@
-﻿{
+{
  "lang": "ro",
  "entries": {
   "page.record": "Înregistrare",
@@ -46,6 +46,10 @@
   "ui.off": "Oprit",
   "ui.hint": "Ctrl+F10 deschide acest panou · ESC îl închide",
   "playback.current": "Curent",
+  "timeline.selection": "Selecție",
+  "timeline.enable": "Cronologie",
+  "timeline.enable.tip": "Afișează panoul cronologiei în partea de jos a ecranului în timpul redării.",
+  "timeline.floor.hint": "Podea",
   "playback.idle": "Nicio reluare încărcată. Apasă „Redă” la un fișier mai jos.",
   "playback.idle_err": "Ultima încărcare a eșuat: {0}",
   "playback.empty": "Încă nu există reluări. Joacă un nivel și una se salvează automat.",

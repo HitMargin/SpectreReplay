@@ -1,4 +1,4 @@
-﻿{
+{
  "lang": "pl",
  "entries": {
   "page.record": "Nagrywanie",
@@ -46,6 +46,10 @@
   "ui.off": "Wył.",
   "ui.hint": "Ctrl+F10 otwiera ten panel · ESC zamyka",
   "playback.current": "Bieżąca",
+  "timeline.selection": "Zakres",
+  "timeline.enable": "Oś czasu",
+  "timeline.enable.tip": "Wyświetla panel osi czasu na dole ekranu podczas odtwarzania.",
+  "timeline.floor.hint": "Podłoga",
   "playback.idle": "Nie wczytano powtórki. Naciśnij „Odtwórz” przy pliku poniżej.",
   "playback.idle_err": "Ostatnie wczytanie nie powiodło się: {0}",
   "playback.empty": "Nie ma jeszcze powtórek. Zagraj poziom, a powtórka zapisze się automatycznie.",

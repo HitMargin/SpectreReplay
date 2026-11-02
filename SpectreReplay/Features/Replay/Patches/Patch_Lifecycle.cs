@@ -135,6 +135,7 @@ internal class Patch_StartRewind
         {
             Debug.Log("[SpectreReplay] TryStartPlayback 进入（PlayMode=" + PlayMode
                 + " RecordMode=" + RecordMode + " is_playing=" + is_playing + "）");
+            TimelineController.RefreshCurrentLevel();
             if (!DebugMode || !debug_skip_Verification)
             {
                 // fail-open 的落点（同 TryStartRecording）：核心补丁真挂不上

@@ -1104,10 +1104,62 @@ namespace UiPreview
                 s => s.Contains("bool ready = VideoEncoder.VerifyEncoder(exe);", StringComparison.Ordinal)
                     && s.Contains("if (!VideoEncoder.VerifyEncoder(ff))", StringComparison.Ordinal));
 
+            fail += Check(projectRoot,
+                "时间轴状态必须与 ReplayData 分离并保存动态区间",
+                "Features\\Replay\\Timeline\\ReplayTimeline.cs",
+                s => s.Contains("internal sealed class ReplayTimelineState", StringComparison.Ordinal)
+                    && s.Contains("TimelineSelection Selection", StringComparison.Ordinal)
+                    && s.Contains("internal void MoveSelectionStart", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "关卡载入后必须刷新时间轴楼层时间",
+                "Features\\Replay\\Patches\\Patch_Lifecycle.cs",
+                s => s.Contains("TimelineController.RefreshCurrentLevel();", StringComparison.Ordinal));
+
+            fail += Check(projectRoot,
+                "回放载入与卸载必须接通时间轴状态",
+                "Features\\Replay\\Runtime\\ReplayManager.cs",
+                s => s.Contains("TimelineController.Load(replayData, null);", StringComparison.Ordinal)
+                    && s.Contains("TimelineController.Clear();", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "回放必须支持任意歌曲时间 seek",
+                "Features\\Replay\\Runtime\\ReplayPlayer.cs",
+                s => s.Contains("internal static bool SeekToTime(double targetSongPosition)", StringComparison.Ordinal)
+                    && s.Contains("FastForward(targetFloor);", StringComparison.Ordinal)
+                    && s.Contains("KeyEventIndex = keyIndex;", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "时间轴必须使用独立 UGUI Canvas 与批量标记图形",
+                "Ui\\Timeline\\TimelineOverlay.cs",
+                s => s.Contains("RenderMode.ScreenSpaceOverlay", StringComparison.Ordinal)
+                    && s.Contains("TimelineMarkersGraphic", StringComparison.Ordinal)
+                    && s.Contains("TimelineController.SetInputCaptured(true);", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "拖动时间轴时必须隔离玩法输入查询",
+                "Features\\Replay\\Patches\\Patch_InputInjection.cs",
+                s => CountOccurrences(s, "TimelineController.InputCaptured") >= 4);
+            fail += Check(projectRoot,
+                "渲染必须从时间轴选择区间启动",
+                "Features\\VideoRender\\Pipeline\\VideoRender.cs",
+                s => s.Contains("internal readonly struct RenderRange", StringComparison.Ordinal)
+                    && s.Contains("StartRender(RenderRange.FromTimeline())", StringComparison.Ordinal)
+                    && s.Contains("Job = VideoRenderJob.Launch(encoderPath, range);", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "渲染作业必须把区间传入作业实例",
+                "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
+                s => s.Contains("job.renderRange = range;", StringComparison.Ordinal));
+
+            fail += Check(projectRoot,
+                "渲染作业必须按区间起点选砖并按区间终点停止",
+                "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
+                s => s.Contains("VideoRender.RenderRange range = renderRange.Enabled", StringComparison.Ordinal)
+                    && s.Contains("ResolveRangeStartFloor(range)", StringComparison.Ordinal)
+                    && s.Contains("replayEndSongPosition = range.Enabled", StringComparison.Ordinal)
+                    && s.Contains("replayEndSong = replayEndSongPosition;", StringComparison.Ordinal));
+
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");
             return fail;
         }
+
 
         /// <summary>
         /// 页面里不许出现 <c>GUILayout.Width(数字</c>。

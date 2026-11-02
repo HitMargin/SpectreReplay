@@ -84,6 +84,9 @@ public static class ConfigManager
         public bool EditorUIFloorPanelOn { get; set; }
         public bool EditorUIHorizontalOn { get; set; }
         public bool TimelineOn { get; set; }
+        public float TimelinePosX { get; set; }
+        public float TimelinePosY { get; set; }
+        public float TimelineWidth { get; set; }
         public bool FixChartLoadOn { get; set; }
         public bool CustomEventsOn { get; set; }
         public bool EnableProEvents { get; set; }
@@ -214,6 +217,9 @@ public static class ConfigManager
                 EditorUIFloorPanelOn = Settings.EditorUIFloorPanelOn,
                 EditorUIHorizontalOn = Settings.EditorUIHorizontalOn,
                 TimelineOn = Settings.TimelineOn,
+                TimelinePosX = Settings.TimelinePosX,
+                TimelinePosY = Settings.TimelinePosY,
+                TimelineWidth = Settings.TimelineWidth,
                 FixChartLoadOn = Settings.FixChartLoadOn,
                 CustomEventsOn = Settings.CustomEventsOn,
                 EnableProEvents = Settings.EnableProEvents
@@ -502,7 +508,10 @@ public static class ConfigManager
                     Settings.EditorUIOn = sets.Value<bool?>("EditorUIOn") ?? Settings.EditorUIOn;
                     Settings.EditorUIFloorPanelOn = sets.Value<bool?>("EditorUIFloorPanelOn") ?? Settings.EditorUIFloorPanelOn;
                     Settings.EditorUIHorizontalOn = sets.Value<bool?>("EditorUIHorizontalOn") ?? Settings.EditorUIHorizontalOn;
-                    Settings.TimelineOn = sets.Value<bool?>("TimelineOn") ?? Settings.TimelineOn;
+                                        Settings.TimelineOn = sets.Value<bool?>("TimelineOn") ?? Settings.TimelineOn;
+                    Settings.TimelinePosX = sets.Value<float?>("TimelinePosX") ?? Settings.TimelinePosX;
+                    Settings.TimelinePosY = sets.Value<float?>("TimelinePosY") ?? Settings.TimelinePosY;
+                    Settings.TimelineWidth = sets.Value<float?>("TimelineWidth") ?? Settings.TimelineWidth;
                     Settings.FixChartLoadOn = sets.Value<bool?>("FixChartLoadOn") ?? Settings.FixChartLoadOn;
                     Settings.CustomEventsOn = sets.Value<bool?>("CustomEventsOn") ?? Settings.CustomEventsOn;
                     Settings.EnableProEvents = sets.Value<bool?>("EnableProEvents") ?? Settings.EnableProEvents;
