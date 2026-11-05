@@ -8,46 +8,68 @@ namespace SpectreReplay.Ui
     internal static class Gui
     {
         // ── 调色板（一处定义，四个页面共用）─────────────────────
-        internal static readonly Color CardBg = new Color(0.13f, 0.15f, 0.19f, 1f);
-        internal static readonly Color HeadBg = new Color(0.09f, 0.11f, 0.14f, 1f);
-        internal static readonly Color LineCol = new Color(1f, 1f, 1f, 0.09f);
-        internal static readonly Color Accent = new Color(0.24f, 0.62f, 0.92f, 1f);
-        internal static readonly Color TextCol = new Color(0.90f, 0.93f, 0.96f, 1f);
-        internal static readonly Color DimCol = new Color(0.60f, 0.66f, 0.74f, 1f);
-        internal static readonly Color OkCol = new Color(0.30f, 0.82f, 0.46f, 1f);
-        internal static readonly Color WarnCol = new Color(0.96f, 0.72f, 0.22f, 1f);
-        internal static readonly Color BadCol = new Color(0.93f, 0.34f, 0.34f, 1f);
-        internal static readonly Color PillOff = new Color(1f, 1f, 1f, 0.16f);
-        internal static readonly Color BtnOff = new Color(1f, 1f, 1f, 0.14f);
-        internal static readonly Color BtnFace = new Color(0.20f, 0.23f, 0.29f, 1f);
-        internal static readonly Color BtnHover = new Color(0.28f, 0.32f, 0.39f, 1f);
+        internal static readonly Color WindowBg = new Color(0.063f, 0.066f, 0.078f, 0.97f);
+        internal static readonly Color CardBg = new Color(0.086f, 0.090f, 0.105f, 1f);
+        internal static readonly Color CardHover = new Color(0.115f, 0.120f, 0.140f, 1f);
+        internal static readonly Color HeaderBg = new Color(0.055f, 0.058f, 0.069f, 1f);
+        internal static readonly Color TabBg = new Color(0.071f, 0.075f, 0.088f, 1f);
+        internal static readonly Color LineCol = new Color(1f, 1f, 1f, 0.07f);
+        internal static readonly Color Accent = new Color(0.93f, 0.95f, 0.98f, 1f);
+        internal static readonly Color TextCol = new Color(0.95f, 0.96f, 0.98f, 1f);
+        internal static readonly Color DimCol = new Color(0.64f, 0.66f, 0.72f, 1f);
+        internal static readonly Color OnAccent = new Color(0.045f, 0.050f, 0.060f, 1f);
+        internal static readonly Color OkCol = new Color(0.43f, 0.82f, 0.58f, 1f);
+        internal static readonly Color WarnCol = new Color(0.98f, 0.74f, 0.36f, 1f);
+        internal static readonly Color BadCol = new Color(0.96f, 0.42f, 0.42f, 1f);
+        internal static readonly Color PillOff = new Color(1f, 1f, 1f, 0.13f);
+        internal static readonly Color BtnOff = new Color(1f, 1f, 1f, 0.12f);
+        internal static readonly Color BtnFace = new Color(0.13f, 0.14f, 0.17f, 1f);
+        internal static readonly Color BtnHover = new Color(0.20f, 0.21f, 0.25f, 1f);
         // 分段/页签的"未选中"底色（比按钮面再暗一点，让选中态更跳）。
         // 用**不透明**色而不是半透明白：贴图把颜色烘进去了，半透明会在卡片上
         // 二次混色，同一组页签在深/浅卡片上看起来不一样。
-        internal static readonly Color BtnQuiet = new Color(0.16f, 0.18f, 0.23f, 1f);
-        internal static readonly Color FieldBg = new Color(0.21f, 0.24f, 0.30f, 1f);
-        internal static readonly Color FieldBorder = new Color(1f, 1f, 1f, 0.30f);
-        internal static readonly Color FieldFocus = new Color(0.35f, 0.68f, 0.95f, 1f);
-        internal static readonly Color FieldSel = new Color(0.24f, 0.62f, 0.92f, 0.45f);
+        internal static readonly Color BtnQuiet = new Color(0.095f, 0.102f, 0.120f, 1f);
+        internal static readonly Color FieldBg = new Color(0.135f, 0.145f, 0.175f, 1f);
+        internal static readonly Color FieldBorder = new Color(1f, 1f, 1f, 0.24f);
+        internal static readonly Color FieldFocus = new Color(0.84f, 0.87f, 0.91f, 1f);
+        internal static readonly Color FieldSel = new Color(0.70f, 0.78f, 0.88f, 0.34f);
         // 占位文案单独一色：DimCol (0.60,0.66,0.74) 在 (0.21,0.24,0.30) 上偏亮，
         // 会被误当成"已填好的真路径"。压暗到能读但不抢眼。
-        internal static readonly Color FieldHint = new Color(0.55f, 0.60f, 0.68f, 1f);
+        internal static readonly Color FieldHint = new Color(0.48f, 0.51f, 0.58f, 1f);
         // 自绘滑条：轨道凹槽 + 滑块。滑块要比轨道亮得多才抓得住眼睛。
-        internal static readonly Color SliderTrack = new Color(0.14f, 0.16f, 0.21f, 1f);
-        internal static readonly Color SliderThumb = new Color(0.88f, 0.91f, 0.95f, 1f);
+        internal static readonly Color SliderTrack = new Color(0.21f, 0.22f, 0.25f, 1f);
+        internal static readonly Color SliderThumb = new Color(0.93f, 0.95f, 0.98f, 1f);
 
-        internal static readonly Color SliderTrackHover = new Color(0.20f, 0.23f, 0.29f, 1f);
-        internal static readonly Color SliderFillHover = new Color(0.36f, 0.72f, 1f, 1f);
+        internal static readonly Color SliderTrackHover = new Color(0.12f, 0.13f, 0.16f, 1f);
+        internal static readonly Color SliderFillHover = new Color(1f, 1f, 1f, 1f);
         internal static readonly Color SliderThumbHover = new Color(1f, 1f, 1f, 1f);
-        internal static readonly Color PillOffHover = new Color(1f, 1f, 1f, 0.26f);
-        internal static readonly Color FieldBgHover = new Color(0.26f, 0.30f, 0.37f, 1f);
-        internal static readonly Color FieldBorderHover = new Color(1f, 1f, 1f, 0.45f);
+        internal static readonly Color PillOffHover = new Color(1f, 1f, 1f, 0.22f);
+        internal static readonly Color FieldBgHover = new Color(0.17f, 0.18f, 0.22f, 1f);
+        internal static readonly Color FieldBorderHover = new Color(1f, 1f, 1f, 0.40f);
 
         // ── 悬浮说明（tooltip）调色板 ────────────────────────────
         // **底色必须接近不透明。** 说明框会盖在卡片与文字之上，半透明底会把
         // 下面的行文字透上来，两层字叠在一起比没有说明更难读。
-        internal static readonly Color TipBg = new Color(0.05f, 0.06f, 0.08f, 0.98f);
-        internal static readonly Color TipBorder = new Color(0.35f, 0.68f, 0.95f, 0.95f);
+        internal static readonly Color TipBg = new Color(0.035f, 0.038f, 0.047f, 0.98f);
+        internal static readonly Color TipBorder = new Color(1f, 1f, 1f, 0.35f);
+
+        /// <summary>
+        /// 独立窗口正文模式。只改变布局与分组过滤；设置字段、点击回调和落盘
+        /// 仍由 Pages 原实现负责，避免出现两套状态机。
+        /// </summary>
+        internal static bool ModernMode;
+
+        /// <summary>现代 IMGUI 行固定列宽（标签 128 + 控件 64）。</summary>
+        internal const float ModernLabelW = 128f;
+        internal const float ModernValueW = 64f;
+        internal const float ModernSwitchW = 34f;
+        internal const float ModernSwitchH = 20f;
+        internal const float ModernDropdownW = 170f;
+        internal const float ModernDropdownListW = 220f;
+        internal const float ModernHotkeyW = 160f;
+        internal const float ModernInputW = 210f;
+        internal const float ModernRowPadX = 14f;
+        internal const float ModernRowPadY = 10f;
 
         private static int _dimDepth;
         private static readonly Color DimTint = new Color(0.62f, 0.62f, 0.62f, 1f);
@@ -103,7 +125,10 @@ namespace SpectreReplay.Ui
 
         private static GUISkin _skin;
         private static Font _font;
-        private static GUIStyle _label, _labelC, _bold, _boldC, _h1, _h2, _small, _smallC, _note, _pad, _btn, _btnPrimary, _btnQuiet, _btnAccent, _tipStyle;
+        private static GUIStyle _label, _labelC, _bold, _boldC, _h1, _h2, _small, _smallC, _note, _pad, _row, _modernRow, _modernRowHot, _btn, _btnPrimary, _btnQuiet, _btnAccent, _tipStyle;
+        private static GUIStyle _modernTitle, _modernDesc, _modernSubtitle, _modernTab, _modernTabOn, _modernSeg, _modernSegOn;
+        private static readonly Dictionary<string, float> _switchAnim = new Dictionary<string, float>();
+        private static readonly Dictionary<string, Vector2> _segmentAnim = new Dictionary<string, Vector2>();
 
         // 内层滚动区专用的滚动条三件套（轨道 / 滑块 / 两端按钮）。
         // 只在本文件的 ScrollArea 里临时挂到 GUI.skin 上，出区立刻还原。
@@ -128,20 +153,55 @@ namespace SpectreReplay.Ui
             _labelC = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, clipping = TextClipping.Clip };
             _bold = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, clipping = TextClipping.Clip };
             _boldC = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold, clipping = TextClipping.Clip };
-            _h1 = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, fontSize = 19, clipping = TextClipping.Clip };
-            _h2 = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, fontSize = 13, clipping = TextClipping.Clip };
+            _h1 = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, fontSize = 20, clipping = TextClipping.Clip };
+            _h2 = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, fontSize = 14, clipping = TextClipping.Clip };
             _small = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontSize = 11, clipping = TextClipping.Clip };
             _smallC = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontSize = 11, fontStyle = FontStyle.Bold, clipping = TextClipping.Clip };
             // 说明文字要**换行**：UMM 把 GUI.skin.label.clipping 改成了 Overflow
             // （decompiled :3509），照抄 Skin.label 的话长句会一路画出窗口外
             // 而不是折行——玩家看到半句话被硬生生截断。
             _note = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.UpperLeft, wordWrap = true, clipping = TextClipping.Clip };
-            _pad = new GUIStyle { padding = new RectOffset(12, 12, 8, 8), margin = new RectOffset(0, 0, 0, 0) };
-            _pad.normal.background = RoundedTex.Get(2, 2, 0, CardBg);
+            // 卡片底 = 浮起面板：上边亮描边、下边暗描边、
+            // 顶边内侧 1px 高光、往下 3px 的柔影（pad=6，阴影由 9-slice 的
+            // overflow 呈现到卡外）。这是层次感的主体——之前只有一块平涂色，
+            // 卡片和页面底之间没有任何"浮起来"的线索。
+            _pad = new GUIStyle { padding = new RectOffset(18, 18, 12, 14), margin = new RectOffset(0, 0, 0, 0) };
+            _pad.border = new RectOffset(16, 16, 16, 16);
+            _pad.overflow = new RectOffset(6, 6, 6, 8);
+            _pad.normal.background = RoundedTex.Panel3D(
+                new Color(0.086f, 0.090f, 0.105f, 1f),          // CardC
+                new Color(0.176f, 0.180f, 0.196f, 1f),          // 0x2D2D32 顶边
+                new Color(0.055f, 0.058f, 0.070f, 1f),          // 0x0E0F12 底边
+                new Color(1f, 1f, 1f, 0.06f),                   // 顶边内侧高光
+                12, 6, 0.65f, 3);
+            _row = new GUIStyle { padding = new RectOffset((int)ModernRowPadX, (int)ModernRowPadX, (int)ModernRowPadY, (int)ModernRowPadY), margin = new RectOffset(0, 0, 0, 0) };
+            _modernRow = MakeButton(GUIStyle.none, Color.clear, Color.clear, Color.clear, false);
+            _modernRow.border = new RectOffset(10, 10, 10, 10);
+            _modernRow.normal.background = RoundedTex.Get(32, 32, 8,
+                new Color(0.075f, 0.079f, 0.092f, 0.86f));
+            _modernRow.hover.background = RoundedTex.Get(32, 32, 8,
+                new Color(0.086f, 0.090f, 0.104f, 0.90f));
+            _modernRowHot = new GUIStyle(_modernRow);
+            _modernRowHot.normal.background = _modernRow.hover.background;
+            _modernTitle = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold, fontSize = 14, alignment = TextAnchor.UpperLeft, clipping = TextClipping.Clip, wordWrap = true };
+            _modernDesc = new GUIStyle(GUI.skin.label) { fontSize = 12, alignment = TextAnchor.UpperLeft, clipping = TextClipping.Clip, wordWrap = true };
+            _modernTitle.normal.textColor = TextCol;
+            _modernDesc.normal.textColor = DimCol;
+            _modernSubtitle = new GUIStyle(_modernDesc) { fontSize = 13, richText = false };
+            _modernTab = new GUIStyle(GUI.skin.label) { fontSize = 13, alignment = TextAnchor.MiddleCenter, clipping = TextClipping.Clip, richText = false };
+            _modernTab.normal.textColor = DimCol;
+            _modernTab.hover.textColor = DimCol;
+            _modernTabOn = new GUIStyle(_modernTab) { fontStyle = FontStyle.Bold };
+            _modernTabOn.normal.textColor = TextCol;
+            _modernTabOn.hover.textColor = TextCol;
+            _modernSeg = new GUIStyle(GUI.skin.label) { fontSize = 12, alignment = TextAnchor.MiddleCenter, clipping = TextClipping.Clip };
+            _modernSeg.normal.textColor = DimCol;
+            _modernSegOn = new GUIStyle(_modernSeg) { fontStyle = FontStyle.Bold };
+            _modernSegOn.normal.textColor = TextCol;
             _btn = MakeButton(GUI.skin.button, BtnFace, BtnHover, TextCol, false);
-            _btnPrimary = MakeButton(GUI.skin.button, Accent, Lighten(Accent, 0.15f), Color.white, true);
-            _btnQuiet = MakeButton(GUI.skin.button, BtnQuiet, Lighten(BtnQuiet, 0.10f), DimCol, false);
-            _btnAccent = MakeButton(GUI.skin.button, Accent, Lighten(Accent, 0.15f), Color.white, true);
+            _btnPrimary = MakeButton(GUI.skin.button, Accent, Color.white, new Color(0.04f, 0.05f, 0.06f, 1f), true);
+            _btnQuiet = MakeButton(GUI.skin.button, BtnQuiet, BtnHover, DimCol, false);
+            _btnAccent = MakeButton(GUI.skin.button, Accent, Color.white, new Color(0.04f, 0.05f, 0.06f, 1f), true);
             // 说明框正文。**必须 wordWrap**（长句不折行会一路画出框外），
             // 且字号与正文一致——说明文字比正文小一档时，在 1080p 下
             // 中文字形会糊成一团。
@@ -174,9 +234,9 @@ namespace SpectreReplay.Ui
         /// </summary>
         private static void BuildScrollbar()
         {
-            const int BarW = 12;      // 轨道总宽
-            const int Pad = 2;        // 滑块与轨道边缘的留白
-            const int Radius = 4;
+            const int BarW = 6;       // 细轨道占 6px，留一点余量给高 DPI。
+            const int Pad = 1;
+            const int Radius = 3;
             const int Tex = 16;
 
             // padding / margin 显式清零：皮肤里这两项是给原生控件留空隙用的，
@@ -185,11 +245,11 @@ namespace SpectreReplay.Ui
             {
                 fixedWidth = BarW,
                 padding = new RectOffset(0, 0, 0, 0),
-                margin = new RectOffset(0, 0, 0, 0),
+                margin = new RectOffset(10, 0, 0, 0),
                 border = new RectOffset(Radius + 1, Radius + 1, Radius + 1, Radius + 1),
             };
             _bar.normal.background =
-                RoundedTex.Get(Tex, Tex, Radius, new Color(0.07f, 0.08f, 0.11f, 0.75f));
+                RoundedTex.Get(Tex, Tex, Radius, new Color(0.045f, 0.048f, 0.058f, 0.45f));
 
             // 滑块比轨道亮得多，一眼能看出「现在停在哪、还能往下走多少」。
             _barThumb = new GUIStyle(GUI.skin.verticalScrollbarThumb)
@@ -199,14 +259,46 @@ namespace SpectreReplay.Ui
                 margin = new RectOffset(Pad, Pad, 0, 0),
             };
             _barThumb.normal.background =
-                RoundedTex.Get(Tex, Tex, Radius, new Color(0.55f, 0.62f, 0.71f, 0.95f));
+                RoundedTex.Get(Tex, Tex, Radius, new Color(0.48f, 0.50f, 0.56f, 0.95f));
             _barThumb.hover.background =
-                RoundedTex.Get(Tex, Tex, Radius, new Color(0.78f, 0.84f, 0.92f, 1f));
+                RoundedTex.Get(Tex, Tex, Radius, new Color(0.78f, 0.80f, 0.85f, 1f));
             _barThumb.active.background =
                 RoundedTex.Get(Tex, Tex, Radius, Accent);
 
             // 零尺寸的空样式：原生箭头按钮在这里既不占位也不画底。
             _barBtn = new GUIStyle(GUIStyle.none) { fixedWidth = 0f, fixedHeight = 0f };
+        }
+
+        /// <summary>
+        /// 独立窗口的滚动区：使用同一套 6px 圆角滚动条，并禁用原生箭头和
+        /// 横向滚动条。这个 API 只换外观，滚动位置仍由 GUILayout 维护。
+        /// </summary>
+        internal static Vector2 ModernScrollView(Vector2 pos, Action body)
+        {
+            Ensure();
+            GUIStyle bar = GUI.skin.verticalScrollbar;
+            GUIStyle thumb = GUI.skin.verticalScrollbarThumb;
+            GUIStyle up = GUI.skin.verticalScrollbarUpButton;
+            GUIStyle down = GUI.skin.verticalScrollbarDownButton;
+            GUI.skin.verticalScrollbar = _bar;
+            GUI.skin.verticalScrollbarThumb = _barThumb;
+            GUI.skin.verticalScrollbarUpButton = _barBtn;
+            GUI.skin.verticalScrollbarDownButton = _barBtn;
+            try
+            {
+                pos = GUILayout.BeginScrollView(pos, false, false,
+                    GUIStyle.none, _bar, GUIStyle.none);
+                try { body?.Invoke(); }
+                finally { GUILayout.EndScrollView(); }
+                return pos;
+            }
+            finally
+            {
+                GUI.skin.verticalScrollbar = bar;
+                GUI.skin.verticalScrollbarThumb = thumb;
+                GUI.skin.verticalScrollbarUpButton = up;
+                GUI.skin.verticalScrollbarDownButton = down;
+            }
         }
 
         /// <summary>
@@ -222,13 +314,13 @@ namespace SpectreReplay.Ui
         /// </summary>
         private static GUIStyle MakeButton(GUIStyle basis, Color face, Color hover, Color text, bool bold)
         {
-            const int Size = 64, Radius = 8;
+            const int Size = 64, Radius = 7;
             var st = new GUIStyle(basis)
             {
                 alignment = TextAnchor.MiddleCenter,
                 fontStyle = bold ? FontStyle.Bold : FontStyle.Normal,
                 // 让文字与圆角之间留出呼吸，否则贴边看起来像被裁掉
-                padding = new RectOffset(10, 10, 4, 4),
+                padding = new RectOffset(13, 13, 5, 5),
                 // 按钮文字也裁在矩形里：内建 button 皮肤自己没被 UMM 动过
                 // clipping，但依赖「默认恰好是 Clip」太悬，写明与 label 一套口径。
                 clipping = TextClipping.Clip,
@@ -238,7 +330,7 @@ namespace SpectreReplay.Ui
             st.normal.textColor = text;
             st.hover.background = RoundedTex.Get(Size, Size, Radius, hover);
             st.hover.textColor = text;
-            st.active.background = RoundedTex.Get(Size, Size, Radius, Darken(face, 0.12f));
+            st.active.background = RoundedTex.Get(Size, Size, Radius, Darken(face, 0.20f));
             st.active.textColor = text;
             st.focused.background = st.hover.background;
             st.focused.textColor = text;
@@ -260,6 +352,13 @@ namespace SpectreReplay.Ui
         internal static GUIStyle H2Style { get { Ensure(); return _h2; } }
         internal static GUIStyle NoteStyle { get { Ensure(); return _note; } }
         internal static GUIStyle SmallStyle { get { Ensure(); return _small; } }
+        internal static GUIStyle ModernTitleStyle { get { Ensure(); return _modernTitle; } }
+        internal static GUIStyle ModernDescStyle { get { Ensure(); return _modernDesc; } }
+        internal static GUIStyle ModernSubtitleStyle { get { Ensure(); return _modernSubtitle; } }
+        internal static GUIStyle ModernTabStyle { get { Ensure(); return _modernTab; } }
+        internal static GUIStyle ModernTabOnStyle { get { Ensure(); return _modernTabOn; } }
+        internal static GUIStyle ModernSegStyle { get { Ensure(); return _modernSeg; } }
+        internal static GUIStyle ModernSegOnStyle { get { Ensure(); return _modernSegOn; } }
         internal static GUIStyle ButtonStyle { get { Ensure(); return _btn; } }
         internal static GUIStyle PrimaryButtonStyle { get { Ensure(); return _btnPrimary; } }
         /// <summary>压暗的按钮（页签未选中 / 下拉列表项）。</summary>
@@ -311,6 +410,11 @@ namespace SpectreReplay.Ui
         /// <summary>一条 1px 分隔线，占一整行的布局高度。</summary>
         internal static void Divider()
         {
+            if (ModernMode)
+            {
+                GUILayout.Space(8f);
+                return;
+            }
             Rect r = GUILayoutUtility.GetRect(1f, 1f, GUILayout.ExpandWidth(true));
             Fill(r, LineCol);
         }
@@ -320,12 +424,21 @@ namespace SpectreReplay.Ui
         internal static void Section(string titleKey, Color accent, Action body, bool enabled = true)
         {
             Ensure();
-            GUILayout.Space(8f);
-            Rect head = GUILayoutUtility.GetRect(1f, 24f, GUILayout.ExpandWidth(true));
-            Fill(head, HeadBg);
-            Fill(new Rect(head.x, head.y + head.height - 1f, head.width, 1f), LineCol);
-            Fill(new Rect(head.x, head.y, 3f, head.height), accent);
-            Text(new Rect(head.x + 11f, head.y, head.width - 18f, head.height), Loc.T(titleKey), TextCol, _bold);
+            if (ModernMode && !OnGui.IsModernSectionVisible(titleKey))
+                return;
+            if (!ModernMode)
+            {
+                GUILayout.Space(12f);
+                Rect head = GUILayoutUtility.GetRect(1f, 24f, GUILayout.ExpandWidth(true));
+                Fill(new Rect(head.x + 14f, head.y + 11f, 3f, 3f), accent);
+                Text(new Rect(head.x + 26f, head.y, head.width - 32f, head.height),
+                    Loc.T(titleKey), TextCol, _h2);
+            }
+            else
+            {
+                // 二级页签已经是当前分组标题；再画 Section 标题就是玩家看到的重复。
+                GUILayout.Space(8f);
+            }
 
             // 卡片体边框/左侧色条。两个约束：
             //   · GetLastRect() 返回最后一个**控件**的布局矩形，不是外层组的矩形，
@@ -351,15 +464,106 @@ namespace SpectreReplay.Ui
                 if (Event.current != null && Event.current.type == EventType.Repaint
                     && !float.IsNaN(bottom) && bottom - top > 4f)
                 {
-                    Rect card = new Rect(head.x, top, head.width, bottom - top);
-                    Frame(card, LineCol);
-                    Fill(new Rect(card.x, card.y, 3f, card.height), accent);
+                    // 不再画 1px 方框：方框在深色底上会把每一组切成生硬的
+                    // “表格线”，与圆角卡底/无边框列表相反。
+                    // 卡底来自 _pad 的圆角贴图，这里只补标题与内容的缩进。
                 }
             }
             finally
             {
                 GUILayout.EndVertical();
             }
+        }
+
+        /// <summary>
+        /// 二级分段页签。返回选中项；只负责交互与视觉，不持有页面状态。
+        /// 二级页签是“文本 + 动画下划线”，不是整块按钮。
+        /// </summary>
+        internal static int SegmentTabs(string[] labels, int current, string key = null)
+        {
+            Ensure();
+            if (labels == null || labels.Length == 0) return 0;
+            // 顶栏 HandleDrag 会把标题栏内的 MouseDown 吃掉，但二级页签在
+            // 标题栏之外；这里必须先于任何 Use 判断命中，否则点击只画 hover、
+            // 状态不切换，看起来像“选择失效”。
+            current = Mathf.Clamp(current, 0, labels.Length - 1);
+            Rect row = GUILayoutUtility.GetRect(1f, 34f, GUILayout.ExpandWidth(true), GUILayout.Height(34f));
+            Event e = Event.current;
+            float x = row.x;
+            int hit = -1;
+            float selX = row.x, selW = 0f;
+            Vector2 anim = Vector2.zero;
+            bool hasAnim = key != null && _segmentAnim.TryGetValue(key, out anim);
+            for (int i = 0; i < labels.Length; i++)
+            {
+                GUIStyle st = i == current ? _modernTabOn : _modernTab;
+                float w = st.CalcSize(new GUIContent(labels[i])).x + 22f;
+                Rect tab = new Rect(x, row.y, w, row.height);
+                if (i == current) { selX = tab.x + 8f; selW = w - 16f; }
+                if (e != null && e.type == EventType.MouseDown && e.button == 0 && tab.Contains(e.mousePosition))
+                {
+                    hit = i;
+                    e.Use();
+                }
+                bool hov = e != null && e.type != EventType.Used && tab.Contains(e.mousePosition);
+                GUI.Label(tab, labels[i], hov && i != current ? _modernTabOn : st);
+                x += w + 4f;
+            }
+            if (e != null && e.type == EventType.Repaint && selW > 0f)
+            {
+                if (!hasAnim) anim = new Vector2(selX, selW);
+                anim.x = Mathf.Lerp(anim.x, selX, 1f - Mathf.Exp(-18f * Time.unscaledDeltaTime));
+                anim.y = Mathf.Lerp(anim.y, selW, 1f - Mathf.Exp(-18f * Time.unscaledDeltaTime));
+                if (key != null) _segmentAnim[key] = anim;
+                Fill(new Rect(anim.x, row.yMax - 2f, anim.y, 2f), Accent);
+            }
+            return hit >= 0 ? hit : current;
+        }
+
+        /// <summary>二级页签条高度（独立窗口把这条从动画区搬出去时要留位）。</summary>
+        internal const float SegmentTabsH = 34f;
+
+        internal static void BeginModernRow()
+        {
+            Ensure();
+            GUILayout.BeginVertical(_modernRow);
+        }
+
+        internal static void EndModernRow()
+        {
+            GUILayout.EndVertical();
+            GUILayout.Space(4f);
+        }
+
+        internal static Rect Snap(Rect r)
+        {
+            return new Rect(Mathf.Round(r.x), Mathf.Round(r.y),
+                Mathf.Round(r.width), Mathf.Round(r.height));
+        }
+
+        /// <summary>画开关本体到指定矩形；交互由调用方在同一矩形上处理。</summary>
+        internal static void SwitchAt(string key, Rect track, bool on, bool enabled)
+        {
+            Ensure();
+            if (Event.current == null || Event.current.type != EventType.Repaint) return;
+            bool hot = enabled && Hover(track);
+            float target = on ? 1f : 0f;
+            float t;
+            if (!_switchAnim.TryGetValue(key, out t)) t = target;
+            t = Mathf.MoveTowards(t, target, Time.unscaledDeltaTime * 8f);
+            _switchAnim[key] = t;
+            float k = Mathf.SmoothStep(0f, 1f, t);
+            Color trackColor = Color.Lerp(hot ? PillOffHover : PillOff, hot ? Color.white : Accent, k);
+            Color old = GUI.color;
+            GUI.color = trackColor * Tint;
+            GUI.DrawTexture(Snap(track), RoundedTex.Get(34, 20, 10, Color.white));
+            const float knobSize = 14f;
+            Rect knob = new Rect(Mathf.Lerp(track.x + 3f, track.xMax - knobSize - 3f, k),
+                track.y + 3f, knobSize, knobSize);
+            GUI.color = Color.Lerp(new Color(0.72f, 0.74f, 0.78f, 1f),
+                new Color(0.05f, 0.055f, 0.065f, 1f), k) * Tint;
+            GUI.DrawTexture(Snap(knob), RoundedTex.Get(28, 28, 8, Color.white));
+            GUI.color = old;
         }
 
         // ── 内嵌滚动区 ────────────────────────────────────────
@@ -431,6 +635,20 @@ namespace SpectreReplay.Ui
         internal static void KeyValue(string labelKey, string value, Color valueColor)
         {
             Ensure();
+            if (ModernMode)
+            {
+                GUILayout.BeginVertical();
+                GUILayout.Label(Loc.T(labelKey), _modernDesc,
+                    GUILayout.ExpandWidth(true));
+                Color old = GUI.color;
+                GUI.color = valueColor * Tint;
+                GUILayout.Label(value ?? "", _modernSubtitle,
+                    GUILayout.ExpandWidth(true));
+                GUI.color = old;
+                GUILayout.EndVertical();
+                GUILayout.Space(2f);
+                return;
+            }
             GUILayout.BeginHorizontal();
             GUILayout.Label(Loc.T(labelKey), _label, GUILayout.Width(LabelW));
             Text(GUILayoutUtility.GetRect(1f, 20f, GUILayout.ExpandWidth(true)), value, valueColor, _label);
@@ -452,10 +670,12 @@ namespace SpectreReplay.Ui
         /// 重复触发（一个点击删两份回放那种）。这里让 GUI.Button 负责命中，
         /// 只是把它的外观换成文字。</para>
         /// </summary>
-        internal static void ClickableLabel(string text, bool active, string tipKey, Action onClick)
+        internal static void ClickableLabel(string text, bool active, string tipKey, Action onClick,
+            float height = 20f)
         {
             Ensure();
-            Rect r = GUILayoutUtility.GetRect(1f, 20f, GUILayout.ExpandWidth(true));
+            Rect r = GUILayoutUtility.GetRect(1f, height, GUILayout.ExpandWidth(true),
+                GUILayout.Height(height));
             bool hot = r.Contains(Event.current != null ? Event.current.mousePosition : new Vector2(-1f, -1f));
             Tip(r, tipKey);
             Color old = GUI.color;
@@ -486,6 +706,52 @@ namespace SpectreReplay.Ui
             Text(GUILayoutUtility.GetRect(1f, 18f, GUILayout.ExpandWidth(true)),
                 value ?? "", valueColor, _label);
         }
+
+        /// <summary>
+        /// 一枚"判定胶囊"：彩色底 + 白字，模拟游戏结算面板里的判定数字。
+        ///
+        /// <para>为什么要胶囊而不是纯文本染色：一行十几个判定挤在一起时，
+        /// 每个数字自己一个色块远比"每个数字用不同颜色"醒目——游戏结算
+        /// 面板就是一整排彩色圆角块（参考 DetailedResults.GenerateResults
+        /// 的 Result()/ResultWithAuto() 输出）。圆角底来自 RoundedTex，
+        /// 9-slice 不变形。</para>
+        ///
+        /// <para>背景色按 tone 压暗一档做底，前景白字——直接拿 tone 做文字色
+        /// 在深色卡底上太暗（黄/绿都还行，蓝会看不清）。</para>
+        /// </summary>
+        /// <summary>
+        /// 一段判定显示：**数字本身用档位色**（"完美 926"整串绿色），不是
+        /// 白字压在彩色胶囊上——游戏结算面板就是数字直接染色（用户截图
+        /// "完美 7704 中旋 1230" 那种）。名字+数字一起染，同一档一个颜色。
+        /// </summary>
+        internal static void JudgmentChip(string text, Color tone)
+        {
+            Ensure();
+            var c = new GUIContent(text);
+            Vector2 size = _small.CalcSize(c);
+            // **高度必须比 lineHeight 多留几像素。** _small 的 clipping=Clip，
+            // 行高只含基线度量、不含字形上下沿；直接用 lineHeight 当控件高度
+            // 会把字的下半截裁掉——用户截图里那一排只剩上半个字就是这个。
+            // 宽度 +2 同理，避免 CalcSize 的浮点舍入把最后一个字切掉。
+            float w = Mathf.Ceil(size.x) + 2f;
+            float h = Mathf.Max(18f, _small.lineHeight + 4f);
+            Rect r = GUILayoutUtility.GetRect(w, h,
+                GUILayout.Width(w), GUILayout.Height(h));
+            if (Event.current == null || Event.current.type != EventType.Repaint) return;
+            // 竖直居中的专用样式：直接复用 _small（UpperLeft/MiddleLeft）
+            // 会在加高后的矩形里贴顶，下半截仍然靠外。
+            if (_judge == null)
+            {
+                _judge = new GUIStyle(_small)
+                {
+                    alignment = TextAnchor.MiddleLeft,
+                    clipping = TextClipping.Overflow,
+                };
+            }
+            Text(r, text, tone, _judge);
+        }
+
+        private static GUIStyle _judge;
 
         /// <summary>一条进度条。total&lt;=0 时直接返回，避免 0/0 得到 NaN 宽度
         /// ——NaN 传给 GUI.DrawTexture 会抛 ArgumentException 打断整个 OnGUI，
@@ -589,12 +855,14 @@ namespace SpectreReplay.Ui
                 Color old = GUI.color;
                 GUI.color = Tint;
 
-                // 轨道与填充用**纯色 Fill**，不用圆角贴图。
-                // 原因是拉伸：贴图只有 16px 宽，而填充条要撑到上百像素，
-                // GUI.DrawTexture 会把左边那两个圆角横向拉成椭圆（"两头尖"）。
-                // 而这条槽只有 6px 高，圆角本来就看不出来——不值得为它做 9-slice。
-                // 真正需要圆角的是滑块：它是 1:1 绘制（32→14 等比缩小），不会被拉歪。
-                Fill(bar, hot ? SliderTrackHover : SliderTrack);
+                // 轨道 = Well3D 凹槽底（顶部内侧阴影 + 底唇微光），与输入框
+                // 同一套"陷进去"语言。9-slice 保证圆角不被拉伸；槽高 6px 但
+                // 贴图是 22x22 的 9-slice，两端各留 11px 拉伸中段，圆角恒定。
+                // 填充条仍用纯色 Fill：它盖在凹槽上，颜色比凹槽亮一档即可，
+                // 再叠一层立体描边反而脏。
+                var well = RoundedTex.Well3D(hot ? SliderTrackHover : SliderTrack, 4);
+                GUI.DrawTexture(Snap(bar), well, ScaleMode.StretchToFill,
+                    true, 0f, Color.white, 7f, 7f);
                 float fillW = span * k;
                 if (fillW > 1f)
                 {
@@ -671,7 +939,7 @@ namespace SpectreReplay.Ui
                                     : (hot ? BtnHover : BtnFace));
                         Frame(cell, on ? new Color(0.55f, 0.82f, 1f, 0.9f)
                                     : new Color(1f, 1f, 1f, hot ? 0.34f : 0.22f));
-                        Text(cell, key, on ? Color.white : TextCol, _smallC);
+                        Text(cell, key, on ? OnAccent : TextCol, _smallC);
 
                         // 说明按**格**登记（不是整组一条）：玩家悬停的是具体哪个键，
                         // 一条整组说明回答不了"Print 和 SysReq 有什么区别"。
@@ -716,11 +984,11 @@ namespace SpectreReplay.Ui
         internal static void Header(string title, string subtitle, string badge, Color badgeColor)
         {
             Ensure();
-            Rect r = GUILayoutUtility.GetRect(1f, 46f, GUILayout.ExpandWidth(true));
-            Fill(r, HeadBg);
-            Fill(new Rect(r.x, r.y + r.height - 2f, r.width, 2f), Accent);
-            Text(new Rect(r.x + 12f, r.y + 6f, r.width - 200f, 24f), title, TextCol, _h1);
-            Text(new Rect(r.x + 13f, r.y + 28f, r.width - 200f, 16f), subtitle, DimCol, _small);
+            Rect r = GUILayoutUtility.GetRect(1f, 52f, GUILayout.ExpandWidth(true));
+            // 头区不铺成整块横幅，只留一条很淡的下边线；视觉重心交给页面本身。
+            Fill(new Rect(r.x, r.y + r.height - 1f, r.width, 1f), LineCol);
+            Text(new Rect(r.x + 4f, r.y + 5f, r.width - 210f, 28f), title, TextCol, _h1);
+            Text(new Rect(r.x + 5f, r.y + 32f, r.width - 210f, 17f), subtitle, DimCol, _small);
             if (!string.IsNullOrEmpty(badge))
             {
                 if (badgeColor == Color.clear)
@@ -735,7 +1003,7 @@ namespace SpectreReplay.Ui
                 float bw = Mathf.Max(40f, Mathf.Min(
                     r.width - 185f,
                     Mathf.Max(122f, _smallC.CalcSize(new GUIContent(badge)).x + 14f)));
-                Rect b = new Rect(r.x + r.width - bw - 10f, r.y + 13f, bw, 20f);
+                Rect b = new Rect(r.x + r.width - bw - 6f, r.y + 16f, bw, 20f);
                 Badge(b, badge, badgeColor);
             }
         }
@@ -752,7 +1020,9 @@ namespace SpectreReplay.Ui
             Ensure();
             GUILayout.BeginHorizontal();
             GUILayout.Label(Loc.T(labelKey), _label, GUILayout.Width(LabelW));
-            Rect track = GUILayoutUtility.GetRect(44f, 20f, GUILayout.Width(44f), GUILayout.Height(20f));
+            GUILayout.FlexibleSpace();
+            Rect track = GUILayoutUtility.GetRect(34f, 20f,
+                GUILayout.Width(34f), GUILayout.Height(20f));
             // **禁用态：按钮点不动。** GUI.Button 自己会检查 GUI.enabled，但这里
             // 是自绘 + GUIStyle.none，**必须自己拦**——否则灰色的 pill 照样能点开。
             bool clicked = !IsDim && GUI.Button(track, GUIContent.none, GUIStyle.none);
@@ -764,17 +1034,27 @@ namespace SpectreReplay.Ui
             // 半透明白，在深色卡片上本来就淡，不给反馈会让人以为点不动。
             // 禁用态同样不提亮（理由见 Slider）。
             bool hot = !IsDim && Hover(track);
-            Fill(track, value ? (hot ? Lighten(Accent, 0.10f) : Accent)
-                            : (hot ? PillOffHover : PillOff));
-            Frame(track, value ? new Color(0.55f, 0.82f, 1f, 0.9f)
-                            : new Color(1f, 1f, 1f, hot ? 0.34f : 0.22f));
-            float k = track.height - 6f;
+            Color trackColor = value ? (hot ? Color.white : Accent)
+                : (hot ? PillOffHover : PillOff);
+            if (Event.current.type == EventType.Repaint)
+            {
+                Color old = GUI.color;
+                GUI.color = trackColor * Tint;
+                GUI.DrawTexture(track, RoundedTex.Get(32, 20, 10, Color.white));
+                GUI.color = old;
+            }
+            float k = 14f;
             Rect knob = new Rect(
                 value ? track.x + track.width - k - 3f : track.x + 3f,
                 track.y + 3f, k, k);
-            Fill(knob, value ? Color.white : new Color(0.75f, 0.78f, 0.82f, 1f));
-            Text(track, Loc.T(value ? "ui.on" : "ui.off"), value ? Accent : DimCol, _smallC);
-            GUILayout.FlexibleSpace();
+            if (Event.current.type == EventType.Repaint)
+            {
+                Color old = GUI.color;
+                GUI.color = (value ? new Color(0.05f, 0.055f, 0.065f, 1f)
+                    : new Color(0.72f, 0.74f, 0.78f, 1f)) * Tint;
+                GUI.DrawTexture(knob, RoundedTex.Get(28, 28, 10, Color.white));
+                GUI.color = old;
+            }
             GUILayout.EndHorizontal();
             if (clicked)
             {
@@ -913,6 +1193,14 @@ namespace SpectreReplay.Ui
             return new Rect(0f, 0f, Screen.width, Screen.height);
         }
 
+        /// <summary>
+        /// 独立浮层把当前 GUI.Window 的客户区覆盖到这里。默认空 = UMM/屏幕
+        /// 原有裁剪，不做任何额外假设；浮层退出时清空。
+        /// </summary>
+        internal static Rect? ViewportOverride;
+
+        internal static Rect CurrentViewport => ViewportOverride ?? Viewport();
+
         private static PropertyInfo _guiClipProp;
         private static bool _guiClipProbed;
 
@@ -945,7 +1233,7 @@ namespace SpectreReplay.Ui
             }
 
             Ensure();
-            Rect view = Viewport();
+            Rect view = CurrentViewport;
             // **宽度仍由常量给上限**（跟着内容走会让长说明撑满整行），
             // 只是再夹到可视区内：窗口窄于 320+边距时，写死的宽度会顶出
             // 右缘——与"位置越界"是同一个坏结果，只是原因在宽度。

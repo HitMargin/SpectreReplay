@@ -10,8 +10,6 @@ namespace SpectreReplay.Ui
     /// **为什么需要它。** UMM 把设置页交给我们时，皮肤里的 button / slider / box
     /// 全是 Unity 默认那套方角贴图（UMM 的 ScaleGUI 只改它们的 padding / fixedHeight，
     /// 从不换贴图），所以光靠改颜色永远做不出圆角——圆角必须由贴图本身带。
-    /// 参考 ADOFAIMacro 的 Material 3 观感（**只参考思路，未复制其代码**：
-    /// 那份是 AGPL-3.0，本项目无 LICENSE，抄代码会有许可问题）。
     ///
     /// **两个关键取舍：**
     ///
@@ -122,6 +120,133 @@ namespace SpectreReplay.Ui
             tex.Apply(false, false);
             return tex;
         }
+
+        // ── 立体面：浮起面板 / 凹陷槽 / 窗口投影 ───────────────────
+
+        /// <summary>
+        /// 圆角矩形的有符号距离：内部为负、边上 0、外部为正。
+        /// 中心对称（size 为边长，radius 为圆角半径），用于立体贴图的逐像素
+        /// 覆盖率与阴影计算——和 <see cref="Build"/> 逐角算不一样，SDF 一次
+        /// 算完四个角 + 四条边，Panel3D 的阴影/高光都要靠它。
+        /// </summary>
+        private static float RoundSdf(float x, float y, float size, float r)
+        {
+            float h = size / 2f;
+            float qx = Math.Abs(x - h) - (h - r);
+            float qy = Math.Abs(y - h) - (h - r);
+            float ox = Math.Max(qx, 0f), oy = Math.Max(qy, 0f);
+            return (float)Math.Sqrt(ox * ox + oy * oy)
+                + Math.Min(Math.Max(qx, qy), 0f) - r;
+        }
+
+        private static Texture2D NewTex(int w, int h)
+        {
+            return new Texture2D(w, h, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave,
+            };
+        }
+
+        /// <summary>
+        /// 浮起面板：填充 + 上/下渐变描边 + 顶边内侧 1px 高光 + 往下 offY
+        /// 偏移的柔影（阴影画进贴图 pad 区，用 9-slice 的 overflow 呈现）。
+        /// 这是"层次感"的主体：窗口里的每张卡浮在页面上，而不是一块平涂色。
+        /// </summary>
+        internal static Texture2D Panel3D(Color fill, Color borderTop, Color borderBottom,
+            Color highlight, int r, int pad, float shadowA, int offY)
+        {
+            highlight.a *= 0.35f;
+            shadowA *= 0.45f;
+            int inner = r * 2 + 8, size = inner + pad * 2;
+            var t = NewTex(size, size);
+            var px = new Color[size * size];
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float fx = x + 0.5f - pad, fy = y + 0.5f - pad;
+                    float d = RoundSdf(fx, fy, inner, r);
+                    float v = Mathf.Clamp01(fy / inner);      // 0 下 → 1 上
+                    var bg = Color.clear;
+                    if (pad > 0 && shadowA > 0f)
+                    {
+                        float ds = RoundSdf(fx, fy + offY, inner, r);
+                        float sh = Mathf.Clamp01(1f - Math.Max(0f, ds) / pad);
+                        bg = new Color(0f, 0f, 0f, sh * sh * sh * shadowA);
+                    }
+                    float cover = Mathf.Clamp01(0.5f - d);
+                    Color border = Color.Lerp(borderBottom, borderTop,
+                        Mathf.SmoothStep(0f, 1f, v));
+                    Color c = Color.Lerp(border, fill, Mathf.Clamp01(-d - 1f + 0.5f));
+                    // 顶边内侧 1px 高光：光从上方来。
+                    if (v > 0.5f && d < -1f && d > -2.2f)
+                    {
+                        float wgt = highlight.a * Mathf.Clamp01((v - 0.5f) * 2f);
+                        c = Color.Lerp(c, new Color(highlight.r, highlight.g, highlight.b, c.a), wgt);
+                    }
+                    float a = c.a * cover;
+                    float outA = a + bg.a * (1f - a);
+                    Color rgb = outA > 0f
+                        ? (c * a + bg * bg.a * (1f - a)) / outA
+                        : Color.clear;
+                    px[y * size + x] = new Color(rgb.r, rgb.g, rgb.b, outA);
+                }
+            t.SetPixels(px);
+            t.Apply(false, false);
+            return t;
+        }
+
+        /// <summary>
+        /// 凹陷槽：顶部内侧阴影 + 底唇 1px 微光 + 边缘细线。用于输入框、
+        /// 滑条轨道——"陷进去"的面与浮起的卡是同一套光的两个方向。
+        /// </summary>
+        internal static Texture2D Well3D(Color fill, int r)
+        {
+            int inner = r * 2 + 8, size = inner;
+            var t = NewTex(size, size);
+            var px = new Color[size * size];
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float fx = x + 0.5f, fy = y + 0.5f;
+                    float d = RoundSdf(fx, fy, inner, r);
+                    float cover = Mathf.Clamp01(0.5f - d);
+                    float fromTop = inner - fy, fromBottom = fy;
+                    Color c = fill;
+                    float shade = Mathf.Clamp01(1f - fromTop / 4f) * 0.18f;
+                    c = Color.Lerp(c, Color.black, shade);
+                    if (d > -1.2f) c = Color.Lerp(c, new Color(0.165f, 0.165f, 0.176f), 0.6f);
+                    if (fromBottom < 1.6f && d < -0.2f)
+                        c = Color.Lerp(c, Color.white, 0.02f);
+                    px[y * size + x] = new Color(c.r, c.g, c.b, fill.a * cover);
+                }
+            t.SetPixels(px);
+            t.Apply(false, false);
+            return t;
+        }
+
+        /// <summary>
+        /// 窗口投影：96x96 的圆角软阴影，模糊半径 34。画在窗口矩形**外面**
+        /// 一圈（左右各 34、上 22、下 48），窗口才不会像"贴在屏幕上的一张贴纸"。
+        /// </summary>
+        internal static Texture2D Shadow(int half = 48, int blur = 34)
+        {
+            int n = half * 2;
+            var t = NewTex(n, n);
+            var px = new Color[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float d = RoundSdf(x + 0.5f, y + 0.5f, n, blur + 8) + blur;
+                    float a = Mathf.Clamp01(1f - d / blur);
+                    px[y * n + x] = new Color(0f, 0f, 0f, a * a * 0.38f);
+                }
+            t.SetPixels(px);
+            t.Apply(false, false);
+            return t;
+        }
+
 
         /// <summary>
         /// 像素落在哪个圆角区域里；是圆角则输出该角的圆心。

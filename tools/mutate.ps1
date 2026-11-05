@@ -824,6 +824,71 @@ switch ($Which) {
         Backup 'Features\VideoRender\Pipeline\VideoRender.cs'
         ReplaceExact 'Features\VideoRender\Pipeline\VideoRender.cs' ('        if (!VideoEncoder.VerifyEncoder(encoderPath))') ('        if (false)')
     }
+    'MUT-U82' {
+        # ⑬c2：圆角卡底退回方角贴图——现代 IMGUI 的圆角判据必须变红。
+        Backup 'Ui\Gui.cs'
+        ReplaceExact 'Ui\Gui.cs' ('_pad.normal.background = RoundedTex.Get(20, 20, 10, CardBg);') ('_pad.normal.background = RoundedTex.Get(2, 2, 0, CardBg);')
+    }
+    'MUT-U83' {
+        # ⑬c5：独立窗口改成复制另一套页面绘制入口——复用判据必须变红。
+        Backup 'Ui\ModernSettingsWindow.cs'
+        ReplaceExact 'Ui\ModernSettingsWindow.cs' 'OnGui.DrawPanel(false)' 'OnGui.DrawModernPage(false)'
+    }
+    'MUT-U84' {
+        # ⑬c3：删掉窗口拖动提交——独立窗口位置持久化判据必须变红。
+        Backup 'Ui\ModernSettingsWindow.cs'
+        ReplaceExact 'Ui\ModernSettingsWindow.cs' '                Settings.CommitSafe();' '                // mutated'
+    }
+    'MUT-U85' {
+        # ⑬c6：说明退回裁剪样式——GUILayout 动态行高判据必须变红。
+        Backup 'Ui\OnGui.cs'
+        ReplaceExact 'Ui\OnGui.cs' 'GUILayout.Label(desc, Gui.ModernDescStyle, GUILayout.ExpandWidth(true));' 'GUILayout.Label(desc, Gui.LabelStyle, GUILayout.ExpandWidth(true));'
+    }
+    'MUT-U86' {
+        # ⑬c7：现代模式重新画 Section 标题——重复标题判据必须变红。
+        Backup 'Ui\Gui.cs'
+        ReplaceExact 'Ui\Gui.cs' 'if (!ModernMode)' 'if (true)'
+    }
+    'MUT-U87' {
+        # ⑬c8：窗口焦点态退回原皮肤——选中发亮判据必须变红。
+        Backup 'Ui\ModernSettingsWindow.cs'
+        ReplaceExact 'Ui\ModernSettingsWindow.cs' '_style.focused.background = bg;' '_style.focused.background = null;'
+    }
+    'MUT-U88' {
+        # ⑬c5：现代页签过滤层外又画一遍页面——重叠显示判据必须变红。
+        Backup 'Ui\OnGui.cs'
+        ReplaceExact 'Ui\OnGui.cs' 'Pages.Pages.FlushPending();' 'DrawPage(); Pages.Pages.FlushPending();'
+    }
+    'MUT-U89' {
+        # ⑬c10：背景不再抓游戏相机——节流玻璃更新判据必须变红。
+        Backup 'Ui\ModernSettingsWindow.cs'
+        ReplaceExact 'Ui\ModernSettingsWindow.cs' 'if (!TryCaptureScene(out full))' 'if (TryCaptureScene(out full))'
+    }
+    'MUT-U90' {
+        # ⑬c4：一级页签下划线瞬移——滑动动画判据必须变红。
+        Backup 'Ui\ModernSettingsWindow.cs'
+        ReplaceExact 'Ui\ModernSettingsWindow.cs' '_tabRailX = Mathf.Lerp(_tabRailX, selX, k);' '_tabRailX = selX;'
+    }
+    'MUT-U91' {
+        # 5d：KeyViewer 的 Menu 兜底去掉探测——先探测 SkyHook 判据必须变红。
+        Backup 'Features\Replay\Runtime\KeyViewerBridge.cs'
+        ReplaceExact 'Features\Replay\Runtime\KeyViewerBridge.cs' ('if (code == KeyCode.Menu && SkyHook.SkyHookKeyMapper.UnityKeyToSkyHookKey(code)') ('if (code == KeyCode.Menu && true')
+    }
+    'MUT-U92' {
+        # 5e：托管输入的 Menu 兜底去掉探测——先探测判据必须变红。
+        Backup 'Features\Replay\Runtime\ManagedInput.cs'
+        ReplaceExact 'Features\Replay\Runtime\ManagedInput.cs' ('if (k == KeyCode.Menu && SkyHook.SkyHookKeyMapper.UnityKeyToSkyHookKey(k)') ('if (k == KeyCode.Menu && true')
+    }
+    'MUT-U93' {
+        # ⑬c11：关闭动画期间重新铺输入挡板——热键关窗后鼠标失效判据必须变红。
+        Backup 'Ui\ModernSettingsWindow.cs'
+        ReplaceExact 'Ui\ModernSettingsWindow.cs' ('bool blockWindowInput = !_closing;') ('bool blockWindowInput = true;')
+    }
+    'MUT-U94' {
+        # ⑬c12：删掉 Toast 的左下锚点——新增位置判据必须变红。
+        Backup 'Ui\Toast.cs'
+        ReplaceExact 'Ui\Toast.cs' ('                    case 5: x = 20f; ty = sh - 18f - th; dir = -1f; enter = new Vector2(-24f, 0f); break;') ('                    // mutated')
+    }
     'MUT-U25' {
         # ⑫i：把已删除的「界面语言跟随游戏」开关加回来（防回归变异）。
         #      用单引号字符串拼出双引号，避免在 here-string 外层写转义。
@@ -2200,7 +2265,7 @@ switch ($Which) {
         ReplaceExact 'Pages\Pages.cs' 'DrawDeleteFileButton(captured);' ''
     }
     default {
-        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U81）"
+        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U94）"
     }
 }
 

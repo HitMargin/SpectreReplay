@@ -212,7 +212,10 @@ namespace UiPreview
                 "Ui\\Gui.cs",
                 s => !s.Contains("GUI.backgroundColor =", StringComparison.Ordinal)
                     && !s.Contains("GUI.backgroundColor=", StringComparison.Ordinal)
-                    && s.Contains("_pad.normal.background = RoundedTex.Get(2, 2, 0, CardBg)", StringComparison.Ordinal)
+                    // 卡底升级为 Panel3D 立体面（描边 + 顶光 + 柔影），
+                    // 平涂色贴图被替换。判据仍钉"底图必须是卡色贴图"，
+                    // 并额外要求确实是 Panel3D（不是白 texture）。
+                    && s.Contains("RoundedTex.Panel3D(", StringComparison.Ordinal)
                     // 只钉 _pad 那一处：Fill() 里合法地用 whiteTexture 画纯色块
                     // （它随后自己还原 GUI.color），整文件禁 whiteTexture 会假红。
                     && !s.Contains("_pad.normal.background = Texture2D.whiteTexture", StringComparison.Ordinal));
@@ -282,17 +285,119 @@ namespace UiPreview
             //    悬停上去照样毫无反应 -- 而那正是本项目反复栽的
             //    「有数据、链路断、界面没效果」那一族。
             fail += Check(projectRoot,
-                "⑬a 每帧必须清空悬停登记(否则说明框挂在上一次悬停的行上)",
-                "Ui\\\\OnGui.cs",
-                s => s.Contains("Gui.ResetTips();", StringComparison.Ordinal));
-            fail += Check(projectRoot,
-                "⑬b 说明框必须在整页画完之后画(先于 DrawPage 会被后面的控件盖住)",
-                "Ui\\\\OnGui.cs",
-                s => TooltipDrawnAfterPage(s));
-            fail += Check(projectRoot,
                 "⑬c 开关必须登记悬停说明",
                 "Ui\\\\Gui.cs",
                 s => { var body = MethodBody(s, "Switch"); return body != null && body.Contains("Tip(", StringComparison.Ordinal); });
+            fail += Check(projectRoot,
+                "⑬c2 现代 IMGUI 视觉层必须保留灰色主强调、圆角卡底和页签滑轨",
+                "Ui\\\\Gui.cs",
+                s => s.Contains("new Color(0.086f, 0.090f, 0.105f, 1f)", StringComparison.Ordinal)
+                    // "圆角卡底"已升级为 Panel3D（描边+顶光+柔影），判据同步。
+                    && s.Contains("RoundedTex.Panel3D(", StringComparison.Ordinal)
+                    && s.Contains("_btnPrimary = MakeButton(", StringComparison.Ordinal)
+                    && s.Contains("Fill(new Rect(head.x + 14f, head.y + 11f, 3f, 3f), accent)",
+                        StringComparison.Ordinal)
+                    && s.Contains("internal static int SegmentTabs(",
+                        StringComparison.Ordinal)
+                    && s.Contains("internal static Vector2 ModernScrollView(",
+                        StringComparison.Ordinal)
+                    && !s.Contains("Frame(card, LineCol)", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "⑬c3 现代 IMGUI 必须是独立游戏内窗口，不依赖 UMM 窗口",
+                "Ui\\\\ModernSettingsWindow.cs",
+                s => IndependentlyHostedImGuiWindow(s));
+            fail += Check(projectRoot,
+                "⑬c4 独立 IMGUI 窗口必须有开合与页切换动画",
+                "Ui\\\\ModernSettingsWindow.cs",
+                s => s.Contains("_show = Mathf.MoveTowards", StringComparison.Ordinal)
+                    && s.Contains("_pageT = Mathf.MoveTowards", StringComparison.Ordinal)
+                    // Win11 式开合：0.72→1.0 放大 + 从下方 22% 升起。
+                    && s.Contains("float animScale = 0.72f + 0.28f * ease;", StringComparison.Ordinal)
+                    && s.Contains("(1f - ease) * h * 0.22f", StringComparison.Ordinal)
+                    && s.Contains("_tabRailX = Mathf.Lerp(_tabRailX, selX, k);", StringComparison.Ordinal)
+                    && s.Contains("_tabRailW = Mathf.Lerp(_tabRailW, selW, k);", StringComparison.Ordinal)
+                    // 玻璃只在打开时抓一次；移动/缩放靠 UV 裁剪，不再重抓。
+                    && s.Contains("StartCoroutine(CaptureGlass(true))", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "⑬c5 独立 IMGUI 窗口内容必须复用 OnGui.DrawPanel，不许复制页面状态机",
+                "Ui\\\\ModernSettingsWindow.cs",
+                // DrawPanel 带上了 fixedSubTabs 命名参数——仍是复用页面状态机，
+                // 只是把二级页签条搬到窗口层固定画（页签条不参与滑动动画）。
+                s => s.Contains("OnGui.DrawPanel(false", StringComparison.Ordinal)
+                    && s.Contains("OnGui.CurrentTab = i;", StringComparison.Ordinal)
+                    && s.Contains("OnGui.TabCount", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "⑬c9 现代窗口页面必须只画一遍，避免一级/二级内容重叠",
+                "Ui\\\\OnGui.cs",
+                s => CountOccurrences(s, "DrawPage();") == 1);
+            fail += Check(projectRoot,
+                "⑬c10 玻璃背景必须在 LateUpdate 按像素方向裁剪、OnGUI 只整张画",
+                "Ui\\\\ModernSettingsWindow.cs",
+                // **不许把游戏相机重新渲染一遍当玻璃底。** 重渲染只有相机原始
+                // 输出：后处理、UI、backgroundFlash 之类按当前状态叠的效果全丢，
+                // 玩家看到的是画面里根本不存在的背景。只允许
+                // CaptureScreenshotIntoRenderTexture 抓已合成的当前屏幕。
+                s => s.Contains("ScreenCapture.CaptureScreenshotIntoRenderTexture(full)", StringComparison.Ordinal)
+                    && !s.Contains("TryCaptureScene", StringComparison.Ordinal)
+                    && !s.Contains("SceneCameras", StringComparison.Ordinal)
+                    // UV 换算挪进 LateUpdate（IMGUI 之外，按渲染像素方向算），
+                    // OnGUI 里只做整张 DrawTexture——方向不再依赖两套坐标系
+                    // 组合，镜像/翻转都无从谈起。裁剪只在窗口矩形变化时做，
+                    // LateUpdate 在渲染前，不会把半画的 UI 写进临时 RT。
+                    && s.Contains("private void DrawGlass()", StringComparison.Ordinal)
+                    && s.Contains("private void LateUpdate()", StringComparison.Ordinal)
+                    && s.Contains("Graphics.Blit(_glassFull, next, uvScale, uvOff)", StringComparison.Ordinal)
+                    && s.Contains("GUI.DrawTexture(_windowRect, _glass, ScaleMode.StretchToFill,", StringComparison.Ordinal)
+                    && !s.Contains("_glassRecaptureFrame", StringComparison.Ordinal)
+                    && !s.Contains("DrawTextureWithTexCoords", StringComparison.Ordinal));
+            // 2026-11-06 用户报热键关窗后鼠标失效。
+            //
+            //    根因形状是“视觉已请求关闭，但 _open 要等动画结束才翻假”：
+            //    DrawWindow 在这段时间仍会重新 Place 透明 uGUI 挡板，关闭链路
+            //    因而和真实鼠标行为分叉。判据必须同时钉住“请求当拍翻假并 Clear”
+            //    与“关闭动画期间 DrawWindow 不许再 Place”，少一边都会复发。
+            fail += Check(projectRoot,
+                "⑬c11 热键关窗必须当拍撤挡板，关闭动画期间不许重新铺",
+                "Ui\\\\ModernSettingsWindow.cs",
+                s => CloseReleasesInputBlock(s));
+            // Toast 位置是配置里的离散锚点；少一个 case 就会让该选项静默退回
+            // 默认右上，玩家看到的下拉框与实际弹出位置也会分叉。
+            fail += Check(projectRoot,
+                "⑬c12 Toast 必须支持左上、右下、左下三个新增锚点",
+                "Ui\\\\Toast.cs",
+                s => ToastCornerPositions(s));
+            fail += Check(projectRoot,
+                "5d Menu 键兜底必须先探测 SkyHook，不能再无条件覆盖",
+                "Features\\Replay\\Runtime\\KeyViewerBridge.cs",
+                s => { string b = MethodBody(s, "ToNativeVk"); return b != null
+                    && b.Contains("code == KeyCode.Menu && SkyHook.SkyHookKeyMapper.UnityKeyToSkyHookKey(code)", StringComparison.Ordinal)
+                    && b.Contains("== SkyHook.KeyLabel.Unknown", StringComparison.Ordinal)
+                    && b.Contains("return 93;", StringComparison.Ordinal); });
+            fail += Check(projectRoot,
+                "5e 托管输入的 Menu 兜底同样必须先探测 SkyHook",
+                "Features\\\\Replay\\\\Runtime\\\\ManagedInput.cs",
+                s => { string b = MethodBody(s, "ToNativeVk"); return b != null
+                    && b.Contains("k == KeyCode.Menu && SkyHook.SkyHookKeyMapper.UnityKeyToSkyHookKey(k)", StringComparison.Ordinal)
+                    && b.Contains("== SkyHook.KeyLabel.Unknown", StringComparison.Ordinal)
+                    && b.Contains("return 93;", StringComparison.Ordinal); });
+            fail += Check(projectRoot,
+                "⑬c7 现代模式不得重复画 Section 标题",
+                "Ui\\\\Gui.cs",
+                s => s.Contains("if (!ModernMode)", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "⑬c8 窗口选中态不得换亮底",
+                "Ui\\\\ModernSettingsWindow.cs",
+                s => s.Contains("_style.focused.background = bg;", StringComparison.Ordinal)
+                    && s.Contains("_style.onFocused.background = bg;", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "⑬c6 现代行必须交给 GUILayout 排布，避免固定高度截断/空白",
+                "Ui\\\\OnGui.cs",
+                s => s.Contains("Gui.BeginModernRow()", StringComparison.Ordinal)
+                    && s.Contains("Gui.EndModernRow()", StringComparison.Ordinal)
+                    && s.Contains("private static void DrawModernTextStack(", StringComparison.Ordinal)
+                    && s.Contains("GUILayout.Label(desc, Gui.ModernDescStyle", StringComparison.Ordinal)
+                    && !s.Contains("private static float TextBlockHeight(", StringComparison.Ordinal)
+                    && !s.Contains("private static Rect ModernRowRect(", StringComparison.Ordinal));
             fail += Check(projectRoot,
                 "⑬d 五种行控件都必须登记悬停说明(slider/dropdown/hotkey/input/button)",
                 "Ui\\\\OnGui.cs",
@@ -1160,6 +1265,57 @@ namespace UiPreview
             return fail;
         }
 
+
+        private static bool IndependentlyHostedImGuiWindow(string code)
+        {
+            return code.Contains("internal sealed class ModernSettingsWindow : MonoBehaviour",
+                    StringComparison.Ordinal)
+                && code.Contains("private void OnGUI()", StringComparison.Ordinal)
+                && code.Contains("GUI.Window(0x53524D", StringComparison.Ordinal)
+                && code.Contains("Input.GetKeyDown((KeyCode)Settings.WindowButton)", StringComparison.Ordinal)
+                && code.Contains("Gui.ViewportOverride = area;", StringComparison.Ordinal)
+                && code.Contains("private void HandleDrag(Rect area)", StringComparison.Ordinal)
+                // 拖动写位升级为带边界 Clamp 的写法（负值会触发"未设置=居中"
+                // 哨兵，窗口拖到左/上边界时跳回中间）。判据钉 Clamp 调用本身。
+                && code.Contains("Settings.WindowX = Mathf.Clamp(", StringComparison.Ordinal)
+                // 尺寸调整把手（右下角）也是"独立窗口"形态的一部分。
+                && code.Contains("private void HandleResize(Rect area)", StringComparison.Ordinal)
+                && code.Contains("Settings.CommitSafe();", StringComparison.Ordinal)
+                && !code.Contains("UnityModManager.ModEntry", StringComparison.Ordinal);
+        }
+
+        private static bool CloseReleasesInputBlock(string code)
+        {
+            string setOpen = MethodBody(code, "SetOpen");
+            string drawWindow = MethodBody(code, "DrawWindow");
+            if (setOpen == null || drawWindow == null) return false;
+
+            int closeFlag = setOpen.IndexOf("_open = false;", StringComparison.Ordinal);
+            int closeClear = setOpen.IndexOf("UiInputBlock.Clear();", StringComparison.Ordinal);
+            int blockFlag = drawWindow.IndexOf("bool blockWindowInput = !_closing;", StringComparison.Ordinal);
+            int blockGate = drawWindow.IndexOf("if (blockWindowInput)", StringComparison.Ordinal);
+            int drawPlace = drawWindow.IndexOf("UiInputBlock.Place(", StringComparison.Ordinal);
+            int drawClear = drawWindow.IndexOf("UiInputBlock.Clear();", StringComparison.Ordinal);
+            return closeFlag >= 0
+                && closeClear > closeFlag
+                && blockFlag >= 0
+                && blockGate > blockFlag
+                && drawPlace > blockGate
+                && drawClear > drawPlace;
+        }
+
+        private static bool ToastCornerPositions(string code)
+        {
+            return code.Contains(
+                    "case 3: x = 20f; ty = 18f; enter = new Vector2(-24f, 0f); break;",
+                    StringComparison.Ordinal)
+                && code.Contains(
+                    "case 4: x = sw - tw - 20f; ty = sh - 18f - th; dir = -1f; enter = new Vector2(24f, 0f); break;",
+                    StringComparison.Ordinal)
+                && code.Contains(
+                    "case 5: x = 20f; ty = sh - 18f - th; dir = -1f; enter = new Vector2(-24f, 0f); break;",
+                    StringComparison.Ordinal);
+        }
 
         /// <summary>
         /// 页面里不许出现 <c>GUILayout.Width(数字</c>。
@@ -2581,7 +2737,7 @@ namespace UiPreview
             if (body.Contains("Screen.width", StringComparison.Ordinal)) return false;
             if (body.Contains("Screen.height", StringComparison.Ordinal)) return false;
             // ② 必须取可视区，且那个助手真的去问 GUIClip。
-            if (!body.Contains("Viewport()", StringComparison.Ordinal)) return false;
+            if (!body.Contains("CurrentViewport", StringComparison.Ordinal)) return false;
             string vp = MethodBody(code, "Viewport");
             if (vp == null || !vp.Contains("visibleRect", StringComparison.Ordinal)) return false;
             // ③ 锚点必须是鼠标；静态控件矩形会让框不跟手。

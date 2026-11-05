@@ -95,6 +95,11 @@ public static class ConfigManager
     private class IntsData
     {
         public int selected_tab { get; set; }
+        public int window_button { get; set; }
+        public float window_x { get; set; }
+        public float window_y { get; set; }
+        public float window_w { get; set; }
+        public float window_h { get; set; }
         public int save_button { get; set; }
         public int cancel_save_button { get; set; }
         public int KeybdSoundVolume { get; set; }
@@ -117,6 +122,7 @@ public static class ConfigManager
         public int render_stop_key { get; set; }
         /// <summary>提示条停留秒数（见 Settings.NotificationSeconds）。</summary>
         public float notification_seconds { get; set; }
+        public int notification_pos { get; set; }
     }
 
     private class StringsData
@@ -227,6 +233,11 @@ public static class ConfigManager
             Ints = new IntsData
             {
                 selected_tab = 0,
+                window_button = Settings.WindowButton,
+                window_x = Settings.WindowX,
+                window_y = Settings.WindowY,
+                window_w = Settings.WindowWOverride,
+                window_h = Settings.WindowHOverride,
                 save_button = Settings.SaveButton,
                 cancel_save_button = Settings.CancelSaveButton,
                 KeybdSoundVolume = Settings.KeybdSoundVolume,
@@ -247,6 +258,7 @@ public static class ConfigManager
                 render_stop_on = Settings.RenderStopOn,
                 render_stop_key = Settings.RenderStopKey,
                 notification_seconds = Settings.NotificationSeconds,
+                notification_pos = Settings.NotificationPos,
             },
             Strings = new StringsData
             {
@@ -529,6 +541,12 @@ public static class ConfigManager
                     // 记住上次停留的页签（越界时回首页，防页签数量变化后指错）
                     /* selected_tab 由新 UI 维护，此处不再持久化 */
                     Settings.SaveButton = ints.Value<int?>("save_button") ?? Settings.SaveButton;
+                    Settings.WindowButton = ints.Value<int?>("window_button")
+                        ?? Settings.WindowButton;
+                    Settings.WindowX = ints.Value<float?>("window_x") ?? Settings.WindowX;
+                    Settings.WindowY = ints.Value<float?>("window_y") ?? Settings.WindowY;
+                    Settings.WindowWOverride = ints.Value<float?>("window_w") ?? Settings.WindowWOverride;
+                    Settings.WindowHOverride = ints.Value<float?>("window_h") ?? Settings.WindowHOverride;
                     Settings.CancelSaveButton = ints.Value<int?>("cancel_save_button") ?? Settings.CancelSaveButton;
                     Settings.KeybdSoundVolume = ints.Value<int?>("KeybdSoundVolume") ?? Settings.KeybdSoundVolume;
                     Settings.MicrophoneOffset = ints.Value<int?>("MicrophoneOffset") ?? Settings.MicrophoneOffset;
@@ -553,6 +571,8 @@ public static class ConfigManager
                     // Clamp 到某个区间反而会把手改配置里的怪值悄悄改成另一个**看似正常**的键。
                     Settings.RenderStopKey = ints.Value<int?>("render_stop_key") ?? Settings.RenderStopKey;
                     Settings.NotificationSeconds = Mathf.Clamp(ints.Value<float?>("notification_seconds") ?? Settings.NotificationSeconds, 1f, 10f);
+                    // 0-5 对应 Toast.Pos 的六个锚点；追加新位置时同步扩展上界。
+                    Settings.NotificationPos = Mathf.Clamp(ints.Value<int?>("notification_pos") ?? Settings.NotificationPos, 0, 5);
                 }
             }
             catch (Exception ex)

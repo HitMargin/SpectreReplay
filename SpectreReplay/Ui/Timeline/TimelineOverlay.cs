@@ -27,21 +27,31 @@ internal sealed class TimelineOverlay : MonoBehaviour
     private const float RowGap = 2f;
 
     // ── 配色 ──────────────────────────────────────────────────
-    private static readonly Color PanelColor      = new(0.10f, 0.11f, 0.13f, 0.94f);
-    private static readonly Color PanelBorderColor = new(1f, 1f, 1f, 0.08f);
+    // 颜色全部改用 Gui 的调色板：时间轴是浮在游戏上的第二块界面，
+    // 它和独立设置窗口出现在同一屏时，两套蓝/灰各说各话就是玩家说的
+    // "没有对齐颜色"。这里只做映射，不再自造色值。
+    private static readonly Color PanelColor      = WithAlpha(Gui.CardBg, 0.94f);
+    private static readonly Color PanelBorderColor = Gui.LineCol;
     private static readonly Color TrackColor       = new(1f, 1f, 1f, 0.06f);
     private static readonly Color TrackHoverColor  = new(1f, 1f, 1f, 0.11f);
-    private static readonly Color ProgressColor    = new(0.35f, 0.72f, 1f, 0.30f);
-    private static readonly Color SelectionColor   = new(0.30f, 0.65f, 1f, 0.14f);
-    private static readonly Color SelBorderColor   = new(0.35f, 0.72f, 1f, 0.50f);
-    private static readonly Color HandleColor      = new(0.40f, 0.78f, 1f, 0.90f);
-    private static readonly Color HandleHoverColor = new(0.60f, 0.88f, 1f, 1f);
-    private static readonly Color PlayheadColor    = new(1f, 0.85f, 0.28f, 0.95f);
-    private static readonly Color MarkerColor      = new(0.55f, 0.80f, 1f, 0.55f);
-    private static readonly Color TickColor        = new(1f, 1f, 1f, 0.12f);
-    private static readonly Color TextPrimary      = new(0.92f, 0.94f, 0.96f, 0.95f);
-    private static readonly Color TextSecondary    = new(0.55f, 0.60f, 0.68f, 0.80f);
-    private static readonly Color TextAccent       = new(0.45f, 0.80f, 1f, 0.95f);
+    // 进度/选区走中性的 Accent 灰（原先的蓝 0.35,0.72,1 与设置窗口无关）。
+    private static readonly Color ProgressColor    = WithAlpha(Gui.Accent, 0.22f);
+    private static readonly Color SelectionColor   = WithAlpha(Gui.Accent, 0.10f);
+    private static readonly Color SelBorderColor   = WithAlpha(Gui.Accent, 0.45f);
+    private static readonly Color HandleColor      = WithAlpha(Gui.Accent, 0.90f);
+    private static readonly Color HandleHoverColor = Gui.TextCol;
+    // 播放头用设置窗口的警告橙：醒目但不是自造色。
+    private static readonly Color PlayheadColor    = Gui.WarnCol;
+    private static readonly Color MarkerColor      = WithAlpha(Gui.Accent, 0.55f);
+    private static readonly Color TickColor        = Gui.LineCol;
+    private static readonly Color TextPrimary      = Gui.TextCol;
+    private static readonly Color TextSecondary    = Gui.DimCol;
+    // 时间数字：不再用自造蓝，改强调白——与窗口里主数值一致。
+    private static readonly Color TextAccent       = Gui.TextCol;
+
+    /// <summary>只改 alpha，保留调色板 RGB。</summary>
+    private static Color WithAlpha(Color c, float a)
+        => new Color(c.r, c.g, c.b, a);
 
     private static TimelineOverlay _instance;
 
@@ -113,8 +123,14 @@ internal sealed class TimelineOverlay : MonoBehaviour
 
     private void Build()
     {
-        _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (_font == null) _font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+        // 字体优先 Segoe UI（和 Windows 下设置窗口看到的字形一致），
+        // 失败才退 Unity 内置字体。
+        // 之前用 LegacyRuntime.ttf，字形与 IMGUI 那边明显不是一款。
+        try { _font = Font.CreateDynamicFontFromOSFont(
+            new[] { "Segoe UI", "Microsoft YaHei", "Malgun Gothic", "Arial" }, 16); }
+        catch { _font = null; }
+        if (_font == null) _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (_font == null) _font = GUI.skin.font;
 
         _canvas = gameObject.AddComponent<Canvas>();
         _canvas.renderMode = RenderMode.ScreenSpaceOverlay;

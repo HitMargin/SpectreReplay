@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using SpectreReplay.Features.Cloud;
@@ -156,6 +157,27 @@ namespace SpectreReplay.Pages
         }
 
         /// <summary>
+        /// 判定档位的短摘要。
+        ///
+        /// 详情面板按“两列 × 两行”排版，逐档信息不适合再塞进 KeyValue 网格；
+        /// 这里把非零档位压成一行，未知分布显式写「无」，不伪造 0。
+        /// </summary>
+        private static string JudgmentText(ReplayFileInfo info)
+        {
+            if (info.JudgmentCounts == null)
+                return Loc.T("playback.info.judgments") + ": " + Loc.T("playback.info.na");
+            var parts = new List<string>();
+            for (int row = 0; row < ReplayFileInfo.JudgmentRowCount; row++)
+            {
+                if (!info.JudgmentRow(row, out string key, out int count) || count <= 0)
+                    continue;
+                parts.Add(Loc.F(key, count));
+            }
+            return Loc.T("playback.info.judgments") + ": "
+                + (parts.Count == 0 ? Loc.T("playback.info.na") : string.Join("  ", parts));
+        }
+
+        /// <summary>
         /// 云端条目的详情数据，带缓存。
         ///
         /// <para>缓存键用 <see cref="CloudKey"/>，时间戳兼作「内容变了没」的戳记：云端
@@ -281,11 +303,16 @@ namespace SpectreReplay.Pages
         }
 
         /// <summary>
-        /// 判定分布：只画计数 &gt; 0 的桶，一格一个「名字 数字」。
+        /// 判定分布：游戏结算同款配色 + 一格一个"名字 数字"。
         ///
-        /// **不画全 16 桶。**16 个里一局通常只命中 5～8 种，剩下那排 0 会把
+        /// <para>颜色照抄游戏结算面板（RDConstants.data.hitMarginColoursUI +
+        /// ColourSchemeHitMargin.SelectByHitMargin），跟玩家游玩时看到的
+        /// Perfect/Early/Late 一色不差——旧 3.3.1 版没有 XPerfect 枚举成员时
+        /// 由 HitMarginCompat.TryResolve 返回 false 自动跳过该桶，不崩不画 0。</para>
+        ///
+        /// <para>**不画全 16 桶。**16 个里一局通常只命中 5～8 种，剩下那排 0 会把
         /// 真正要看的那几个稀释掉；而「这个版本没有这个判定」和「这局没出现」
-        /// 又会画成一模一样。只画非零 = 这一排就是这一局的分布本身。
+        /// 又会画成一模一样。只画非零 = 这一排就是这一局的分布本身。</para>
         /// </summary>
         private static void DrawJudgments(ReplayFileInfo info)
         {
@@ -296,9 +323,10 @@ namespace SpectreReplay.Pages
                 GUILayout.Width(Gui.LabelWNarrow));
             for (int row = 0; row < ReplayFileInfo.JudgmentRowCount; row++)
             {
-                if (!info.JudgmentRow(row, out string key, out int count)) continue;
+                if (!info.JudgmentRowVisual(row, out string key, out int count,
+                        out Color tone)) continue;
                 if (any) GUILayout.Space(6f);
-                GUILayout.Label(Loc.F(key, count), Gui.SmallStyle, GUILayout.ExpandWidth(false));
+                Gui.JudgmentChip(Loc.F(key, count), tone);
                 any = true;
             }
             if (!any)

@@ -34,6 +34,31 @@
   "zh": "录制时按下按键即可。回放文件保存在下方「回放目录」所示的文件夹里。",
   "en": "Keys pressed while playing are captured. Replays are saved in the folder shown under \"Replay folder\" below."
  },
+{
+  "key": "subtab.record.basics",
+  "zh": "录制设置",
+  "en": "Recording"
+},
+{
+  "key": "subtab.render.start",
+  "zh": "渲染",
+  "en": "Render"
+},
+{
+  "key": "subtab.render.output",
+  "zh": "输出",
+  "en": "Output"
+},
+{
+  "key": "subtab.render.experimental",
+  "zh": "实验项",
+  "en": "Experimental"
+},
+{
+  "key": "subtab.about.info",
+  "zh": "信息",
+  "en": "Info"
+},
  {
   "key": "record.howto",
   "zh": "① 在这里设好参数（快捷键：Ctrl+F10 打开本窗口）② 进关卡正常玩，按键会被记下来 ③ 通关后自动存成回放文件 ④ 在「回放」页载入，或在「视频渲染」页出片。",
@@ -44,6 +69,16 @@
   "zh": "快捷键",
   "en": "Hotkeys"
  },
+{
+  "key": "ui.windowkey",
+  "zh": "打开独立设置窗口",
+  "en": "Open standalone settings"
+},
+{
+  "key": "ui.windowkey.tip",
+  "zh": "按一下再按任意键，把它改成不会和游玩按键冲突的键。设置窗口内的 Esc 只关闭窗口。",
+  "en": "Click, then press any key to bind a key that does not clash with gameplay. Esc inside the window only closes it."
+},
  {
   "key": "record.savekey",
   "zh": "保存回放",
@@ -214,6 +249,11 @@
   "zh": "Ctrl+F10 开关界面 · ESC 关闭",
   "en": "Ctrl+F10 opens this panel · ESC closes"
  },
+{
+  "key": "ui.modern.hint",
+  "zh": "{0} 开关独立设置 · Esc 关闭",
+  "en": "{0} opens/closes standalone settings · Esc closes"
+},
  {
   "key": "playback.current",
   "zh": "当前",
@@ -819,6 +859,46 @@
   "zh": "屏幕底部提示条自动收起的秒数。默认 3 秒；警告与需要读两行的提示会自动多留 2 秒，并跟着这个值一起变长。",
   "en": "Seconds before the message at the bottom of the screen hides itself. Default 3 s; warnings and two-line messages get 2 extra seconds automatically and grow with this value."
  },
+ {
+  "key": "about.notif.pos",
+  "zh": "提示条出现位置",
+  "en": "Toast position"
+ },
+ {
+  "key": "about.notif.pos.tip",
+ "zh": "提示卡在屏幕上的锚点。右上、左上适合边看画面边瞄一眼；顶部/底部中央更醒目，左右下角适合避开中央内容。",
+ "en": "Where the toast anchors on screen. Top corners stay out of the way; centred positions are more eye-catching, and the bottom corners avoid central content."
+ },
+ {
+  "key": "about.notif.pos.tr",
+  "zh": "右上",
+  "en": "Top right"
+ },
+ {
+  "key": "about.notif.pos.tc",
+  "zh": "顶部中央",
+  "en": "Top centre"
+ },
+ {
+  "key": "about.notif.pos.bc",
+  "zh": "底部中央",
+  "en": "Bottom centre"
+ },
+{
+ "key": "about.notif.pos.tl",
+ "zh": "左上",
+ "en": "Top left"
+},
+{
+ "key": "about.notif.pos.br",
+ "zh": "右下",
+ "en": "Bottom right"
+},
+{
+ "key": "about.notif.pos.bl",
+ "zh": "左下",
+ "en": "Bottom left"
+},
  {
   "key": "about.engine",
   "zh": "回放引擎",

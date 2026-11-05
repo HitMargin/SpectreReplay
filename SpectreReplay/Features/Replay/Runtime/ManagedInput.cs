@@ -293,6 +293,13 @@ internal static class ManagedInput
     /// </summary>
     private static int ToNativeVk(KeyCode k)
     {
+        // SkyHook 的 KeyLabel 目前没有 Menu/VK_APPS；Unity 的 KeyCode.Menu 又是
+        // 276。不在这里补映射的话，查询会落到 Held[276]，而录制数据在 93。
+        // **只在 SkyHook 仍缺 Menu 时兜底**：未来引擎补上该键后，
+        // UnityKeyToSkyHookKey 能正常映射，这段就自动失效。
+        if (k == KeyCode.Menu && SkyHook.SkyHookKeyMapper.UnityKeyToSkyHookKey(k)
+            == SkyHook.KeyLabel.Unknown)
+            return 93;
         try
         {
             SkyHook.KeyLabel label = SkyHook.SkyHookKeyMapper.UnityKeyToSkyHookKey(k);

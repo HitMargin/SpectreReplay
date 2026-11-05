@@ -8,7 +8,7 @@ namespace SpectreReplay.Ui.Timeline;
 /// <summary>
 /// 运行时生成圆角矩形贴图（4x 超采样 + 抗锯齿边），
 /// 配合 Image.type=Sliced 九宫格拉伸，替代默认的方角 Image。
-/// 参考 StutterFix.UiDraw.RoundSprite 的实现方式。
+/// 程序化生成圆角矩形 Sprite，供时间轴的 uGUI 元素使用。
 /// </summary>
 internal static class RoundedSprite
 {
@@ -16,7 +16,7 @@ internal static class RoundedSprite
     private static readonly Dictionary<int, Sprite> _outline = new();
     private const int Supersample = 4;
 
-    /// <summary>获取圆角填充矩形 Sprite。key = 半径 × 2（与 StutterFix 一致）。</summary>
+    /// <summary>获取圆角填充矩形 Sprite。key = 半径 × 2。</summary>
     internal static Sprite Fill(int radiusKey)
     {
         if (!_fill.TryGetValue(radiusKey, out var s) || s == null)

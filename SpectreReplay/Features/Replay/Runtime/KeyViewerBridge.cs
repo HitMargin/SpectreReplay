@@ -144,6 +144,12 @@ internal static class KeyViewerBridge
     /// <summary>KeyCode → 原生虚拟键码（**不查重映射表**）；无法换算时返回 0。</summary>
     private static ushort ToNativeVk(KeyCode code)
     {
+        // KeyViewer 用 Unity KeyCode 查询。Menu 键在 SkyHook KeyLabel 里目前缺失，
+        // 但真实钩子/回放数据使用 Win32 VK_APPS=93；不补映射会显示成没按。
+        // 只在 SkyHook 仍返回 Unknown 时兜底；引擎将来加上 Menu 后自动走原生路径。
+        if (code == KeyCode.Menu && SkyHook.SkyHookKeyMapper.UnityKeyToSkyHookKey(code)
+            == SkyHook.KeyLabel.Unknown)
+            return 93;
         try
         {
             SkyHook.KeyLabel label = SkyHook.SkyHookKeyMapper.UnityKeyToSkyHookKey(code);

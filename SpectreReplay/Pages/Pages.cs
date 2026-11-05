@@ -122,8 +122,9 @@ namespace SpectreReplay.Pages
         {
             Gui.Section("page.record", Gui.Accent, () =>
             {
-                OnGui.Note("record.howto");
-                Gui.Divider();
+                // 独立窗口把总开关移到最上方；UMM 旧入口保留原顺序。
+                if (!Gui.ModernMode) OnGui.Note("record.howto");
+                if (!Gui.ModernMode) Gui.Divider();
                 OnGui.Row("record.recording", ReplayOn, v => { ReplayOn = v; Commit(); });
                 OnGui.Row("record.autosave", AutoSave, v => { AutoSave = v; Commit(); }, ReplayOn);
                 // 保存策略七项：**每一项都真的在控制回放什么时候落盘**
@@ -163,6 +164,10 @@ namespace SpectreReplay.Pages
             Gui.Section("record.hotkeys", Gui.Accent, () =>
             {
                 // 按任意键改键：等待期间 Esc 取消并独占 Esc（见 OnGui.RowHotkey）。
+                // 独立设置窗口的开关键也在这里：它不是 UMM 的固定入口，必须
+                // 可改，否则会和 Insert 系按键/其他模组冲突。
+                OnGui.RowHotkey("ui.windowkey", () => Settings.WindowButton,
+                    k => { Settings.WindowButton = k; Commit(); });
                 // 这两个键是**手动存这一局**的入口——没有它，练到一半的短局
                 // 只能等通关自动保存，等于存不下来。
                 //
@@ -410,11 +415,12 @@ namespace SpectreReplay.Pages
             // 准备了一个查不出来的坑。
             //
             // 真要停止注入，用 ReplayOn 总开关——它连补丁一起卸，语义干净。
-            Gui.Section("playback.current", Gui.OkCol, () => DrawPlaybackState());
-
-            // 时间轴开关：隐藏/显示屏幕底部的时间轴面板。
-            OnGui.Row("timeline.enable", Settings.TimelineOn,
-                v => { Settings.TimelineOn = v; Commit(); });
+            Gui.Section("playback.current", Gui.OkCol, () =>
+            {
+                DrawPlaybackState();
+                OnGui.Row("timeline.enable", Settings.TimelineOn,
+                    v => { Settings.TimelineOn = v; Commit(); });
+            });
 
             var files = ReplayList();
             Gui.Section("playback.files", Gui.Accent, () =>
@@ -455,7 +461,7 @@ namespace SpectreReplay.Pages
                         // 上面的搜索框兜——它把「找某一份」的成本降到打几个字。
                         string captured = path;
                         bool loaded = string.Equals(path, _loadedPath, StringComparison.OrdinalIgnoreCase);
-                        GUILayout.BeginHorizontal();
+                        GUILayout.BeginHorizontal(GUILayout.Height(30f));
                         if (loaded)
                         {
                             string loadedBadge = Loc.T("playback.loaded");
@@ -468,13 +474,13 @@ namespace SpectreReplay.Pages
                         Gui.ClickableLabel(Path.GetFileNameWithoutExtension(path),
                             loaded || ReplayInfoPanel.IsOpen(captured),
                             "playback.info.tip",
-                            () => ReplayInfoPanel.Toggle(captured));
+                            () => ReplayInfoPanel.Toggle(captured), 30f);
                         // 宽度按文案实测：写死常量在英文/西语下会把字裁掉
                         // （Gui.ButtonW 的注释里记了那次事故）。
                         string replayLabel = Loc.T("playback.replay");
                         if (GUILayout.Button(replayLabel, Gui.ButtonStyle,
                                 GUILayout.Width(Gui.ButtonW(replayLabel, Gui.ButtonStyle, 110f)),
-                                GUILayout.Height(22f)))
+                                GUILayout.Height(26f)))
                         {
                             LoadReplayFile(captured);
                         }
@@ -487,6 +493,7 @@ namespace SpectreReplay.Pages
                         // 视觉权重；用 QuietButtonStyle 与「卸载回放」同一档。
                         DrawDeleteFileButton(captured);
                         GUILayout.EndHorizontal();
+                        if (Gui.ModernMode) GUILayout.Space(4f);
 
                         // 详情就地展开在这一行正下方（点文件名切换）。
                         if (ReplayInfoPanel.IsOpen(captured))
@@ -1101,7 +1108,17 @@ namespace SpectreReplay.Pages
                 return;
             }
 
-            GUILayout.Label(Loc.T("playback.idle"), Gui.NoteStyle, GUILayout.ExpandWidth(true));
+            if (Gui.ModernMode)
+            {
+                Rect r = GUILayoutUtility.GetRect(1f, 44f, GUILayout.ExpandWidth(true),
+                    GUILayout.Height(44f));
+                GUI.Label(new Rect(r.x + Gui.ModernRowPadX, r.y, r.width - Gui.ModernRowPadX * 2f,
+                    r.height), Loc.T("playback.idle"), Gui.ModernDescStyle);
+            }
+            else
+            {
+                GUILayout.Label(Loc.T("playback.idle"), Gui.NoteStyle, GUILayout.ExpandWidth(true));
+            }
         }
 
         /// <summary>
@@ -1655,7 +1672,7 @@ namespace SpectreReplay.Pages
             // 这些参数一个都不会被读到——留着可调等于让玩家白设一遍。
             // 用 Dim 包一整块而不是逐行加参数：这里二十多个控件，逐行写既啰嗦
             // 又容易漏一个，而漏的那一个正好会变成"整块都灰、只有它亮着"。
-            Gui.Section("render.options", Gui.Accent, () => Gui.Dim(!RenderOn, DrawRenderOptions));
+            Gui.Dim(!RenderOn, DrawRenderOptions);
 
             // 转换已有视频放在最后：它是"渲染完再做的事"，与渲染参数不是一类。
             DrawConvertSection();
@@ -1740,71 +1757,59 @@ namespace SpectreReplay.Pages
         /// </summary>
         private static void DrawRenderOptions()
         {
-            // 宽/高只对「纯净相机」有意义：游戏画面模式的分辨率跟随窗口，
-            // 置灰不如**不显示**——留两个调了没反应的滑条，正是本项目反复
-            // 栽过的「有界面但改不了」。上游同样在该模式下用说明替换掉这组控件
-            // （SpectreUiPages.Features.cs:716-722）。
-            if (RenderCaptureMode != 1)
+            Gui.Section("render.options", Gui.Accent, () =>
             {
-                OnGui.RowSlider("render.width", RenderWidth, 320f, 7680f,
-                    v => ((int)v) + " px", v => { RenderWidth = (int)v; Commit(); });
-                OnGui.RowSlider("render.height", RenderHeight, 240f, 4320f,
-                    v => ((int)v) + " px", v => { RenderHeight = (int)v; Commit(); });
-            }
-            OnGui.RowSlider("render.fps", RenderFps, 15f, 480f,
-                v => ((int)v) + " fps", v => { RenderFps = (int)v; Commit(); });
-            OnGui.RowSlider("render.tail", RenderTailSeconds, 0f, 15f,
-                v => v.ToString("0.#") + " s", v => { RenderTailSeconds = v; Commit(); });
-            // 渲染途中按快捷键提前结束：对应 **Settings.RenderStopOn / RenderStopKey**。
-            // 紧跟在「结尾秒数」之后：这两项描述的是同一件事——这段渲染到哪儿为止。
-            // 快捷键那一行跟着上一项置灰：关掉之后那个键整个不被消费（补丁不挂），
-            // 还让玩家去改一个永远不生效的键没有意义。RowHotkey 内部会按
-            // `!enabled || Gui.IsDim` 拦掉点击与扫键——Gui.Dim 本身只染色，
-            // 拦不住内建 GUI.Button，所以这里不能只靠外层包一层。
-            OnGui.Row("render.stop.enable", RenderStopOn,
-                v => { RenderStopOn = v; Commit(); });
-            OnGui.RowHotkey("render.stop.key", () => RenderStopKey,
-                k => { RenderStopKey = k; Commit(); }, RenderStopOn);
-            if (RenderStopOn)
-                OnGui.Note("render.stop.hint");
-            OnGui.RowDropdown("render.surface", new[]
+                if (RenderCaptureMode != 1)
+                {
+                    OnGui.RowSlider("render.width", RenderWidth, 320f, 7680f,
+                        v => ((int)v) + " px", v => { RenderWidth = (int)v; Commit(); });
+                    OnGui.RowSlider("render.height", RenderHeight, 240f, 4320f,
+                        v => ((int)v) + " px", v => { RenderHeight = (int)v; Commit(); });
+                }
+                OnGui.RowSlider("render.fps", RenderFps, 15f, 480f,
+                    v => ((int)v) + " fps", v => { RenderFps = (int)v; Commit(); });
+                OnGui.RowSlider("render.tail", RenderTailSeconds, 0f, 15f,
+                    v => v.ToString("0.#") + " s", v => { RenderTailSeconds = v; Commit(); });
+                OnGui.Row("render.stop.enable", RenderStopOn,
+                    v => { RenderStopOn = v; Commit(); });
+                OnGui.RowHotkey("render.stop.key", () => RenderStopKey,
+                    k => { RenderStopKey = k; Commit(); }, RenderStopOn);
+                if (RenderStopOn)
+                    OnGui.Note("render.stop.hint");
+                OnGui.RowDropdown("render.surface", new[]
+                {
+                    Loc.T("render.surface.clean"), Loc.T("render.surface.screen"),
+                }, RenderCaptureMode, i => { RenderCaptureMode = i; Commit(); });
+                OnGui.Note(RenderCaptureMode == 1
+                    ? "render.surface.screen_note" : "render.surface.clean_note");
+                OnGui.Row("render.cursor", RenderCursorOn,
+                    v => { RenderCursorOn = v; Commit(); });
+            }, RenderOn);
+
+            Gui.Section("render.codec", Gui.Accent, () =>
             {
-                Loc.T("render.surface.clean"), Loc.T("render.surface.screen"),
-            }, RenderCaptureMode, i => { RenderCaptureMode = i; Commit(); });
-            // 两种画面源的取舍差异很大（要不要 UI、分辨率能不能超采样），
-            // 只给两个下拉项说不出这些——照上游在选中项下面补一句说明。
-            // 两个键都写在源码里（三元表达式），LocCheck 才能都核到。
-            OnGui.Note(RenderCaptureMode == 1
-                ? "render.surface.screen_note" : "render.surface.clean_note");
-            // 鼠标指针开关：对应 **Settings.RenderCursorOn**。
-            // 放在画面来源之后，因为它描述的是"成片里有什么"，与分辨率/帧率无关。
-            // 游戏本身不把指针画进 backbuffer（Cursor.visible 只是藏/显硬件光标），
-            // 所以打开时由 CursorOverlay 在像素层画一个上去。
-            OnGui.Row("render.cursor", RenderCursorOn,
-                v => { RenderCursorOn = v; Commit(); });
-            OnGui.RowDropdown("render.codec", new[]
+                OnGui.RowDropdown("render.codec", new[]
+                {
+                    Loc.T("render.codec.auto"), Loc.T("render.codec.fastest"),
+                    Loc.T("render.codec.quality"), Loc.T("render.codec.cpu"),
+                }, RenderEncoderMode, i => { RenderEncoderMode = i; Commit(); });
+                OnGui.RowDropdown("render.quality", new[]
+                {
+                    Loc.T("render.quality.low"), Loc.T("render.quality.standard"),
+                    Loc.T("render.quality.high"), Loc.T("render.quality.extreme"),
+                }, RenderQualityMode, i => { RenderQualityMode = i; Commit(); });
+                OnGui.RowDropdown("render.format", new[] { "mp4", "mkv", "webm", "mov" },
+                    RenderOutputFormat, i => { RenderOutputFormat = i; Commit(); });
+                OnGui.RowInput("render.outdir");
+                DrawEncoderNote();
+            }, RenderOn);
+
+            Gui.Section("render.clock.experimental", Gui.WarnCol, () =>
             {
-                Loc.T("render.codec.auto"), Loc.T("render.codec.fastest"),
-                Loc.T("render.codec.quality"), Loc.T("render.codec.cpu"),
-            }, RenderEncoderMode, i => { RenderEncoderMode = i; Commit(); });
-            OnGui.RowDropdown("render.quality", new[]
-            {
-                Loc.T("render.quality.low"), Loc.T("render.quality.standard"),
-                Loc.T("render.quality.high"), Loc.T("render.quality.extreme"),
-            }, RenderQualityMode, i => { RenderQualityMode = i; Commit(); });
-            // 格式名（mp4/mkv/webm/mov）保持原样：那是实际的文件格式，
-            // 翻译了反而对不上。索引与 VideoEncoder.OutContainer 一一对应。
-            OnGui.RowDropdown("render.format", new[] { "mp4", "mkv", "webm", "mov" },
-                RenderOutputFormat, i => { RenderOutputFormat = i; Commit(); });
-            OnGui.RowInput("render.outdir");
-            DrawEncoderNote();
-            // ── 实验性：确定性渲染时钟 ──────────────────────────────
-            // 放在最後、并明确标"实验性"：它动的是游戏的时间源本身，影响面比
-            // 其余选项都大，不该混在常规选项里让人顺手就开。
-            Gui.Divider();
-            OnGui.Row("render.clock.experimental", RenderClockOn,
-                v => { RenderClockOn = v; Commit(); });
-            OnGui.Note("render.clock.hint");
+                OnGui.Row("render.clock.experimental", RenderClockOn,
+                    v => { RenderClockOn = v; Commit(); });
+                OnGui.Note("render.clock.hint");
+            }, RenderOn);
         }
 
         /// <summary>
@@ -2098,10 +2103,25 @@ namespace SpectreReplay.Pages
                 OnGui.RowSlider("about.notif.seconds", NotificationSeconds, 1f, 10f,
                     v => v.ToString("0.#") + " s",
                     v => { NotificationSeconds = Mathf.Round(v * 10f) / 10f; Commit(); });
+                // 提示卡出现位置：保留旧三项索引，再追加左上 / 右下 / 左下。
+                OnGui.RowDropdown("about.notif.pos", new[]
+                {
+                    Loc.T("about.notif.pos.tr"),
+                    Loc.T("about.notif.pos.tc"),
+                    Loc.T("about.notif.pos.bc"),
+                    Loc.T("about.notif.pos.tl"),
+                    Loc.T("about.notif.pos.br"),
+                    Loc.T("about.notif.pos.bl"),
+                }, Settings.NotificationPos, v =>
+                {
+                    Settings.NotificationPos = v;
+                    Ui.Toast.Pos = v;
+                    Commit();
+                });
                 Gui.Divider();
                 Gui.KeyValue("about.version", VersionText(), Gui.TextCol);
                 Gui.KeyValue("about.engine", Loc.T("about.engine.value"), Gui.DimCol);
-                Gui.KeyValue("about.path", SaveDirText(), Gui.DimCol);
+                Gui.KeyValue("about.path", BreakPathForDisplay(SaveDirText()), Gui.DimCol);
                 Gui.Divider();
                 DrawUpdateRow();
 
@@ -2326,6 +2346,12 @@ namespace SpectreReplay.Pages
             }
         }
 
+        private static string BreakPathForDisplay(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return s;
+            return s.Replace("\\", "\\\u200b").Replace("/", "/\u200b");
+        }
+
         /// <summary>把过长的路径折成「头…尾」，保证单行显示得完。</summary>
         private static string ClipMiddle(string s, int max)
         {
@@ -2375,15 +2401,40 @@ namespace SpectreReplay.Pages
         }
         private static void DrawSaveDirRow()
         {
+            if (Gui.ModernMode)
+            {
+                Gui.BeginModernRow();
+                GUILayout.BeginHorizontal();
+                GUILayout.BeginVertical();
+                GUILayout.Label(Loc.T("record.savedir"), Gui.ModernTitleStyle,
+                    GUILayout.ExpandWidth(true));
+                GUILayout.Label(BreakPathForDisplay(SaveDirText()), Gui.ModernDescStyle,
+                    GUILayout.ExpandWidth(true));
+                GUILayout.EndVertical();
+                GUILayout.FlexibleSpace();
+                string dirLabel = Loc.T("record.changedir");
+                if (GUILayout.Button(dirLabel, Gui.ButtonStyle,
+                        GUILayout.Width(Gui.ButtonW(dirLabel, Gui.ButtonStyle, 90f)),
+                        GUILayout.Height(28f)))
+                {
+                    if (is_recording) Status.Warn("record.savedir.busy");
+                    else _pickSaveDirPending = true;
+                }
+                GUILayout.EndHorizontal();
+                Gui.EndModernRow();
+                DrawPickSaveDirDeferred();
+                return;
+            }
+
             GUILayout.BeginHorizontal();
             GUILayout.Label(Loc.T("record.savedir"), Gui.LabelStyle, GUILayout.Width(Gui.LabelW));
             // 路径可能很长（换到别的盘之后尤其），中段省略：盘符/开头与目录名/
             // 结尾是玩家用来确认"是不是我选的那个"的两端，尾巴省略反而认不出。
-            GUILayout.Label(ClipMiddle(SaveDirText(), 46), Gui.LabelStyle,
+            GUILayout.Label(BreakPathForDisplay(SaveDirText()), Gui.LabelStyle,
                 GUILayout.ExpandWidth(true));
-            string dirLabel = Loc.T("record.changedir");
-            if (GUILayout.Button(dirLabel, Gui.ButtonStyle,
-                    GUILayout.Width(Gui.ButtonW(dirLabel, Gui.ButtonStyle, 90f)),
+            string legacyDirLabel = Loc.T("record.changedir");
+            if (GUILayout.Button(legacyDirLabel, Gui.ButtonStyle,
+                    GUILayout.Width(Gui.ButtonW(legacyDirLabel, Gui.ButtonStyle, 90f)),
                     GUILayout.Height(22f)))
             {
                 // **录制中不许改。** 本局键盘音写在**旧**目录的 tmp.wav 里，而保存时
@@ -2401,7 +2452,11 @@ namespace SpectreReplay.Pages
             }
             GUILayout.FlexibleSpace();
             GUILayout.EndHorizontal();
+            DrawPickSaveDirDeferred();
+        }
 
+        private static void DrawPickSaveDirDeferred()
+        {
             if (!_pickSaveDirPending)
             {
                 return;

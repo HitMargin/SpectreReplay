@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using UnityEngine;
 using K = SpectreReplay.Features.Replay.ReplayKeys;
 
 namespace SpectreReplay.Features.Replay;
@@ -306,6 +307,75 @@ internal sealed class ReplayFileInfo
             return false;
         localeKey = JudgmentLocaleKeys[row];
         return true;
+    }
+
+    /// <summary>
+    /// 带结算面板颜色的版本（给 <c>ReplayInfoPanel.DrawJudgments</c> 用）。
+    ///
+    /// <para>颜色取自 <c>RDConstants.data.hitMarginColoursUI</c>（游戏自己的
+    /// 结算面板配色）。取不到（老版本字段改名、常量未初始化等）时退到
+    /// 本项目的静态配色——玩家看到的仍然是"Perfect 绿 / 失败红"这套共识色，
+    /// 不会糊成一片白。</para>
+    ///
+    /// <para>**3.3.1 兼容**：旧版没有 XPerfect / PerfectPlus / PerfectMinus /
+    /// Midspin / FailedFloor 这些成员，TryResolve 返回 false，对应桶自动跳过
+    /// （与 <see cref="JudgmentRow"/> 同一套逻辑）。老回放里的判定数据按旧
+    /// 枚举顺序存（Perfect=3 就是旧 Perfect），新代码读到的索引在
+    /// HitMarginCompat 按名解析下自动对上本版语义，不需要转换。</para>
+    /// </summary>
+    internal bool JudgmentRowVisual(int row, out string localeKey, out int count,
+        out Color tone)
+    {
+        tone = Color.white;
+        if (!JudgmentRow(row, out localeKey, out count)) return false;
+        tone = JudgmentTone(JudgmentNames[row]);
+        return true;
+    }
+
+    /// <summary>档位 → 结算面板颜色（取不到时退到本项目共识色）。</summary>
+    internal static Color JudgmentTone(string name)
+    {
+        try
+        {
+            var scheme = RDConstants.data?.hitMarginColoursUI;
+            if (scheme != null
+                && SpectreReplay.Features.Compat.HitMarginCompat.TryResolve(name, out var margin))
+            {
+                return scheme.SelectByHitMargin(margin);
+            }
+        }
+        catch
+        {
+            // 常量未初始化 / 字段缺失：走下面的静态兜底。结算配色是锦上添花，
+            // 不能让分布行整个消失。
+        }
+
+        // 本项目共识色（深底可读、按档位语义分组）。
+        switch (name)
+        {
+            case "XPerfect":
+            case "PerfectMinus":
+            case "PerfectPlus":
+            case "EarlyPerfect":
+            case "LatePerfect":
+                return new Color(0.30f, 0.78f, 0.42f);   // 完美系：绿
+            case "VeryEarly":
+            case "VeryLate":
+                return new Color(0.95f, 0.75f, 0.25f);   // 偏差大：黄
+            case "TooEarly":
+            case "TooLate":
+                return new Color(0.90f, 0.45f, 0.20f);   // 偏差更大：橙
+            case "FailMiss":
+            case "FailOverload":
+            case "FailedFloor":
+                return new Color(0.92f, 0.30f, 0.30f);   // 失败：红
+            case "Midspin":
+            case "Multipress":
+            case "Auto":
+                return new Color(0.45f, 0.55f, 0.95f);   // 特殊：蓝
+            default:
+                return new Color(0.70f, 0.72f, 0.78f);   // 兜底：灰白
+        }
     }
 
 }

@@ -78,6 +78,12 @@ public static class Settings
     public static float NotificationSeconds = 3f;
 
     /// <summary>
+    /// 提示卡出现位置：0=右上，1=顶部中央，2=底部中央，3=左上，4=右下，5=左下。
+    /// 改入口在「关于」页，和提示时长同一组。
+    /// </summary>
+    public static int NotificationPos = 0;
+
+    /// <summary>
     /// 提示条时长解析：基础值 + <paramref name="extra"/> 秒。
     ///
     /// 用"基础 + 差量"而不是给每个调用点留一个绝对秒数：玩家把基础调成 6 秒时，
@@ -87,6 +93,20 @@ public static class Settings
     internal static float NotificationDuration(float extra = 0f)
         => Mathf.Clamp(NotificationSeconds + extra, 0.5f, 30f);
 
+    /// <summary>
+    /// 独立设置窗口的开关键（默认 Insert）。**不写死别的键**：玩家可能用 Insert
+    /// 绑定游玩按键或与其他模组冲突，所以它必须像保存键/中止渲染键一样可改。
+    /// </summary>
+    public static int WindowButton = 277;
+
+    // 独立设置窗口的屏幕位置（-1 = 尚未手动拖动，使用居中默认值）。
+    // 用设置文件而不是 PlayerPrefs，保证卸载/换机器时仍可恢复。
+    public static float WindowX = -1f;
+    public static float WindowY = -1f;
+    // 独立设置窗口的自定义尺寸（0 = 未调整，用默认 WindowW/H）。
+    // 与 WindowX/Y 同一套持久化通道（Configs.json），不落盘的调整没有意义。
+    public static float WindowWOverride = 0f;
+    public static float WindowHOverride = 0f;
     public static int SaveButton = 290;
     public static int CancelSaveButton = 291;
     public static int KeybdSoundVolume = 10;
@@ -300,6 +320,8 @@ public static class Settings
     internal static void check(string path = "")
     {
         SavePath = string.IsNullOrEmpty(SavePath) ? path : SavePath;
+        // 提示卡锚点跟配置同步（ConfigManager 只读进 Settings，绘制侧读 Toast.Pos）。
+        Ui.Toast.Pos = NotificationPos;
         CurrLanguage = string.IsNullOrEmpty(CurrLanguage) ? LocalizationManager.GetLangCode(RDString.language) : CurrLanguage;
         if (string.IsNullOrEmpty(MicrophoneDeviceName))
             MicrophoneDeviceName = Microphone.devices.Length != 0 ? Microphone.devices[0] : "None";

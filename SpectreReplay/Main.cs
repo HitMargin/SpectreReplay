@@ -27,8 +27,10 @@ namespace SpectreReplay
                 Settings.check(modEntry.Path);
                 WavLoader.reset();
                 Ui.Timeline.TimelineOverlay.Ensure();
+                Ui.ModernSettingsWindow.Ensure();
 
-                modEntry.OnGUI = Ui.OnGui.OnGUI;
+                // UMM 的设置入口改成打开独立窗口，不再显示旧面板。
+                modEntry.OnGUI = Ui.OnGui.OnUmmOpen;
                 modEntry.OnShowGUI = Ui.OnGui.OnShow;
                 modEntry.OnHideGUI = Ui.OnGui.OnHide;
                 modEntry.OnSaveGUI = Ui.OnGui.OnSave;
@@ -97,6 +99,7 @@ namespace SpectreReplay
                 MainThread.Uninstall();
                 AudioRecorder.StopAllMicrophones();
                 Ui.Timeline.TimelineOverlay.Destroy();
+                Ui.ModernSettingsWindow.Destroy();
                 Features.Replay.TimelineController.Clear();
                 return true;
             }

@@ -1,0 +1,39 @@
+  正在确定要还原的项目…
+  所有项目均是最新的，无法还原。
+D:\Projects\SpectreReplay\SpectreReplay\Ui\Settings\SettingsWindowUgui.cs(109,22): error CS0117: “OnGui”未包含“PollHotkeyCapture”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(220,21): error CS0117: “OnGui”未包含“CurrentHotkey”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(222,19): error CS0117: “OnGui”未包含“IsHotkeyCapturing”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(225,23): error CS0117: “OnGui”未包含“BeginHotkeyCapture”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(229,19): error CS0117: “OnGui”未包含“IsHotkeyCapturing”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(230,48): error CS0117: “OnGui”未包含“CurrentHotkey”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(232,21): error CS0117: “OnGui”未包含“CurrentHotkey”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(235,19): error CS0117: “OnGui”未包含“BeginHotkeyCapture”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(239,19): error CS0117: “OnGui”未包含“IsHotkeyCapturing”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(240,48): error CS0117: “OnGui”未包含“CurrentHotkey”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(491,37): error CS0117: “ReplayInfoPanel”未包含“DrawUgui”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(604,37): error CS0117: “ReplayInfoPanel”未包含“DrawCloudUgui”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(744,32): error CS0117: “OnGui”未包含“IsHotkeyCapturing”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(748,23): error CS0117: “OnGui”未包含“BeginHotkeyCapture”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(762,55): error CS0117: “OnGui”未包含“PickOutputDirectory”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+
+生成失败。
+
+D:\Projects\SpectreReplay\SpectreReplay\Ui\Settings\SettingsWindowUgui.cs(109,22): error CS0117: “OnGui”未包含“PollHotkeyCapture”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(220,21): error CS0117: “OnGui”未包含“CurrentHotkey”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(222,19): error CS0117: “OnGui”未包含“IsHotkeyCapturing”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(225,23): error CS0117: “OnGui”未包含“BeginHotkeyCapture”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(229,19): error CS0117: “OnGui”未包含“IsHotkeyCapturing”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(230,48): error CS0117: “OnGui”未包含“CurrentHotkey”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(232,21): error CS0117: “OnGui”未包含“CurrentHotkey”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(235,19): error CS0117: “OnGui”未包含“BeginHotkeyCapture”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(239,19): error CS0117: “OnGui”未包含“IsHotkeyCapturing”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(240,48): error CS0117: “OnGui”未包含“CurrentHotkey”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(491,37): error CS0117: “ReplayInfoPanel”未包含“DrawUgui”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(604,37): error CS0117: “ReplayInfoPanel”未包含“DrawCloudUgui”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(744,32): error CS0117: “OnGui”未包含“IsHotkeyCapturing”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(748,23): error CS0117: “OnGui”未包含“BeginHotkeyCapture”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+D:\Projects\SpectreReplay\SpectreReplay\Pages\Pages.Ugui.cs(762,55): error CS0117: “OnGui”未包含“PickOutputDirectory”的定义 [D:\Projects\SpectreReplay\SpectreReplay\SpectreReplay.csproj]
+    0 个警告
+    15 个错误
+
+已用时间 00:00:02.35

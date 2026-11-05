@@ -50,6 +50,22 @@ namespace SpectreReplay.Ui
             "page.record", "page.playback", "page.render", "page.effects", "page.about",
         };
 
+        /// <summary>
+        /// 一级页签内部的长页分类。键全部复用现有文案，不再造第二套标题；
+        /// 独立窗口只显示选中的组，业务页面仍然只画一遍。
+        /// </summary>
+        private static readonly string[][] SubTabKeys =
+        {
+            new[] { "subtab.record.basics", "record.hotkeys", "record.keybd", "record.specialkeys", "record.keymap" },
+            new[] { "playback.current", "playback.files", "playback.cloud" },
+            new[] { "subtab.render.start", "subtab.render.output", "render.codec", "subtab.render.experimental", "convert.title" },
+            new[] { "effects.master", "effects.visual", "effects.decor", "effects.track",
+                "effects.planet", "effects.audio", "effects.gameplay" },
+            new[] { "subtab.about.info" },
+        };
+
+        private static readonly int[] _subSel = new int[5];
+
         /// <summary>标签页固定宽度：页名长短不一，按内容伸缩会让整排跳动。</summary>
         private const float TabW = 132f;
 
@@ -62,6 +78,18 @@ namespace SpectreReplay.Ui
         internal static void OnShow(ModEntry modEntry)
         {
             _visible = true;
+            _outDir.Text = Settings.RenderOutputDir ?? "";
+            _outDir.Editing = false;
+            _outDirLoaded = true;
+            Loc.RefreshLanguage();
+        }
+
+        /// <summary>
+        /// 独立浮层第一次打开时的初始化。与 <see cref="OnShow"/> 共用同一份草稿，
+        /// 但不设置 UMM 的 `_visible`：独立窗口不要求 UMM 面板同时打开。
+        /// </summary>
+        internal static void RefreshForModernWindow()
+        {
             _outDir.Text = Settings.RenderOutputDir ?? "";
             _outDir.Editing = false;
             _outDirLoaded = true;
@@ -122,6 +150,39 @@ namespace SpectreReplay.Ui
             {
                 return;
             }
+            DrawPanel(true);
+        }
+
+        /// <summary>
+        /// UMM 自身打开设置页时的入口。
+        ///
+        /// 用户要的是独立 IMGUI 窗口。UMM 的老窗口仍可能被管理器打开；
+        /// 这里把它改成一个明确入口，避免又显示旧布局，同时保留 UMM 的
+        /// OnHide/OnSave 生命周期。入口只在从关闭变为打开时触发一次。
+        /// </summary>
+        internal static void OnUmmOpen(ModEntry modEntry)
+        {
+            if (!_visible)
+            {
+                return;
+            }
+            ModernSettingsWindow.OpenFromUmm();
+        }
+
+        /// <summary>
+        /// 独立 IMGUI 浮层调用的同一套页面绘制入口。
+        ///
+        /// **不要再复制一份 DrawPage。** UMM 外框与游戏内独立浮层只是两个宿主：
+        /// 页签、设置字段、热键捕获、延迟提交都必须走同一条路径，否则一处改了
+        /// 另一处仍显示旧状态。调用方负责窗口底色、裁切和输入隔离。
+        /// </summary>
+        /// <summary>
+        /// <paramref name="fixedSubTabs"/>：二级页签条由外层（独立窗口）画过时，
+        /// 这里不再画——不然窗口层的滑动动画会把页签条一起平移+淡入，
+        /// 玩家看到"切个二级页整个页签条都在动"。
+        /// </summary>
+        internal static void DrawPanel(bool includeTabs = true, bool fixedSubTabs = false)
+        {
             Loc.RefreshLanguage();
             if (!_outDirLoaded)
             {
@@ -133,19 +194,49 @@ namespace SpectreReplay.Ui
             // 悬浮说明同理：控件在画的过程中只"登记"，鼠标移开必须当帧就清掉，
             // 否则说明框会挂在上一次悬停的那一行上（看着像卡住了）。
             Gui.ResetTips();
-            DrawHeader();
-            DrawPatchWarning();
-            DrawTabs();
-            GUILayout.Space(4f);
-            DrawPage();
-            // 说明框必须在**整页画完之后**画：它要盖在别的控件之上，
-            // 而且不能参与布局（否则会把下面的行往下顶，鼠标一动整页就跳）。
-            Gui.DrawTooltip();
-            GUILayout.Space(12f);
-            // 拖动滑条时落盘被推迟（见 Pages.Commit）。放在**画完**之后：
-            // 这时 Input.GetMouseButton(0) 反映的是本帧真实状态，松手那一帧
-            // 会走到这里把攒下的改动一次写清。
-            Pages.Pages.FlushPending();
+            if (includeTabs)
+            {
+                DrawHeader();
+                DrawPatchWarning();
+                DrawTabs();
+                GUILayout.Space(4f);
+            }
+            else
+            {
+                if (!fixedSubTabs)
+                {
+                    DrawPatchWarning();
+                    int sub = Gui.SegmentTabs(
+                        SubTabLabels(CurrentTab), CurrentSubTab, "subtab");
+                    SetSubTab(sub);
+                    GUILayout.Space(2f);
+                }
+            }
+            try
+            {
+                Gui.ModernMode = !includeTabs;
+                DrawPage();
+                // 说明框必须在**整页画完之后**画：它要盖在别的控件之上，
+                // 而且不能参与布局（否则会把下面的行往下顶，鼠标一动整页就跳）。
+                Gui.DrawTooltip();
+                GUILayout.Space(12f);
+                // 拖动滑条时落盘被推迟（见 Pages.Commit）。放在**画完**之后：
+                // 这时 Input.GetMouseButton(0) 反映的是本帧真实状态，松手那一帧
+                // 会走到这里把攒下的改动一次写清。
+                Pages.Pages.FlushPending();
+            }
+            finally
+            {
+                Gui.ModernMode = false;
+            }
+        }
+
+        private static string[] SubTabLabels(int page)
+        {
+            string[] keys = SubTabKeys[Mathf.Clamp(page, 0, TabKeys.Length - 1)];
+            var labels = new string[keys.Length];
+            for (int i = 0; i < keys.Length; i++) labels[i] = Loc.T(keys[i]);
+            return labels;
         }
 
         // ── 头部 ────────────────────────────────────────────────
@@ -188,7 +279,6 @@ namespace SpectreReplay.Ui
             }
             Gui.Header(Loc.Brand, Loc.Hint, status, color);
         }
-
         /// <summary>
         /// 补丁挂不上时在顶部说一次。
         ///
@@ -210,18 +300,87 @@ namespace SpectreReplay.Ui
             GUILayout.Space(4f);
         }
 
+        /// <summary>补丁挂载失败数（独立窗口的页签条也要画同一份警告）。</summary>
+        internal static int PatchFailuresPublic => PatchFailures;
+
+        /// <summary>给外层窗口用的二级页签键表（按一级页索引取）。</summary>
+        internal static string[] SubTabLabelsFor(int page)
+            => SubTabLabels(page);
+
         // ── 分页 ────────────────────────────────────────────────
+
+        internal static int TabCount => TabKeys.Length;
+
+        internal static string TabLabel(int index)
+            => index >= 0 && index < TabKeys.Length ? Loc.T(TabKeys[index]) : "";
+
+        internal static int CurrentSubTab
+            => Mathf.Clamp(_subSel[Mathf.Clamp(_tab, 0, TabKeys.Length - 1)], 0,
+                SubTabCount - 1);
+
+        internal static int SubTabCount
+            => SubTabKeys[Mathf.Clamp(_tab, 0, TabKeys.Length - 1)].Length;
+
+        internal static void SetSubTab(int index)
+        {
+            int page = Mathf.Clamp(_tab, 0, TabKeys.Length - 1);
+            _subSel[page] = Mathf.Clamp(index, 0, SubTabKeys[page].Length - 1);
+            _openRow = -1;
+        }
+
+        internal static bool IsModernSectionVisible(string key)
+        {
+            int page = Mathf.Clamp(_tab, 0, TabKeys.Length - 1);
+            int sub = _subSel[page];
+            if (page == 0)
+            {
+                if (sub == 0) return key == "page.record";
+                if (sub == 1) return key == "record.hotkeys";
+                if (sub == 2) return key == "record.keybd";
+                if (sub == 3) return key == "record.specialkeys";
+                if (sub == 4) return key == "record.keymap";
+                return key == "page.record";
+            }
+            if (page == 1 || page == 3)
+                return key == SubTabKeys[page][Mathf.Clamp(sub, 0, SubTabKeys[page].Length - 1)];
+            if (page == 2)
+            {
+                if (sub == 0)
+                    return key == "render.enable" || key == "render.start" || key == "render.cancel";
+                if (sub == 1)
+                    return key == "render.options";
+                if (sub == 3)
+                    return key == "render.clock.experimental";
+                return key == SubTabKeys[page][Mathf.Clamp(sub, 0, SubTabKeys[page].Length - 1)];
+            }
+            return true;
+        }
+
+        internal static int CurrentTab
+        {
+            get => _tab;
+            set
+            {
+                _tab = Mathf.Clamp(value, 0, TabKeys.Length - 1);
+                _openRow = -1;
+            }
+        }
+
+        internal static int CapturingTarget => _capturing;
+
+        internal static string CurrentHotkey(int value)
+            => value > 0 ? KeyName((KeyCode)value) : Loc.T("ui.nokey");
 
         private static void DrawTabs()
         {
-            GUILayout.Space(6f);
-            GUILayout.BeginHorizontal();
+            GUILayout.Space(8f);
+            GUILayout.BeginHorizontal(Gui.QuietButtonStyle);
             for (int i = 0; i < TabKeys.Length; i++)
             {
                 bool on = i == _tab;
                 if (GUILayout.Button(Loc.T(TabKeys[i]),
                         on ? Gui.AccentButtonStyle : Gui.QuietButtonStyle,
-                        GUILayout.Width(TabW), GUILayout.Height(28f)))
+                        GUILayout.Width(TabW), GUILayout.Height(26f)))
                 {
                     _tab = i;
                     // 换页时收起展开的下拉：否则旧页的下拉会挂在新页上，
@@ -258,6 +417,12 @@ namespace SpectreReplay.Ui
         // 不同语言下标签长度差很多，自动排布会让控件列左右跳动。
 
         internal const float LabelW = Gui.LabelW;
+        /// <summary>
+        /// 独立设置窗口控件列右对齐时，标签列实际可用宽度。
+        /// 旧 UMM 面板保留 190px；独立窗口没有右边按钮列，可缩短，
+        /// 但所有行仍走同一常量，语言一变也不会左右跳。
+        /// </summary>
+        private const float InlineLabelW = 156f;
 
         private static void RowGap()
         {
@@ -274,6 +439,29 @@ namespace SpectreReplay.Ui
         internal static void Row(string labelKey, bool value, Action<bool> onChange,
             bool enabled = true)
         {
+            if (Gui.ModernMode)
+            {
+                Gui.Dim(!enabled, () =>
+                {
+                    Gui.BeginModernRow();
+                    GUILayout.BeginHorizontal();
+                    GUILayout.BeginVertical();
+                    DrawModernTextStack(labelKey);
+                    GUILayout.EndVertical();
+                    GUILayout.Space(12f);
+                    Rect hitArea = GUILayoutUtility.GetRect(Gui.ModernSwitchW + 16f,
+                        Gui.ModernSwitchH + 12f, GUILayout.Width(Gui.ModernSwitchW + 16f),
+                        GUILayout.Height(Gui.ModernSwitchH + 12f));
+                    bool hit = !Gui.IsDim && GUI.Button(hitArea, GUIContent.none, GUIStyle.none);
+                    Rect track = new Rect(hitArea.x + 8f, hitArea.y + 6f,
+                        Gui.ModernSwitchW, Gui.ModernSwitchH);
+                    Gui.SwitchAt(labelKey, track, value, enabled);
+                    if (hit) onChange?.Invoke(!value);
+                    GUILayout.EndHorizontal();
+                    Gui.EndModernRow();
+                });
+                return;
+            }
             Gui.Dim(!enabled, () => Gui.Switch(labelKey, value, onChange));
             RowGap();
         }
@@ -282,24 +470,29 @@ namespace SpectreReplay.Ui
         internal static void RowSlider(string labelKey, float value, float min, float max,
             Func<float, string> fmt, Action<float> onChange, bool enabled = true)
         {
+            if (Gui.ModernMode)
+            {
+                ModernSlider(labelKey, value, min, max, fmt, onChange, enabled);
+                return;
+            }
             Gui.Dim(!enabled, () =>
             {
                 GUILayout.BeginHorizontal();
-                GUILayout.Label(Loc.T(labelKey), Gui.LabelStyle, GUILayout.Width(LabelW));
+                GUILayout.Label(Loc.T(labelKey), Gui.LabelStyle, GUILayout.Width(InlineLabelW));
                 // 自绘滑条：原生 HorizontalSlider 的贴图来自 GUI.skin.horizontalSlider，
                 // 而 UMM 只改它的 fixedHeight/border/padding/margin、**从不换贴图**，
                 // 所以它永远是 Unity 默认的圆头灰条（见 Gui.Slider 的说明）。
-                Rect track = GUILayoutUtility.GetRect(Gui.CtrlW, 20f,
-                    GUILayout.Width(Gui.CtrlW), GUILayout.Height(20f));
+                Rect track = GUILayoutUtility.GetRect(10f, 28f,
+                    GUILayout.ExpandWidth(true), GUILayout.Height(28f));
                 // 悬停说明覆盖「标签 + 滑条 + 数值框 + 单位」整行。玩家想被解释的是
                 // 这一项设置，不是那条 6px 高的槽；只认槽的话等于要求他先猜准位置。
                 // 右侧留 46+4 与下面单位区的宽度一致，改那边时别忘了这里。
-                Gui.Tip(new Rect(track.x - LabelW, track.y,
-                    LabelW + track.width + FieldW + 50f, track.height), labelKey);
+                Gui.Tip(new Rect(track.x - InlineLabelW, track.y,
+                    InlineLabelW + track.width + FieldW + 50f, track.height), labelKey);
                 float now = Gui.Slider(track, value, min, max);
                 float shown = Mathf.Approximately(now, value) ? value : now;
-                Rect field = GUILayoutUtility.GetRect(FieldW, 20f,
-                    GUILayout.Width(FieldW), GUILayout.Height(20f));
+                Rect field = GUILayoutUtility.GetRect(FieldW, 28f,
+                    GUILayout.Width(FieldW), GUILayout.Height(28f));
                 string full = fmt(shown);
                 string suffix = UnitOf(full);
                 if (suffix.Length > 0)
@@ -343,6 +536,68 @@ namespace SpectreReplay.Ui
                 }
             });
             RowGap();
+        }
+
+        private static void ModernSlider(string labelKey, float value, float min, float max,
+            Func<float, string> fmt, Action<float> onChange, bool enabled)
+        {
+            Gui.Dim(!enabled, () =>
+            {
+                Gui.BeginModernRow();
+                DrawModernTextStack(labelKey);
+                GUILayout.Space(6f);
+                GUILayout.BeginHorizontal();
+                GUILayout.Label(Loc.T(labelKey), Gui.ModernDescStyle,
+                    GUILayout.Width(Gui.ModernLabelW), GUILayout.Height(28f));
+                Rect track = GUILayoutUtility.GetRect(10f, 28f,
+                    GUILayout.ExpandWidth(true), GUILayout.Height(28f));
+                float now = Gui.Slider(track, value, min, max);
+                Rect field = GUILayoutUtility.GetRect(Gui.ModernValueW, 28f,
+                    GUILayout.Width(Gui.ModernValueW), GUILayout.Height(28f));
+                string shown = fmt(Mathf.Approximately(now, value) ? value : now);
+                TextField st = GetField(labelKey);
+                SyncField(st, NumberOf(shown));
+                bool canceled;
+                bool commit = st.Draw(field, Gui.LabelStyle, "", out canceled);
+                if (canceled) st.Text = NumberOf(shown);
+                else if (commit && TryParse(st.Text, out float typed))
+                {
+                    onChange?.Invoke(Mathf.Clamp(typed, min, max));
+                    return;
+                }
+                if (!Mathf.Approximately(now, value)) onChange?.Invoke(now);
+                GUILayout.EndHorizontal();
+                Gui.EndModernRow();
+            });
+        }
+
+        private static void DrawModernTextStack(string labelKey)
+        {
+            string desc = Loc.T(labelKey + ".tip");
+            if (string.IsNullOrEmpty(desc) || desc == labelKey + ".tip")
+            {
+                string note = Loc.T(NoteKeyFor(labelKey));
+                desc = note == NoteKeyFor(labelKey) ? "" : note;
+            }
+            GUILayout.Label(Loc.T(labelKey), Gui.ModernTitleStyle,
+                GUILayout.ExpandWidth(true));
+            if (!string.IsNullOrEmpty(desc))
+                GUILayout.Label(desc, Gui.ModernDescStyle, GUILayout.ExpandWidth(true));
+        }
+
+        private static string NoteKeyFor(string labelKey)
+        {
+            switch (labelKey)
+            {
+                case "page.record": return "record.howto";
+                case "effects.on": return "effects.on.note";
+                case "effects.enablesave": return "effects.enablesave.note";
+                case "effects.removealldecor": return "effects.decor.note";
+                case "effects.repeatevents": return "effects.gameplay.note";
+                case "convert.target": return "convert.hint";
+                case "about.notif.seconds": return "about.note";
+                default: return "";
+            }
         }
 
         /// <summary>数值框宽度。与原先只读 Label 的 90f 一致，列宽不变。</summary>
@@ -418,6 +673,42 @@ namespace SpectreReplay.Ui
         internal static void RowDropdown(string labelKey, string[] options, int current,
             Action<int> onChange)
         {
+            if (Gui.ModernMode)
+            {
+                Gui.BeginModernRow();
+                DrawModernTextStack(labelKey);
+                GUILayout.Space(6f);
+                GUILayout.BeginHorizontal();
+                string modernShown = current >= 0 && current < options.Length ? options[current] : "—";
+                if (GUILayout.Button(modernShown, Gui.ButtonStyle,
+                        GUILayout.Width(Gui.ModernDropdownW), GUILayout.Height(28f)))
+                    _openRow = _openRow == _openSeq ? -1 : _openSeq;
+                int modernSeq = _openSeq++;
+                GUILayout.FlexibleSpace();
+                GUILayout.EndHorizontal();
+                if (_openRow == modernSeq)
+                {
+                    GUILayout.Space(4f);
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Space(6f);
+                    GUILayout.BeginVertical(GUILayout.Width(Gui.ModernDropdownListW));
+                    for (int i = 0; i < options.Length; i++)
+                    {
+                        if (i > 0) GUILayout.Space(4f);
+                        if (GUILayout.Button(options[i], i == current
+                                ? Gui.AccentButtonStyle : Gui.ButtonStyle,
+                                GUILayout.Height(26f)))
+                        {
+                            _openRow = -1;
+                            if (i != current) onChange(i);
+                        }
+                    }
+                    GUILayout.EndVertical();
+                    GUILayout.EndHorizontal();
+                }
+                Gui.EndModernRow();
+                return;
+            }
             int seq = _openSeq++;
             GUILayout.BeginHorizontal();
             GUILayout.Label(Loc.T(labelKey), Gui.LabelStyle, GUILayout.Width(LabelW));
@@ -482,6 +773,31 @@ namespace SpectreReplay.Ui
             // 捕获 id 只取决于 labelKey，循环内每次重算是一样的值；
             // 提到闭包外面是为了让「画」和「扫键」两段读同一个 id。
             int id = GetCaptureId(labelKey);
+            if (Gui.ModernMode)
+            {
+                Gui.Dim(!enabled, () =>
+                {
+                    Gui.BeginModernRow();
+                    DrawModernTextStack(labelKey);
+                    GUILayout.Space(6f);
+                    GUILayout.BeginHorizontal();
+                    GUILayout.FlexibleSpace();
+                    int cur = get();
+                    bool waiting = _capturing == id;
+                    string text = waiting ? Loc.T("ui.presskey")
+                        : cur > 0 ? KeyName((KeyCode)cur) : Loc.T("ui.nokey");
+                    Rect hk = GUILayoutUtility.GetRect(160f, 28f,
+                        GUILayout.Width(Gui.ModernHotkeyW), GUILayout.Height(28f));
+                    bool hit = GUI.Button(hk, text, waiting
+                        ? Gui.AccentButtonStyle : Gui.ButtonStyle);
+                    if (!enabled || Gui.IsDim) hit = false;
+                    if (hit) _capturing = _capturing == id ? 0 : id;
+                    GUILayout.EndHorizontal();
+                    Gui.EndModernRow();
+                });
+                CaptureKey(id, enabled, set);
+                return;
+            }
             Gui.Dim(!enabled, () =>
             {
                 GUILayout.BeginHorizontal();
@@ -513,6 +829,11 @@ namespace SpectreReplay.Ui
                 RowGap();
             });
 
+            CaptureKey(id, enabled, set);
+        }
+
+        private static void CaptureKey(int id, bool enabled, Action<int> set)
+        {
             if (!enabled)
             {
                 // 行在等待按键期间被关掉（总开关拨回去）：顺手退出等待态，
@@ -551,7 +872,6 @@ namespace SpectreReplay.Ui
                 }
                 _capturing = 0;
                 set((int)k);
-                Settings.CommitSafe();
                 return;
             }
         }
@@ -723,6 +1043,12 @@ namespace SpectreReplay.Ui
         /// <summary>一段不带标签键的说明文字（内容已经本地化过了）。</summary>
         internal static void NoteText(string text)
         {
+            if (Gui.ModernMode)
+            {
+                GUILayout.Label(text ?? "", Gui.ModernDescStyle,
+                    GUILayout.ExpandWidth(true));
+                return;
+            }
             GUILayout.BeginHorizontal();
             GUILayout.Space(LabelW);
             GUILayout.Label(text, Gui.NoteStyle, GUILayout.ExpandWidth(true));
@@ -739,6 +1065,23 @@ namespace SpectreReplay.Ui
         /// </param>
         internal static void Button(string labelKey, Action onClick, bool wide, bool enabled = true)
         {
+            if (Gui.ModernMode)
+            {
+                GUILayout.BeginHorizontal();
+                GUILayout.Space(Gui.ModernRowPadX);
+                string modernCaption = Loc.T(labelKey);
+                float modernButtonW = Gui.ButtonW(modernCaption,
+                    wide ? Gui.PrimaryButtonStyle : Gui.ButtonStyle, wide ? 220f : 140f);
+                if (GUILayout.Button(modernCaption,
+                        wide ? Gui.PrimaryButtonStyle : Gui.ButtonStyle,
+                        GUILayout.Width(modernButtonW),
+                        GUILayout.Height(wide ? 36f : 30f)) && enabled)
+                    onClick?.Invoke();
+                GUILayout.FlexibleSpace();
+                GUILayout.EndHorizontal();
+                GUILayout.Space(6f);
+                return;
+            }
             GUILayout.BeginHorizontal();
             // wide 用专门的强调样式：GUI.backgroundColor 是乘算，会把贴图里
             // 烘好的底色再压一遍。
@@ -770,6 +1113,36 @@ namespace SpectreReplay.Ui
 
         internal static void RowInput(string labelKey)
         {
+            if (Gui.ModernMode)
+            {
+                Gui.BeginModernRow();
+                DrawModernTextStack(labelKey);
+                GUILayout.Space(6f);
+                GUILayout.BeginHorizontal();
+                Rect modernBox = GUILayoutUtility.GetRect(210f, 28f,
+                    GUILayout.Width(Gui.ModernInputW), GUILayout.Height(28f));
+                string modernChangeLabel = Loc.T("record.changedir");
+                GUIStyle changeStyle = Gui.ButtonStyle;
+                if (GUILayout.Button(modernChangeLabel, Gui.ButtonStyle,
+                        GUILayout.Width(Gui.ButtonW(modernChangeLabel, changeStyle, 90f)),
+                        GUILayout.Height(28f)))
+                    _pickOutDirPending = true;
+                GUILayout.FlexibleSpace();
+                GUILayout.EndHorizontal();
+                bool canceledInput;
+                bool commitInput = _outDir.Draw(modernBox, Gui.LabelStyle,
+                    Loc.T("render.outdir.empty"), out canceledInput);
+                if (canceledInput) _outDir.Text = Settings.RenderOutputDir ?? "";
+                if (commitInput) CommitText();
+                if (_pickOutDirPending)
+                {
+                    _pickOutDirPending = false;
+                    try { MainThread.Defer(PickOutDirDeferred); }
+                    catch (Exception ex) { Debug.LogWarning("[SpectreReplay] 无法启动输出目录选择框：" + ex.Message); }
+                }
+                Gui.EndModernRow();
+                return;
+            }
             GUILayout.BeginHorizontal();
             GUILayout.Label(Loc.T(labelKey), Gui.LabelStyle, GUILayout.Width(LabelW));
             // **宽度必须走 Gui.CtrlW，不能写死 360。** 页面上每一行控件列

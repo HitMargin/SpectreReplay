@@ -119,7 +119,7 @@ foreach ($f in $files) {
         elseif ($pluginCallbackNames -contains $name) { $cat = 'A 插件回调（反射调用）' }
         elseif ($relForCat -match 'SpectreAPI') { $cat = 'B 公开 API 面' }
         elseif ($relForCat -match 'VideoRenderClockPatches' -and $name -in @('ConductorTranspiler','Delta','DspTime','TimeD','TimeF')) { $cat = 'A IL 直调（Transpiler 改写调用点，源码里没有这个调用字样）' }
-        elseif ($name -in @('PatchManual','Defer','OnKeyUpdated')) { $cat = 'A 反射调用' }
+        elseif ($name -in @('PatchManual','Defer','OnKeyUpdated','DrawTooltip','ResetTips','OnUmmOpen')) { $cat = 'A UMM 回调（反射调用）' }
         # C 类：随移植搬来、**调用方在 Spectre 侧而本项目按裁决"不补"**（见
         # docs\SPECTRE_COMPARISON.md 第七之二节：档位 UI / 结算附加文本 / 编辑器
         # 特性均不补）。这些方法在本仓无人调用是**裁决的结果**，不是漏接线——

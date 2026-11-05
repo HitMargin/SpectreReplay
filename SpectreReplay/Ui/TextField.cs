@@ -29,6 +29,37 @@ namespace SpectreReplay.Ui
         private const float BlinkPeriod = 0.55f;
 
         /// <summary>
+        /// 输入框专用单行样式。
+        ///
+        /// <para><b>必须显式关掉 wordWrap。</b>绘制时传进来的通常是
+        /// <see cref="Gui.LabelStyle"/>，而 GUI.skin.label 默认 wordWrap=true。
+        /// 输入框只有 28px 高，一换行第二行就落在裁剪区外——玩家看到的是
+        /// "文字只显示半截/下面一行被切掉"。这里按传入样式的字体度量派生一份
+        /// 单行样式：水平 Overflow（超长靠内部 _scroll 处理，不靠换行）、
+        /// 垂直 Middle（在框内居中）、clipping 用 Clip 收在裁剪区内。</para>
+        /// </summary>
+        private static GUIStyle _singleLine;
+        private static GUIStyle _singleLineFor;
+
+        private static GUIStyle SingleLine(GUIStyle basis)
+        {
+            if (_singleLine != null && _singleLineFor == basis) return _singleLine;
+            _singleLine = new GUIStyle(basis)
+            {
+                wordWrap = false,
+                alignment = TextAnchor.MiddleLeft,
+                clipping = TextClipping.Clip,
+                richText = false,
+            };
+            // 高度按字体行高走：行高比控件高时，用 Middle 居中仍会被 Clip
+            // 切掉上下沿，所以把固定高度交给布局（不设 fixedHeight）。
+            _singleLine.fixedHeight = 0f;
+            _singleLine.stretchHeight = false;
+            _singleLineFor = basis;
+            return _singleLine;
+        }
+
+        /// <summary>
         /// 画在 <paramref name="box"/> 里并处理输入。
         /// 返回 true = 本次回车（或点别处）提交，调用方据此落盘。
         /// <paramref name="canceled"/> 为 true = 玩家按了 Esc，调用方据此把
@@ -45,6 +76,9 @@ namespace SpectreReplay.Ui
             {
                 style = GUI.skin.label;
             }
+            // 统一换成单行样式：度量、命中、绘制三步必须用同一套字体，
+            // 否则光标位置和实际字形会对不上。
+            style = SingleLine(style);
 
             Rect inner = new Rect(box.x + PadX, box.y + 1f,
                 Mathf.Max(1f, box.width - PadX * 2f), Mathf.Max(1f, box.height - 2f));
@@ -172,8 +206,19 @@ namespace SpectreReplay.Ui
             // 同一套语汇（悬停即提亮），否则整页只有按钮"活"着。
             // 禁用态不提亮：灰着还跟鼠标发亮会让人以为能点。
             bool hot = !Gui.IsDim && Gui.Hover(box);
-            Gui.Fill(box, hot && !Editing ? Gui.FieldBgHover : Gui.FieldBg);
-            Gui.Frame(box, Editing ? Gui.FieldFocus : (hot ? Gui.FieldBorderHover : Gui.FieldBorder));
+            // **输入框就是一块平的圆角面，没有凹槽、没有描边环。**
+            // 之前叠 Well3D（内阴影）+ 1px 圆角环，在 24px 高的细条里圆角半径
+            // 接近半高，整条被看成"胶囊"，外圈那道光就是环被 9-slice 拉伸后
+            // 的直边——用户看到的就是这个。
+            // 现在只画一层圆角填充：正常 = FieldBg，hover = FieldBgHover，
+            // 编辑中 = FieldBgHover（更亮一档，作为焦点反馈）。
+            Rect snapped = Gui.Snap(box);
+            Color face = Editing ? Gui.FieldBgHover
+                : (hot ? Gui.FieldBgHover : Gui.FieldBg);
+            // 半径 6：贴图只做 9-slice，圆角在任何宽高下都保持 6px，
+            // 不会随高度变成胶囊。
+            GUI.DrawTexture(snapped, RoundedTex.Get(48, 48, 6, face),
+                ScaleMode.StretchToFill, true, 0f, Color.white, 7f, 7f);
 
             // 占位文案与正文都要在裁剪里。Gui.LabelStyle 克隆自 GUI.skin.label，
             // 而 UMM 把 skin.label.clipping 改成了 Overflow（decompiled :3509），
@@ -188,7 +233,9 @@ namespace SpectreReplay.Ui
             {
                 if (Text.Length == 0 && !Editing && !string.IsNullOrEmpty(placeholder))
                 {
-                    Gui.Text(new Rect(0f, 0f, inner.width, inner.height),
+                    float phLine = style.CalcHeight(new GUIContent(placeholder), inner.width);
+                    float phY = Mathf.Max(0f, (inner.height - phLine) * 0.5f);
+                    Gui.Text(new Rect(0f, phY, inner.width, phLine),
                         placeholder, Gui.FieldHint, style);
                     return;
                 }
@@ -197,6 +244,11 @@ namespace SpectreReplay.Ui
                 int b = Mathf.Max(_anchor, _caret);
                 float textW = _bounds[Text.Length];
                 float h = inner.height;
+                // **单行文字必须在框内垂直居中。** 之前一律从 y=0 开始画，
+                // 而 clipping=Clip 只给框那么高：字形的下沿直接被裁掉，看起来
+                // 像"只显示半截"。这里按样式行高算出居中偏移，并保证不低于 0。
+                float lineH = style.CalcHeight(new GUIContent(Text), inner.width);
+                float textY = Mathf.Max(0f, (h - lineH) * 0.5f);
 
                 // BeginClip 把坐标原点挪到裁剪矩形左上角，所以里面的坐标是
                 // 相对值，滚动量直接减在 x 上。
@@ -204,15 +256,17 @@ namespace SpectreReplay.Ui
                 {
                     float x1 = _bounds[a] - _scroll;
                     float x2 = _bounds[b] - _scroll;
-                    Gui.Fill(new Rect(x1, 0f, Mathf.Max(1f, x2 - x1), h), Gui.FieldSel);
+                    Gui.Fill(new Rect(x1, textY, Mathf.Max(1f, x2 - x1),
+                        Mathf.Min(h - textY, lineH)), Gui.FieldSel);
                 }
-                Gui.Text(new Rect(-_scroll, 0f, Mathf.Max(textW, inner.width), h),
+                Gui.Text(new Rect(-_scroll, textY, Mathf.Max(textW, inner.width), lineH),
                     Text, Gui.TextCol, style);
 
                 bool blink = ((Time.realtimeSinceStartup - _blinkAt) % (BlinkPeriod * 2f)) < BlinkPeriod;
                 if (Editing && blink)
                 {
-                    Gui.Fill(new Rect(_bounds[_caret] - _scroll, 3f, 1f, Mathf.Max(1f, h - 6f)), Gui.TextCol);
+                    Gui.Fill(new Rect(_bounds[_caret] - _scroll, textY + 1f, 1f,
+                        Mathf.Max(1f, Mathf.Min(h - textY - 2f, lineH - 2f))), Gui.TextCol);
                 }
             }
             finally

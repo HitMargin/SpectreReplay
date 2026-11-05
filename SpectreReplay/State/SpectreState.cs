@@ -685,42 +685,11 @@ public static class SpectreState
             return;
         }
         float dur = Settings.NotificationDuration(extra);
-        try
-        {
-            var n = Notification.instance;
-            n.text.text = message.TrimEnd('\n');
-            n.icon.enabled = true;
-            n.button.onClick.RemoveAllListeners();
-            switch (type)
-            {
-                case NotifType.Warning:
-                    n.icon.sprite = n.warningIcon;
-                    n.icon.color = new Color(1f, 0.2f, 0.2f);
-                    break;
-                default:
-                    n.icon.sprite = n.completeIcon;
-                    n.icon.color = new Color(0.2f, 0.7215686f, 0.3921569f);
-                    break;
-            }
-            var graphics = n.bar.GetComponentsInChildren<Graphic>(true);
-            var states = graphics.Select(g => g.raycastTarget).ToArray();
-            foreach (var g in graphics) g.raycastTarget = false;
-            n.StartCoroutine(RestoreGraphics(graphics, states, dur));
-            var m = PatchManager.GetMethodInfo(typeof(Notification), "SetupNotification",
-                [typeof(float), typeof(float), typeof(bool)]);
-            m.Invoke(n, [dur, 1f, true]);
-        }
-        catch (Exception ex)
-        {
-            Debug.Log(ex);
-        }
-    }
-
-    private static System.Collections.IEnumerator RestoreGraphics(Graphic[] graphics, bool[] states, float dur)
-    {
-        yield return new WaitForSecondsRealtime(0.5f + 0.5f + dur + 0.3f);
-        for (int i = 0; i < graphics.Length; i++)
-            if (graphics[i] != null) graphics[i].raycastTarget = states[i];
+        // 2026-11-05 起改走自绘 Toast（深色圆角提示卡）：
+        // 游戏 Notification 那条 UGUI 横幅样式老旧、没法做入场滑入/剩余时间条，
+        // 且 RefreshLanguage 切换后它显示的是实例化时缓存的文案。自绘卡样式、
+        // 时机、合并（同因 ×N）全部可控。时长口径不变：NotificationDuration(extra)。
+        Ui.Toast.Show(message, dur, type == NotifType.Warning);
     }
 
     public static bool ReplayHit(scrPlayer player, HitSnapshot hitdata)
