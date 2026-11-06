@@ -63,9 +63,10 @@ SpectreReplay is a UnityModManager mod (mod id `com.spectre.replay`). While you 
 ### Settings interface
 
 - **Fully self-drawn controls.** Every control is drawn by the mod itself — rounded panels with nine-slice textures, custom sliders, toggles and text fields — so it looks the same regardless of the game's UI scaling.
+- **Standalone layered window.** The panel opens on top of gameplay as a rounded, layered IMGUI window. Drag the header to move it, resize it from the lower-right handle, and it remembers both between runs. The opening hotkey is rebindable; `Esc` closes the window.
 - **Hover explanations.** Each option explains itself on hover, including the input the game must have enabled for that option to do anything.
 - **Five pages** (Recording, Playback, Video Render, Effects, About), opened with a hotkey, and the interface follows the game's language — all **14 languages** the game ships with (Simplified/Traditional Chinese, English, Japanese, Korean, Spanish, Portuguese, French, German, Polish, Czech, Romanian, Russian, Vietnamese).
-- **Toast duration is adjustable.** How long the pop-up at the bottom of the screen stays before hiding lives on the About page (1–10 s, default 3 s). Every message the mod raises scales with it; the few that are worth reading twice (failure reasons often run to two lines) get 2 seconds on top, so they stretch with the setting instead of being pinned by a hard-coded number.
+- **Toast duration and placement are adjustable.** Choose any screen corner or centre; the default is top-left. Long titles and details wrap and the card grows to fit them, so messages are not cut off. Duration lives on the About page (1–10 s, default 3 s). Every message the mod raises scales with it; the few that are worth reading twice (failure reasons often run to two lines) get 2 seconds on top, so they stretch with the setting instead of being pinned by a hard-coded number.
 
 ## How it works
 
@@ -154,7 +155,7 @@ On the compile side this has been checked against three separate `Assembly-CShar
 - **C# / .NET Standard 2.1** for the mod assembly — the target the game's Mono runtime loads.
 - **Unity 6000.3.25f1**, game **3.3.1** (release branch) and **3.4.0** (alpha, build **r150**), **UnityModManager 0.33**.
 - **Harmony** for runtime method patching, including transpilers.
-- **Self-drawn IMGUI** for the whole settings UI: rounded nine-slice background textures, custom sliders, toggles and text fields — no stock controls.
+- **Self-drawn IMGUI** for the standalone settings window: rounded nine-slice background textures, custom sliders, toggles and text fields — no stock controls.
 - **ffmpeg** as an external encoder, distributed with the mod: libx264 for CPU encoding, with hardware (NVENC) fallback when available.
 - **Offline verification gate**: a `net10.0-windows` test harness that links the real replay codec and audio/format logic and asserts behaviour without launching the game, plus a mutation suite that reintroduces each previously fixed bug and checks that the assertions actually go red. An assertion that cannot fail is treated as a bug in the test.
 
