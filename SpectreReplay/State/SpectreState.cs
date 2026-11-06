@@ -491,7 +491,7 @@ public static class SpectreState
         return num;
     }
 
-    internal static bool SaveFile(bool without_sound = false, bool retry = false)
+    internal static bool SaveFile(bool without_sound = false, bool retry = false, bool notify = true)
     {
         if (data == null)
         {
@@ -655,10 +655,12 @@ public static class SpectreState
             }
         }
 
-        TriggerMessage(message);
+        // The first failure is not final: SaveFile immediately retries with a safe name.
+        // Hold that warning until the retry resolves so one operation yields one toast.
+        if (notify && (success || retry)) TriggerMessage(message);
         if (!success && !retry)
         {
-            return SaveFile(without_sound, retry: true);
+            return SaveFile(without_sound, retry: true, notify: notify);
         }
         return success;
     }

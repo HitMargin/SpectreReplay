@@ -348,6 +348,7 @@ namespace UiPreview
                     && s.Contains("private void LateUpdate()", StringComparison.Ordinal)
                     && s.Contains("Graphics.Blit(_glassFull, next, uvScale, uvOff)", StringComparison.Ordinal)
                     && s.Contains("GUI.DrawTexture(_windowRect, _glass, ScaleMode.StretchToFill,", StringComparison.Ordinal)
+                    && GlassCropTracksSourceAxes(s)
                     && !s.Contains("_glassRecaptureFrame", StringComparison.Ordinal)
                     && !s.Contains("DrawTextureWithTexCoords", StringComparison.Ordinal));
             // 2026-11-06 用户报热键关窗后鼠标失效。
@@ -979,6 +980,55 @@ namespace UiPreview
                 "Features\\VideoRender\\Pipeline\\RenderOverlayCapture.cs",
                 s => s.Contains("PatchManager.RegisterManualPrefix", StringComparison.Ordinal)
                     && s.Contains("UnscaledDeltaPin.CurrentUnscaledF", StringComparison.Ordinal));
+            // Quartz ships its own KeyViewer and wall-clock rain timeline. Its
+            // public KvExternalDriver is the intended offline-render bridge:
+            // Begin supplies the virtual clock, Key supplies replay edges, End
+            // restores physical input. Missing any one leaves the same visible
+            // symptom (rain speed or key highlights wrong) with a different cause.
+            fail += Check(projectRoot,
+                "㊴c Quartz KeyViewer 必须接入外部时钟、按键流并在收尾恢复",
+                "Features\\VideoRender\\Pipeline\\RenderOverlayCapture.cs",
+                s => s.Contains("Quartz.Features.KeyViewer.KvExternalDriver", StringComparison.Ordinal)
+                    && s.Contains("AccessTools.Method(driver, \"Begin\"", StringComparison.Ordinal)
+                    && s.Contains("AccessTools.Method(driver, \"Key\"", StringComparison.Ordinal)
+                    && s.Contains("AccessTools.Method(driver, \"End\"", StringComparison.Ordinal)
+                    && s.Contains("quartzBegin.Invoke", StringComparison.Ordinal)
+                    && s.Contains("quartzKey.Invoke", StringComparison.Ordinal)
+                    && s.Contains("quartzEnd?.Invoke", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㊴d 回放按键与跳转重建必须同步喂给 Quartz KeyViewer（它不读 ManagedInput/SkyHook）",
+                "Features\\Replay\\Runtime\\ReplayPlayer.cs",
+                s => s.Contains("RenderOverlayCapture.QuartzKey(num, ev.IsPressed)", StringComparison.Ordinal)
+                    && s.Contains("RenderOverlayCapture.ResetQuartzKeys()", StringComparison.Ordinal)
+                    && HasMethodSpan(s, "private static void RebuildHeldInputs()",
+                        "internal static void SyncQuartzHeld()", out string rebuildBody)
+                    && rebuildBody.Contains("RenderOverlayCapture.ResetQuartzKeys()", StringComparison.Ordinal)
+                    && rebuildBody.Contains("RenderOverlayCapture.QuartzKey(num, ev.IsPressed)", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㊴e SeekToTime 必须复用同一份按键重建（跳转中途按下/抬起不能只改一端）",
+                "Features\\Replay\\Runtime\\ReplayPlayer.cs",
+                s => MethodBody(s, "SeekToTime") is string body
+                    && body.Contains("RebuildHeldInputs()", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㊴f 私有 PumpInput 必须把回放按键边界注入 Quartz（同名无参重载不算）",
+                "Features\\Replay\\Runtime\\ReplayPlayer.cs",
+                s => HasMethodSpan(s, "private static void PumpInput(double songPosition",
+                    "internal static bool ReplayHitOld",
+                    out string pumpBody)
+                    && pumpBody.Contains("RenderOverlayCapture.QuartzKey(num, ev.IsPressed)", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㊴g 首帧必须在 Quartz 丢弃初始化队列后重新补按住键，且先于 Grab",
+                "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
+                s => IndexBefore(s,
+                    "if (frameIndex == 0)\n                ReplayPlayer.SyncQuartzHeld();",
+                    "frames.Grab(frameIndex);"));
+            fail += Check(projectRoot,
+                "㊴h 帧源构造失败必须回滚 Quartz/时钟、相机目标和预览纹理",
+                "Features\\VideoRender\\Pipeline\\VideoFrameSource.cs",
+                s => s.Contains("catch\n        {\n            CleanupOnConstructionFailure();\n            throw;\n        }", StringComparison.Ordinal)
+                    && MethodBody(s, "CleanupOnConstructionFailure") is string cleanup
+                    && cleanup.Contains("RestoreTargets()", StringComparison.Ordinal)
+                    && cleanup.Contains("texture.Release()", StringComparison.Ordinal));
             // ㊵ 开放 API：其它 mod 的画布经 SpectreAPI 登记进同一注册表。
             //    门面必须真转发到注册表（RenderOverlayCapture 的
             //    RegisterExternal/UnregisterExternal）——只加门面不接线，
@@ -2422,6 +2472,21 @@ namespace UiPreview
         }
 
         /// <summary>
+        /// 玻璃裁剪的 Y 轴必须使用抓帧平台方向：
+        /// uvScale.y 为负、窗口顶边 offset 为 1-y/H。三段全钉，
+        /// 缺一边都会重新出现上下镜像/错位。
+        /// </summary>
+        private static bool GlassCropTracksSourceAxes(string code)
+        {
+            string body = MethodBody(code, "LateUpdate");
+            return body != null
+                && body.Contains("w / Screen.width", StringComparison.Ordinal)
+                && body.Contains("h / Screen.height * (flip ? -1f : 1f)", StringComparison.Ordinal)
+                && body.Contains("flip ? 1f - y / Screen.height", StringComparison.Ordinal)
+                && body.Contains(": 1f - (y + h) / Screen.height", StringComparison.Ordinal);
+        }
+
+        /// <summary>
         /// 滑条右侧的数值是否真的是**可编辑自绘输入框**。
         ///
         /// 判据落在 <c>RowSlider</c> 方法体内，不整文件搜：OnGui.cs 别处
@@ -2499,6 +2564,18 @@ namespace UiPreview
                 sb.AppendLine(lines[i]);
             }
             return sb.ToString();
+        }
+
+        private static bool HasMethodSpan(string code, string signature, string endSignature,
+            out string body)
+        {
+            body = string.Empty;
+            int start = code.IndexOf(signature, StringComparison.Ordinal);
+            if (start < 0) return false;
+            int end = code.IndexOf(endSignature, start, StringComparison.Ordinal);
+            if (end < 0) return false;
+            body = code.Substring(start, end - start);
+            return true;
         }
 
         /// <summary>

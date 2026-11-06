@@ -919,6 +919,13 @@ switch ($Which) {
         Backup 'Ui\ModernSettingsWindow.cs'
         ReplaceExact 'Ui\ModernSettingsWindow.cs' ('GUI.Box(Gui.Snap(mark), GUIContent.none, BrandMarkStyle());') ('Gui.Fill(mark, Color.white);')
     }
+    'MUT-U101' {
+        # ⑬c18：玻璃裁剪 Y 轴回退非镜像——实测会上下颠倒。
+        Backup 'Ui\ModernSettingsWindow.cs'
+        ReplaceExact 'Ui\ModernSettingsWindow.cs' `
+            'h / Screen.height * (flip ? -1f : 1f)' `
+            'h / Screen.height * (flip ? 1f : -1f)'
+    }
     'MUT-U25' {
         # ⑫i：把已删除的「界面语言跟随游戏」开关加回来（防回归变异）。
         #      用单引号字符串拼出双引号，避免在 here-string 外层写转义。
@@ -2204,6 +2211,124 @@ switch ($Which) {
         ReplaceExact 'Features\Replay\Runtime\ReplayPlayer.cs' 'bool asyncInject = AsyncInputInjector.Injectable' 'bool asyncInject = AsyncInputInjector.Usable'
     }
 
+    'MUT-CI11' {
+        # Save legacy warning regression: report the first failed attempt even though
+        # SaveFile immediately retries with a safe filename. The user then sees two
+        # unrelated outcomes for one save action.
+        Backup 'State\SpectreState.cs'
+        ReplaceExact 'State\SpectreState.cs' 'if (notify && (success || retry)) TriggerMessage(message);' 'if (notify) TriggerMessage(message);'
+    }
+
+    'MUT-CI12' {
+        # Manual-save hotkey fan-out regression: two Harmony postfixes on the
+        # same Update both observe GetKeyDown and start a save for one key press.
+        Backup 'Features\Replay\Patches\Patch_Misc.cs'
+        ReplaceExact 'Features\Replay\Patches\Patch_Misc.cs' 'if (!ManualSaveHotkey.TryConsume()) return;' 'if (false) return;'
+    }
+
+    'MUT-CI13' {
+        # Quartz rain-clock regression: keep the reflection surface but stop
+        # entering its external driver, so rain follows the wall clock again.
+        Backup 'Features\VideoRender\Pipeline\RenderOverlayCapture.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\RenderOverlayCapture.cs' 'quartzBegin.Invoke(null, new object[] { quartzClock });' '// quartzBegin.Invoke(null, new object[] { quartzClock });'
+    }
+
+    'MUT-CI14' {
+        # Quartz replay-input regression: its driver queue receives only the
+        # clock and no replay edges, leaving highlights/rains blind during render.
+        Backup 'Features\Replay\Runtime\ReplayPlayer.cs'
+        # The same call also appears in RebuildHeldInputs. Mutate only the private
+        # PumpInput overload so this case stays about live edge delivery.
+        $lines = Lines 'Features\Replay\Runtime\ReplayPlayer.cs'
+        $start = -1
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Contains('private static void PumpInput(double songPosition')) { $start = $i; break }
+        }
+        if ($start -lt 0) { throw 'MUT-CI14 PumpInput 锚点未找到' }
+        $end = -1
+        for ($i = $start + 1; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Contains('internal static bool ReplayHitOld')) { $end = $i; break }
+        }
+        if ($end -lt 0) { throw 'MUT-CI14 方法收尾未找到' }
+        $hit = 0
+        for ($i = $start + 1; $i -lt $end; $i++) {
+            if ($lines[$i].Contains('Features.VideoRender.RenderOverlayCapture.QuartzKey(num, ev.IsPressed);')) {
+                $lines[$i] = '// mutated'
+                $hit++
+            }
+        }
+        if ($hit -ne 1) { throw "MUT-CI14 命中 $hit 次（应为 1）" }
+        SetLines 'Features\Replay\Runtime\ReplayPlayer.cs' $lines
+    }
+
+    'MUT-CI15' {
+        # Quartz seek regression: stale Quartz-held keys survive a timeline jump
+        # because the viewer's external state is not reset before rebuilding.
+        Backup 'Features\Replay\Runtime\ReplayPlayer.cs'
+        # SyncQuartzHeld intentionally calls the same reset method; limit this
+        # mutation to the shared prefix rebuild used by seek paths.
+        $lines = Lines 'Features\Replay\Runtime\ReplayPlayer.cs'
+        $start = -1
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Contains('private static void RebuildHeldInputs()')) { $start = $i; break }
+        }
+        if ($start -lt 0) { throw 'MUT-CI15 RebuildHeldInputs 锚点未找到' }
+        $end = -1
+        for ($i = $start + 1; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Contains('internal static void SyncQuartzHeld()')) { $end = $i; break }
+        }
+        if ($end -lt 0) { throw 'MUT-CI15 方法收尾未找到' }
+        $hit = 0
+        for ($i = $start + 1; $i -lt $end; $i++) {
+            if ($lines[$i].Contains('Features.VideoRender.RenderOverlayCapture.ResetQuartzKeys();')) {
+                $lines[$i] = '// mutated'
+                $hit++
+            }
+        }
+        if ($hit -ne 1) { throw "MUT-CI15 命中 $hit 次（应为 1）" }
+        SetLines 'Features\Replay\Runtime\ReplayPlayer.cs' $lines
+    }
+
+    'MUT-CI16' {
+        # First-frame regression: Quartz priming itself may discard the input
+        # queued while VideoFrameSource installed its external driver.
+        Backup 'Features\VideoRender\Pipeline\VideoRenderJob.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'if (frameIndex == 0)' 'if (false)'
+    }
+
+    'MUT-CI17' {
+        # Construction failure regression: leave the virtual clock and camera
+        # capture installed when VideoFrameSource throws before the caller gets a
+        # reference to dispose.
+        Backup 'Features\VideoRender\Pipeline\VideoFrameSource.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoFrameSource.cs' 'CleanupOnConstructionFailure();' '// mutated'
+    }
+
+    'MUT-CI18' {
+        # Seek regression: KeyEventIndex moves, but ManagedInput and Quartz are
+        # rebuilt from different code paths and disagree after the jump.
+        Backup 'Features\Replay\Runtime\ReplayPlayer.cs'
+        $lines = Lines 'Features\Replay\Runtime\ReplayPlayer.cs'
+        $start = -1
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Contains('internal static bool SeekToTime(double targetSongPosition)')) { $start = $i; break }
+        }
+        if ($start -lt 0) { throw 'MUT-CI18 SeekToTime 锚点未找到' }
+        $end = -1
+        for ($i = $start + 1; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Contains('private static void RebuildHeldInputs()')) { $end = $i; break }
+        }
+        if ($end -lt 0) { throw 'MUT-CI18 方法收尾未找到' }
+        $hit = 0
+        for ($i = $start + 1; $i -lt $end; $i++) {
+            if ($lines[$i].Contains('RebuildHeldInputs();')) {
+                $lines[$i] = '// mutated'
+                $hit++
+            }
+        }
+        if ($hit -ne 1) { throw "MUT-CI18 命中 $hit 次（应为 1）" }
+        SetLines 'Features\Replay\Runtime\ReplayPlayer.cs' $lines
+    }
 
     'MUT-D14' {
         # ㉔ BPM 回归：官方关卡退回硬写 0（详情面板重新显示成问号）。

@@ -10,6 +10,25 @@ using static SpectreReplay.SpectreState;
 
 namespace SpectreReplay.Features.Replay;
 
+internal static class ManualSaveHotkey
+{
+    private static int _lastFrame = -1;
+
+    /// <summary>
+    /// A hotkey is an operation, not a query. Multiple Harmony postfixes on the
+    /// same Update can all observe GetKeyDown in one frame; only the first may
+    /// start a save. Later frames remain eligible, so keep the guard to one frame.
+    /// </summary>
+    internal static bool TryConsume()
+    {
+        if (_lastFrame == UnityEngine.Time.frameCount) return false;
+        _lastFrame = UnityEngine.Time.frameCount;
+        return true;
+    }
+
+    internal static void Reset() => _lastFrame = -1;
+}
+
 // ——— scrController.TogglePauseGame ————————————————————----——
 internal class Patch_TogglePauseGame
 {
@@ -52,6 +71,7 @@ internal class Patch_ConductorUpdate
         int state = (int)(States)controller.stateMachine.GetState();
         if (state != StateFail && state != StateFail2 && state != StateWon) return;
         if (!PendingSave) return;
+        if (!ManualSaveHotkey.TryConsume()) return;
 
         PlayActions.StopRecording();
         if (SaveFile()) PendingSave = false;

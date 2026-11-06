@@ -25,6 +25,9 @@ namespace SpectreReplay.Ui
         private const float TabH = 36f;
         private const float MinScale = 0.78f;
         private const float MaxScale = 1.15f;
+
+        private const float OpenDuration = 0.22f;
+        private const float CloseDuration = 0.18f;
         // 正文区比外层玻璃更沉，但保留较多底层画面；0.52 不再压成死黑。
         private const float BodyBgAlpha = 0.52f;
 
@@ -123,9 +126,9 @@ namespace SpectreReplay.Ui
             // 关闭流程都会在固定帧数内走完。
             float dt = Time.unscaledDeltaTime;
             if (_closing)
-                _show = Mathf.MoveTowards(_show, 0f, dt / 0.14f);
+                _show = Mathf.MoveTowards(_show, 0f, dt / CloseDuration);
             else
-                _show = Mathf.MoveTowards(_show, 1f, dt / 0.16f);
+                _show = Mathf.MoveTowards(_show, 1f, dt / OpenDuration);
             if (_show <= 0f && _closing)
             {
                 FinishClose();
@@ -168,8 +171,9 @@ namespace SpectreReplay.Ui
             var crop = new Rect(x, y, w, h);
             if (_glass != null && _glassCrop == crop) return;
 
-            // 与整屏抓帧同向的像素坐标。v 从贴图底部起算：
-            // 窗口顶边（y 小）对应更大的 v；uvRect.y 取较小 v，即 1-(y+h)/H。
+            // 抓帧纹理在 D3D 等平台上按 UV 顶起点方向存储。
+            // 因此窗口顶部（y 小）要采样源贴图底部起算后的高位 v：
+            // uvScale.y 取负，uvOff.y 取窗口顶边 1-y/H。
             bool flip = SystemInfo.graphicsUVStartsAtTop;
             var uvScale = new Vector2(
                 w / Screen.width,
@@ -248,19 +252,6 @@ namespace SpectreReplay.Ui
             if (!_open && !_closing) return;
 
             float dt = Time.unscaledDeltaTime;
-            if (_closing)
-                // 关 0.14s、开 0.16s，都是纯线性 MoveTowards——窗口整体 alpha
-                // 由 EaseOut(_show) 出曲线，这里再叠变速反而"生硬"（先慢后快
-                // 再停）。之前的 (0.4+0.6*show) 变速就是"关闭很奇怪"的来源。
-                _show = Mathf.MoveTowards(_show, 0f, dt / 0.14f);
-            else
-                _show = Mathf.MoveTowards(_show, 1f, dt / 0.16f);
-            if (_show <= 0f && _closing)
-            {
-                FinishClose();
-                return;
-            }
-
             if (_glassState == 1)
             {
                 if (Event.current.type == EventType.Repaint)
@@ -370,18 +361,14 @@ namespace SpectreReplay.Ui
             _style = new GUIStyle(GUI.skin.window)
             {
                 padding = new RectOffset(0, 0, 0, 0),
-                border = new RectOffset(12, 12, 12, 12),
+                border = new RectOffset(13, 13, 13, 13),
                 margin = new RectOffset(0, 0, 0, 0),
             };
-            // 玻璃卡盖层：alpha **0.56** 的半透明深色面，靠下面的模糊游戏
-            // 画面透出层次。之前这里用 0.86，几乎不透，游戏画面被彻底挡住
-            // ——玻璃感全无。
-            var bg = RoundedTex.Panel3D(
-                new Color(0.078f, 0.082f, 0.098f, 0.56f),   // 0x14151A, 0.56
-                new Color(0.28f, 0.29f, 0.32f, 0.45f),
-                new Color(0.03f, 0.032f, 0.04f, 0.55f),
+            // Glass card: one crisp 1px border reads better than a gradient edge.
+            var bg = RoundedTex.Card(
+                new Color(0.078f, 0.082f, 0.098f, 0.56f),
                 new Color(1f, 1f, 1f, 0.14f),
-                14, 0, 0f, 0);
+                12, 1);
             // GUI.Window 被点击后会切到 focused / onFocused；这两个状态不覆盖，
             // 就会露出 Unity 原皮肤那套亮底。on* 一并处理，避免选中态残影。
             _style.normal.background = bg;
@@ -494,7 +481,10 @@ namespace SpectreReplay.Ui
                 // 拖动时按当前布局公式同款边界夹取，负值永远进不了配置。
                 float scale = Mathf.Clamp(Screen.height / 1080f * 1.1f, MinScale, MaxScale);
                 float sw = Screen.width / scale, sh = Screen.height / scale;
-                float w = Mathf.Min(WindowW, sw - 46f), h = Mathf.Min(WindowH, sh - 24f);
+                float w = Settings.WindowWOverride > 0f ? Settings.WindowWOverride : WindowW;
+                float h = Settings.WindowHOverride > 0f ? Settings.WindowHOverride : WindowH;
+                w = Mathf.Clamp(Mathf.Min(w, sw - 46f), MinW, sw - 46f);
+                h = Mathf.Clamp(Mathf.Min(h, sh - 24f), MinH, sh - 24f);
                 Settings.WindowX = Mathf.Clamp(
                     _windowRect.x + (e.mousePosition.x - _dragOffset.x), 4f, sw - w - 4f);
                 Settings.WindowY = Mathf.Clamp(

@@ -197,6 +197,26 @@ namespace SpectreReplay.Ui
             return t;
         }
 
+        internal static Texture2D Card(Color fill, Color border, int r, int borderThickness)
+        {
+            int inner = r * 2 + 4, size = inner;
+            var t = NewTex(size, size);
+            var px = new Color[size * size];
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float d = RoundSdf(x + 0.5f, y + 0.5f, inner, r);
+                    float cover = Mathf.Clamp01(0.5f - d);
+                    Color c = borderThickness > 0
+                        ? Color.Lerp(border, fill, Mathf.Clamp01(-d - borderThickness + 0.5f))
+                        : fill;
+                    px[y * size + x] = new Color(c.r, c.g, c.b, c.a * cover);
+                }
+            t.SetPixels(px);
+            t.Apply(false, false);
+            return t;
+        }
+
         /// <summary>
         /// 凹陷槽：顶部内侧阴影 + 底唇 1px 微光 + 边缘细线。用于输入框、
         /// 滑条轨道——"陷进去"的面与浮起的卡是同一套光的两个方向。

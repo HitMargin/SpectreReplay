@@ -99,6 +99,8 @@ namespace UiPreview
             // 只会在实机上暴露。离线钉住它的接线形状。
             int crossInputFail = CrossPlatformInputCheck.Run(
                 ProjectDir);
+            int saveToastFail = SaveToastOnceCheck.Run(
+                ProjectDir);
             // Steam 云生命周期：退出链 OnQuitting → FlushConfig 会在 Steam 上下文
             // 已被游戏 Shutdown 之后上传（_RE 工程编辑器退出实测崩进程，原生栈）。
             // 三处接线（退出先失能再落盘 / 装配重置探测 / 失能是持久标志）断在
@@ -111,7 +113,7 @@ namespace UiPreview
                 ProjectDir);
             int orphanFail = PortedCompletenessCheck.NoOrphanChecks(
                 ProjectDir);
-            int total = locFail + hardFail + replayFail + timelineFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + locLangFail + pinStateFail + injectFail + logPrefixFail + scatterFail + cursorFail + cursorTrackFail + keybdAudioFail + keybdPrefsFail + crossInputFail + cloudFail + debugFail + orphanFail;
+            int total = locFail + hardFail + replayFail + timelineFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + locLangFail + pinStateFail + injectFail + logPrefixFail + scatterFail + cursorFail + cursorTrackFail + keybdAudioFail + keybdPrefsFail + crossInputFail + saveToastFail + cloudFail + debugFail + orphanFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"

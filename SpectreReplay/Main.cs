@@ -90,6 +90,7 @@ namespace SpectreReplay
                 catch (Exception ex) { UnityEngine.Debug.LogWarning("[SpectreReplay] 关模组时停止回放失败：" + ex.Message); }
                 try { SpectreState.PlayActions.StopRecording(); }
                 catch (Exception ex) { UnityEngine.Debug.LogWarning("[SpectreReplay] 关模组时停止录制失败：" + ex.Message); }
+                Features.Replay.ManualSaveHotkey.Reset();
                 try { Features.VideoRender.VideoRender.CancelRender(); }
                 catch (Exception ex) { UnityEngine.Debug.LogWarning("[SpectreReplay] 关模组时取消渲染失败：" + ex.Message); }
 
