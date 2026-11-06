@@ -366,6 +366,33 @@ namespace UiPreview
                 "⑬c12 Toast 必须支持左上、右下、左下三个新增锚点",
                 "Ui\\\\Toast.cs",
                 s => ToastCornerPositions(s));
+            // 正文背景必须是“深色但非全黑”的半透明层；把它改成 1.0 或删掉
+            // 都会改变用户要求的层次：前者盖死玻璃，后者让正文透回外层。
+            // 0.52 是第二次截图反馈后的偏透明值，避免深色底显得死黑。
+            fail += Check(projectRoot,
+                "⑬c13 独立窗口正文背景必须是半透明深色底",
+                "Ui\\\\ModernSettingsWindow.cs",
+                s => ModernBodyBackground(s));
+            // 长消息曾经只按单行 CalcSize 取高，第二行会被固定矩形裁掉；
+            // 判据同时钉住标题/详情的按宽换行和底部首卡的实际高度锚点。
+            fail += Check(projectRoot,
+                "⑬c14 Toast 长文本必须按宽度换行并按内容增高",
+                "Ui\\\\Toast.cs",
+                s => ToastLongTextFits(s));
+            fail += Check(projectRoot,
+                "⑬c15 Toast 配置默认位置必须是左上",
+                "State\\\\Settings.cs",
+                s => s.Contains("public static int NotificationPos = 3;",
+                    StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "⑬c16 Toast 绘制默认位置必须同步为左上",
+                "Ui\\\\Toast.cs",
+                s => s.Contains("internal static int Pos = 3;",
+                    StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "⑬c17 IMGUI 顶栏必须绘制品牌标记而不是白色占位方块",
+                "Ui\\\\ModernSettingsWindow.cs",
+                s => BrandMarkDrawn(s));
             fail += Check(projectRoot,
                 "5d Menu 键兜底必须先探测 SkyHook，不能再无条件覆盖",
                 "Features\\Replay\\Runtime\\KeyViewerBridge.cs",
@@ -1310,10 +1337,54 @@ namespace UiPreview
                     "case 3: x = 20f; ty = 18f; enter = new Vector2(-24f, 0f); break;",
                     StringComparison.Ordinal)
                 && code.Contains(
-                    "case 4: x = sw - tw - 20f; ty = sh - 18f - th; dir = -1f; enter = new Vector2(24f, 0f); break;",
+                    "case 4: x = sw - tw - 20f; ty = sh - 18f; dir = -1f; enter = new Vector2(24f, 0f); break;",
                     StringComparison.Ordinal)
                 && code.Contains(
-                    "case 5: x = 20f; ty = sh - 18f - th; dir = -1f; enter = new Vector2(-24f, 0f); break;",
+                    "case 5: x = 20f; ty = sh - 18f; dir = -1f; enter = new Vector2(-24f, 0f); break;",
+                    StringComparison.Ordinal);
+        }
+
+        private static bool ModernBodyBackground(string code)
+        {
+            return code.Contains(
+                    "private const float BodyBgAlpha = 0.52f;",
+                    StringComparison.Ordinal)
+                && code.Contains(
+                    "border = new RectOffset(8, 8, 8, 8),",
+                    StringComparison.Ordinal)
+                && code.Contains(
+                    "GUI.Box(Gui.Snap(body), GUIContent.none, BodyBgStyle());",
+                    StringComparison.Ordinal)
+                && code.Contains(
+                    "BodyBgAlpha * EaseOut(_show) * pageEase * subEase) * Gui.Tint;",
+                    StringComparison.Ordinal);
+        }
+
+        private static bool ToastLongTextFits(string code)
+        {
+            return code.Contains(
+                    "wordWrap = true,", StringComparison.Ordinal)
+                && code.Contains(
+                    "_title.CalcHeight(new GUIContent(titleText), textW)",
+                    StringComparison.Ordinal)
+                && code.Contains(
+                    "_detail.CalcHeight(new GUIContent(t.Detail), textW)",
+                    StringComparison.Ordinal)
+                && code.Contains(
+                    "float targetY = dir > 0f ? ty : ty - cardH;",
+                    StringComparison.Ordinal);
+        }
+
+        private static bool BrandMarkDrawn(string code)
+        {
+            return code.Contains(
+                    "GUI.Box(Gui.Snap(mark), GUIContent.none, BrandMarkStyle());",
+                    StringComparison.Ordinal)
+                && code.Contains(
+                    "RoundedTex.Get(24, 24, 6,",
+                    StringComparison.Ordinal)
+                && code.Contains(
+                    "\"▶\", ModernMarkStyle()",
                     StringComparison.Ordinal);
         }
 

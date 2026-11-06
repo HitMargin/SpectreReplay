@@ -889,6 +889,36 @@ switch ($Which) {
         Backup 'Ui\Toast.cs'
         ReplaceExact 'Ui\Toast.cs' ('                    case 5: x = 20f; ty = sh - 18f - th; dir = -1f; enter = new Vector2(-24f, 0f); break;') ('                    // mutated')
     }
+    'MUT-U95' {
+        # ⑬c13：正文背景改成全不透明——半透明深色底判据必须变红。
+        Backup 'Ui\ModernSettingsWindow.cs'
+        ReplaceExact 'Ui\ModernSettingsWindow.cs' ('private const float BodyBgAlpha = 0.72f;') ('private const float BodyBgAlpha = 1f;')
+    }
+    'MUT-U96' {
+        # ⑬c13：去掉正文背景的 9-slice 边界——第二层圆角判据必须变红。
+        Backup 'Ui\ModernSettingsWindow.cs'
+        ReplaceExact 'Ui\ModernSettingsWindow.cs' ('border = new RectOffset(8, 8, 8, 8),') ('border = new RectOffset(0, 0, 0, 0),')
+    }
+    'MUT-U97' {
+        # ⑬c14：长标题退回单行 CalcSize——Toast 文本截断判据必须变红。
+        Backup 'Ui\Toast.cs'
+        ReplaceExact 'Ui\Toast.cs' ('_title.CalcHeight(new GUIContent(titleText), textW)') ('_title.CalcSize(new GUIContent(titleText)).y')
+    }
+    'MUT-U98' {
+        # ⑬c15：配置默认位置退回右上——左上默认判据必须变红。
+        Backup 'State\Settings.cs'
+        ReplaceExact 'State\Settings.cs' ('public static int NotificationPos = 3;') ('public static int NotificationPos = 0;')
+    }
+    'MUT-U99' {
+        # ⑬c16：绘制默认位置退回右上——Toast 默认同步判据必须变红。
+        Backup 'Ui\Toast.cs'
+        ReplaceExact 'Ui\Toast.cs' ('internal static int Pos = 3;') ('internal static int Pos = 0;')
+    }
+    'MUT-U100' {
+        # ⑬c17：品牌标记退回白色占位方块——顶栏图标判据必须变红。
+        Backup 'Ui\ModernSettingsWindow.cs'
+        ReplaceExact 'Ui\ModernSettingsWindow.cs' ('GUI.Box(Gui.Snap(mark), GUIContent.none, BrandMarkStyle());') ('Gui.Fill(mark, Color.white);')
+    }
     'MUT-U25' {
         # ⑫i：把已删除的「界面语言跟随游戏」开关加回来（防回归变异）。
         #      用单引号字符串拼出双引号，避免在 here-string 外层写转义。
@@ -2265,7 +2295,7 @@ switch ($Which) {
         ReplaceExact 'Pages\Pages.cs' 'DrawDeleteFileButton(captured);' ''
     }
     default {
-        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U94）"
+        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U100）"
     }
 }
 

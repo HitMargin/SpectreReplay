@@ -28,7 +28,8 @@ namespace SpectreReplay.Ui
         /// 显示位置：0=右上 1=顶部中央 2=底部中央 3=左上 4=右下 5=左下。
         /// 索引追加而不是重排，保证旧 Configs.json 的选择不会错位。
         /// </summary>
-        internal static int Pos = 0;
+        // 默认与 Settings.NotificationPos 一致，避免配置尚未加载时先弹到右上。
+        internal static int Pos = 3;
 
         internal sealed class Rec
         {
@@ -141,10 +142,10 @@ namespace SpectreReplay.Ui
                 switch (Pos)
                 {
                     case 1: x = sw / 2f - tw / 2f; ty = 18f; enter = new Vector2(0f, -18f); break;
-                    case 2: x = sw / 2f - tw / 2f; ty = sh - 18f - th; dir = -1f; enter = new Vector2(0f, 18f); break;
+                    case 2: x = sw / 2f - tw / 2f; ty = sh - 18f; dir = -1f; enter = new Vector2(0f, 18f); break;
                     case 3: x = 20f; ty = 18f; enter = new Vector2(-24f, 0f); break;
-                    case 4: x = sw - tw - 20f; ty = sh - 18f - th; dir = -1f; enter = new Vector2(24f, 0f); break;
-                    case 5: x = 20f; ty = sh - 18f - th; dir = -1f; enter = new Vector2(-24f, 0f); break;
+                    case 4: x = sw - tw - 20f; ty = sh - 18f; dir = -1f; enter = new Vector2(24f, 0f); break;
+                    case 5: x = 20f; ty = sh - 18f; dir = -1f; enter = new Vector2(-24f, 0f); break;
                     default: x = sw - tw - 20f; ty = 18f; enter = new Vector2(24f, 0f); break;
                 }
 
@@ -155,22 +156,26 @@ namespace SpectreReplay.Ui
                     for (int i = 0; i < Cards.Count; i++)
                     {
                         var t = Cards[i];
-                        float y;
-                        if (!Y.TryGetValue(t, out y)) y = ty;
-                        if (step) { y = Approach(y, ty, 14f); Y[t] = y; }
-
                         float age = now - t.Born;
                         float ein = EaseOut(Mathf.Clamp01(age / 0.28f));
                         float outT = Mathf.Clamp01((t.Life - age) / 0.5f);
                         string titleText = t.Count > 1 ? t.Title + "  ×" + t.Count : t.Title;
+                        float textW = tw - 32f;
                         float titleH = Mathf.Max(18f,
-                            _title.CalcSize(new GUIContent(titleText)).y);
+                            _title.CalcHeight(new GUIContent(titleText), textW));
                         float detailH = string.IsNullOrEmpty(t.Detail) ? 0f
                             : Mathf.Max(16f,
-                                _detail.CalcSize(new GUIContent(t.Detail)).y);
+                                _detail.CalcHeight(new GUIContent(t.Detail), textW));
+                        string shortText = t.Count > 1 ? t.Short + " ×" + t.Count : t.Short;
                         float cardH = detailed
                             ? 10f + titleH + (detailH > 0f ? 4f + detailH : 0f) + 12f
-                            : th;
+                            : Mathf.Max(th, _short.CalcHeight(new GUIContent(shortText), tw - 34f) + 8f);
+                        // 顶部从上往下堆，底部从下往上堆；底部首卡必须按
+                        // 自己的实际高度贴住底边，否则长文本会溢出屏幕。
+                        float targetY = dir > 0f ? ty : ty - cardH;
+                        float y;
+                        if (!Y.TryGetValue(t, out y)) y = targetY;
+                        if (step) { y = Approach(y, targetY, 14f); Y[t] = y; }
                         // 进场沿 enter 方向滑入；离场**沿同一方向反向收回**
                         // （从哪来回哪去）。
                         float slide = (1f - ein) + (1f - outT);
@@ -184,8 +189,9 @@ namespace SpectreReplay.Ui
                         {
                             Fill(new Rect(r.x + 10f, r.y + 12f, 3f, r.height - 24f),
                                 t.Warning ? WarnCol : OkCol, 1.5f);
-                            // 行高用实测值，并且留 1px 余量：CalcSize 有时
-                            // 正好等于字形下沿，浮点舍入会把最后一像素裁掉。
+                            // 行高按可用宽度换行后实测，并且留 1px 余量：
+                            // CalcHeight 有时正好等于字形下沿，浮点舍入会把
+                            // 最后一像素裁掉。
                             Label(new Rect(r.x + 22f, r.y + 9f,
                                 r.width - 32f, titleH + 1f), titleText, _title);
                             if (detailH > 0f)
@@ -204,7 +210,7 @@ namespace SpectreReplay.Ui
                             Fill(new Rect(r.x + 13f, r.center.y - 3f, 6f, 6f),
                                 t.Warning ? WarnCol : OkCol, 3f);
                             Label(new Rect(r.x + 26f, r.y, r.width - 34f, r.height),
-                                t.Count > 1 ? t.Short + " ×" + t.Count : t.Short, _short);
+                                shortText, _short);
                         }
                         _ga = old;
                         ty += dir * (cardH + gap);
@@ -308,6 +314,7 @@ namespace SpectreReplay.Ui
             {
                 fontSize = 13, fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.UpperLeft, clipping = TextClipping.Clip,
+                wordWrap = true,
             };
             _title.normal.textColor = new Color(0.95f, 0.96f, 0.98f, 1f);
             _detail = new GUIStyle(GUI.skin.label)
@@ -320,6 +327,7 @@ namespace SpectreReplay.Ui
             {
                 fontSize = 12, fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleLeft, clipping = TextClipping.Clip,
+                wordWrap = true,
             };
             _short.normal.textColor = new Color(0.95f, 0.96f, 0.98f, 1f);
             _white = Texture2D.whiteTexture;

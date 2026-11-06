@@ -81,7 +81,8 @@ public static class Settings
     /// 提示卡出现位置：0=右上，1=顶部中央，2=底部中央，3=左上，4=右下，5=左下。
     /// 改入口在「关于」页，和提示时长同一组。
     /// </summary>
-    public static int NotificationPos = 0;
+    // 默认左上：既避开中央画面，也和新 UI 的首屏阅读方向一致。
+    public static int NotificationPos = 3;
 
     /// <summary>
     /// 提示条时长解析：基础值 + <paramref name="extra"/> 秒。

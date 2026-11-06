@@ -25,6 +25,8 @@ namespace SpectreReplay.Ui
         private const float TabH = 36f;
         private const float MinScale = 0.78f;
         private const float MaxScale = 1.15f;
+        // 正文区比外层玻璃更沉，但保留较多底层画面；0.52 不再压成死黑。
+        private const float BodyBgAlpha = 0.52f;
 
         private float _show;
         private float _pageT = 1f;
@@ -360,6 +362,7 @@ namespace SpectreReplay.Ui
         }
 
         private GUIStyle _style;
+        private GUIStyle _bodyBgStyle;
 
         private GUIStyle ModernWindowStyle()
         {
@@ -390,6 +393,29 @@ namespace SpectreReplay.Ui
             _style.onActive.background = bg;
             _style.onFocused.background = bg;
             return _style;
+        }
+
+        private GUIStyle BodyBgStyle()
+        {
+            if (_bodyBgStyle != null) return _bodyBgStyle;
+            _bodyBgStyle = new GUIStyle
+            {
+                padding = new RectOffset(0, 0, 0, 0),
+                margin = new RectOffset(0, 0, 0, 0),
+                // 8px 边界让 32px 圆角贴图按 9-slice 拉伸，正文变宽时圆角不被拉扁。
+                border = new RectOffset(8, 8, 8, 8),
+            };
+            var tex = RoundedTex.Get(32, 32, 8,
+                new Color(0.035f, 0.038f, 0.048f, 1f));
+            _bodyBgStyle.normal.background = tex;
+            _bodyBgStyle.hover.background = tex;
+            _bodyBgStyle.active.background = tex;
+            _bodyBgStyle.focused.background = tex;
+            _bodyBgStyle.onNormal.background = tex;
+            _bodyBgStyle.onHover.background = tex;
+            _bodyBgStyle.onActive.background = tex;
+            _bodyBgStyle.onFocused.background = tex;
+            return _bodyBgStyle;
         }
 
         private void DrawWindow(int id)
@@ -545,8 +571,16 @@ namespace SpectreReplay.Ui
         private void DrawHeader(Rect area)
         {
             Rect r = new Rect(0f, 0f, area.width, HeaderH);
-            Gui.Fill(new Rect(r.x + 16f, r.y + 20f, 19f, 19f),
-                new Color(0.86f, 0.89f, 0.94f, 1f));
+            Rect mark = new Rect(r.x + 16f, r.y + 20f, 19f, 19f);
+            GUI.Box(Gui.Snap(mark), GUIContent.none, BrandMarkStyle());
+            if (Event.current.type == EventType.Repaint)
+            {
+                Color oldMarkColor = GUI.color;
+                GUI.color = new Color(0.95f, 0.96f, 0.98f, 1f);
+                GUI.Label(new Rect(mark.x, mark.y - 1f, mark.width, mark.height),
+                    "▶", ModernMarkStyle());
+                GUI.color = oldMarkColor;
+            }
             GUI.Label(new Rect(r.x + 50f, r.y + 17f, 160f, 25f),
                 "SpectreReplay", ModernTitleStyle());
             GUI.Label(new Rect(r.x + 50f, r.y + 39f, 260f, 18f),
@@ -642,6 +676,16 @@ namespace SpectreReplay.Ui
             Rect body = new Rect(
                 18f + (1f - pageEase) * 10f + (1f - subEase) * 6f, top,
                 area.width - 36f, bottom - top - 8f);
+            // 正文页自己铺一层圆角深色底，避免内容卡片以外的区域直接透出
+            // 外层红色模糊画面；alpha 随开合/切页动画淡入淡出。
+            if (Event.current.type == EventType.Repaint)
+            {
+                Color oldBodyColor = GUI.color;
+                GUI.color = new Color(1f, 1f, 1f,
+                    BodyBgAlpha * EaseOut(_show) * pageEase * subEase) * Gui.Tint;
+                GUI.Box(Gui.Snap(body), GUIContent.none, BodyBgStyle());
+                GUI.color = oldBodyColor;
+            }
             GUI.BeginGroup(body);
             try
             {
@@ -747,6 +791,8 @@ namespace SpectreReplay.Ui
         private GUIStyle _tabHoverStyle;
         private GUIStyle _closeStyle;
         private GUIStyle _footerStyle;
+        private GUIStyle _markStyle;
+        private GUIStyle _markTextStyle;
 
         private GUIStyle ModernTitleStyle()
             => _titleStyle ??= new GUIStyle(GUI.skin.label)
@@ -763,6 +809,39 @@ namespace SpectreReplay.Ui
                 fontSize = 12,
                 alignment = TextAnchor.MiddleLeft,
                 normal = { textColor = new Color(0.62f, 0.65f, 0.72f, 1f) },
+            };
+
+        private GUIStyle BrandMarkStyle()
+        {
+            if (_markStyle != null) return _markStyle;
+            _markStyle = new GUIStyle
+            {
+                padding = new RectOffset(0, 0, 0, 0),
+                margin = new RectOffset(0, 0, 0, 0),
+                border = new RectOffset(6, 6, 6, 6),
+            };
+            var tex = RoundedTex.Get(24, 24, 6,
+                new Color(0.16f, 0.18f, 0.22f, 0.96f));
+            _markStyle.normal.background = tex;
+            _markStyle.hover.background = tex;
+            _markStyle.active.background = tex;
+            _markStyle.focused.background = tex;
+            _markStyle.onNormal.background = tex;
+            _markStyle.onHover.background = tex;
+            _markStyle.onActive.background = tex;
+            _markStyle.onFocused.background = tex;
+            return _markStyle;
+        }
+
+        private GUIStyle ModernMarkStyle()
+            => _markTextStyle ??= new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 11,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                clipping = TextClipping.Clip,
+                richText = false,
+                normal = { textColor = new Color(0.95f, 0.96f, 0.98f, 1f) },
             };
 
         private GUIStyle ModernTabStyle()
