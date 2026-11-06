@@ -102,71 +102,103 @@ internal sealed class VideoFrameSource
     internal VideoFrameSource(VideoSurface surface, int width, int height)
     {
         this.surface = surface;
-        // 雨滴时钟换轨：JRP 的 CurrentTicks 吃墙钟，渲染慢放时两种来源的
-        // 成片里雨速都不对——必须在 surface 分支**之前**装配，「游戏画面」
-        // 来源同样要吃虚拟时钟（放分支里 = 该来源永远走不到，正是修过的
-        // 错位形态，㊴a 的位置判据钉着它）。
-        RenderOverlayCapture.InstallClockOverride();
-        if (surface == VideoSurface.CleanCamera)
+        try
         {
-            scrCamera cam = scrCamera.instance;
-            if (cam == null || cam.camobj == null)
-                throw new InvalidOperationException("scrCamera not available");
-            Width = width;
-            Height = height;
-
-            // 三台相机由同一套补丁保证非空，但这里是跨版本接缝：任一为 null 就抛，
-            // 而不是把 null 一起赋给 targetTexture（赋值本身不报错，之后渲染全黑）
-            if (cam.Bgcamstatic == null || cam.BGcam == null)
-                throw new InvalidOperationException("scrCamera sub-cameras not available");
-            camStatic = cam.Bgcamstatic;
-            camBackground = cam.BGcam;
-            camMain = cam.camobj;
-            oldStatic = camStatic.targetTexture;
-            oldBackground = camBackground.targetTexture;
-            oldMain = camMain.targetTexture;
-
-            texture = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32);
-            // Create() 返回 false 表示显存/驱动拒绝（分辨率超限、显存耗尽、后台无设备）。
-            // 原实现无视返回值，于是异步回读每帧都 hasError，成片是一路黑帧却"渲染成功"
-            if (!texture.Create())
+            // 雨滴时钟换轨：JRP 的 CurrentTicks 吃墙钟，渲染慢放时两种来源的
+            // 成片里雨速都不对——必须在 surface 分支**之前**装配，「游戏画面」
+            // 来源同样要吃虚拟时钟（放分支里 = 该来源永远走不到，正是修过的
+            // 错位形态，㊴a 的位置判据钉着它）。
+            RenderOverlayCapture.InstallClockOverride();
+            if (surface == VideoSurface.CleanCamera)
             {
-                Object.Destroy(texture);
-                throw new InvalidOperationException(
-                    "RenderTexture.Create failed (" + width + "x" + height + ", CleanCamera)");
+                scrCamera cam = scrCamera.instance;
+                if (cam == null || cam.camobj == null)
+                    throw new InvalidOperationException("scrCamera not available");
+                Width = width;
+                Height = height;
+
+                // 三台相机由同一套补丁保证非空，但这里是跨版本接缝：任一为 null 就抛，
+                // 而不是把 null 一起赋给 targetTexture（赋值本身不报错，之后渲染全黑）
+                if (cam.Bgcamstatic == null || cam.BGcam == null)
+                    throw new InvalidOperationException("scrCamera sub-cameras not available");
+                camStatic = cam.Bgcamstatic;
+                camBackground = cam.BGcam;
+                camMain = cam.camobj;
+                oldStatic = camStatic.targetTexture;
+                oldBackground = camBackground.targetTexture;
+                oldMain = camMain.targetTexture;
+
+                texture = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32);
+                // Create() 返回 false 表示显存/驱动拒绝（分辨率超限、显存耗尽、后台无设备）。
+                // 原实现无视返回值，于是异步回读每帧都 hasError，成片是一路黑帧却"渲染成功"
+                if (!texture.Create())
+                {
+                    Object.Destroy(texture);
+                    throw new InvalidOperationException(
+                        "RenderTexture.Create failed (" + width + "x" + height + ", CleanCamera)");
+                }
+                cam.Bgcamstatic.targetTexture = texture;
+                cam.BGcam.targetTexture = texture;
+                cam.camobj.targetTexture = texture;
+
+                // 第三方画布 opt-in（SpectreAPI.RegisterRenderOverlay）：仅纯净相机
+                // 生效——「游戏画面」拍的就是后备缓冲，画布本来就在。
+                RenderOverlayCapture.InstallCameraCapture(cam.camobj);
+
+                // **捕获期间屏幕必须还有东西在画。** 三台相机被劫持到我们的
+                // RenderTexture 之后，屏幕上没有任何相机清屏：世界冻在最后一帧，
+                // 而 IMGUI 每帧照常往上叠，半透明菜单一层层累加 ⇒ 越叠越亮、
+                // 文字重影（镜厅）。这不是收尾那一小段才有的问题——整个捕获期都这样。
+                //
+                // 加一台只负责清屏 + 把刚渲染的画面贴回屏幕的相机：
+                // cullingMask = 0 渲染任何场景物体，depth 拉到最大排在所有相机之后，
+                // OnPostRender 里把我们的纹理 Blit 到 backbuffer。
+                CreatePreviewCamera();
             }
-            cam.Bgcamstatic.targetTexture = texture;
-            cam.BGcam.targetTexture = texture;
-            cam.camobj.targetTexture = texture;
-
-            // 第三方画布 opt-in（SpectreAPI.RegisterRenderOverlay）：仅纯净相机
-            // 生效——「游戏画面」拍的就是后备缓冲，画布本来就在。
-            RenderOverlayCapture.InstallCameraCapture(cam.camobj);
-
-            // **捕获期间屏幕必须还有东西在画。** 三台相机被劫持到我们的
-            // RenderTexture 之后，屏幕上没有任何相机清屏：世界冻在最后一帧，
-            // 而 IMGUI 每帧照常往上叠，半透明菜单一层层累加 ⇒ 越叠越亮、
-            // 文字重影（镜厅）。这不是收尾那一小段才有的问题——整个捕获期都这样。
-            //
-            // 加一台只负责清屏 + 把刚渲染的画面贴回屏幕的相机：
-            // cullingMask = 0 渲染任何场景物体，depth 拉到最大排在所有相机之后，
-            // OnPostRender 里把我们的纹理 Blit 到 backbuffer。
-            CreatePreviewCamera();
+            else
+            {
+                Width = screenW = Screen.width;
+                Height = screenH = Screen.height;
+                // 截屏接口要求目标纹理不带深度缓冲
+                texture = new RenderTexture(Width, Height, 0, RenderTextureFormat.ARGB32);
+                if (!texture.Create())
+                {
+                    Object.Destroy(texture);
+                    throw new InvalidOperationException(
+                        "RenderTexture.Create failed (" + Width + "x" + Height + ", WholeScreen)");
+                }
+            }
         }
-        else
+        catch
         {
-            Width = screenW = Screen.width;
-            Height = screenH = Screen.height;
-            // 截屏接口要求目标纹理不带深度缓冲
-            texture = new RenderTexture(Width, Height, 0, RenderTextureFormat.ARGB32);
-            if (!texture.Create())
-            {
-                Object.Destroy(texture);
-                throw new InvalidOperationException(
-                    "RenderTexture.Create failed (" + Width + "x" + Height + ", WholeScreen)");
-            }
+            CleanupOnConstructionFailure();
+            throw;
         }
         frameBytes = Width * Height * 4;
+    }
+
+    private void CleanupOnConstructionFailure()
+    {
+        try
+        {
+            RestoreTargets();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogException(ex);
+        }
+        if (texture != null)
+        {
+            try
+            {
+                texture.Release();
+                Object.Destroy(texture);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex);
+            }
+        }
     }
 
     // 是否把鼠标指针画进帧（由渲染作业每轮按 Settings.RenderCursorOn 写入）。

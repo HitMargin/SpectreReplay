@@ -442,6 +442,11 @@ internal sealed class VideoRenderJob : MonoBehaviour
 
             yield return new WaitForEndOfFrame();
 
+            // Quartz's first Update may discard input queued during source setup;
+            // seed once after that boundary so held keys survive into the first frame.
+            if (frameIndex == 0)
+                ReplayPlayer.SyncQuartzHeld();
+
             // 编辑器/后台聚焦策略可能暂停全局音频，渲染期间强制开启（离线混音依赖它）
             AudioListener.pause = false;
 

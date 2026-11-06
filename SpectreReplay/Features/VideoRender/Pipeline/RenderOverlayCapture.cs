@@ -65,6 +65,7 @@ internal static class RenderOverlayCapture
     internal static void InstallClockOverride()
     {
         InstallClockPatch();
+        InstallQuartzDriver();
     }
 
     /// <summary>
@@ -105,6 +106,7 @@ internal static class RenderOverlayCapture
     /// <summary>渲染会话结束时调一次（幂等，两种来源都调）。时钟补丁卸载、已切换的画布恢复。</summary>
     internal static void Restore()
     {
+        UninstallQuartzDriver();
         UninstallClockPatch();
         foreach (Entry e in entries)
         {
@@ -193,6 +195,147 @@ internal static class RenderOverlayCapture
         }
         clockTarget = null;
         anchorTaken = false;
+    }
+
+    // Quartz KeyViewer exposes a public interop driver specifically for offline
+    // capture. Its rain managers read KvClock.Now; without Begin(), that remains
+    // a Stopwatch wall clock while game time is pinned, so rain plays at real-time
+    // speed in a slowed/offline render. Reflection is required because Quartz
+    // modules are byte-loaded and are not compile-time references of this mod.
+    private static object quartzDriver;
+    private static System.Reflection.MethodInfo quartzBegin;
+    private static System.Reflection.MethodInfo quartzKey;
+    private static System.Reflection.MethodInfo quartzEnd;
+    private static Func<double> quartzClock;
+    private static readonly Dictionary<ushort, KeyCode> quartzKeyCodes
+        = new Dictionary<ushort, KeyCode>();
+    private static bool quartzKeyMapReady;
+    private static readonly HashSet<ushort> quartzHeld = new HashSet<ushort>();
+
+    private static void InstallQuartzDriver()
+    {
+        if (quartzDriver != null) return;
+        try
+        {
+            Type driver = AccessTools.TypeByName("Quartz.Features.KeyViewer.KvExternalDriver");
+            if (driver == null) return;
+            quartzBegin = AccessTools.Method(driver, "Begin", new[] { typeof(Func<double>) });
+            quartzKey = AccessTools.Method(driver, "Key", new[] { typeof(KeyCode), typeof(bool) });
+            quartzEnd = AccessTools.Method(driver, "End");
+            if (quartzBegin == null || quartzKey == null || quartzEnd == null)
+            {
+                Debug.LogWarning("[SpectreReplay] Quartz KeyViewer 时钟换轨未生效："
+                    + "KvExternalDriver 接口形状变了（视频里的雨滴仍跟随墙钟）");
+                return;
+            }
+            quartzClock = () => UnscaledDeltaPin.CurrentUnscaledD;
+            quartzBegin.Invoke(null, new object[] { quartzClock });
+            quartzDriver = driver;
+            Debug.Log("[SpectreReplay] Quartz KeyViewer 已接入渲染虚拟时钟（雨滴跟随成片时间轴）");
+        }
+        catch (Exception ex)
+        {
+            quartzDriver = null;
+            Debug.LogWarning("[SpectreReplay] Quartz KeyViewer 时钟换轨失败，雨滴将跟随墙钟: "
+                + ex.GetType().Name + " " + ex.Message);
+        }
+    }
+
+    private static void UninstallQuartzDriver()
+    {
+        if (quartzDriver == null) return;
+        try
+        {
+            quartzEnd?.Invoke(null, null);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("[SpectreReplay] Quartz KeyViewer 时钟恢复失败: "
+                + ex.GetType().Name + " " + ex.Message);
+        }
+        quartzDriver = null;
+        quartzBegin = null;
+        quartzKey = null;
+        quartzEnd = null;
+        quartzClock = null;
+    }
+
+    /// <summary>
+    /// Feed the replay edge to Quartz at the point ReplayPlayer consumes it.
+    /// A no-op unless this render session successfully entered Quartz driver mode.
+    /// </summary>
+    internal static void QuartzKey(ushort vk, bool down)
+    {
+        if (quartzDriver == null || quartzKey == null) return;
+        try
+        {
+            KeyCode key = QuartzKeyCode(vk);
+            if (key == KeyCode.None) return;
+            quartzKey.Invoke(null, new object[] { key, down });
+            if (down) quartzHeld.Add(vk);
+            else quartzHeld.Remove(vk);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("[SpectreReplay] Quartz KeyViewer 按键注入失败: "
+                + ex.GetType().Name + " " + ex.Message);
+        }
+    }
+
+    private static KeyCode QuartzKeyCode(ushort vk)
+    {
+        if (!quartzKeyMapReady) BuildQuartzKeyMap();
+        return quartzKeyCodes.TryGetValue(vk, out KeyCode key) ? key : KeyCode.None;
+    }
+
+    private static void BuildQuartzKeyMap()
+    {
+        quartzKeyMapReady = true;
+        // Replay events are Win32 virtual-key codes; KeyCode values are a
+        // different enum. Reuse SkyHook's own table in reverse rather than
+        // maintaining a second 256-entry keyboard table.
+        foreach (KeyCode key in Enum.GetValues(typeof(KeyCode)))
+        {
+            if (key == KeyCode.None) continue;
+            try
+            {
+                SkyHook.KeyLabel label = SkyHook.SkyHookKeyMapper.UnityKeyToSkyHookKey(key);
+                if (label == SkyHook.KeyLabel.Unknown) continue;
+                int native = SkyHook.SkyHookKeyMapper.KeyLabelToNativeKeyCode(label);
+                if (native > 0 && native <= ushort.MaxValue && !quartzKeyCodes.ContainsKey((ushort)native))
+                    quartzKeyCodes[(ushort)native] = key;
+            }
+            catch
+            {
+                // A missing engine mapping only means that key cannot drive
+                // Quartz; replay judgment is unaffected.
+            }
+        }
+        // SkyHook currently lacks VK_APPS; Quartz can still display it.
+        if (!quartzKeyCodes.ContainsKey(93)) quartzKeyCodes[93] = KeyCode.Menu;
+    }
+
+    /// <summary>
+    /// Forget edges before a timeline seek. ReplayPlayer reconstructs the held
+    /// set from the replay prefix and calls QuartzKey for those keys next.
+    /// </summary>
+    internal static void ResetQuartzKeys()
+    {
+        if (quartzDriver == null || quartzKey == null) return;
+        try
+        {
+            foreach (ushort vk in new List<ushort>(quartzHeld))
+            {
+                KeyCode key = QuartzKeyCode(vk);
+                if (key != KeyCode.None) quartzKey.Invoke(null, new object[] { key, false });
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning("[SpectreReplay] Quartz KeyViewer 跳转清理失败: "
+                + ex.GetType().Name + " " + ex.Message);
+        }
+        quartzHeld.Clear();
     }
 
     // 渲染期 KeyViewer.CurrentTicks 的替身：锚点 + 虚拟时钟增量。

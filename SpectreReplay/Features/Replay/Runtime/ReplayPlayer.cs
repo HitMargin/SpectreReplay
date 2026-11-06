@@ -182,29 +182,7 @@ internal static class ReplayPlayer
             }
         }
 
-        CurrKeyState = new byte[256];
-        ManagedInput.Clear();
-
-        // 重建跳转点仍然按住的键。
-        // 被跳过的事件里「按下但还没抬起」的键，在跳转之后仍是按住状态；只清空不重建，
-        // 那颗键就永远等不到按下事件，后面的抬起事件打在空状态上是幂等空操作。
-        // 长按地板（hold）正是靠这个状态判定的，所以在长条中间跳转会直接漏判。
-        for (int i = 0; i < KeyEventIndex; i++)
-        {
-            var ev = data.KeyEvents[i];
-            ushort num = ev.KeyCode < Settings.key_code_convert.Length
-                ? Settings.key_code_convert[ev.KeyCode]
-                : (ushort)0;
-            // 热键也不该在跳转后被「恢复成按住」：存量回放里录进了它们，
-            // 而 Restore 不写帧戳、只改按住集合，于是它们会一直挂着到结束。
-            if (num == 0 || num == 27 || ManagedInput.IsModHotkey(num)) continue;
-            ManagedInput.Restore(num, ev.IsPressed);
-        }
-        // 托管状态已就位，同步一份给 SendInput 路径，Stop() 才知道该发哪些抬起
-        for (int vk = 1; vk < CurrKeyState.Length; vk++)
-        {
-            if (ManagedInput.IsHeldVk((ushort)vk)) CurrKeyState[vk] = 128;
-        }
+        RebuildHeldInputs();
 
         AllAutoHits = false;
     }
@@ -244,26 +222,58 @@ internal static class ReplayPlayer
         }
         KeyEventIndex = keyIndex;
 
-        CurrKeyState = new byte[256];
-        ManagedInput.Clear();
-        for (int i = 0; i < KeyEventIndex; i++)
-        {
-            var ev = data.KeyEvents[i];
-            ushort num = ev.KeyCode < Settings.key_code_convert.Length
-                ? Settings.key_code_convert[ev.KeyCode]
-                : (ushort)0;
-            if (num == 0 || num == 27 || ManagedInput.IsModHotkey(num))
-                continue;
-            ManagedInput.Restore(num, ev.IsPressed);
-        }
-        for (int vk = 1; vk < CurrKeyState.Length; vk++)
-        {
-            if (ManagedInput.IsHeldVk((ushort)vk))
-                CurrKeyState[vk] = 128;
-        }
+        RebuildHeldInputs();
 
         AllAutoHits = false;
         return true;
+    }
+
+    /// <summary>
+    /// Rebuild the complete input state at the current key cursor.
+    /// Both replay judgment and the Quartz KeyViewer must see the same prefix;
+    /// keeping this in one place prevents a seek path from updating only one side.
+    /// </summary>
+    private static void RebuildHeldInputs()
+    {
+        CurrKeyState = new byte[256];
+        ManagedInput.Clear();
+        Features.VideoRender.RenderOverlayCapture.ResetQuartzKeys();
+
+        if (data?.KeyEvents != null)
+        {
+            int end = Math.Max(0, Math.Min(KeyEventIndex, data.KeyEvents.Count));
+            for (int i = 0; i < end; i++)
+            {
+                var ev = data.KeyEvents[i];
+                ushort num = ev.KeyCode < Settings.key_code_convert.Length
+                    ? Settings.key_code_convert[ev.KeyCode]
+                    : (ushort)0;
+                // Hotkeys were recorded in older replays; Restore does not write
+                // a frame stamp, so restoring them would leave them stuck down.
+                if (num == 0 || num == 27 || ManagedInput.IsModHotkey(num)) continue;
+                ManagedInput.Restore(num, ev.IsPressed);
+                Features.VideoRender.RenderOverlayCapture.QuartzKey(num, ev.IsPressed);
+            }
+        }
+
+        // Keep the SendInput mirror in sync so Stop() releases exactly the keys
+        // that remain held after the rebuild.
+        for (int vk = 1; vk < CurrKeyState.Length; vk++)
+        {
+            if (ManagedInput.IsHeldVk((ushort)vk)) CurrKeyState[vk] = 128;
+        }
+    }
+
+    /// <summary>
+    /// Seed Quartz with the held set after its driver is installed.
+    /// ReplayPlayer.FastForward runs before VideoFrameSource enters driver mode,
+    /// so events consumed during that interval never reach Quartz's queue.
+    /// </summary>
+    internal static void SyncQuartzHeld()
+    {
+        Features.VideoRender.RenderOverlayCapture.ResetQuartzKeys();
+        foreach (ushort vk in ManagedInput.SnapshotHeld())
+            Features.VideoRender.RenderOverlayCapture.QuartzKey(vk, true);
     }
 
     internal static bool TryGetSongPosition(out double songPosition)
@@ -468,6 +478,10 @@ internal static class ReplayPlayer
                 // Shift/Ctrl/Alt 同样算「按住」；若在此滤掉，录音里只按住修饰键的长条
                 // 会在回放时被判成松手。Esc(27) 与 0（未映射/无效）仍排除。
                 ManagedInput.Note(num, ev.IsPressed);
+                // Quartz KeyViewer has its own external-driver queue; it does not
+                // consume ManagedInput, SkyHook, or Unity Input. Feed the same edge
+                // here so its rain animation and key highlights share the replay clock.
+                Features.VideoRender.RenderOverlayCapture.QuartzKey(num, ev.IsPressed);
                 if (asyncInject && AsyncInputInjector.Healthy)
                 {
                     try { AsyncInputInjector.Inject(num, ev.IsPressed, ev.SongPosition); }
