@@ -29,6 +29,20 @@ internal class Patch_SwitchToEditMode
     internal static void Prefix(scnEditor __instance)
     {
         Features.VideoRender.VideoRender.CancelForSceneExit();
+        // 编辑器试玩过关（LateSave）后退出试玩也走这条路：场景切换的三个
+        // case（scnLevelSelect/scnLoading/scnTaroMenu0）在编辑器里永不经过，
+        // 不在这里落盘的话 LateSaveMode 挂着的本局录制会被 StopAll 直接丢掉，
+        // 唯一剩下的保存入口就是结算后手动按保存热键。
+        if (LateSaveMode)
+        {
+            PlayActions.StopRecording();
+            if (Settings.DontSaveWhenMiss)
+            {
+                if (HitMarginCompat.FailCount(HitMarginCounts) == 0) SaveFile();
+            }
+            else SaveFile();
+            LateSaveMode = false;
+        }
         StopAll();
     }
 }

@@ -1076,6 +1076,20 @@ namespace UiPreview
                 "㊷ 录制诊断复位必须接在 ReplayRecorder.Start（每局录制起点）",
                 "Features\\Replay\\Runtime\\ReplayRecorder.cs",
                 s => s.Contains("Patch_Hit.ResetDiagnostics();", StringComparison.Ordinal));
+            // ㊷b 「第 0 块命中去重」状态必须随新一局重置。2026-11-07 实测：
+            //    上一局第一个 hit 记过 CurrentHitFloor/HitMarginCounts，data.Reset()
+            //    只清列表不清这两个；重开后第一个 hit 误判「与上一块相同」走
+            //    RemoveAt(Count-1)=RemoveAt(-1)，异常被吞后整局 HitSnapshots=0、
+            //    元数据空——保存出来一份 2521B 的「空壳回放」。Start 必须重置。
+            fail += Check(projectRoot,
+                "㊷b 每局录制起点必须重置去重状态（CurrentHitFloor/HitMarginCounts）",
+                "Features\\Replay\\Runtime\\ReplayRecorder.cs",
+                s => s.Contains("CurrentHitFloor = null;", StringComparison.Ordinal)
+                    && s.Contains("Array.Clear(HitMarginCounts, 0, HitMarginCounts.Length);", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "㊷c Hit 前缀去重分支必须在列表非空时才允许 RemoveAt",
+                "Features\\Replay\\Patches\\Patch_Recording.cs",
+                s => s.Contains("else if (data.HitSnapshots.Count > 0)", StringComparison.Ordinal));
             // ㊸ 录制/回放启动前必须运行时核对关键补丁仍在目标上。2026-10-31 实测：
             //    JALib（Jipper 全家桶公共库，自动联网更新）的 JAPatcher 按捕获
             //    快照重写目标方法的整套补丁集（JRP 的 Bpm.OnHit 两个 JAPatch 正压
@@ -1336,6 +1350,20 @@ namespace UiPreview
                     && s.Contains("ResolveRangeStartFloor(range)", StringComparison.Ordinal)
                     && s.Contains("replayEndSongPosition = range.Enabled", StringComparison.Ordinal)
                     && s.Contains("replayEndSong = replayEndSongPosition;", StringComparison.Ordinal));
+
+            // LateSave 的三个落盘触发点必须都在：切到选关/加载/主菜单场景、
+            // 开录下一局、编辑器退出试玩（SwitchToEditMode）。漏掉最后一个时，
+            // 编辑器里过关后置上的 LateSaveMode 没有任何落盘出口——退出试玩
+            // 只走 StopAll（纯停录），本局录制被直接丢掉，唯一剩下的保存入口
+            // 只剩结算后手动按保存热键（2026-11-07 用户实测"必须按快捷键才保存"
+            // 正是这个缺口）。
+            fail += Check(projectRoot,
+                "编辑器退出试玩必须接上 LateSave 落盘（否则试玩过关不回存）",
+                "Features\\Replay\\Patches\\Patch_Lifecycle.cs",
+                s => s.Contains("internal class Patch_SwitchToEditMode", StringComparison.Ordinal)
+                    && CountOccurrences(s, "LateSaveMode = false;") == 3
+                    && CountOccurrences(s, "if (LateSaveMode)") == 2
+                    && s.Contains("if (!LateSaveMode) break;", StringComparison.Ordinal));
 
             if (fail == 0)
                 Console.WriteLine("    ✓ " + _checksRun + " 条界面形状判据都成立");

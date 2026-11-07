@@ -926,6 +926,43 @@ switch ($Which) {
             'h / Screen.height * (flip ? -1f : 1f)' `
             'h / Screen.height * (flip ? 1f : -1f)'
     }
+    'MUT-U104' {
+        # ㊷b：每局录制起点漏掉去重状态重置——上一局的 CurrentHitFloor 会压住
+        # 新一局第一个 hit，走 RemoveAt(-1) 后整局 HitSnapshots=0。
+        Backup 'Features\Replay\Runtime\ReplayRecorder.cs'
+        ReplaceExact 'Features\Replay\Runtime\ReplayRecorder.cs' `
+            '            CurrentHitFloor = null;' `
+            '            // mutated: CurrentHitFloor = null;'
+    }
+    'MUT-U105' {
+        # ㊷c：去重分支退化为不看列表长度——Count=0 时 RemoveAt(-1) 必炸。
+        Backup 'Features\Replay\Patches\Patch_Recording.cs'
+        ReplaceExact 'Features\Replay\Patches\Patch_Recording.cs' `
+            '            else if (data.HitSnapshots.Count > 0)' `
+            '            else'
+    }
+    'MUT-U106' {
+        # ㊹：编辑器退出试玩的 LateSave 落盘分支被整段拆掉——回到 2026-11-07
+        #     用户实测的缺口：试玩过关后 LateSaveMode 挂着却没有任何落盘出口，
+        #     StopAll 把本局录制直接丢掉，只剩手动保存热键能救。
+        #     锚点必须钉在 SwitchToEditMode 那一处：`if (LateSaveMode)` 在
+        #     TryStartRecording（重新录制兜底）里还有一处同款，单换
+        #     ReplaceExact 会因命中 2 次而抛错，所以按行索引定位带
+        #     CancelForSceneExit 上文的那段（注释行隔在中间，得回看几行，
+        #     不能只看紧邻前一行）。
+        Backup 'Features\Replay\Patches\Patch_Lifecycle.cs'
+        $ls = Lines 'Features\Replay\Patches\Patch_Lifecycle.cs'
+        $n = 0
+        for ($i = 0; $i -lt $ls.Count; $i++) {
+            if ($ls[$i].Trim() -eq 'if (LateSaveMode)' -and
+                ($ls[[Math]::Max(0, $i - 5)..$i] -join "`n").Contains('CancelForSceneExit')) {
+                $ls[$i] = $ls[$i].Replace('if (LateSaveMode)', 'if (false)')
+                $n++
+            }
+        }
+        if ($n -ne 1) { throw ('MUT-U106 unexpected count=' + $n) }
+        SetLines 'Features\Replay\Patches\Patch_Lifecycle.cs' $ls
+    }
     'MUT-U25' {
         # ⑫i：把已删除的「界面语言跟随游戏」开关加回来（防回归变异）。
         #      用单引号字符串拼出双引号，避免在 here-string 外层写转义。

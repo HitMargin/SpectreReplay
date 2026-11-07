@@ -73,6 +73,10 @@ internal class Patch_ConductorUpdate
         if (!PendingSave) return;
         if (!ManualSaveHotkey.TryConsume()) return;
 
+        // LateSave 路径在这里不能让 StopRecording 代存一次、自己再存一次
+        // （Toast 会合并成 ×2）：清掉标记后 Stop 只收音/收数据，保存仍由
+        // 下面这一处负责。
+        LateSaveMode = false;
         PlayActions.StopRecording();
         if (SaveFile()) PendingSave = false;
     }
