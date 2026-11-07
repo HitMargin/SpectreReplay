@@ -477,12 +477,18 @@ namespace SpectreReplay.Pages
                             () => ReplayInfoPanel.Toggle(captured), 30f);
                         // 宽度按文案实测：写死常量在英文/西语下会把字裁掉
                         // （Gui.ButtonW 的注释里记了那次事故）。
-                        string replayLabel = Loc.T("playback.replay");
+                        string replayLabel = Loc.T(loaded ? "playback.unload" : "playback.replay");
                         if (GUILayout.Button(replayLabel, Gui.ButtonStyle,
                                 GUILayout.Width(Gui.ButtonW(replayLabel, Gui.ButtonStyle, 110f)),
                                 GUILayout.Height(26f)))
                         {
-                            LoadReplayFile(captured);
+                            if (loaded)
+                            {
+                                PlayActions.UnloadReplay();
+                                _loadedPath = "";
+                                _loadedCloudName = "";
+                            }
+                            else LoadReplayFile(captured);
                         }
                         // 云端单份上传：**只在云可用时出现**。云关着时给每一行都挂一颗
                         // 灰按钮，等于用几十颗灰点去解释一件「这一页别处已经说清」的事，
@@ -817,7 +823,7 @@ namespace SpectreReplay.Pages
         private static void DrawUploadButton(string path)
         {
             string label = Loc.T("playback.cloud.upload.one");
-            Rect r = Gui.ButtonRect(label, Gui.QuietButtonStyle, 70f, 22f);
+            Rect r = Gui.ButtonRect(label, Gui.QuietButtonStyle, 70f, 26f);
             if (GUI.Button(r, label, Gui.QuietButtonStyle))
             {
                 UploadReplayFile(path);
@@ -897,7 +903,7 @@ namespace SpectreReplay.Pages
             string label = Loc.T(pending ? "playback.delete.confirm" : "playback.delete");
             GUIStyle style = pending ? Gui.AccentButtonStyle : Gui.QuietButtonStyle;
             // 宽度按文案实测：确认态的「确认删除」在德语/俄语下比 110px 宽。
-            Rect r = Gui.ButtonRect(label, style, 70f, 22f);
+            Rect r = Gui.ButtonRect(label, style, 70f, 26f);
             Gui.Tip(r, "playback.cloud.delete.tip");
             if (!GUI.Button(r, label, style))
             {
@@ -981,7 +987,7 @@ namespace SpectreReplay.Pages
             // 显式取矩形而不是让 GUILayout.Button 自己排：Gui.Tip 需要一个 Rect，
             // 而本项目「每个控件都能自我解释」的约定要靠它（删除尤其需要——
             // 它是这一页唯一的破坏性操作）。宽度按文案实测，确认态不再靠 110f 硬撑。
-            Rect r = Gui.ButtonRect(label, style, 70f, 22f);
+            Rect r = Gui.ButtonRect(label, style, 70f, 26f);
             Gui.Tip(r, "playback.delete");
             if (!GUI.Button(r, label, style))
             {
