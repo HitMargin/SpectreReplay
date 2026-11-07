@@ -1387,6 +1387,10 @@ internal sealed class VideoRenderJob : MonoBehaviour
         {
             try { SpectreState.PlayActions.UnloadReplay(); }
             catch (Exception ex) { Debug.LogException(ex); }
+            // 成功卸载后同步回放页的「已载入」标记：UnloadReplay 只清数据，
+            // 列表徽章读的是 Pages 的两个来源字段，不同步就会把已卸载的
+            // 回放一直标成已载入、按钮停在「卸载」（2026-11-07 实测）。
+            SpectreReplay.Pages.Pages.NotifyReplayUnloaded();
             Debug.Log("[SpectreReplay] render teardown: replay consumed and unloaded "
                 + "(PlayMode=" + SpectreState.PlayMode + " RecordMode=" + SpectreState.RecordMode
                 + " is_playing=" + SpectreState.is_playing

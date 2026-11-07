@@ -2424,6 +2424,14 @@ switch ($Which) {
         ReplaceExact 'Features\VideoRender\Pipeline\VideoEncoder.cs' 'if (!probe.WaitForExit(15000))' 'if (!probe.WaitForExit(5000))'
     }
 
+    'MUT-D34' {
+        # Badge desync regression (2026-11-07): a successful render unloads the
+        # replay; the replay list must drop its loaded badge in step or it keeps
+        # showing/unloading an already-unloaded file.
+        Backup 'Features\VideoRender\Pipeline\VideoRenderJob.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'SpectreReplay.Pages.Pages.NotifyReplayUnloaded();' '// mutated'
+    }
+
     'MUT-D14' {
         # ㉔ BPM 回归：官方关卡退回硬写 0（详情面板重新显示成问号）。
         Backup 'Features\Replay\Patches\Patch_Lifecycle.cs'

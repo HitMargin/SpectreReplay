@@ -682,6 +682,12 @@ namespace UiPreview
                 "渲染页打开必须预热编码器（Locate + NVENC + 文件缓存）",
                 "Pages\\Pages.cs",
                 s => s.Contains("Features.VideoRender.VideoEncoder.WarmUp();", StringComparison.Ordinal));
+            // 渲染成功会卸载回放（一次性消费），但列表徽章读的是 Pages 的
+    //        两个来源字段——卸载后必须同步清掉，否则列表一直显示「已载入」。
+            fail += Check(projectRoot,
+                "渲染成功的卸载必须同步回放页「已载入」标记",
+                "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
+                s => s.Contains("SpectreReplay.Pages.Pages.NotifyReplayUnloaded();", StringComparison.Ordinal));
             // ㉓ 回放详情面板（2026-10-18 用户要求「点击回放文件可以看信息」）。
             //
             //    这块最容易出的错不是「没画出来」，而是**为了拿数据把文件装载了**：

@@ -49,6 +49,19 @@ namespace SpectreReplay.Pages
         /// </summary>
         private static string _loadedCloudName = "";
 
+        /// <summary>
+        /// 外部路径（渲染成功等）卸载回放后同步视图标记。卸载动作本身只清
+        /// SpectreState 的数据，列表徽章与「卸载回放」按钮读的是这两个来源
+        /// 字段——不同步的话，列表会把已卸载的回放一直标成「已载入」
+        /// （2026-11-07 渲染成功实测）。字段保持 private，外部只走这个入口，
+        /// 两个一起清，防止调用方漏掉其中一个。
+        /// </summary>
+        internal static void NotifyReplayUnloaded()
+        {
+            _loadedPath = "";
+            _loadedCloudName = "";
+        }
+
         // 回放列表缓存与刷新时刻（TickCount 差值按无符号比较，回绕安全）。
         private static List<string> _replayCache;
         private static int _replayCacheTick = int.MinValue;
