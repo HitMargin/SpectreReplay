@@ -15,9 +15,12 @@
 // 压过场景），会话结束恢复；「游戏画面」来源拍的就是后备缓冲，登记与否
 // 画布本来就在，切模式反而是双重绘制，故不适用。
 //
-// 时钟域：JRP 全程用 Stopwatch 域做差（ToStopwatchTicks 把事件时间换算进
-// 同一域），锚点取 Stopwatch.GetTimestamp()，增量乘 Stopwatch.Frequency
-// ——与 JRP 的换算同域，不依赖 Stopwatch.Frequency 恰好等于 1e7。
+// 时钟域：JRP 的 CurrentTicks 是它自己 Stopwatch 的 **Elapsed** 相对刻度
+// （1e7 ticks/秒），ToStopwatchTicks 的 _eventOffsetTicks 也是在正常游玩时
+// 按这个相对域建立的。锚点必须取 JRP 自己的 Stopwatch.Elapsed，**不能**取
+// Stopwatch.GetTimestamp() 的绝对 QPC 刻度——两者相差整个进程运行时长，
+// 混用会让 StartTime 与 CurrentTicks 差出几十秒，雨滴瞬间消失（2026-11-08
+// 实测「雨滴更炸裂」正是这个域错位）。
 //
 // **前缀绝不抛异常**：JRP 的显示线程与 RainManager 都在读它，任何异常都会
 // 打断显示模组；失败姿态是放行（return true → JRP 墙钟），宁可雨滴速度
@@ -54,9 +57,11 @@ internal static class RenderOverlayCapture
     private static Camera captureCamera;
 
     private static System.Reflection.MethodInfo clockTarget;
+    private static FieldInfo clockStopwatchField;
     private static readonly System.Reflection.MethodInfo clockPrefix
         = AccessTools.Method(typeof(RenderOverlayCapture), nameof(CurrentTicksPrefix));
-    private static long anchorStopwatchTicks;
+    private static long anchorJrpTicks;
+    private static long lastJrpTicks;
     private static double anchorVirtualSeconds;
     private static bool anchorTaken;
     // JRP 1.6 的 get_CurrentTicks 带 aggressiveinlining：JIT 可能把值内联进
@@ -175,10 +180,18 @@ internal static class RenderOverlayCapture
             Type kv = AccessTools.TypeByName("JipperResourcePack.KeyViewerContents.KeyViewer");
             if (kv == null) return;   // JRP 未安装：没有雨滴，无需换轨
             clockTarget = AccessTools.PropertyGetter(kv, "CurrentTicks");
+            clockStopwatchField = kv.GetField("Stopwatch",
+                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
             if (clockTarget == null)
             {
                 Debug.LogWarning("[SpectreReplay] 雨滴时钟换轨未生效：JRP 的 CurrentTicks 属性形状变了"
                     + "（游戏画面来源的成片里雨滴将跟随墙钟，速度不对）");
+                return;
+            }
+            if (clockStopwatchField == null)
+            {
+                Debug.LogWarning("[SpectreReplay] 雨滴时钟换轨未生效：JRP 的 Stopwatch 字段形状变了"
+                    + "（雨滴将跟随墙钟）");
                 return;
             }
             PatchManager.RegisterManualPrefix(clockTarget, clockPrefix);
@@ -392,13 +405,16 @@ internal static class RenderOverlayCapture
         if (!VideoRender.Active || !UnscaledDeltaPin.Installed) return false;
         if (!anchorTaken)
         {
-            anchorStopwatchTicks = Stopwatch.GetTimestamp();
+            // 取 JRP 自己 Stopwatch 的当前刻度，保证与 StartTime 同域。
+            anchorJrpTicks = ReadJrpClockTicks();
             anchorVirtualSeconds = UnscaledDeltaPin.CurrentUnscaledD;
             anchorTaken = true;
+            Debug.Log("[SpectreReplay] JRP 雨滴时钟已换轨：锚点 " + anchorJrpTicks
+                + "，虚拟 " + anchorVirtualSeconds.ToString("0.000") + "s");
         }
         // CurrentUnscaledF 每帧推进 1/captureFramerate（钉扎语义），雨滴由此跟拍游戏时间
-        ticks = anchorStopwatchTicks
-            + (long)((UnscaledDeltaPin.CurrentUnscaledF - (float)anchorVirtualSeconds) * Stopwatch.Frequency);
+        ticks = anchorJrpTicks
+            + (long)((UnscaledDeltaPin.CurrentUnscaledF - (float)anchorVirtualSeconds) * 10_000_000L);
         return true;
     }
 
@@ -414,7 +430,30 @@ internal static class RenderOverlayCapture
     /// （Windows 上 JRP 的 CurrentTicks 就是 Stopwatch ticks，两者可直接相减）。
     /// </summary>
     internal static long RainClockTicks()
-        => TryVirtualTicks(out long ticks) ? ticks : Stopwatch.GetTimestamp();
+        => TryVirtualTicks(out long ticks) ? ticks : ReadJrpClockTicks();
+
+    /// <summary>
+    /// 复刻 JRP 的 get_CurrentTicks 刻度：Frequency==1e7 时用 ElapsedTicks，
+    /// 否则用 Elapsed.Ticks（两者都是 1e7 ticks/秒）。读不到时返回 0。
+    /// </summary>
+    private static long ReadJrpClockTicks()
+    {
+        try
+        {
+            if (clockStopwatchField?.GetValue(null) is Stopwatch watch)
+            {
+                lastJrpTicks = Stopwatch.Frequency == 10_000_000L
+                    ? watch.ElapsedTicks
+                    : watch.Elapsed.Ticks;
+                return lastJrpTicks;
+            }
+        }
+        catch
+        {
+            // 外部 mod 的字段读取失败：调用方按自身兜底处理
+        }
+        return lastJrpTicks;
+    }
 
     /// <summary>
     /// 把方法体内对 <c>KeyViewer.get_CurrentTicks</c> 的调用替换成

@@ -1310,7 +1310,14 @@ namespace UiPreview
                     && s.Contains("PatchManager.RegisterManualTranspiler(", StringComparison.Ordinal)
                     && s.Contains("internal static long RainClockTicks()", StringComparison.Ordinal)
                     && s.Contains("callee.Name != \"get_CurrentTicks\"", StringComparison.Ordinal)
-                    && s.Contains("JRP 雨滴时钟：调用点替换 0 处", StringComparison.Ordinal));
+                    && s.Contains("JRP 雨滴时钟：调用点替换 0 处", StringComparison.Ordinal)
+                    // 时钟域必须是 JRP 自己的 Elapsed 相对域；GetTimestamp 的绝对
+                    // QPC 域会与 ToStopwatchTicks 的 _eventOffsetTicks 错位，
+                    // 让雨滴在一帧内消失（2026-11-08 二次实测）。
+                    && s.Contains("anchorJrpTicks = ReadJrpClockTicks();", StringComparison.Ordinal)
+                    && s.Contains("* 10_000_000L", StringComparison.Ordinal)
+                    && s.Contains("watch.ElapsedTicks", StringComparison.Ordinal)
+                    && !s.Contains("anchorStopwatchTicks", StringComparison.Ordinal));
             fail += Check(projectRoot,
                 "JRP 雨滴时钟：手动 Transpiler 必须有注册与还原两个 API",
                 "Patch\\Shared\\PatchManager.cs",
