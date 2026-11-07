@@ -27,4 +27,7 @@ internal static class FeatureKeys
     // 为什么不在"一个键都没勾"时也挂着：这条路径在**每帧输入处理**上，
     // 没勾键的玩家不该为一个用不到的功能付每帧一次委托调用的代价。
     public const string SpecialKeys = "SpecialKeys";
+    // 结算详情的「最大同时按键数」默认只在 >10 时显示；打开后无条件显示。
+    // 与回放/录制相互独立，所以谓词只看它自己的设置。
+    public const string AlwaysShowMaxUsedKeys = "AlwaysShowMaxUsedKeys";
 }

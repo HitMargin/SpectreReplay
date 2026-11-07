@@ -285,6 +285,16 @@
   "en": "Show the timeline panel at the bottom of the screen during replay. Drag to seek, set selection range for looping."
  },
  {
+  "key": "replay.maxusedkeys",
+  "zh": "结算详情始终显示最大同时按键数",
+  "en": "Always show max simultaneous keys in results"
+ },
+ {
+  "key": "replay.maxusedkeys.tip",
+  "zh": "游戏默认只在同时按过 10 个以上键时显示这一行；打开后任何一局结算都会显示最大同时按键数。",
+  "en": "The game normally shows this row only after pressing more than 10 keys at once; enable this to show the maximum on every result screen."
+ },
+ {
   "key": "playback.idle",
   "zh": "还没载入回放。在下面的列表里点「回放」即可。",
   "en": "No replay loaded. Press \"Replay\" on a file below."
@@ -1388,6 +1398,176 @@
   "key": "effects.on.note",
   "zh": "进关时把下列特效从谱面里摘掉。只影响这次运行的内存数据：不动磁盘上的原文件，除非你打开下面的「允许覆盖关卡」。",
   "en": "Strips the effects below from the chart when a level loads. This only touches this run's in-memory data, not the file on disk, unless you enable overwriting saves below."
+ },
+ {
+  "key": "effects.presets",
+  "zh": "预设配置",
+  "en": "Presets"
+ },
+ {
+  "key": "effects.presets.note",
+  "zh": "预设是「摘掉哪些特效」开关的快照：应用只改预设里写到的开关（没写的保持现状），不动总开关与「允许覆盖存盘」；开关在下次载入关卡时生效。把 .json 放进预设目录即可导入。",
+  "en": "A preset is a snapshot of the strip toggles: applying only touches the keys written in the file (missing keys keep their value) and never changes the master switch or the save override. Toggles take effect the next time a level loads. Drop .json files into the presets folder to import."
+ },
+ {
+  "key": "effects.preset.select",
+  "zh": "选择预设",
+  "en": "Preset"
+ },
+ {
+  "key": "effects.preset.apply",
+  "zh": "应用选中预设",
+  "en": "Apply selected preset"
+ },
+ {
+  "key": "effects.preset.delete",
+  "zh": "删除选中预设",
+  "en": "Delete selected preset"
+ },
+ {
+  "key": "effects.preset.delete.tip",
+  "zh": "删除选中的预设文件。两段确认：第一下只提醒，5 秒内再点一次才真删。",
+  "en": "Deletes the selected preset file. Two-step confirm: the first click only warns, click again within 5 seconds to actually delete."
+ },
+ {
+  "key": "effects.preset.name",
+  "zh": "预设名称",
+  "en": "Preset name"
+ },
+ {
+  "key": "effects.preset.name.tip",
+  "zh": "保存用的文件名（不用写 .json）。非法字符会换成下划线，留空用时间戳。",
+  "en": "File name for saving (without .json). Invalid characters become underscores; leave empty to use a timestamp."
+ },
+ {
+  "key": "effects.preset.name.empty",
+  "zh": "留空则用时间戳命名",
+  "en": "Leave empty to name by timestamp"
+ },
+ {
+  "key": "effects.preset.save",
+  "zh": "保存当前为预设",
+  "en": "Save current as preset"
+ },
+ {
+  "key": "effects.preset.save.tip",
+  "zh": "把当前所有去特效开关存成一份快照，之后随时可以应用回去。",
+  "en": "Snapshots all effect-remover toggles into a file you can re-apply anytime."
+ },
+ {
+  "key": "effects.preset.openfolder",
+  "zh": "打开预设目录",
+  "en": "Open presets folder"
+ },
+ {
+  "key": "effects.preset.openfolder.tip",
+  "zh": "在资源管理器里打开预设目录；把 .json 丢进去就是导入。",
+  "en": "Opens the presets folder in Explorer; dropping .json files there imports them."
+ },
+ {
+  "key": "effects.preset.select.tip",
+  "zh": "从预设目录的 .json 里选一份；下拉框显示文件名（不含扩展名）。",
+  "en": "Pick one of the .json files in the presets folder; the dropdown shows file names without the extension."
+ },
+ {
+  "key": "effects.preset.apply.tip",
+  "zh": "把选中预设里写到的开关改成文件里的值；没写的键保持现状，下次载入关卡生效。",
+  "en": "Sets the toggles written in the selected preset; keys missing from the file keep their value. Takes effect the next time a level loads."
+ },
+ {
+  "key": "effects.preset.confirm",
+  "zh": "再点一次「删除」确认（5 秒内）",
+  "en": "Click Delete again to confirm (within 5 seconds)"
+ },
+ {
+  "key": "effects.preset.none",
+  "zh": "还没有预设。先「保存当前为预设」，或把 .json 放进预设目录。",
+  "en": "No presets yet. Save the current toggles as a preset or drop .json files into the presets folder."
+ },
+ {
+  "key": "effects.preset.applied",
+  "zh": "已应用预设，{0} 项开关已更新",
+  "en": "Preset applied: {0} toggles updated"
+ },
+ {
+  "key": "effects.preset.saved",
+  "zh": "预设已保存：{0}",
+  "en": "Preset saved: {0}"
+ },
+ {
+  "key": "effects.preset.deleted",
+  "zh": "已删除预设：{0}",
+  "en": "Preset deleted: {0}"
+ },
+ {
+  "key": "effects.preset.failed",
+  "zh": "预设操作失败：{0}",
+  "en": "Preset operation failed: {0}"
+ },
+ {
+  "key": "effects.preset.rename",
+  "zh": "重命名选中预设",
+  "en": "Rename selected preset"
+ },
+ {
+  "key": "effects.preset.rename.tip",
+  "zh": "把选中的预设文件改成名称框里的名字（不写 .json）；目标同名已存在时拒绝。",
+  "en": "Renames the selected preset file to the name in the box (without .json); refuses if the target already exists."
+ },
+ {
+  "key": "effects.preset.upload",
+  "zh": "上传选中到 Steam 云",
+  "en": "Upload selected to Steam Cloud"
+ },
+ {
+  "key": "effects.preset.upload.tip",
+  "zh": "把选中的预设上传到 Steam 云；云端同名文件会被覆盖。",
+  "en": "Uploads the selected preset to Steam Cloud; a cloud file with the same name is overwritten."
+ },
+ {
+  "key": "effects.preset.pull",
+  "zh": "拉取 Steam 云端预设",
+  "en": "Pull presets from Steam Cloud"
+ },
+ {
+  "key": "effects.preset.pull.tip",
+  "zh": "从 Steam 云拉取所有本地没有的预设；本地已有的同名文件不会被覆盖。",
+  "en": "Pulls every cloud preset missing locally; existing local files with the same name are not overwritten."
+ },
+ {
+  "key": "effects.preset.badname",
+  "zh": "预设名不能为空",
+  "en": "Preset name is empty"
+ },
+ {
+  "key": "effects.preset.exists",
+  "zh": "同名预设已存在",
+  "en": "A preset with this name already exists"
+ },
+ {
+  "key": "effects.preset.uploaded",
+  "zh": "已上传到 Steam 云：{0}",
+  "en": "Uploaded to Steam Cloud: {0}"
+ },
+ {
+  "key": "effects.preset.pulled",
+  "zh": "已从云端拉取 {0} 个预设",
+  "en": "Pulled {0} presets from Steam Cloud"
+ },
+ {
+  "key": "effects.preset.cloudfresh",
+  "zh": "云端没有需要拉取的预设",
+  "en": "Nothing to pull — local presets are up to date"
+ },
+ {
+  "key": "effects.preset.cloudoff",
+  "zh": "Steam 云不可用（离线或非 Steam 版）",
+  "en": "Steam Cloud unavailable (offline or non-Steam)"
+ },
+ {
+  "key": "effects.preset.renamed",
+  "zh": "已重命名预设：{0}",
+  "en": "Preset renamed: {0}"
  },
  {
   "key": "effects.enablesave",

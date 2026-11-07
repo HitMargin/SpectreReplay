@@ -68,6 +68,12 @@ internal static class ManagedInput
     /// </remarks>
     internal static bool IsHeldVk(ushort vk) => vk < Held.Length && Held[vk];
 
+    /// <summary>
+    /// 指定虚拟键码是否在**本帧**产生了按下沿（供只轮询按键状态的显示模组）。
+    /// </summary>
+    internal static bool WasPressedThisFrame(ushort vk)
+        => vk < PressedFrame.Length && PressedFrame[vk] == Time.frameCount;
+
     private static int _takeoverFrame = -1;
     private static bool _takeover;
 

@@ -83,8 +83,9 @@ foreach ($m in [regex]::Matches($texts[$settingsFile.FullName],
     # 非界面代码里有没有**真读取**。
     # **纯持久化不算消费**：ConfigManager 的 save/load（`X = Settings.X` 与
     # `Settings.X = sets.Value<bool?>("X") ?? …`）只是把值搬进搬出，不改变任何行为。
-    # round 54 实测：LegacyPauseCalculation 被上一版数成"消费点 6 处"，而真实是
+    # round 54 实测：当时那个死开关被上一版数成"消费点 6 处"，而真实是
     # 1 定义 + 2 持久化 + 1 FeatureKeys 常量 + 1 load 行 = **零行为消费**。
+    # （2026-11-08 起这批上游残留死开关已整体删除，注释只留口径。）
     #
     # **但 Settings.cs 自己不能整个排除**：round 55 发现 CurrLanguage / KeyCodeConvert /
     # InputedKey 的**真实消费就在 Settings.cs 里**（语言切换 :377/378/385、键位重映射
@@ -124,7 +125,7 @@ if ($noUi.Count -gt 0) {
 
 # **零读取清单必须印出来。** round 54 改口径后这一类从 0 变成 83 项，
 # 而最初脚本只印"无界面"那一类——于是这 83 个"有定义、有落盘、但不控制任何
-# 行为"的设置成了**看不见的数字**。它们不是无害的：`LegacyPauseCalculation`
+# 行为"的设置成了**看不见的数字**。它们不是无害的：当年代码里的死开关
 # 就是典型（上游 gate 两个编辑器补丁，我们没搬那两个类、Main.cs 也没注册
 # SetFeatureToggle ⇒ 玩家改它毫无效果且无提示）。
 # 印出来的目的不是让人去删，而是让人能判断每一个是"有意留着的兼容字段"
@@ -135,7 +136,7 @@ if ($dead.Count -gt 0) {
     Write-Output "── 零读取：有定义、有落盘，但不控制任何行为（共 $($dead.Count) 项）──"
     Write-Output "（报告型。删不删要逐项判断：有的是有意留着的旧版兼容字段，"
     Write-Output "  有的是「上游 gate 一个我们没搬的特性」——后者改了没效果也没提示，"
-    Write-Output "  玩家会以为功能坏了。已核实的样本：LegacyPauseCalculation 属后者。）"
+    Write-Output "  玩家会以为功能坏了。2026-11-08 已清掉上游残留的这一批。）"
     $dead | Sort-Object N | ForEach-Object { "  " + $_.N }
 }
 # **恒为 0**：报告型脚本。真实的门禁在 PortedCompletenessCheck（只钉已补项）。

@@ -72,24 +72,10 @@ public static class ConfigManager
         public bool EffectRemoverSetCameraZoom { get; set; }
 
         public bool AlwaysShowMaxUsedKeys { get; set; }
-        public bool LegacyPauseCalculation { get; set; }
-        public bool DecorationPreviewOn { get; set; }
-        public bool MemoryOptimizerOn { get; set; }
-        public bool EditorBugfixOn { get; set; }
-        public bool BpmBeatCalculatorOn { get; set; }
-        public bool SpeedPauseConverterOn { get; set; }
-        public bool BetterUndoRedoOn { get; set; }
-        public bool BGAModeOn { get; set; }
-        public bool EditorUIOn { get; set; }
-        public bool EditorUIFloorPanelOn { get; set; }
-        public bool EditorUIHorizontalOn { get; set; }
         public bool TimelineOn { get; set; }
         public float TimelinePosX { get; set; }
         public float TimelinePosY { get; set; }
         public float TimelineWidth { get; set; }
-        public bool FixChartLoadOn { get; set; }
-        public bool CustomEventsOn { get; set; }
-        public bool EnableProEvents { get; set; }
     }
 
     private class IntsData
@@ -211,24 +197,10 @@ public static class ConfigManager
                 EffectRemoverSetCameraZoom = Settings.EffectRemoverSetCameraZoom,
 
                 AlwaysShowMaxUsedKeys = Settings.AlwaysShowMaxUsedKeys,
-                LegacyPauseCalculation = Settings.LegacyPauseCalculation,
-                DecorationPreviewOn = Settings.DecorationPreviewOn,
-                MemoryOptimizerOn = Settings.MemoryOptimizerOn,
-                EditorBugfixOn = Settings.EditorBugfixOn,
-                BpmBeatCalculatorOn = Settings.BpmBeatCalculatorOn,
-                SpeedPauseConverterOn = Settings.SpeedPauseConverterOn,
-                BetterUndoRedoOn = Settings.BetterUndoRedoOn,
-                BGAModeOn = Settings.BGAModeOn,
-                EditorUIOn = Settings.EditorUIOn,
-                EditorUIFloorPanelOn = Settings.EditorUIFloorPanelOn,
-                EditorUIHorizontalOn = Settings.EditorUIHorizontalOn,
                 TimelineOn = Settings.TimelineOn,
                 TimelinePosX = Settings.TimelinePosX,
                 TimelinePosY = Settings.TimelinePosY,
                 TimelineWidth = Settings.TimelineWidth,
-                FixChartLoadOn = Settings.FixChartLoadOn,
-                CustomEventsOn = Settings.CustomEventsOn,
-                EnableProEvents = Settings.EnableProEvents
             },
             Ints = new IntsData
             {
@@ -509,24 +481,10 @@ public static class ConfigManager
                     Settings.EffectRemoverResetTrackColor = sets.Value<bool?>("EffectRemoverResetTrackColor") ?? Settings.EffectRemoverResetTrackColor;
                     Settings.EffectRemoverSetCameraZoom = sets.Value<bool?>("EffectRemoverSetCameraZoom") ?? Settings.EffectRemoverSetCameraZoom;
                     Settings.AlwaysShowMaxUsedKeys = sets.Value<bool?>("AlwaysShowMaxUsedKeys") ?? Settings.AlwaysShowMaxUsedKeys;
-                    Settings.LegacyPauseCalculation = sets.Value<bool?>("LegacyPauseCalculation") ?? Settings.LegacyPauseCalculation;
-                    Settings.DecorationPreviewOn = sets.Value<bool?>("DecorationPreviewOn") ?? Settings.DecorationPreviewOn;
-                    Settings.MemoryOptimizerOn = sets.Value<bool?>("MemoryOptimizerOn") ?? Settings.MemoryOptimizerOn;
-                    Settings.EditorBugfixOn = sets.Value<bool?>("EditorBugfixOn") ?? Settings.EditorBugfixOn;
-                    Settings.BpmBeatCalculatorOn = sets.Value<bool?>("BpmBeatCalculatorOn") ?? Settings.BpmBeatCalculatorOn;
-                    Settings.SpeedPauseConverterOn = sets.Value<bool?>("SpeedPauseConverterOn") ?? Settings.SpeedPauseConverterOn;
-                    Settings.BetterUndoRedoOn = sets.Value<bool?>("BetterUndoRedoOn") ?? Settings.BetterUndoRedoOn;
-                    Settings.BGAModeOn = sets.Value<bool?>("BGAModeOn") ?? Settings.BGAModeOn;
-                    Settings.EditorUIOn = sets.Value<bool?>("EditorUIOn") ?? Settings.EditorUIOn;
-                    Settings.EditorUIFloorPanelOn = sets.Value<bool?>("EditorUIFloorPanelOn") ?? Settings.EditorUIFloorPanelOn;
-                    Settings.EditorUIHorizontalOn = sets.Value<bool?>("EditorUIHorizontalOn") ?? Settings.EditorUIHorizontalOn;
-                                        Settings.TimelineOn = sets.Value<bool?>("TimelineOn") ?? Settings.TimelineOn;
+                    Settings.TimelineOn = sets.Value<bool?>("TimelineOn") ?? Settings.TimelineOn;
                     Settings.TimelinePosX = sets.Value<float?>("TimelinePosX") ?? Settings.TimelinePosX;
                     Settings.TimelinePosY = sets.Value<float?>("TimelinePosY") ?? Settings.TimelinePosY;
                     Settings.TimelineWidth = sets.Value<float?>("TimelineWidth") ?? Settings.TimelineWidth;
-                    Settings.FixChartLoadOn = sets.Value<bool?>("FixChartLoadOn") ?? Settings.FixChartLoadOn;
-                    Settings.CustomEventsOn = sets.Value<bool?>("CustomEventsOn") ?? Settings.CustomEventsOn;
-                    Settings.EnableProEvents = sets.Value<bool?>("EnableProEvents") ?? Settings.EnableProEvents;
                 }
             }
             catch (Exception ex)

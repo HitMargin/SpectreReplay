@@ -431,8 +431,11 @@ internal class Patch_StartRewind
             // 等判定开始才注入，首键晚 ~350ms（实测）。FastForward 的锚点
             // 已改到 entryTimeAfterExtraBeats，起点相同也走一遍对齐，
             // 前导期按键被跳过，首个有效键与判定同拍。
+            // runStartAlignment 同时让按键重建跳过整段前缀：前导期按键不注入，
+            // 也不再被重建成「按住」——否则判定开启一刻仍按着的暖手键会从
+            // 第一帧起亮在键游上（2026-11-07「刚开始播放就有按键被按下」实测）。
             if (is_playing)
-                ReplayPlayer.FastForward(GCS.checkpointNum);
+                ReplayPlayer.FastForward(GCS.checkpointNum, runStartAlignment: true);
             if (is_playing)
                 ResetRejectLog();
             TriggerMessage(LocalizationManager.GetLocalizedText("note.start_playing"));

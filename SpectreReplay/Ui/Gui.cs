@@ -580,6 +580,19 @@ namespace SpectreReplay.Ui
                 Mathf.Round(r.width), Mathf.Round(r.height));
         }
 
+        // ── 开关贴图的超采样 ─────────────────────────────────────
+        //
+        // **为什么不能直接按 34×20 画。** 现代设置窗把整块界面包在
+        // `GUI.matrix = Scale(scale)` 里（约 1.15 倍），经典面板还会再吃一层
+        // UMM 的 ScaleGUI。34×20 的贴图被 1.15~1.5 倍非整数拉伸时，圆角与
+        // 旋钮边缘只剩一两个像素可插值，看上去就是「像素太低」——截图里
+        // 表现为轨道两端有台阶、旋钮像八边形。
+        //
+        // 做法：贴图按 4 倍尺寸生成（136×80 / 112×112），再缩回控件尺寸。
+        // RoundedTex 有缓存，固定倍数不会随窗口尺寸增长；4 倍足够覆盖
+        // 常见 DPI 缩放，同时显存占用仍是每张几十 KB 量级。
+        private const int SwitchTexScale = 4;
+
         /// <summary>画开关本体到指定矩形；交互由调用方在同一矩形上处理。</summary>
         internal static void SwitchAt(string key, Rect track, bool on, bool enabled)
         {
@@ -595,13 +608,15 @@ namespace SpectreReplay.Ui
             Color trackColor = Color.Lerp(hot ? PillOffHover : PillOff, hot ? Color.white : Accent, k);
             Color old = GUI.color;
             GUI.color = trackColor * Tint;
-            GUI.DrawTexture(Snap(track), RoundedTex.Get(34, 20, 10, Color.white));
+            GUI.DrawTexture(Snap(track), RoundedTex.Get(
+                34 * SwitchTexScale, 20 * SwitchTexScale, 10 * SwitchTexScale, Color.white));
             const float knobSize = 14f;
             Rect knob = new Rect(Mathf.Lerp(track.x + 3f, track.xMax - knobSize - 3f, k),
                 track.y + 3f, knobSize, knobSize);
             GUI.color = Color.Lerp(new Color(0.72f, 0.74f, 0.78f, 1f),
                 new Color(0.05f, 0.055f, 0.065f, 1f), k) * Tint;
-            GUI.DrawTexture(Snap(knob), RoundedTex.Get(28, 28, 8, Color.white));
+            GUI.DrawTexture(Snap(knob), RoundedTex.Get(
+                14 * SwitchTexScale, 14 * SwitchTexScale, 7 * SwitchTexScale, Color.white));
             GUI.color = old;
         }
 
@@ -1092,7 +1107,8 @@ namespace SpectreReplay.Ui
             {
                 Color old = GUI.color;
                 GUI.color = trackColor * Tint;
-                GUI.DrawTexture(track, RoundedTex.Get(32, 20, 10, Color.white));
+                GUI.DrawTexture(track, RoundedTex.Get(
+                    34 * SwitchTexScale, 20 * SwitchTexScale, 10 * SwitchTexScale, Color.white));
                 GUI.color = old;
             }
             float k = 14f;
@@ -1104,7 +1120,8 @@ namespace SpectreReplay.Ui
                 Color old = GUI.color;
                 GUI.color = (value ? new Color(0.05f, 0.055f, 0.065f, 1f)
                     : new Color(0.72f, 0.74f, 0.78f, 1f)) * Tint;
-                GUI.DrawTexture(knob, RoundedTex.Get(28, 28, 10, Color.white));
+                GUI.DrawTexture(knob, RoundedTex.Get(
+                    14 * SwitchTexScale, 14 * SwitchTexScale, 7 * SwitchTexScale, Color.white));
                 GUI.color = old;
             }
             GUILayout.EndHorizontal();

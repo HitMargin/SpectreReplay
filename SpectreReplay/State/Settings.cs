@@ -133,8 +133,6 @@ public static class Settings
 
     public static bool AlwaysShowMaxUsedKeys = false;
 
-    public static bool LegacyPauseCalculation = false;
-
     // ── Special keys filter ─────────────────────────────
     public static HashSet<string> AllowedKeyboardSpecialKeys = new();
     public static HashSet<string> AllowedAsyncSpecialKeys = new();
@@ -147,8 +145,6 @@ public static class Settings
     public static bool EffectRemoverOn = false;
     public static bool EffectRemoverEnableSave = false;
 
-    // ── Enable Pro Events ────────────────────────────────
-    public static bool EnableProEvents = false;
     public static bool EffectRemoverFilters = true;
     public static bool EffectRemoverAdvancedFilters = true;
     public static bool EffectRemoverParticles = true;
@@ -176,41 +172,10 @@ public static class Settings
     public static bool EffectRemoverSetCameraZoom = false;
     public static float EffectRemoverCameraZoomScale = 250f;
 
-    // ── Decoration Preview ──────────────────────────────
-    public static bool DecorationPreviewOn = false;
-
-    // ── Memory Optimizer（纹理 DXT 压缩，有损） ─────────
-    public static bool MemoryOptimizerOn = false;
-
-    // ── Editor Bugfix（编辑器独立 bug 修复） ────────────
-    public static bool EditorBugfixOn = true;
-
-    // ── BpmBeatCalculator（realBPM / durationAngle 联动字段） ──
-    public static bool BpmBeatCalculatorOn = false;
-
-    // ── SpeedPauseConverter（变速 ↔ 暂停 互转按钮） ──
-    public static bool SpeedPauseConverterOn = false;
-
-    // ── BetterUndoRedo（无操作状态过滤 + 重做队列修正） ──
-    public static bool BetterUndoRedoOn = true;
-
-    // ── BGAMode（BGA 录制：隐藏前景元素录纯背景） ──
-    public static bool BGAModeOn = false;
-
-    // ── EditorUI（编辑器 UI 增强：floor 属性注入 + 横向属性行） ──
-    public static bool EditorUIOn = false;
-    public static bool EditorUIFloorPanelOn = true;
-    public static bool EditorUIHorizontalOn = false;
-
     public static bool TimelineOn = true;
     public static float TimelinePosX = 0f;
     public static float TimelinePosY = -68f;
     public static float TimelineWidth = 960f;
-
-    public static bool FixChartLoadOn = false;
-
-    // ── CustomEvents（自定义事件：变量系统等，PACL2 谱面兼容） ──
-    public static bool CustomEventsOn = false;
 
     public static bool RenderOn = true;
     // ── 实验性：确定性渲染时钟 ────────────────────────────────────────

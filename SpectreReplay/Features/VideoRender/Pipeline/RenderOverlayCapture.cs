@@ -282,7 +282,7 @@ internal static class RenderOverlayCapture
         }
     }
 
-    private static KeyCode QuartzKeyCode(ushort vk)
+    internal static KeyCode QuartzKeyCode(ushort vk)
     {
         if (!quartzKeyMapReady) BuildQuartzKeyMap();
         return quartzKeyCodes.TryGetValue(vk, out KeyCode key) ? key : KeyCode.None;

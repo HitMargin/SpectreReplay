@@ -701,8 +701,8 @@ namespace UiPreview
             fail += Check(projectRoot,
                 "键游标对齐必须无条件执行——起点相同的检查点开始也有前导期按键要跳过",
                 "Features\\Replay\\Patches\\Patch_Lifecycle.cs",
-                s => s.Contains("if (is_playing)\r\n                ReplayPlayer.FastForward(GCS.checkpointNum);", StringComparison.Ordinal)
-                    || s.Contains("if (is_playing)\n                ReplayPlayer.FastForward(GCS.checkpointNum);", StringComparison.Ordinal));
+                s => s.Contains("if (is_playing)\r\n                ReplayPlayer.FastForward(GCS.checkpointNum, runStartAlignment: true);", StringComparison.Ordinal)
+                    || s.Contains("if (is_playing)\n                ReplayPlayer.FastForward(GCS.checkpointNum, runStartAlignment: true);", StringComparison.Ordinal));
             // 详情面板的长文本在滚动区里必须换行（2026-11-07 实测：不换行按
     //        内容宽度排开，撑出一条默认皮肤的水平滚动条）；列表滚动区不开
     //        alwaysShowHorizontal。
@@ -735,12 +735,172 @@ namespace UiPreview
                         && body.Contains("GUI.skin.horizontalScrollbar = barH;", StringComparison.Ordinal)
                         && body.Contains("GUI.skin.horizontalScrollbarThumb = thumbH;", StringComparison.Ordinal);
                 });
+            // 开关像素（2026-11-08 用户报「开关像素太低」）：现代窗把界面包在
+            // GUI.matrix 里放大 ~1.15 倍，经典面板还要吃 UMM ScaleGUI；34×20
+            // 的 1:1 贴图非整数拉伸后圆角只剩一两像素可插值，看起来像台阶。
+            // 判据：两处开关都必须按超采样倍数取贴图。
+            fail += Check(projectRoot,
+                "开关贴图必须超采样绘制（非整数 UI 缩放下 1:1 贴图会出像素台阶）",
+                "Ui\\Gui.cs",
+                s => s.Contains("SwitchTexScale = 4;", StringComparison.Ordinal)
+                    && (MethodBody(s, "SwitchAt") ?? "").Contains(
+                        "34 * SwitchTexScale, 20 * SwitchTexScale", StringComparison.Ordinal)
+                    && (MethodBody(s, "SwitchAt") ?? "").Contains(
+                        "14 * SwitchTexScale, 14 * SwitchTexScale", StringComparison.Ordinal)
+                    && (MethodBody(s, "Switch") ?? "").Contains(
+                        "34 * SwitchTexScale, 20 * SwitchTexScale", StringComparison.Ordinal)
+                    && (MethodBody(s, "Switch") ?? "").Contains(
+                        "14 * SwitchTexScale, 14 * SwitchTexScale", StringComparison.Ordinal));
+            // 去特效预设（2026-11-08 用户要求「多配置」）：白名单必须恰好覆盖
+            // 25 个可预设开关（24 个 bool + 缩放值）。少一个 = 导入静默漏项，
+            // 多一个 = 有人把授权类开关（总开关/允许覆盖存盘）混了进来。
+            // 另外钉住：应用按 settings 节走、文件名拒绝带路径、缩放值夹在
+            // 滑条范围内、保存写 UTF-8 无 BOM（与 Configs.json 同口径）。
+            fail += Check(projectRoot,
+                "去特效预设：白名单必须恰好覆盖 25 个开关，云同步/重命名/防路径必须接线",
+                "Features\\EffectRemover\\EffectPresets.cs",
+                s => CountOccurrences(s, "case \"EffectRemover") == 25
+                    && s.Contains("root[\"settings\"] as JObject", StringComparison.Ordinal)
+                    && s.Contains("fileName == Path.GetFileName(fileName)", StringComparison.Ordinal)
+                    && s.Contains("Mathf.Clamp((float)zoom.Value, 100f, 1000f)", StringComparison.Ordinal)
+                    && s.Contains("new UTF8Encoding(false)", StringComparison.Ordinal)
+                    && s.Contains("SteamCloud.Upload(", StringComparison.Ordinal)
+                    && s.Contains("SteamCloud.List(", StringComparison.Ordinal)
+                    && s.Contains("SteamCloud.Download(", StringComparison.Ordinal)
+                    && s.Contains("File.Move(", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "去特效预设：页面必须接线应用/保存/重命名/删除/上传/拉取全部路径",
+                "Pages\\Pages.cs",
+                s => s.Contains("Gui.Section(\"effects.presets\"", StringComparison.Ordinal)
+                    && s.Contains("EffectPresets.Apply(", StringComparison.Ordinal)
+                    && s.Contains("EffectPresets.Save(", StringComparison.Ordinal)
+                    && s.Contains("EffectPresets.Delete(", StringComparison.Ordinal)
+                    && s.Contains("EffectPresets.Rename(", StringComparison.Ordinal)
+                    && s.Contains("EffectPresets.UploadToCloud(", StringComparison.Ordinal)
+                    && s.Contains("EffectPresets.PullFromCloud(", StringComparison.Ordinal)
+                    && s.Contains("EffectPresets.OpenFolder(", StringComparison.Ordinal));
+            // 现代窗按「Section key == 二级页签 key」过滤分组；预设不登记进
+            // SubTabKeys[去特效] 就整块不可见——用户报「找不到 UI 配置设置」
+            // 正是这一种（2026-11-08）。页签必须紧挨主开关。
+            fail += Check(projectRoot,
+                "去特效预设必须注册为现代窗二级页签（漏登记 = 整组不可见）",
+                "Ui\\OnGui.cs",
+                s => s.Contains("\"effects.master\", \"effects.presets\",", StringComparison.Ordinal));
             // 录键音的质量告诫（2026-11-07 用户要求）：必须存在且用 WarnCol
             // 黄色——黄色是「这是警告不是说明」的唯一信号，换成普通色就白说了。
             fail += Check(projectRoot,
                 "录制键盘音必须带黄色警告提示（可能不完美、不建议录键盘音乐）",
                 "Pages\\Pages.cs",
                 s => s.Contains("OnGui.Note(\"record.keybd.warn\", Gui.WarnCol);", StringComparison.Ordinal));
+            // 镜像松键门槛（2026-11-07）：Stop 必须在 is_playing 翻假**之前**
+            // 取好松键决定。ManagedInput.Mirror 含 is_playing，事后判就是
+            // 死代码，OS 层按键滞留到玩家物理再按同一个键。判据钉住取值
+            // 表达式、取值时机（先于翻假）与门槛的实际使用，三缺一即红。
+            fail += Check(projectRoot,
+                "镜像松键门槛必须在 is_playing 翻假之前取好（否则 Stop 松键块恒死）",
+                "Features\\Replay\\Runtime\\ReplayPlayer.cs",
+                s =>
+                {
+                    string body = MethodBody(s, "Stop") ?? "";
+                    int gate = body.IndexOf(
+                        "bool releaseMirrorKeys = PlayMode && Settings.MirrorInputToOS;",
+                        StringComparison.Ordinal);
+                    int flip = body.IndexOf("is_playing = false;", StringComparison.Ordinal);
+                    return gate >= 0 && flip >= 0 && gate < flip
+                        && body.Contains("if (releaseMirrorKeys)", StringComparison.Ordinal)
+                        && !body.Contains("if (PlayMode && ManagedInput.Mirror)", StringComparison.Ordinal);
+                });
+            // Quartz 实时桥（2026-11-07）：石英雨滴的唯一活水是它打在
+            // HookCallback 上的前缀，与回声抑制器同槽竞争注册顺序——谁先注册
+            // 谁先跑，这就是「Windows API 对石英有概率不生效」的根因。桥必须
+            // 走它的公共外部驱动（Begin/Key/End）+ HookKeys 兜底源，渲染期让路，
+            // 泵与 seek 重建两处都要喂边。
+            fail += Check(projectRoot,
+                "Quartz 实时桥必须存在：外部驱动接管 + HookKeys 兜底 + 渲染让路",
+                "Features\\Replay\\Runtime\\QuartzLiveBridge.cs",
+                s => s.Contains("KvExternalDriver", StringComparison.Ordinal)
+                    && s.Contains("Quartz.Game.HookKeys", StringComparison.Ordinal)
+                    && s.Contains("Stopwatch.GetTimestamp", StringComparison.Ordinal)
+                    && s.Contains("VideoRender.Active", StringComparison.Ordinal)
+                    && s.Contains("internal static void Edge(ushort vk, bool down)", StringComparison.Ordinal)
+                    && s.Contains("internal static void SeedHeld()", StringComparison.Ordinal)
+                    && s.Contains("internal static void ResetLive()", StringComparison.Ordinal)
+                    && s.Contains("internal static void Shutdown()", StringComparison.Ordinal));
+            // 结算「最大同时按键数」（2026-11-08）：游戏默认只在 >10 时显示。
+            // 判据要同时盯住四处：Transpiler 的精确 IL 匹配（按 maximumUsedKeys
+            // 字段，不按裸常量 10——同方法里还有 HitMargin 枚举 10）、Feature
+            // 注册、设置行、以及 IL 未命中时必须写警告。
+            fail += Check(projectRoot,
+                "结算最大按键数：Transpiler 必须按 maximumUsedKeys 字段匹配且漏配可诊断",
+                "Features\\Results\\Patch_AlwaysShowMaxUsedKeys.cs",
+                s => s.Contains("typeof(DetailedResults), \"GenerateResults\"", StringComparison.Ordinal)
+                    && s.Contains("field.Name != \"maximumUsedKeys\"", StringComparison.Ordinal)
+                    && s.Contains("!(list[i + 1].operand is sbyte threshold)", StringComparison.Ordinal)
+                    && s.Contains("list[i + 1].operand = (sbyte)-1;", StringComparison.Ordinal)
+                    && s.Contains("Debug.LogWarning", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "结算最大按键数：Feature 已注册且设置行已接线",
+                "Main.cs",
+                s => s.Contains("SetFeatureToggle(FeatureKeys.AlwaysShowMaxUsedKeys,", StringComparison.Ordinal)
+                    && s.Contains("() => Settings.AlwaysShowMaxUsedKeys", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "结算最大按键数：回放页必须有设置行并走 i18n",
+                "Pages\\Pages.cs",
+                s => s.Contains("OnGui.Row(\"replay.maxusedkeys\", Settings.AlwaysShowMaxUsedKeys,", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "Quartz 实时桥：泵喂实时边沿；重建只播种净按住态（历史边沿会变成开局假雨）",
+                "Features\\Replay\\Runtime\\ReplayPlayer.cs",
+                s =>
+                {
+                    // PumpInput 有无参包装与真泵两个重载，MethodBody 只认第一个，
+                    // 所以这里按调用计数而不是按方法体收窄。Edge 恰好一处（泵）；
+                    // 重建走 SeedHeld 播种净态——历史边沿会变成开局假雨。
+                    return CountOccurrences(s, "QuartzLiveBridge.Edge(num, ev.IsPressed);") == 1
+                        && CountOccurrences(s, "QuartzLiveBridge.SeedHeld();") == 1
+                        && CountOccurrences(s, "QuartzLiveBridge.TryInstall();") == 1
+                        && CountOccurrences(s, "QuartzLiveBridge.Shutdown();") == 1;
+                });
+            // CT 键位显示（2026-11-08）：CheryTools 的 KvRuntimeHost 每帧直接
+            // 轮询 Unity Input，没有外部驱动。桥必须在它轮询之后改写结果，
+            // 且不能只改按住态——按下沿与 _hasTrackedPressed 漏掉就会出现
+            // 「键亮了但雨滴/统计不跟」的半截状态（MUT-D47）。
+            fail += Check(projectRoot,
+                "CT 键位桥：必须先开 Update 轮询门，再后置改写按住/按下沿并同步 _hasTrackedPressed",
+                "Features\\Replay\\Runtime\\CheryToolsKvBridge.cs",
+                s => s.Contains("KvRuntimeHost", StringComparison.Ordinal)
+                    && s.Contains("PatchType.Postfix", StringComparison.Ordinal)
+                    && s.Contains("PatchType.Prefix", StringComparison.Ordinal)
+                    && s.Contains("Update_Prefix", StringComparison.Ordinal)
+                    && s.Contains("_hasTrackedPressed.SetValue(__instance, true);", StringComparison.Ordinal)
+                    && s.Contains("_polledKeys", StringComparison.Ordinal)
+                    && s.Contains("_hasTrackedPressed", StringComparison.Ordinal)
+                    && s.Contains("ManagedInput.IsHeldVk", StringComparison.Ordinal)
+                    && s.Contains("ManagedInput.WasPressedThisFrame", StringComparison.Ordinal)
+                    && s.Contains("_pollStateDown.SetValue(state, down);", StringComparison.Ordinal)
+                    && s.Contains("Debug.LogWarning", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "CT 键位桥：回放开始挂载、模组重装复位",
+                "Features\\Replay\\Runtime\\ReplayPlayer.cs",
+                s => CountOccurrences(s, "CheryToolsKvBridge.TryInstall();") == 1)
+                + Check(projectRoot,
+                "CT 键位桥：Main 重装时复位静态安装标志",
+                "Main.cs",
+                s => s.Contains("Features.Replay.CheryToolsKvBridge.Reset();", StringComparison.Ordinal));
+            // 开局对齐的按键重建（2026-11-07）：预备阶段的暖手输入是判定未开
+            // 时的真实按键，游戏不认；回放开局若把它们重建成净按住态，判定
+            // 开启一刻仍按着的键（实测 Nostalgia：Q/2/=/Back/Del）会从第一帧
+            // 起亮成按住——「刚开始播放就有按键被按下」。锚点跳过必须同时
+            // 作用于注入与重建两处，重建退回全前缀即红（MUT-D45）。
+            fail += Check(projectRoot,
+                "开局对齐必须让按键重建同样跳过判定开始前的前缀（预备阶段不许有假按住）",
+                "Features\\Replay\\Runtime\\ReplayPlayer.cs",
+                s =>
+                {
+                    string body = MethodBody(s, "FastForward") ?? "";
+                    return body.Contains("bool runStartAlignment = false", StringComparison.Ordinal)
+                        && body.Contains("int restoreFrom = runStartAlignment ? KeyEventIndex : 0;", StringComparison.Ordinal)
+                        && body.Contains("RebuildHeldInputs(restoreFrom);", StringComparison.Ordinal);
+                });
             // ㉓ 回放详情面板（2026-10-18 用户要求「点击回放文件可以看信息」）。
             //
             //    这块最容易出的错不是「没画出来」，而是**为了拿数据把文件装载了**：
@@ -1107,7 +1267,7 @@ namespace UiPreview
                 "Features\\Replay\\Runtime\\ReplayPlayer.cs",
                 s => s.Contains("RenderOverlayCapture.QuartzKey(num, ev.IsPressed)", StringComparison.Ordinal)
                     && s.Contains("RenderOverlayCapture.ResetQuartzKeys()", StringComparison.Ordinal)
-                    && HasMethodSpan(s, "private static void RebuildHeldInputs()",
+                    && HasMethodSpan(s, "private static void RebuildHeldInputs(int restoreFrom = 0)",
                         "internal static void SyncQuartzHeld()", out string rebuildBody)
                     && rebuildBody.Contains("RenderOverlayCapture.ResetQuartzKeys()", StringComparison.Ordinal)
                     && rebuildBody.Contains("RenderOverlayCapture.QuartzKey(num, ev.IsPressed)", StringComparison.Ordinal));

@@ -105,6 +105,20 @@ namespace SpectreReplay.Pages
         /// </summary>
         private static string _pendingCloudDelete = "";
 
+        // ── 去特效预设（多配置） ────────────────────────────────
+        //
+        // 预设列表有缓存：目录扫描是每帧 I/O，不能画一遍扫一遍。
+        // 保存/删除后 Force=true 立即失效，其余时候 2 秒内复用。
+        private static readonly TextField _presetName = new TextField();
+        private static readonly List<string> _presetFiles = new List<string>();
+        private static string[] _presetOptions = Array.Empty<string>();
+        private static int _presetSel;
+        private static int _presetCacheTick = int.MinValue;
+        // 删除沿用回放列表的两段确认：记文件名而不是 bool——玩家点 A 再点 B
+        // 时，B 必须重新走第一段（见 _pendingDelete 的注释）。
+        private static string _presetDeleteArm = "";
+        private static int _presetDeleteArmTick;
+
         /// <summary>
         /// 「从云端取回配置」是否处在待确认态（空 = 没有待确认的取回）。
         ///
@@ -436,6 +450,12 @@ namespace SpectreReplay.Pages
                 DrawPlaybackState();
                 OnGui.Row("timeline.enable", Settings.TimelineOn,
                     v => { Settings.TimelineOn = v; Commit(); });
+                // 结算「最大同时按键数」的显示门是游戏写死的 >10；打开后由
+                // Patch_AlwaysShowMaxUsedKeys 把这个条件改掉，任何一局都显示。
+                // 放在回放页而不是关于页：它是复盘时看的结算信息，玩家会在
+                // 这里找「为什么我这一局没看到最大按键数」。
+                OnGui.Row("replay.maxusedkeys", Settings.AlwaysShowMaxUsedKeys,
+                    v => { Settings.AlwaysShowMaxUsedKeys = v; Commit(); });
             });
 
             var files = ReplayList();
@@ -1970,6 +1990,175 @@ namespace SpectreReplay.Pages
 
         // ── 去特效 ──────────────────────────────────────────────
 
+        /// <summary>预设下拉框当前选中项对应的真实文件名；列表为空时返回 null。</summary>
+        private static string SelectedPresetFile()
+            => _presetSel >= 0 && _presetSel < _presetFiles.Count
+                ? _presetFiles[_presetSel]
+                : null;
+
+        /// <summary>刷新预设列表缓存。保存/删除后 force=true 立即重扫。</summary>
+        private static void RefreshPresets(bool force = false)
+        {
+            int now = Environment.TickCount;
+            if (!force && _presetCacheTick != int.MinValue && now - _presetCacheTick < 2000)
+                return;
+            _presetCacheTick = now;
+            _presetFiles.Clear();
+            try
+            {
+                _presetFiles.AddRange(EffectPresets.List());
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[SpectreReplay] 读取预设目录失败：" + ex.Message);
+            }
+            _presetOptions = _presetFiles.Select(PresetDisplayName).ToArray();
+            if (_presetSel >= _presetOptions.Length)
+                _presetSel = _presetOptions.Length - 1;
+        }
+
+        /// <summary>下拉框显示名 = 去掉 .json 后缀的真实文件名。</summary>
+        private static string PresetDisplayName(string file)
+            => file.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+                ? file.Substring(0, file.Length - 5)
+                : file;
+
+        /// <summary>应用当前选中的预设：改开关、落盘并刷新补丁挂载（Commit 内做）。</summary>
+        private static void ApplySelectedPreset()
+        {
+            string file = SelectedPresetFile();
+            if (file == null)
+            {
+                Status.Say("effects.preset.none", null, Status.Level.Warning);
+                return;
+            }
+            var r = EffectPresets.Apply(file);
+            if (!r.Ok)
+            {
+                Status.Say("effects.preset.failed", r.Error, Status.Level.Warning);
+                return;
+            }
+            Commit();
+            Status.Say("effects.preset.applied", r.Applied.ToString());
+        }
+
+        /// <summary>把当前开关保存成预设，并让新预设处于选中态。</summary>
+        private static void SaveCurrentPreset()
+        {
+            var r = EffectPresets.Save(_presetName.Text);
+            if (!r.Ok)
+            {
+                Status.Say("effects.preset.failed", r.Error, Status.Level.Warning);
+                return;
+            }
+            _presetName.Text = "";
+            _presetName.Editing = false;
+            RefreshPresets(force: true);
+            int at = _presetFiles.IndexOf(r.FileName);
+            if (at >= 0) _presetSel = at;
+            Status.Say("effects.preset.saved", PresetDisplayName(r.FileName));
+        }
+
+        /// <summary>把选中的预设改名成名称框里的名字（不写 .json）。</summary>
+        private static void RenameSelectedPreset()
+        {
+            string file = SelectedPresetFile();
+            if (file == null)
+            {
+                Status.Say("effects.preset.none", null, Status.Level.Warning);
+                return;
+            }
+            var r = EffectPresets.Rename(file, _presetName.Text);
+            if (!r.Ok)
+            {
+                // empty name / exists 有各自的专门文案，其余走通用失败
+                Status.Say(
+                    r.Error == "empty name" ? "effects.preset.badname"
+                    : r.Error == "exists" ? "effects.preset.exists"
+                    : "effects.preset.failed",
+                    r.Error, Status.Level.Warning);
+                return;
+            }
+            string oldName = PresetDisplayName(file);
+            RefreshPresets(force: true);
+            int at = _presetFiles.IndexOf(r.FileName);
+            if (at >= 0) _presetSel = at;
+            _presetName.Text = "";
+            _presetName.Editing = false;
+            Status.Say("effects.preset.renamed", oldName + " → " + PresetDisplayName(r.FileName));
+        }
+
+        /// <summary>把选中的预设上传到 Steam 云（云端同名以本地为准）。</summary>
+        private static void UploadSelectedPreset()
+        {
+            string file = SelectedPresetFile();
+            if (file == null)
+            {
+                Status.Say("effects.preset.none", null, Status.Level.Warning);
+                return;
+            }
+            var r = EffectPresets.UploadToCloud(file);
+            if (!r.Ok)
+            {
+                Status.Say(r.Error == "not_available" ? "effects.preset.cloudoff" : "effects.preset.failed",
+                    r.Error, Status.Level.Warning);
+                return;
+            }
+            Status.Say("effects.preset.uploaded", PresetDisplayName(file));
+        }
+
+        /// <summary>从 Steam 云拉取本地没有的预设；本地已有的同名文件不覆盖。</summary>
+        private static void PullCloudPresets()
+        {
+            var r = EffectPresets.PullFromCloud();
+            if (r.Error != null)
+            {
+                Status.Say(r.Error == "not_available" ? "effects.preset.cloudoff" : "effects.preset.failed",
+                    r.Error, Status.Level.Warning);
+                return;
+            }
+            RefreshPresets(force: true);
+            if (r.Pulled > 0)
+                Status.Say("effects.preset.pulled", r.Pulled.ToString());
+            else
+                Status.Say("effects.preset.cloudfresh");
+        }
+
+        /// <summary>
+        /// 删除按钮：两段确认，第一段只弹提醒（复用「确认删除」文案）。
+        /// 确认态 5 秒有效，超时后要重新点两下。
+        /// </summary>
+        private static void DrawPresetDeleteButton()
+        {
+            string file = SelectedPresetFile();
+            bool pending = file != null
+                && string.Equals(file, _presetDeleteArm, StringComparison.OrdinalIgnoreCase)
+                && Environment.TickCount - _presetDeleteArmTick < 5000;
+            string label = Loc.T(pending ? "playback.delete.confirm" : "effects.preset.delete");
+            GUIStyle style = pending ? Gui.AccentButtonStyle : Gui.QuietButtonStyle;
+            Rect r = Gui.ButtonRect(label, style, 70f, 26f);
+            if (!GUI.Button(r, label, style))
+            {
+                return;
+            }
+            if (!pending)
+            {
+                _presetDeleteArm = file;
+                _presetDeleteArmTick = Environment.TickCount;
+                Status.Say("effects.preset.confirm", null, Status.Level.Warning);
+                return;
+            }
+            _presetDeleteArm = "";
+            var d = EffectPresets.Delete(file);
+            if (!d.Ok)
+            {
+                Status.Say("effects.preset.failed", d.Error, Status.Level.Warning);
+                return;
+            }
+            RefreshPresets(force: true);
+            Status.Say("effects.preset.deleted", PresetDisplayName(file));
+        }
+
         /// <summary>
         /// 去特效页。
         ///
@@ -2017,6 +2206,46 @@ namespace SpectreReplay.Pages
                         EffectRemover.RefreshEditorSaveButtons();
                     }, EffectRemoverOn);
                 OnGui.Note("effects.enablesave.note");
+            });
+
+            Gui.Section("effects.presets", Gui.Accent, () =>
+            {
+                OnGui.Note("effects.presets.note");
+                RefreshPresets();
+                if (_presetOptions.Length == 0)
+                {
+                    OnGui.Note("effects.preset.none");
+                }
+                else
+                {
+                    OnGui.RowDropdown("effects.preset.select", _presetOptions, _presetSel,
+                        v => _presetSel = v);
+                    OnGui.Button("effects.preset.apply", ApplySelectedPreset, true);
+                    DrawPresetDeleteButton();
+                }
+
+                // 名称框照抄搜索行的画法：GUILayout 定位、自绘框画在组外，
+                // 否则鼠标处理会和水平组打架（见 DrawSearchRow 注释）。
+                GUILayout.BeginHorizontal();
+                GUILayout.Label(Loc.T("effects.preset.name"), Gui.LabelStyle,
+                    GUILayout.Width(Gui.LabelW));
+                Rect nameBox = GUILayoutUtility.GetRect(Gui.CtrlW, 24f,
+                    GUILayout.Width(Gui.CtrlW), GUILayout.Height(24f));
+                GUILayout.FlexibleSpace();
+                GUILayout.EndHorizontal();
+                bool canceled;
+                _presetName.Draw(nameBox, Gui.LabelStyle,
+                    Loc.T("effects.preset.name.empty"), out canceled);
+                if (canceled)
+                {
+                    _presetName.Text = "";
+                    _presetName.Editing = false;
+                }
+                OnGui.Button("effects.preset.save", SaveCurrentPreset, true);
+                OnGui.Button("effects.preset.rename", RenameSelectedPreset, true);
+                OnGui.Button("effects.preset.upload", UploadSelectedPreset, true);
+                OnGui.Button("effects.preset.pull", PullCloudPresets, true);
+                OnGui.Button("effects.preset.openfolder", () => EffectPresets.OpenFolder(), false);
             });
 
             Gui.Section("effects.visual", Gui.Accent, () =>

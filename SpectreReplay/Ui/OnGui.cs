@@ -59,7 +59,10 @@ namespace SpectreReplay.Ui
             new[] { "subtab.record.basics", "record.hotkeys", "record.keybd", "record.specialkeys", "record.keymap" },
             new[] { "playback.current", "playback.files", "playback.cloud" },
             new[] { "subtab.render.start", "subtab.render.output", "render.codec", "subtab.render.experimental", "convert.title" },
-            new[] { "effects.master", "effects.visual", "effects.decor", "effects.track",
+            // effects.presets 必须登记在这里：现代窗按「Section key == 页签 key」
+            // 过滤分组（IsModernSectionVisible），漏登记 = 分组整块不可见。
+            // 预设紧挨主开关——它配置的是整个去特效功能，不是某一类特效。
+            new[] { "effects.master", "effects.presets", "effects.visual", "effects.decor", "effects.track",
                 "effects.planet", "effects.audio", "effects.gameplay" },
             new[] { "subtab.about.info" },
         };

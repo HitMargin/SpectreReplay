@@ -46,6 +46,13 @@ internal static class ReplayPlayer
             // 在这里而不是 Main.OnToggle：模组加载顺序不保证 KeyViewer 先就绪，
             // 而回放开始时它一定已经在 AppDomain 里了。
             KeyViewerBridge.TryInstall();
+            // Quartz（石英）同款待遇：它的雨滴链挂在 SkyHook 前缀上，与回声
+            // 抑制器同槽竞争注册顺序，靠它自己看 OS 事件是概率性的。实时桥
+            // 直喂它的公共外部驱动，顺序与 Mirror 开关都不再影响显示。
+            QuartzLiveBridge.TryInstall();
+            // CheryTools（CT）键位显示只轮询 Unity Input，没有外部驱动；
+            // 桥在它每帧轮询之后改写结果，同样不依赖镜像开关与窗口聚焦。
+            CheryToolsKvBridge.TryInstall();
         }
     }
 
@@ -66,13 +73,21 @@ internal static class ReplayPlayer
         // 顺序必须是「取快照 → 置 is_playing=false → 按快照发事件」：
         // 先置假才能让 Note 里的日志与查询语义正确，而快照保证我们发的是
         // 停止那一刻真正按住的那些键（清空之后就查不到了）。
+        // **镜像松键的门槛必须先于 is_playing 翻假取好。** ManagedInput.Mirror
+        // 把 is_playing 算进条件，而 Stop 恰恰先翻假——照旧用那个属性的话
+        // 这个松键块恒为死代码，OS 层按住的键会一直滞留到玩家物理再按一次
+        // 同一个键（2026-11-07「回放按键滞留」实测的根因；Esc 暂停后退出是
+        // 最容易踩中的路径：暂停期泵停转，退出走 Stop，松键再被死门吞掉）。
+        // 抬起我们自己按下去的键不需要聚焦也不需要 is_playing：给没按过的
+        // 键发 KEYUP 是无操作，按过而漏发才是真滞留。
+        bool releaseMirrorKeys = PlayMode && Settings.MirrorInputToOS;
         List<ushort> stillHeld = ManagedInput.SnapshotHeld();
         is_playing = false;
         for (int i = 0; i < stillHeld.Count; i++)
             ReleaseLeakedKey(stillHeld[i]);
         // 回放结束：清掉托管输入状态，避免残留的按住键继续被 RDInput 报出来
         ManagedInput.Clear();
-        if (PlayMode && ManagedInput.Mirror)
+        if (releaseMirrorKeys)
         {
             var releases = new List<KeyboardSimulation.INPUT>();
             for (int i = 1; i < 256; i++)
@@ -84,6 +99,8 @@ internal static class ReplayPlayer
             }
             KeyboardSimulation.SendInputs(releases);
         }
+        // Quartz 实时桥收尾：补发抬起、卸兜底源、把输入通道还给 Quartz 自己。
+        QuartzLiveBridge.Shutdown();
         // 场景已卸时 instance 为 null：noFail 无从复原，但后续清理（键盘音停播、
         // CachedNoFail/IgnoreMarkFail 复位）必须照常跑到尾
         var controller = scrController.instance;
@@ -146,7 +163,7 @@ internal static class ReplayPlayer
         }
     }
 
-    internal static void FastForward(int targetFloor)
+    internal static void FastForward(int targetFloor, bool runStartAlignment = false)
     {
         if (data == null) return;
 
@@ -205,7 +222,15 @@ internal static class ReplayPlayer
                 + " keyIndex=" + KeyEventIndex + "/" + data.KeyEvents.Count);
         }
 
-        RebuildHeldInputs();
+        // **开局对齐不许把判定开始前的按键重建成按住态。** 录像的倒计时
+        // （负时间）段是玩家暖手的真实输入，判定未开时游戏本来就不认；
+        // 游标已锚到判定开始，若重建仍从 0 走 Restore，判定开启那一刻仍
+        // 按着的暖手键（实测 Nostalgia：118 条倒计时事件，Q/2/=/Back/Del
+        // 净按住到开局后 2~120ms）会从第一帧起就以「按住」出现在键游——
+        // 正是「刚开始播放就有按键被按下」的来源。开局对齐跳过整段前缀；
+        // 时间轴 seek 等中途跳转保持全前缀恢复，跨游标的长按仍要靠它续上。
+        int restoreFrom = runStartAlignment ? KeyEventIndex : 0;
+        RebuildHeldInputs(restoreFrom);
         _pendingFirstKeyLog = true;
 
     }
@@ -256,16 +281,18 @@ internal static class ReplayPlayer
     /// Both replay judgment and the Quartz KeyViewer must see the same prefix;
     /// keeping this in one place prevents a seek path from updating only one side.
     /// </summary>
-    private static void RebuildHeldInputs()
+    private static void RebuildHeldInputs(int restoreFrom = 0)
     {
         CurrKeyState = new byte[256];
         ManagedInput.Clear();
         Features.VideoRender.RenderOverlayCapture.ResetQuartzKeys();
+        QuartzLiveBridge.ResetLive();
 
         if (data?.KeyEvents != null)
         {
             int end = Math.Max(0, Math.Min(KeyEventIndex, data.KeyEvents.Count));
-            for (int i = 0; i < end; i++)
+            int start = Math.Max(0, Math.Min(restoreFrom, end));
+            for (int i = start; i < end; i++)
             {
                 var ev = data.KeyEvents[i];
                 ushort num = ev.KeyCode < Settings.key_code_convert.Length
@@ -278,6 +305,14 @@ internal static class ReplayPlayer
                 Features.VideoRender.RenderOverlayCapture.QuartzKey(num, ev.IsPressed);
             }
         }
+
+        // **实时桥只喂净按住态，不喂历史边沿。** 游标之前的每条事件都会被
+        // Restore 走一遍（成对抵消，游戏侧状态正确），但把每条 down 也喂给
+        // 雨滴队列的话，开局/跳转的那一帧里每个历史按键都喷一次雨——玩家
+        // 看到的就是「刚开始播放就一排键被按下」（2026-11-07 实测；今天的
+        // 无条件对齐让它从检查点开局扩大到了每次 0:00 开局）。显示层只关心
+        // 「此刻什么还按着」，所以等净态算完再一次性播种。
+        QuartzLiveBridge.SeedHeld();
 
         // Keep the SendInput mirror in sync so Stop() releases exactly the keys
         // that remain held after the rebuild.
@@ -517,6 +552,7 @@ internal static class ReplayPlayer
                 // consume ManagedInput, SkyHook, or Unity Input. Feed the same edge
                 // here so its rain animation and key highlights share the replay clock.
                 Features.VideoRender.RenderOverlayCapture.QuartzKey(num, ev.IsPressed);
+                QuartzLiveBridge.Edge(num, ev.IsPressed);
                 if (asyncInject && AsyncInputInjector.Healthy)
                 {
                     try { AsyncInputInjector.Inject(num, ev.IsPressed, ev.SongPosition); }

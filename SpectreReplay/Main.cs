@@ -122,6 +122,9 @@ namespace SpectreReplay
                 // UnpatchAll 一并卸掉，但桥接自己的「已挂接」静态标志不会跟着翻假。
                 // 不清它，关开一次模组之后键位显示器就永久失联且无日志（见 Reset 注释）。
                 Features.Replay.KeyViewerBridge.Reset();
+                // CT 键位桥同理：它的补丁也随 UnpatchAll 卸掉，静态「已安装」
+                // 标志不跟着翻假，不在这里复位就会永久失联且无日志。
+                Features.Replay.CheryToolsKvBridge.Reset();
                 // Steam 云探测同理：编辑器 Play 会话之间模组域不重载，上一个
                 // Play 留下的接口指针指向已随 SteamClient.Shutdown 销毁的
                 // Steam 上下文，不清就是拿悬空句柄开路（见 ResetProbe 注释）。
@@ -165,6 +168,8 @@ namespace SpectreReplay
                     () => Settings.ReplayOn
                         && (Settings.AllowedKeyboardSpecialKeys.Count > 0
                             || Settings.AllowedAsyncSpecialKeys.Count > 0));
+                SpectrePatchHub.SetFeatureToggle(FeatureKeys.AlwaysShowMaxUsedKeys,
+                    () => Settings.AlwaysShowMaxUsedKeys);
                 SpectrePatchHub.Refresh();
 
                 SpectreState.SetGetKeyAsyncEnabled(Settings.ReplayOn && Settings.GetDataFromAsyncInput);

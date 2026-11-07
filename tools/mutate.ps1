@@ -2307,7 +2307,7 @@ switch ($Which) {
         $lines = Lines 'Features\Replay\Runtime\ReplayPlayer.cs'
         $start = -1
         for ($i = 0; $i -lt $lines.Count; $i++) {
-            if ($lines[$i].Contains('private static void RebuildHeldInputs()')) { $start = $i; break }
+            if ($lines[$i].Contains('private static void RebuildHeldInputs(int restoreFrom = 0)')) { $start = $i; break }
         }
         if ($start -lt 0) { throw 'MUT-CI15 RebuildHeldInputs 锚点未找到' }
         $end = -1
@@ -2353,7 +2353,7 @@ switch ($Which) {
         if ($start -lt 0) { throw 'MUT-CI18 SeekToTime 锚点未找到' }
         $end = -1
         for ($i = $start + 1; $i -lt $lines.Count; $i++) {
-            if ($lines[$i].Contains('private static void RebuildHeldInputs()')) { $end = $i; break }
+            if ($lines[$i].Contains('private static void RebuildHeldInputs(int restoreFrom = 0)')) { $end = $i; break }
         }
         if ($end -lt 0) { throw 'MUT-CI18 方法收尾未找到' }
         $hit = 0
@@ -2481,7 +2481,7 @@ switch ($Which) {
         $lines = Lines 'Features\Replay\Patches\Patch_Lifecycle.cs'
         $hit = 0
         for ($i = 0; $i -lt $lines.Count; $i++) {
-            if ($lines[$i].Trim() -eq 'if (is_playing)' -and $i + 1 -lt $lines.Count -and $lines[$i + 1].Trim() -eq 'ReplayPlayer.FastForward(GCS.checkpointNum);') {
+            if ($lines[$i].Trim() -eq 'if (is_playing)' -and $i + 1 -lt $lines.Count -and $lines[$i + 1].Trim() -eq 'ReplayPlayer.FastForward(GCS.checkpointNum, runStartAlignment: true);') {
                 $lines[$i] = '            if (is_playing && GCS.checkpointNum != data.StartTile)'
                 $hit++
             }
@@ -2504,6 +2504,110 @@ switch ($Which) {
         # players recording keyboard music without knowing the caveat.
         Backup 'Pages\Pages.cs'
         ReplaceExact 'Pages\Pages.cs' 'OnGui.Note("record.keybd.warn", Gui.WarnCol);' '// mutated'
+    }
+
+    'MUT-D43' {
+        # Mirror-key release regression (2026-11-07): Stop must capture the
+        # mirror-release decision BEFORE flipping is_playing. ManagedInput.Mirror
+        # contains is_playing, so gating the release block on it afterwards makes
+        # it dead and OS-level keys stick until the player physically re-presses.
+        Backup 'Features\Replay\Runtime\ReplayPlayer.cs'
+        ReplaceExact 'Features\Replay\Runtime\ReplayPlayer.cs' 'bool releaseMirrorKeys = PlayMode && Settings.MirrorInputToOS;' 'bool releaseMirrorKeys = PlayMode && ManagedInput.Mirror;'
+    }
+
+    'MUT-D44' {
+        # Quartz live-bridge regression (2026-11-07): the rebuild must seed the
+        # NET held set, not replay historical edges — feeding every past down
+        # spawns a burst of fake rain at every (re)start ("keys pressed at
+        # playback start", user-reported). Dropping SeedHeld reverts to that.
+        # 突变形状对准真实退化：开局/跳转重建丢掉净态播种，石英 KV 回到
+        # 「按键不显示/开局假雨」的旧病。接线判据必须红。
+        Backup 'Features\Replay\Runtime\ReplayPlayer.cs'
+        $lines = Lines 'Features\Replay\Runtime\ReplayPlayer.cs'
+        $hit = 0
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Trim() -eq 'QuartzLiveBridge.SeedHeld();') {
+                $lines[$i] = '                // mutated'
+                $hit++
+            }
+        }
+        if ($hit -ne 1) { throw "MUT-D44 命中 $hit 次（应为 1）" }
+        SetLines 'Features\Replay\Runtime\ReplayPlayer.cs' $lines
+    }
+
+    'MUT-D45' {
+        # Run-start rebuild regression (2026-11-07): at run-start alignment the
+        # countdown prefix must NOT be restored as held state — judgment was
+        # closed then, and restoring it lights Q/2/=/Back/Del up from the first
+        # frame ("keys pressed at playback start"; user-reported on Nostalgia:
+        # 118 countdown events, 5 keys net-held at 0.000). Reverting to a full
+        # prefix restore must turn the new gate red.
+        Backup 'Features\Replay\Runtime\ReplayPlayer.cs'
+        ReplaceExact 'Features\Replay\Runtime\ReplayPlayer.cs' 'int restoreFrom = runStartAlignment ? KeyEventIndex : 0;' 'int restoreFrom = 0;'
+    }
+
+    'MUT-D46' {
+        # Results max-used-keys regression (2026-11-08): the game hides this row
+        # unless >10 keys were used at once. If the threshold rewrite is dropped,
+        # the setting still exists but every ordinary run silently hides the row.
+        Backup 'Features\Results\Patch_AlwaysShowMaxUsedKeys.cs'
+        ReplaceExact 'Features\Results\Patch_AlwaysShowMaxUsedKeys.cs' 'list[i + 1].operand = (sbyte)-1;' 'list[i + 1].operand = (sbyte)10;'
+    }
+
+    'MUT-D47' {
+        # CheryTools KV regression (2026-11-08): CT's Update early-returns when
+        # no physical key is down and _hasTrackedPressed is false, so during
+        # replay (physical input isolated) PollInputStates never runs at all.
+        # Dropping the gate-opening prefix makes the whole bridge a no-op —
+        # exactly the "CT KV shows nothing during replay" user report.
+        Backup 'Features\Replay\Runtime\CheryToolsKvBridge.cs'
+        ReplaceExact 'Features\Replay\Runtime\CheryToolsKvBridge.cs' '_hasTrackedPressed.SetValue(__instance, true);' '_hasTrackedPressed.SetValue(__instance, false);'
+    }
+
+    'MUT-D48' {
+        # Switch-pixel regression (2026-11-08 user report): modern window scales
+        # the whole GUI via GUI.matrix (~1.15x). Drawing the switch from a 1:1
+        # 34x20 texture makes the rounded ends stair-step. Reverting one call
+        # site to the unscaled texture must turn the supersampling gate red.
+        Backup 'Ui\Gui.cs'
+        $lines = Lines 'Ui\Gui.cs'
+        $inSwitchAt = $false
+        $hit = 0
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Contains('internal static void SwitchAt(')) { $inSwitchAt = $true; continue }
+            if ($inSwitchAt -and $lines[$i].Contains('internal static void Switch(')) { $inSwitchAt = $false }
+            if ($inSwitchAt -and $lines[$i].Contains('34 * SwitchTexScale, 20 * SwitchTexScale')) {
+                $lines[$i] = $lines[$i].Replace('34 * SwitchTexScale, 20 * SwitchTexScale', '34, 20')
+                $hit++
+            }
+        }
+        if ($hit -ne 1) { throw "MUT-D48 命中 $hit 次（应为 1）" }
+        SetLines 'Ui\Gui.cs' $lines
+    }
+
+    'MUT-D49' {
+        # Effect-preset whitelist regression (2026-11-08): every presettable
+        # toggle must be mapped. Dropping the Cameras mapping makes imports
+        # silently skip that category while the toast still reports success.
+        Backup 'Features\EffectRemover\EffectPresets.cs'
+        ReplaceExact 'Features\EffectRemover\EffectPresets.cs' 'case "EffectRemoverCameras":' 'case "MUT_CamerasLost":'
+    }
+
+    'MUT-D50' {
+        # Effect-preset import path regression (2026-11-08): the "open presets
+        # folder" button is the only import entry point for external .json
+        # files. Mutating it away must turn the page-wiring gate red.
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' '() => EffectPresets.OpenFolder()' '() => { }'
+    }
+
+    'MUT-D51' {
+        # Effect-preset sub-tab regression (2026-11-08 user report): the modern
+        # window filters sections by "section key == sub-tab key", so an
+        # unregistered presets section is completely invisible ("找不到 UI
+        # 配置设置"). Dropping the registration must turn the gate red.
+        Backup 'Ui\OnGui.cs'
+        ReplaceExact 'Ui\OnGui.cs' '"effects.master", "effects.presets",' '"effects.master",'
     }
 
     'MUT-D14' {
