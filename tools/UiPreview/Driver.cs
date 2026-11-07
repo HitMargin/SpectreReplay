@@ -123,6 +123,12 @@ namespace UiPreview
 
         internal static int Main(string[] args)
         {
+            if (args.Length > 1 && args[0] == "--inspect")
+            {
+                var files = new string[args.Length - 1];
+                Array.Copy(args, 1, files, 0, files.Length);
+                return OfflineInspect.Run(files);
+            }
             return Run(args.Length > 0 ? args[0] : "preview", args);
         }
     }

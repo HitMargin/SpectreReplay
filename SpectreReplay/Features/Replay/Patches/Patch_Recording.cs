@@ -147,7 +147,7 @@ internal static class Patch_Hit
                 for (int i = 0; i < count; i++)
                     HitMarginCounts[i] = marginCounts[i];
             }
-            else
+            else if (data.HitSnapshots.Count > 0)
             {
                 bool changed = false;
                 for (int j = 0; j < count; j++)

@@ -24,6 +24,12 @@ internal static class ReplayRecorder
             LateSaveMode = false;
             IgnoreMarkFail = false;
             PrevKeyState = new byte[256];
+            // 「第 0 块命中去重」的状态必须跟着新一局重置：上一局第一个 hit
+            // 记过 CurrentHitFloor/HitMarginCounts，data.Reset() 只清列表不清
+            // 这两个，下一局第一个 hit 会误判「与上一块相同」而去 RemoveAt(-1)，
+            // 异常被吞后整局再也录不到快照——表现为保存的回放 Hits=0、元数据空。
+            CurrentHitFloor = null;
+            Array.Clear(HitMarginCounts, 0, HitMarginCounts.Length);
             // 录制诊断是「每一局第一次」语义，不清的话上一局的门状态会压住
             // 这一局的现场（尤其「跳过」类——上一局命中过门，这一局同样的
             // 门再犯就一声不吭了）。
