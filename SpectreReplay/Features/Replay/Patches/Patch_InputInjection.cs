@@ -19,6 +19,48 @@ internal static class Patch_RDInput
     {
         try { ReplayPlayer.PumpInput(); }
         catch (Exception ex) { Debug.LogException(ex); }
+        try { RecordPatchWatchdog(); }
+        catch (Exception ex) { Debug.LogException(ex); }
+    }
+
+    // ── 录制中补丁看门狗 ─────────────────────────────────────
+    // 「录制前核对」与首个命中之间存在被外部重写的窗口：2026-11-07 编辑器
+    // 试玩实测，核对全绿之后 Jipper 系模组惰性初始化，JAPatcher 按旧快照
+    // 重写 scrPlayer.Hit 的补丁集，前缀整局没执行，HitSnapshots 录成 0。
+    // 泵前缀每帧都跑，而 scrController.PlayerControl_Update 不是 Jipper 系
+    // 的补丁目标，这里活着就能守录制：每 30 帧静默复核一次，缺失当场补挂，
+    // 命中从下一帧起零丢失。
+    private static int _watchdogTick;
+    private static bool _watchdogArmed;
+    private static int _rebuildCount;
+
+    private static void RecordPatchWatchdog()
+    {
+        if (!is_recording)
+        {
+            _watchdogArmed = false;
+            return;
+        }
+        if (!_watchdogArmed)
+        {
+            _watchdogArmed = true;
+            _rebuildCount = 0;
+        }
+        if (++_watchdogTick < 30) return;
+        _watchdogTick = 0;
+        SpectrePatchHub.EnsureAppliedQuiet(typeof(Patch_Hit), typeof(Patch_UpdateInputConsumeAsync),
+            typeof(Patch_PlayerControlUpdate), typeof(Patch_Won_Update));
+        // **执行探针**：地板推进过就必然已有命中快照。「账面在而前缀不执行」
+        // （2026-11-07 实测：JAPatcher 重写后 HarmonyX 账仍显示在位、前缀整局
+        // 不执行）时账面核对天然失明，只能强拆重挂重建 detour。每局限 3 次；
+        // 重建一旦见效快照开始累积，条件自然不再成立。
+        var controller = scrController.instance;
+        if (controller == null || controller.currFloor == null || data == null) return;
+        if (data.HitSnapshots.Count > 0) return;
+        if (controller.currFloor.seqID <= (data.StartTile ?? 0)) return;
+        if (_rebuildCount >= 3) return;
+        _rebuildCount++;
+        SpectrePatchHub.ForceRebuild(typeof(Patch_Hit));
     }
 
     // UpdateInput 在 AsyncInputManager.isActive 时由 scrConductor.Update 每帧调用

@@ -761,8 +761,39 @@ internal static class SpectrePatchHub
     /// </summary>
     public static int EnsureApplied(string context, params Type[] patchClasses)
     {
+        int remounted = EnsureAppliedCore(patchClasses, out int specsChecked);
+        bool bridge = TryGetHarmonyXReader(out _);
+        // 一行核对结论，全绿也打——这是「核对真的跑了」的长期判据
+        // （2026-10-31 HitSnapshots=0 的教训：无声 = 没跑，排查方向整个带偏）。
+        // context 用 ASCII token 传（调用点在 Patch_Lifecycle，硬编码中文会被
+        // 界面文案扫描误伤），日志里翻成中文。
+        string label = context switch
+        {
+            "before-record" => "录制前",
+            "before-play" => "回放前",
+            "after-empty-record" => "空壳复核",
+            _ => context,
+        };
+        AsyncLog.Warning("[" + LogTag + "] 补丁核对（" + label + (bridge ? " · 桥接" : "") + "）："
+            + patchClasses.Length + " 类 / " + specsChecked + " 条已应用声明 —— "
+            + (remounted > 0 ? "补挂 " + remounted + " 条" : "全部在位"));
+        return remounted;
+    }
+
+    /// <summary>
+    /// 录制中的看门狗复核：与 <see cref="EnsureApplied"/> 同一套核对/补挂，
+    /// 但不打摘要行——泵前缀每 30 帧调一次，全绿也打会淹没日志。缺失时的
+    /// 逐条警告照常落（那才是信号）。2026-11-07 编辑器试玩实测：Jipper 系
+    /// 惰性初始化经 JAPatcher 重写 scrPlayer.Hit 补丁集的时机可以晚于
+    /// 「录制前核对」，核对之后的窗口只有逐帧复核守得住。
+    /// </summary>
+    public static int EnsureAppliedQuiet(params Type[] patchClasses)
+        => EnsureAppliedCore(patchClasses, out _);
+
+    private static int EnsureAppliedCore(Type[] patchClasses, out int specsChecked)
+    {
         int remounted = 0;
-        int specsChecked = 0;
+        specsChecked = 0;
         bool bridge = TryGetHarmonyXReader(out _);
         lock (_lock)
         {
@@ -798,29 +829,22 @@ internal static class SpectrePatchHub
                         }
                         if (present)
                             continue;
+                        // 桥接世界的现场证据：补挂前把 HarmonyX 账上的现行名单
+                        // 落日志——「谁还压在这个方法上」才能点名，不用再猜。
+                        string witness = bridge ? BridgePatchList(target) : null;
                         if (PatchOneTarget(s, target))
                         {
                             remounted++;
                             AsyncLog.Warning("[" + LogTag + "] " + s.Id + " → 本补丁在核对账本中缺失，已重新挂载");
+                            if (witness != null)
+                                AsyncLog.Warning("[" + LogTag + "] " + s.Id + " → 补挂前 " + TargetLabel(target)
+                                    + " 现行补丁集（HarmonyX 账）：" + witness);
                         }
                     }
                 }
             }
         }
         ReportJalibPresence();
-        // 一行核对结论，全绿也打——这是「核对真的跑了」的长期判据
-        // （2026-10-31 HitSnapshots=0 的教训：无声 = 没跑，排查方向整个带偏）。
-        // context 用 ASCII token 传（调用点在 Patch_Lifecycle，硬编码中文会被
-        // 界面文案扫描误伤），日志里翻成中文。
-        string label = context switch
-        {
-            "before-record" => "录制前",
-            "before-play" => "回放前",
-            _ => context,
-        };
-        AsyncLog.Warning("[" + LogTag + "] 补丁核对（" + label + (bridge ? " · 桥接" : "") + "）："
-            + patchClasses.Length + " 类 / " + specsChecked + " 条已应用声明 —— "
-            + (remounted > 0 ? "补挂 " + remounted + " 条" : "全部在位"));
         return remounted;
     }
 
@@ -961,6 +985,149 @@ internal static class SpectrePatchHub
         }
         return false;
     }
+
+    // HarmonyX 账的现行补丁名单：那边的 Patches 是另一个 0Harmony 世界
+    // （2.10）的类型，PatchList 的强类型走不通，按字段反射读，格式对齐。
+    // 只在「账面缺失、准备补挂」这个罕见时刻调用，反射开销可以不计。
+    private static string BridgePatchList(MethodBase target)
+    {
+        if (!TryGetHarmonyXReader(out MethodInfo getPatchInfo)) return "（读不到 HarmonyX 账）";
+        object patches;
+        try { patches = getPatchInfo.Invoke(null, new object[] { target }); }
+        catch (Exception ex) { return "（读取失败 " + ex.GetType().Name + "）"; }
+        if (patches == null) return "（无任何补丁）";
+        string s = BridgeOneList(patches, "前缀", "Prefixes")
+            + BridgeOneList(patches, "后缀", "Postfixes")
+            + BridgeOneList(patches, "转译", "Transpilers")
+            + BridgeOneList(patches, "收尾", "Finalizers");
+        return s.Length == 0 ? "（无任何补丁）" : s.TrimEnd();
+    }
+
+    private static string BridgeOneList(object patches, string kind, string field)
+    {
+        FieldInfo list = patches.GetType().GetField(field,
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        if (list?.GetValue(patches) is not IEnumerable coll) return "";
+        var names = new List<string>();
+        foreach (object p in coll)
+        {
+            object m = p.GetType().GetProperty("PatchMethod")?.GetValue(p)
+                ?? p.GetType().GetField("PatchMethod")?.GetValue(p);
+            var mb = m as MethodBase;
+            names.Add((mb?.DeclaringType?.Name ?? "?") + "." + (mb?.Name ?? "?"));
+        }
+        return names.Count == 0 ? "" : kind + "[" + string.Join(", ", names) + "] ";
+    }
+
+    // ── 强制重建（账面在而 detour 陈旧的自愈）─────────────────
+    // 2026-11-07 编辑器试玩实测：JAPatcher 重写目标方法后，HarmonyX 账仍
+    // 显示我们的前缀在位、方法上却整局不再执行——账面核对（EnsureApplied）
+    // 对这种状态天然失明。唯一自愈是把我们的条目从账上拆掉再重挂，逼
+    // Harmony 按现行补丁集重写 detour。先拆后挂是硬序：Add 只按 owner 追加
+    // 不去重，不拆就重挂会让前缀跑两遍（快照翻倍）。桥接世界的 Unpatch
+    // 调用不会被 UMMBridge 转写（只转写 Patch），必须反射走 HarmonyX 自己
+    // 的 UnpatchAll；拆不干净就不重挂——宁可这局继续空，也不能翻倍。
+    public static int ForceRebuild(Type patchClass)
+    {
+        int rebuilt = 0;
+        bool bridge = TryGetHarmonyXReader(out _);
+        lock (_lock)
+        {
+            foreach (Spec s in _specs)
+            {
+                if (s.PatchMethod == null || s.PatchMethod.DeclaringType != patchClass) continue;
+                if (!s.Applied || s.Targets == null) continue;
+                foreach (MethodBase target in s.Targets)
+                {
+                    string witness = bridge ? BridgePatchList(target) : null;
+                    bool removed = bridge ? UnpatchViaHarmonyX(target, s) : UnpatchNative(target, s);
+                    if (!removed)
+                    {
+                        AsyncLog.Warning("[" + LogTag + "] " + s.Id + " → 账面条目拆不掉，放弃重建（防翻倍）");
+                        continue;
+                    }
+                    if (PatchOneTarget(s, target))
+                    {
+                        rebuilt++;
+                        AsyncLog.Warning("[" + LogTag + "] " + s.Id + " → 账面在而前缀不执行，已强拆重挂重建 detour");
+                        if (witness != null)
+                            AsyncLog.Warning("[" + LogTag + "] " + s.Id + " → 重建前 " + TargetLabel(target)
+                                + " 现行补丁集（HarmonyX 账）：" + witness);
+                    }
+                }
+            }
+        }
+        return rebuilt;
+    }
+
+    private static bool UnpatchNative(MethodBase target, Spec s)
+    {
+        try
+        {
+            s.Owner.Unpatch(target, HarmonyPatchTypeOf(s.Attr.PatchType), s.Owner.Id);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AsyncLog.Warning("[" + LogTag + "] " + s.Id + " → Unpatch 失败: " + ex.GetType().Name + " " + ex.Message);
+            return false;
+        }
+    }
+
+    private static bool UnpatchViaHarmonyX(MethodBase target, Spec s)
+    {
+        if (!TryGetHarmonyXReader(out MethodInfo getPatchInfo)) return false;
+        try
+        {
+            Assembly hxAsm = getPatchInfo.DeclaringType.Assembly;
+            object patches = getPatchInfo.Invoke(null, new object[] { target });
+            if (patches == null) return true;
+            FieldInfo list = patches.GetType().GetField(PatchListFieldName(s.Attr.PatchType),
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (list?.GetValue(patches) is not IEnumerable coll) return true;
+            string owner = null;
+            foreach (object p in coll)
+            {
+                object m = p.GetType().GetProperty("PatchMethod")?.GetValue(p)
+                    ?? p.GetType().GetField("PatchMethod")?.GetValue(p);
+                if (!ReferenceEquals(m, s.PatchMethod)) continue;
+                owner = (string)(p.GetType().GetProperty("Owner")?.GetValue(p)
+                    ?? p.GetType().GetField("Owner")?.GetValue(p));
+                break;
+            }
+            if (owner == null) return true;
+            object hx = hxAsm.CreateInstance("HarmonyLib.Harmony", false,
+                BindingFlags.Public | BindingFlags.Instance, null,
+                new object[] { LogTag + ":force-rebuild" }, null, null);
+            hxAsm.GetType("HarmonyLib.Harmony")
+                ?.GetMethod("UnpatchAll", new[] { typeof(string) })
+                ?.Invoke(hx, new object[] { owner });
+            return !BridgeContains(target, s.PatchMethod, s.Attr.PatchType);
+        }
+        catch (Exception ex)
+        {
+            AsyncLog.Warning("[" + LogTag + "] " + s.Id + " → HarmonyX Unpatch 失败: " + ex.GetType().Name + " " + ex.Message);
+            return false;
+        }
+    }
+
+    private static string PatchListFieldName(PatchType type) => type switch
+    {
+        PatchType.Prefix => "Prefixes",
+        PatchType.Postfix => "Postfixes",
+        PatchType.Transpiler => "Transpilers",
+        PatchType.Finalizer => "Finalizers",
+        _ => null,
+    };
+
+    private static HarmonyPatchType HarmonyPatchTypeOf(PatchType type) => type switch
+    {
+        PatchType.Prefix => HarmonyPatchType.Prefix,
+        PatchType.Postfix => HarmonyPatchType.Postfix,
+        PatchType.Transpiler => HarmonyPatchType.Transpiler,
+        PatchType.Finalizer => HarmonyPatchType.Finalizer,
+        _ => HarmonyPatchType.All,
+    };
 
     // ── JALib 在场探测（每次会话首次核对时一次）─────────────────
     // JALib（Jipper 全家桶公共库，自动联网更新）的 JAPatcher 会给自家 mod 挂

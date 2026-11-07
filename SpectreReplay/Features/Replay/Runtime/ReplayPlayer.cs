@@ -184,7 +184,6 @@ internal static class ReplayPlayer
 
         RebuildHeldInputs();
 
-        AllAutoHits = false;
     }
 
     /// <summary>
@@ -224,7 +223,6 @@ internal static class ReplayPlayer
 
         RebuildHeldInputs();
 
-        AllAutoHits = false;
         return true;
     }
 

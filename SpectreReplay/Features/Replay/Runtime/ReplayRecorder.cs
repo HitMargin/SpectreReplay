@@ -20,7 +20,7 @@ internal static class ReplayRecorder
             is_playing = false;
             PendingSave = true;
             HitLocked = false;
-            AllAutoHits = true;
+            EmptySaveBlocked = false;
             LateSaveMode = false;
             IgnoreMarkFail = false;
             PrevKeyState = new byte[256];
@@ -103,6 +103,11 @@ internal static class ReplayRecorder
             if (HitMarginCompat.FailCount(HitMarginCounts) == 0)
             {
                 SaveFile();
+            }
+            else
+            {
+                NotifySaveSkipped(LocalizationManager.GetLocalizedText("note.save_skip_miss"),
+                    "run has a miss (DontSaveWhenMiss)");
             }
         }
         else

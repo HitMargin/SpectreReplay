@@ -36,11 +36,8 @@ internal class Patch_SwitchToEditMode
         if (LateSaveMode)
         {
             PlayActions.StopRecording();
-            if (Settings.DontSaveWhenMiss)
-            {
-                if (HitMarginCompat.FailCount(HitMarginCounts) == 0) SaveFile();
-            }
-            else SaveFile();
+            // 落盘和 DontSaveWhenMiss 判定都在 Stop() 内部完成；
+            // 这里再显式 SaveFile 会双存（Toast ×2、事件 ×2、云同步 ×2）。
             LateSaveMode = false;
         }
         StopAll();

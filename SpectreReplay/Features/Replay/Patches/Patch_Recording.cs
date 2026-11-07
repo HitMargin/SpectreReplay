@@ -133,8 +133,6 @@ internal static class Patch_Hit
                 HitTick = hitTick
             };
 
-            if (!RDC.auto) AllAutoHits = false;
-
             var marginCounts = player.marginTracker.hitMarginsCount;
             // 两个数组都按 Max(HitMargin)+1 分配，正常等长；但这里用**较短者**收敛：
             // 一旦长度不一致（版本差异/兼容层枚举解析偏差），越界异常会被本方法外层的
@@ -195,8 +193,23 @@ internal class Patch_OnLandOnPortal
         if ((int)portalDestination != 1 || data.SceneName == null) return;
         if (SceneManager.GetActiveScene().name != data.SceneName) return;
         if (!is_recording || !Settings.AutoSave) return;
-        if (Settings.DontSaveWhenAuto && AllAutoHits) return;
-        if (Settings.CompleteSave && data.StartTile != 0) return;
+        // 全自动判定读「过关瞬间」的 RDC.auto：这是模式级开关（编辑器自动演示、
+        // Otto、调试键），自动砖每击的临时翻转由 scrPlayer 当击恢复，污染不到
+        // 这里。原先按「每击快照全带 auto」判，纯手打的自动砖测试关会被整局
+        // 误杀（2026-11-07 实测）。编辑器试玩是作者自己的测试，不受此设置约束。
+        bool editorPlaytest = data.SceneName == "scnEditor";
+        if (!editorPlaytest && Settings.DontSaveWhenAuto && RDC.auto)
+        {
+            NotifySaveSkipped(LocalizationManager.GetLocalizedText("note.save_skip_auto"),
+                "auto run (DontSaveWhenAuto)");
+            return;
+        }
+        if (Settings.CompleteSave && data.StartTile != 0)
+        {
+            NotifySaveSkipped(LocalizationManager.GetLocalizedText("note.save_skip_checkpoint"),
+                "checkpoint start (CompleteSave)");
+            return;
+        }
 
         if (Settings.LateSave) { LateSaveMode = true; return; }
 

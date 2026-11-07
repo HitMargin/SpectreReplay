@@ -227,7 +227,6 @@ public static class SpectreState
             LateSaveMode = false;
             PlayIndex = 0;
             KeyEventIndex = 0;
-            AllAutoHits = true;
             IgnoreMarkFail = false;
         }
 
@@ -242,7 +241,6 @@ public static class SpectreState
             LateSaveMode = false;
             PlayIndex = 0;
             KeyEventIndex = 0;
-            AllAutoHits = true;
             IgnoreMarkFail = false;
             IsFullRun = false;
         }
@@ -387,6 +385,11 @@ public static class SpectreState
 
     internal static bool HitLocked = false;
 
+    // 空壳保存拦截的「本局已拦过」标志：SaveFile 会被重试与多条 LateSave
+    // 路径反复调用，拦一次说明一次就够（每次都弹会叠出 ×N 的 Toast）。
+    // ReplayRecorder.Start 归零。
+    internal static bool EmptySaveBlocked = false;
+
     internal static bool IgnoreMarkFail = false;
 
     internal static bool UseAsyncInput = false;
@@ -405,8 +408,6 @@ public static class SpectreState
     internal static int PlayIndex = 0;
 
     internal static int KeyEventIndex = 0;
-
-    internal static bool AllAutoHits = true;
 
     internal static bool IsFullRun = false;
     internal static bool HasKeybdSound = false;
@@ -496,6 +497,27 @@ public static class SpectreState
         if (data == null)
         {
             return true;
+        }
+        // **空壳拦截**：跑出过进度（EndTile 前进过）却 0 命中 = 命中前缀在录制
+        // 途中被外部重写挤掉（JAPatcher 快照重写；2026-11-07 编辑器试玩实测：
+        // 键盘音、指针轨迹都活着，唯独 Hit 快照整局为 0）。这种文件回放必然
+        // 报「数据为空」，落盘只会制造悬案；当场复核补挂，下一局恢复。
+        if (data.HitSnapshots.Count == 0 && (data.EndTile ?? 0) > (data.StartTile ?? 0))
+        {
+            // 拦一次就够：调用链的重试与多条 LateSave 路径会让 SaveFile 一局
+            // 被调十来次，每次都复核+弹窗会叠出一串 Toast（2026-11-07 ×11 实测）。
+            if (!EmptySaveBlocked)
+            {
+                EmptySaveBlocked = true;
+                SpectrePatchHub.EnsureApplied("after-empty-record",
+                    typeof(Patch_Hit), typeof(Patch_UpdateInputConsumeAsync),
+                    typeof(Patch_PlayerControlUpdate), typeof(Patch_Won_Update));
+                SpectrePatchHub.ForceRebuild(typeof(Patch_Hit));
+                if (notify)
+                    NotifySaveSkipped(LocalizationManager.GetLocalizedText("note.save_skip_nohits"),
+                        "no hits recorded (Hit prefix lost mid-recording?)");
+            }
+            return false;
         }
         string message = "";
         bool success = true;
@@ -692,6 +714,16 @@ public static class SpectreState
         // 且 RefreshLanguage 切换后它显示的是实例化时缓存的文案。自绘卡样式、
         // 时机、合并（同因 ×N）全部可控。时长口径不变：NotificationDuration(extra)。
         Ui.Toast.Show(message, dur, type == NotifType.Warning);
+    }
+
+    // 自动保存链的「按设置拒绝」统一出口：拒绝保存可以，但必须当场说明原因。
+    // 静默丢局的表现就是「热键能存、出关不存」的无头案（2026-11-07 实测：
+    // 全自动试玩 + DontSaveWhenAuto，从过关到退出整条链没有任何输出）。
+    // 文案在调用点就地取词（键名要给死键扫描看见），reason 只进日志。
+    internal static void NotifySaveSkipped(string message, string reason)
+    {
+        TriggerMessage(message, type: NotifType.Warning);
+        Debug.Log("[SpectreReplay] replay not auto-saved: " + reason);
     }
 
     public static bool ReplayHit(scrPlayer player, HitSnapshot hitdata)
