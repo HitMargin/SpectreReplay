@@ -1305,8 +1305,10 @@ namespace UiPreview
                 "JRP 雨滴时钟：必须替换 RainManager.Update 等三处 get_CurrentTicks 调用点（防 aggressiveinlining）",
                 "Features\\VideoRender\\Pipeline\\RenderOverlayCapture.cs",
                 s => s.Contains("InstallCallSitePatch(kv, \"ToStopwatchTicks\")", StringComparison.Ordinal)
+                    && s.Contains("InstallCallSitePatch(kv, \"OnKeyEvent\")", StringComparison.Ordinal)
                     && s.Contains("InstallCallSitePatch(rain, \"Update\")", StringComparison.Ordinal)
                     && s.Contains("InstallCallSitePatch(updater, \"Update\")", StringComparison.Ordinal)
+                    && s.Contains("AccessTools.Method(type, methodName)", StringComparison.Ordinal)
                     && s.Contains("PatchManager.RegisterManualTranspiler(", StringComparison.Ordinal)
                     && s.Contains("internal static long RainClockTicks()", StringComparison.Ordinal)
                     && s.Contains("callee.Name != \"get_CurrentTicks\"", StringComparison.Ordinal)

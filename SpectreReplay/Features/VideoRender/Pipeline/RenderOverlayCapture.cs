@@ -199,6 +199,9 @@ internal static class RenderOverlayCapture
             int patched = 0;
             // 事件时间 → Stopwatch 域的换算；雨滴 StartTime 由它决定。
             patched += InstallCallSitePatch(kv, "ToStopwatchTicks");
+            // SkyHook 事件入口：ToStopwatchTicks 自身也带 aggressiveinlining，
+            // 可能被内联进这里——入口里的调用同样要换。
+            patched += InstallCallSitePatch(kv, "OnKeyEvent");
             // 雨滴位置：elapsed = (CurrentTicks - StartTime) / 3e6 * rainSpeed。
             Type rain = AccessTools.TypeByName("JipperResourcePack.KeyViewerContents.RainManager");
             if (rain != null) patched += InstallCallSitePatch(rain, "Update");
@@ -228,9 +231,10 @@ internal static class RenderOverlayCapture
     /// <summary>把目标方法里对 JRP <c>get_CurrentTicks</c> 的调用换成虚拟时钟。</summary>
     private static int InstallCallSitePatch(Type type, string methodName)
     {
-        MethodInfo m = type.GetMethod(methodName,
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-            null, Type.EmptyTypes, null);
+        // **按方法名匹配，不限参数表**：ToStopwatchTicks(long) 带参数，
+        // 零参数查找会让它静默漏替换（2026-11-08 实测：3 处只换到 2 处，
+        // StartTime 留在墙钟域，雨滴起始位置飞出屏幕）。
+        MethodInfo m = AccessTools.Method(type, methodName);
         if (m == null) return 0;
         PatchManager.RegisterManualTranspiler(m, rainClockTranspiler);
         clockCallSites.Add(m);
@@ -469,7 +473,8 @@ internal static class RenderOverlayCapture
         {
             if (list[i].opcode != OpCodes.Call
                 || !(list[i].operand is MethodInfo callee)
-                || callee.Name != "get_CurrentTicks")
+                || (callee.Name != "get_CurrentTicks"
+                    && callee.Name != "ToStopwatchTicks"))
                 continue;
             list[i].opcode = OpCodes.Call;
             list[i].operand = bridge;
