@@ -1296,6 +1296,26 @@ namespace UiPreview
                     && MethodBody(s, "CleanupOnConstructionFailure") is string cleanup
                     && cleanup.Contains("RestoreTargets()", StringComparison.Ordinal)
                     && cleanup.Contains("texture.Release()", StringComparison.Ordinal));
+            // JRP 雨滴时钟（2026-11-08 用户报「渲染成片雨滴快很多」）：JRP 1.6
+            // 的 get_CurrentTicks 带 aggressiveinlining，JIT 可能把值内联进雨滴
+            // 循环，只补 getter 管不到内联副本。必须把 RainManager.Update /
+            // ToStopwatchTicks / KeyViewerUpdater.Update 三处调用点也替换成
+            // RainClockTicks，并配手动 Transpiler 的注册/还原 API。
+            fail += Check(projectRoot,
+                "JRP 雨滴时钟：必须替换 RainManager.Update 等三处 get_CurrentTicks 调用点（防 aggressiveinlining）",
+                "Features\\VideoRender\\Pipeline\\RenderOverlayCapture.cs",
+                s => s.Contains("InstallCallSitePatch(kv, \"ToStopwatchTicks\")", StringComparison.Ordinal)
+                    && s.Contains("InstallCallSitePatch(rain, \"Update\")", StringComparison.Ordinal)
+                    && s.Contains("InstallCallSitePatch(updater, \"Update\")", StringComparison.Ordinal)
+                    && s.Contains("PatchManager.RegisterManualTranspiler(", StringComparison.Ordinal)
+                    && s.Contains("internal static long RainClockTicks()", StringComparison.Ordinal)
+                    && s.Contains("callee.Name != \"get_CurrentTicks\"", StringComparison.Ordinal)
+                    && s.Contains("JRP 雨滴时钟：调用点替换 0 处", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "JRP 雨滴时钟：手动 Transpiler 必须有注册与还原两个 API",
+                "Patch\\Shared\\PatchManager.cs",
+                s => s.Contains("RegisterManualTranspiler(", StringComparison.Ordinal)
+                    && s.Contains("UnpatchManualTranspiler(", StringComparison.Ordinal));
             // ㊵ 开放 API：其它 mod 的画布经 SpectreAPI 登记进同一注册表。
             //    门面必须真转发到注册表（RenderOverlayCapture 的
             //    RegisterExternal/UnregisterExternal）——只加门面不接线，

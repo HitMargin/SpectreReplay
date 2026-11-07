@@ -163,6 +163,32 @@ internal static class PatchManager
         Debug.Log($"Applied manual patch: {targetMethod.DeclaringType.Name}.{targetMethod.Name} -> {postfixMethod.Name}");
     }
 
+    /// <summary>
+    /// 手动挂一个 Transpiler（目标在编译期不可描述，例如外部 mod 的方法）。
+    /// 与 Prefix/Postfix 版同一把锁、同一份 _appliedManualPatches 账本。
+    /// </summary>
+    public static void RegisterManualTranspiler(MethodInfo targetMethod, MethodInfo transpilerMethod)
+    {
+        if (targetMethod == null || transpilerMethod == null) return;
+        lock (_lock)
+        {
+            _harmony.Patch(targetMethod, transpiler: new HarmonyMethod(transpilerMethod));
+            _appliedManualPatches.Add(targetMethod);
+        }
+        Debug.Log($"Applied manual transpiler: {targetMethod.DeclaringType.Name}.{targetMethod.Name} -> {transpilerMethod.Name}");
+    }
+
+    public static void UnpatchManualTranspiler(MethodInfo targetMethod)
+    {
+        if (targetMethod == null) return;
+        lock (_lock)
+        {
+            _harmony.Unpatch(targetMethod, HarmonyPatchType.Transpiler, _harmonyId);
+            _appliedManualPatches.Remove(targetMethod);
+        }
+        Debug.Log($"Unpatched manual transpiler: {targetMethod.DeclaringType.Name}.{targetMethod.Name}");
+    }
+
     public static void UnpatchManualPrefix(MethodInfo targetMethod)
     {
         if (targetMethod == null) return;

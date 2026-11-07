@@ -27,6 +27,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Reflection;
+using System.Reflection.Emit;
 using HarmonyLib;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
@@ -57,6 +59,12 @@ internal static class RenderOverlayCapture
     private static long anchorStopwatchTicks;
     private static double anchorVirtualSeconds;
     private static bool anchorTaken;
+    // JRP 1.6 的 get_CurrentTicks 带 aggressiveinlining：JIT 可能把值内联进
+    // 雨滴循环，只补 getter 会漏掉内联副本（雨滴继续吃墙钟，成片里快好几倍）。
+    // 这些是已经替换过调用点的目标方法，会话结束逐个还原。
+    private static readonly List<MethodInfo> clockCallSites = new();
+    private static readonly MethodInfo rainClockTranspiler
+        = AccessTools.Method(typeof(RenderOverlayCapture), nameof(RainClockTranspiler));
 
     /// <summary>
     /// 渲染会话开始时调一次（**与画面来源无关**，两种来源都必须）——
@@ -174,6 +182,28 @@ internal static class RenderOverlayCapture
                 return;
             }
             PatchManager.RegisterManualPrefix(clockTarget, clockPrefix);
+
+            int patched = 0;
+            // 事件时间 → Stopwatch 域的换算；雨滴 StartTime 由它决定。
+            patched += InstallCallSitePatch(kv, "ToStopwatchTicks");
+            // 雨滴位置：elapsed = (CurrentTicks - StartTime) / 3e6 * rainSpeed。
+            Type rain = AccessTools.TypeByName("JipperResourcePack.KeyViewerContents.RainManager");
+            if (rain != null) patched += InstallCallSitePatch(rain, "Update");
+            // KPS 队列修剪也读 CurrentTicks；同域替换，避免与虚拟时间混算。
+            Type updater = kv.GetNestedType("KeyViewerUpdater",
+                BindingFlags.Public | BindingFlags.NonPublic);
+            if (updater != null) patched += InstallCallSitePatch(updater, "Update");
+
+            if (patched == 0)
+            {
+                Debug.LogWarning("[SpectreReplay] JRP 雨滴时钟：调用点替换 0 处"
+                    + "（getter 补丁仍在，但若被内联雨滴将继续跟随墙钟）");
+            }
+            else
+            {
+                Debug.Log("[SpectreReplay] JRP 雨滴时钟：调用点替换 " + patched
+                    + " 处（防 aggressiveinlining 绕过 getter 补丁）");
+            }
         }
         catch (Exception ex)
         {
@@ -182,12 +212,27 @@ internal static class RenderOverlayCapture
         }
     }
 
+    /// <summary>把目标方法里对 JRP <c>get_CurrentTicks</c> 的调用换成虚拟时钟。</summary>
+    private static int InstallCallSitePatch(Type type, string methodName)
+    {
+        MethodInfo m = type.GetMethod(methodName,
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+            null, Type.EmptyTypes, null);
+        if (m == null) return 0;
+        PatchManager.RegisterManualTranspiler(m, rainClockTranspiler);
+        clockCallSites.Add(m);
+        return 1;
+    }
+
     private static void UninstallClockPatch()
     {
-        if (clockTarget == null) return;
         try
         {
-            PatchManager.UnpatchManualPrefix(clockTarget);
+            for (int i = 0; i < clockCallSites.Count; i++)
+                PatchManager.UnpatchManualTranspiler(clockCallSites[i]);
+            clockCallSites.Clear();
+            if (clockTarget != null)
+                PatchManager.UnpatchManualPrefix(clockTarget);
         }
         catch (Exception ex)
         {
@@ -341,9 +386,10 @@ internal static class RenderOverlayCapture
     // 渲染期 KeyViewer.CurrentTicks 的替身：锚点 + 虚拟时钟增量。
     // 锚点惰性取自首次调用（此时 UnscaledDeltaPin 必已安装——帧源构造晚于
     // 渲染时钟装配），未安装则放行走 JRP 墙钟。
-    private static bool CurrentTicksPrefix(ref long __result)
+    private static bool TryVirtualTicks(out long ticks)
     {
-        if (!VideoRender.Active || !UnscaledDeltaPin.Installed) return true;
+        ticks = 0;
+        if (!VideoRender.Active || !UnscaledDeltaPin.Installed) return false;
         if (!anchorTaken)
         {
             anchorStopwatchTicks = Stopwatch.GetTimestamp();
@@ -351,8 +397,50 @@ internal static class RenderOverlayCapture
             anchorTaken = true;
         }
         // CurrentUnscaledF 每帧推进 1/captureFramerate（钉扎语义），雨滴由此跟拍游戏时间
-        __result = anchorStopwatchTicks
+        ticks = anchorStopwatchTicks
             + (long)((UnscaledDeltaPin.CurrentUnscaledF - (float)anchorVirtualSeconds) * Stopwatch.Frequency);
+        return true;
+    }
+
+    private static bool CurrentTicksPrefix(ref long __result)
+    {
+        if (!VideoRender.Active || !UnscaledDeltaPin.Installed) return true;
+        __result = RainClockTicks();
         return false;
+    }
+
+    /// <summary>
+    /// Transpiler 注入的替代时钟。会话外/未钉扎时退回 Stopwatch 原域
+    /// （Windows 上 JRP 的 CurrentTicks 就是 Stopwatch ticks，两者可直接相减）。
+    /// </summary>
+    internal static long RainClockTicks()
+        => TryVirtualTicks(out long ticks) ? ticks : Stopwatch.GetTimestamp();
+
+    /// <summary>
+    /// 把方法体内对 <c>KeyViewer.get_CurrentTicks</c> 的调用替换成
+    /// <see cref="RainClockTicks"/>。原地改 opcode/operand，保留 label 与异常块。
+    /// </summary>
+    private static IEnumerable<CodeInstruction> RainClockTranspiler(
+        IEnumerable<CodeInstruction> instructions)
+    {
+        var list = instructions.ToList();
+        MethodInfo bridge = AccessTools.Method(typeof(RenderOverlayCapture), nameof(RainClockTicks));
+        int patched = 0;
+        for (int i = 0; i < list.Count; i++)
+        {
+            if (list[i].opcode != OpCodes.Call
+                || !(list[i].operand is MethodInfo callee)
+                || callee.Name != "get_CurrentTicks")
+                continue;
+            list[i].opcode = OpCodes.Call;
+            list[i].operand = bridge;
+            patched++;
+        }
+        if (patched == 0)
+        {
+            Debug.LogWarning("[SpectreReplay] JRP 雨滴时钟：目标方法里没找到 "
+                + "get_CurrentTicks 调用（JRP 更新后雨滴可能继续跟随墙钟）");
+        }
+        return list;
     }
 }

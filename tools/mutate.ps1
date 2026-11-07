@@ -2610,6 +2610,17 @@ switch ($Which) {
         ReplaceExact 'Ui\OnGui.cs' '"effects.master", "effects.presets",' '"effects.master",'
     }
 
+    'MUT-D52' {
+        # JRP rain-clock regression (2026-11-08 user report): JRP 1.6 marks
+        # KeyViewer.get_CurrentTicks as aggressiveinlining, so patching the getter
+        # alone can be bypassed by JIT-inlined copies inside RainManager.Update —
+        # rain then follows the wall clock and looks several times too fast in
+        # rendered video. Dropping the RainManager call-site replacement must
+        # turn the gate red.
+        Backup 'Features\VideoRender\Pipeline\RenderOverlayCapture.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\RenderOverlayCapture.cs' 'if (rain != null) patched += InstallCallSitePatch(rain, "Update");' '// mutated'
+    }
+
     'MUT-D14' {
         # ㉔ BPM 回归：官方关卡退回硬写 0（详情面板重新显示成问号）。
         Backup 'Features\Replay\Patches\Patch_Lifecycle.cs'
