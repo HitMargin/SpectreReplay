@@ -21,3 +21,4 @@ _frames/
 # 会话草稿与一次性诊断工程：不属于产品也不属于工具链
 .agents/
 _diag/
+.planning/
