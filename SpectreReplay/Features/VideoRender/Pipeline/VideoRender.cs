@@ -152,11 +152,14 @@ internal static class VideoRender
         // -version（缓存命中零成本）；这里对最终选择（含 PATH 回落）统一再
         // 门槛一次——坏 ffmpeg 在劫持相机之前就被拦下，报「缺少 ffmpeg」
         // 而不是渲染中途离奇失败。
+        System.Diagnostics.Stopwatch clickSw = System.Diagnostics.Stopwatch.StartNew();
         if (!VideoEncoder.VerifyEncoder(encoderPath))
         {
             TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.ffmpeg_missing"), extra: 2f, type: NotifType.Warning);
             return;
         }
+        Debug.Log("[SpectreReplay] render timing [click-verified] "
+            + clickSw.ElapsedMilliseconds + "ms");
         ResetLeakedPins();
         ResetSnapshot();
         CurrentPhase = Phase.Restarting;

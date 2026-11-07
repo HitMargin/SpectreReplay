@@ -176,7 +176,11 @@ internal sealed class VideoEncoder : IDisposable
                         p.OutputDataReceived += (_, e) => { };
                         p.BeginErrorReadLine();
                         p.BeginOutputReadLine();
-                        if (p.WaitForExit(5000))
+                        // 15 秒而非 5 秒：spawn 本身在这台机器上就要 ~5 秒
+                        // （145MB 的 ffmpeg + 系统盘拥挤 + 杀软扫描），5 秒超时
+                        // 会在 ffmpeg 还没起跑时就把它杀掉——2026-11-07 实测
+                        // 每次渲染都被误判，永远回退 CPU 编码拖累帧率。
+                        if (p.WaitForExit(15000))
                             works = p.ExitCode == 0;
                         else
                         {
@@ -199,12 +203,18 @@ internal sealed class VideoEncoder : IDisposable
     }
 
     /// <summary>
-    /// mod 加载时后台预热：LocateEncoder + NVENC 探测。两者都是起 ffmpeg 子进程
-    /// 并 WaitForExit(5000)，如果在 OnGUI 里首次调用会卡主线程最多 5 秒。
-    /// 提前在后台跑完写入缓存，用户进渲染页时直接命中缓存，不卡。
+    /// 后台预热：LocateEncoder + NVENC 探测。两者都是起 ffmpeg 子进程并
+    /// WaitForExit(15000)，如果在 OnGUI 里首次调用会卡主线程很久。
+    /// mod 加载与渲染页打开时各调一次（内部节流），把 spawn 的文件缓存
+    /// 与探测结果提前焐热，用户点「开始渲染」时预启动的 Join 不再等。
     /// </summary>
+    private static int lastWarmUpTick = int.MinValue;
+
     internal static void WarmUp()
     {
+        // 渲染页每帧都会走到这里，冷却期内不重复起线程（与负缓存同一语义）
+        if (Cooling(lastWarmUpTick)) return;
+        lastWarmUpTick = Environment.TickCount;
         System.Threading.ThreadPool.QueueUserWorkItem(_ =>
         {
             try
@@ -553,7 +563,9 @@ internal sealed class VideoEncoder : IDisposable
                 probe.OutputDataReceived += (_, e) => { };
                 probe.BeginErrorReadLine();
                 probe.BeginOutputReadLine();
-                if (!probe.WaitForExit(5000))
+                // 与 VerifyEncoder 同理放宽到 15 秒：spawn 就要 ~5 秒的机器上，
+                // 5 秒超时会让 NVENC 永远探测失败、永远回退 CPU 编码
+                if (!probe.WaitForExit(15000))
                 {
                     try { probe.Kill(); } catch { }
                     return false;

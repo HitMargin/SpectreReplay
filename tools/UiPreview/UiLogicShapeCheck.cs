@@ -634,6 +634,54 @@ namespace UiPreview
                 "Pages\\Pages.cs",
                 s => MethodBody(s, "AfterReplayDeleted") is string ab2
                     && ab2.Contains("_replayCache = null", StringComparison.Ordinal));
+            // 云端列表与本地列表的按钮同口径（2026-11-07 用户实测：云端载入后
+            //    按钮不变成卸载）：已载入那份的「回放」按钮必须变成「卸载」，
+            //    且卸载要同时清 _loadedPath 与 _loadedCloudName 两个来源字段——
+            //    只清一个，另一侧列表会继续把已卸载的回放标成「已载入」。
+            fail += Check(projectRoot,
+                "云端行的回放按钮必须与本地同口径：已载入变卸载，卸载清两个来源字段",
+                "Pages\\Pages.cs",
+                s => MethodBody(s, "DrawCloudReplays") is string cb
+                    && cb.Contains("Loc.T(loaded ? \"playback.unload\" : \"playback.replay\")", StringComparison.Ordinal)
+                    && cb.Contains("PlayActions.UnloadReplay();", StringComparison.Ordinal)
+                    && cb.Contains("_loadedPath = \"\";", StringComparison.Ordinal)
+                    && cb.Contains("_loadedCloudName = \"\";", StringComparison.Ordinal));
+            // 单行标签族必须显式 wordWrap=false（2026-11-07 用户截图：长文件名
+    //        在 wordWrap=true 的运行时环境里折成两行，撑开固定行高、整列按钮
+    //        错位）。克隆继承的是运行时皮肤的属性，默认值不可依赖。
+            fail += Check(projectRoot,
+                "单行标签样式必须显式禁用 wordWrap——皮肤继承的环境差异会把列表行撑开",
+                "Ui\\Gui.cs",
+                s => s.Contains("_label = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, clipping = TextClipping.Clip, wordWrap = false };", StringComparison.Ordinal)
+                    && s.Contains("_bold = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, clipping = TextClipping.Clip, wordWrap = false };", StringComparison.Ordinal));
+            // 渲染启动链分段计时（2026-11-07 排查「用户开始后卡一段时间」）：
+            //    等待期帧间隙、关卡启动观测、回放接管、采集初始化各段与首帧
+    //        必须落 render timing 行——没有这些数，卡顿定位只能靠猜。
+            fail += Check(projectRoot,
+                "渲染启动链必须有分段计时（render timing）",
+                "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
+                s => s.Contains("private void LogTiming(string stage, string detail = null)", StringComparison.Ordinal)
+                    && s.Contains("\"gap-wait\"", StringComparison.Ordinal)
+                    && s.Contains("\"level-start\"", StringComparison.Ordinal)
+                    && s.Contains("\"takeover-countdown\"", StringComparison.Ordinal)
+                    && s.Contains("\"capture-ready\"", StringComparison.Ordinal)
+                    && s.Contains("\"frame\"", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "渲染点击校验必须计时（Locate/Verify 的缓存命中与否要可见）",
+                "Features\\VideoRender\\Pipeline\\VideoRender.cs",
+                s => s.Contains("render timing [click-verified]", StringComparison.Ordinal));
+            // NVENC/编码器探测超时（2026-11-07 严重卡顿实测）：spawn 一次
+    //        ffmpeg 在拥挤的系统盘上要 ~5 秒，5 秒超时会在它起跑前杀掉——
+    //        NVENC 永远探测失败、永远回退 CPU 编码拖累帧率。
+            fail += Check(projectRoot,
+                "ffmpeg 探测超时必须 ≥15 秒——spawn 本身就能吃掉 5 秒",
+                "Features\\VideoRender\\Pipeline\\VideoEncoder.cs",
+                s => s.Contains("if (p.WaitForExit(15000))", StringComparison.Ordinal)
+                    && s.Contains("if (!probe.WaitForExit(15000))", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "渲染页打开必须预热编码器（Locate + NVENC + 文件缓存）",
+                "Pages\\Pages.cs",
+                s => s.Contains("Features.VideoRender.VideoEncoder.WarmUp();", StringComparison.Ordinal));
             // ㉓ 回放详情面板（2026-10-18 用户要求「点击回放文件可以看信息」）。
             //
             //    这块最容易出的错不是「没画出来」，而是**为了拿数据把文件装载了**：
@@ -1279,7 +1327,7 @@ namespace UiPreview
             fail += Check(projectRoot,
                 "52a NVENC 探测必须在等待前启动管道排空——否则输出撑爆缓冲把探测卡死",
                 "Features\\VideoRender\\Pipeline\\VideoEncoder.cs",
-                s => IndexBefore(s, "probe.BeginErrorReadLine();", "probe.WaitForExit(5000)"));
+                s => IndexBefore(s, "probe.BeginErrorReadLine();", "probe.WaitForExit(15000)"));
             fail += Check(projectRoot,
                 "52b RunAndWait 的 stderr 必须有锁和 8KB 上限，退出后无参 WaitForExit 排尾",
                 "Features\\VideoRender\\Pipeline\\VideoEncoder.cs",
@@ -1299,6 +1347,29 @@ namespace UiPreview
                 "Pages\\Pages.cs",
                 s => s.Contains("bool ready = VideoEncoder.VerifyEncoder(exe);", StringComparison.Ordinal)
                     && s.Contains("if (!VideoEncoder.VerifyEncoder(ff))", StringComparison.Ordinal));
+
+            // 录制中补丁看门狗（2026-11-07 空回放事故）：「录制前核对」与首个
+            // 命中之间存在被 JAPatcher 重写的窗口，泵前缀必须低频复核并在缺失
+            // 时当场补挂——只靠启动期核对挡不住核对之后才动手的重写者。
+            fail += Check(projectRoot,
+                "录制泵必须带补丁看门狗——录制前核对之后的重写窗口只有逐帧复核守得住",
+                "Features\\Replay\\Patches\\Patch_InputInjection.cs",
+                s => s.Contains("try { RecordPatchWatchdog(); }", StringComparison.Ordinal)
+                    && s.Contains("SpectrePatchHub.EnsureAppliedQuiet(typeof(Patch_Hit)", StringComparison.Ordinal)
+                    && s.Contains("if (++_watchdogTick < 30) return;", StringComparison.Ordinal)
+                    && s.Contains("if (data.HitSnapshots.Count > 0) return;", StringComparison.Ordinal)
+                    && s.Contains("if (controller.currFloor.seqID <= (data.StartTile ?? 0)) return;", StringComparison.Ordinal)
+                    && s.Contains("SpectrePatchHub.ForceRebuild(typeof(Patch_Hit));", StringComparison.Ordinal));
+            // 空壳保存拦截（2026-11-07 空回放事故）：跑出进度却 0 命中 = 命中
+            // 前缀被挤掉，这种文件回放必然「数据为空」；必须拒存 + 说明 + 自愈。
+            fail += Check(projectRoot,
+                "空壳保存必须拦截——跑出进度却 0 命中时拒存、说明并当场复核补挂",
+                "State\\SpectreState.cs",
+                s => s.Contains("if (data.HitSnapshots.Count == 0 && (data.EndTile ?? 0) > (data.StartTile ?? 0))", StringComparison.Ordinal)
+                    && s.Contains("note.save_skip_nohits", StringComparison.Ordinal)
+                    && s.Contains("SpectrePatchHub.EnsureApplied(\"after-empty-record\"", StringComparison.Ordinal)
+                    && s.Contains("SpectrePatchHub.ForceRebuild(typeof(Patch_Hit));", StringComparison.Ordinal)
+                    && s.Contains("if (!EmptySaveBlocked)", StringComparison.Ordinal));
 
             fail += Check(projectRoot,
                 "时间轴状态必须与 ReplayData 分离并保存动态区间",

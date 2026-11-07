@@ -49,7 +49,8 @@ internal sealed class VideoRenderJob : MonoBehaviour
     private string endOutput;
     private string endError;
     // TearDown 是否已执行。OnDestroy 兜底与协程正常收尾共用，故需幂等
-    private bool tornDown;
+    // volatile：预启动线程在发布前也要看它（见编码器预启动的收尾竞态）
+    private volatile bool tornDown;
 
     private System.Threading.Thread finalizeWorker;
     // volatile：工作线程写、主线程读
@@ -204,7 +205,26 @@ internal sealed class VideoRenderJob : MonoBehaviour
 
     private void Start()
     {
+        _jobClock = System.Diagnostics.Stopwatch.StartNew();
         StartCoroutine(Drive());
+    }
+
+    // 渲染启动链分段计时（2026-11-07 排查「用户开始后卡一段时间」）：
+    // 每段一条 render timing 行，墙钟与作业相对毫秒并列，日志可直接对拍。
+    private System.Diagnostics.Stopwatch _jobClock;
+    private long _lastFrameTicks;
+    // 编码器后台预启动（见 Phases 的等待期预启动段）：线程句柄给 TearDown/
+    // 采集初始化做限时 Join；异常留给主线程统一上报。
+    private System.Threading.Thread _encoderPreStart;
+    private volatile Exception _encoderPreStartError;
+
+    private void LogTiming(string stage, string detail = null)
+    {
+        double ms = _jobClock == null ? -1 : _jobClock.Elapsed.TotalMilliseconds;
+        Debug.Log("[SpectreReplay] render timing [" + stage + (string.IsNullOrEmpty(detail) ? "" : " " + detail)
+            + "] job+"
+            + ms.ToString("0", CultureInfo.InvariantCulture)
+            + "ms @" + DateTime.Now.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture));
     }
 
     // 外层手动驱动内层协程并兜异常（C# 不允许 try/catch 块体内 yield）
@@ -263,6 +283,44 @@ internal sealed class VideoRenderJob : MonoBehaviour
 
         SetPhase(VideoRender.Phase.Restarting, "rendervideo.stage.restarting", "");
         PrepareWorkspace(container);
+        LogTiming("workspace");
+        // **编码器在等待期后台预启动。** 实测（render timing）：ffmpeg 冷启动/
+        // 杀软扫描会让构造+Begin 阻塞约 5 秒，而它原本落在采集初始化那一帧
+        // ——用户开始游戏的瞬间正好撞上，这就是「开始后卡一段时间」的主因。
+        // 构造与 Spawn 不碰 Unity API，整段放到后台线程：点击立即返回，等
+        // 待期把进程起好，用户开始时零阻塞。ffmpeg 起来后本来就在等 stdin，
+        // 提前起不改变任何行为。
+        System.Diagnostics.Stopwatch encSw = System.Diagnostics.Stopwatch.StartNew();
+        bool cleanCamera = (VideoSurface)Settings.RenderCaptureMode == VideoSurface.CleanCamera;
+        int preW = cleanCamera ? Settings.RenderWidth : Screen.width;
+        int preH = cleanCamera ? Settings.RenderHeight : Screen.height;
+        bool preFlip = cleanCamera;
+        _encoderPreStartError = null;
+        _encoderPreStart = new System.Threading.Thread(() =>
+        {
+            try
+            {
+                var enc = new VideoEncoder(encoderPath, rawVideoPath, outputPath,
+                    preW, preH, fps,
+                    (VideoEncoder.Quality)Settings.RenderEncoderMode, Settings.RenderQualityMode, preFlip,
+                    container);
+                enc.Begin();
+                if (tornDown)
+                {
+                    // 发布前已被收场（超时/取消）：自己释放，避免进程泄漏
+                    try { enc.Dispose(); } catch { }
+                    return;
+                }
+                encoder = enc;
+            }
+            catch (Exception ex)
+            {
+                _encoderPreStartError = ex;
+            }
+        });
+        _encoderPreStart.IsBackground = true;
+        _encoderPreStart.Start();
+        LogTiming("encoder-begin", encSw.ElapsedMilliseconds + "ms (pre-started while waiting)");
         SaveGlobalState(fps);
 
         // 记住渲染前的模式，供取消/失败收尾还原（成功路径不走还原，直接卸载）。
@@ -315,6 +373,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
         }
 
         SetPhase(VideoRender.Phase.WaitingPlayback, "rendervideo.stage.waiting", "");
+        LogTiming("wait-user");
         playbackLive = false;
         yield return AwaitReplayAlive();
         // 顺序有意义：AwaitReplayAlive 在取消时是直接 return 的，playbackLive 会停在 false。
@@ -339,13 +398,17 @@ internal sealed class VideoRenderJob : MonoBehaviour
         }
 
         // 就位：画面源 + 混音轨 + 编码器
+        System.Diagnostics.Stopwatch setupSw = System.Diagnostics.Stopwatch.StartNew();
         frames = new VideoFrameSource((VideoSurface)Settings.RenderCaptureMode, Settings.RenderWidth, Settings.RenderHeight);
+        LogTiming("frame-src", setupSw.ElapsedMilliseconds + "ms");
         // 指针是否进成片，由设置决定；具体在哪一层画见 CursorOverlay 与 VideoFrameSource.Flight。
         frames.DrawCursor = Settings.RenderCursorOn;
         // 指针轨迹随回放数据一起进来：有轨迹 = 位置走确定性时间轴（与画面同源，
         // 渲染快慢/管线波动都影响不到）；没有（旧回放）= 帧源回落到活体捕获。
         frames.CursorTrack = data?.CursorTrack;
+        setupSw.Restart();
         mixdown = new VideoAudioTrack(wavPath, fps);
+        LogTiming("mixdown", setupSw.ElapsedMilliseconds + "ms");
         if (mixdown.Dead)
         {
             // 本地化标签 + 括号里的技术细节，与本文件其余两处音频失败一致。
@@ -353,14 +416,43 @@ internal sealed class VideoRenderJob : MonoBehaviour
             NotifyAudioFailed();
             yield break;
         }
-        encoder = new VideoEncoder(encoderPath, rawVideoPath, outputPath,
-            frames.Width, frames.Height, fps,
-            (VideoEncoder.Quality)Settings.RenderEncoderMode, Settings.RenderQualityMode, frames.NeedsRowFlip,
-            container);
+        // 预启动尚未完成（后台线程还在被冷启动/杀软拖住）就等它收尾；
+        // 预启动失败则整局失败——与旧路径在采集初始化时失败等价，只是更早。
+        if (encoder == null && _encoderPreStart != null && _encoderPreStart.IsAlive)
+        {
+            LogTiming("encoder-prestart-join");
+            _encoderPreStart.Join(6500);
+        }
+        if (_encoderPreStartError != null)
+        {
+            Debug.LogException(_encoderPreStartError);
+            NotifyFailed(LocalizationManager.GetLocalizedText("rendervideo.ffmpeg_missing"));
+            yield break;
+        }
+        if (encoder == null)
+        {
+            NotifyFailed(LocalizationManager.GetLocalizedText("rendervideo.ffmpeg_missing"));
+            yield break;
+        }
         blackout = new byte[frames.Width * frames.Height * 4];
-        encoder.Begin();
+        if (frames.Width != preW || frames.Height != preH || frames.NeedsRowFlip != preFlip)
+        {
+            // 等待期改了分辨率/捕获来源：预启动参数作废，就地重建。正常路径
+            // 尺寸不变不会进这里；真发生时这次冷启动成本与旧行为同价位。
+            LogTiming("encoder-rebuild after resize");
+            encoder?.Dispose();
+            setupSw.Restart();
+            encoder = new VideoEncoder(encoderPath, rawVideoPath, outputPath,
+                frames.Width, frames.Height, fps,
+                (VideoEncoder.Quality)Settings.RenderEncoderMode, Settings.RenderQualityMode, frames.NeedsRowFlip,
+                container);
+            encoder.Begin();
+            LogTiming("encoder-begin", setupSw.ElapsedMilliseconds + "ms (rebuilt)");
+        }
         // 缓冲池对齐满载深度（队列容量 + 在途回读），消除编码满载期的 LOH 重复分配
+        setupSw.Restart();
         frames.SetSparePoolLimit(encoder.QueueCapacity + frames.MaxInFlight);
+        LogTiming("pool", setupSw.ElapsedMilliseconds + "ms");
 
         // 起锚必须取 **dsp 公式值**（音乐实际发声的那条时间轴），不能取
         // songposition_minusi。两者平时相等，但渲染从倒计时中起锚时
@@ -407,6 +499,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
         captureClock = System.Diagnostics.Stopwatch.StartNew();
         VideoRender.Current.Detail = Path.GetFileName(outputPath);
         SetPhase(VideoRender.Phase.Capturing, "rendervideo.stage.rendering", VideoRender.Current.Detail);
+        LogTiming("capture-ready");
 
         // 捕获真正开始：之后的 Start_Rewind 二次触发都视为时间轴被重置
         // （见 Patch_StartRewind → NotifyPlaybackRestarted）。
@@ -441,6 +534,15 @@ internal sealed class VideoRenderJob : MonoBehaviour
             if (cancelRequested) break;
 
             yield return new WaitForEndOfFrame();
+
+            // 早期帧逐帧计时：首帧与头几帧若慢，间隙会直接落在日志里
+            long frameTicks = _jobClock.ElapsedMilliseconds;
+            if (frameIndex <= 8)
+            {
+                long frameGap = _lastFrameTicks == 0 ? 0 : frameTicks - _lastFrameTicks;
+                LogTiming("frame", frameIndex + (frameGap >= 200 ? " gap=" + frameGap + "ms" : ""));
+            }
+            _lastFrameTicks = frameTicks;
 
             // Quartz's first Update may discard input queued during source setup;
             // seed once after that boundary so held keys survive into the first frame.
@@ -789,10 +891,16 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // 10 秒真实预算：正常倒计时约 2.1 s，余量留给场景加载慢 / 外部 mod 抢时序
         const double WaitBudgetSeconds = 10.0;
         System.Diagnostics.Stopwatch waitClock = System.Diagnostics.Stopwatch.StartNew();
+        long lastPollMs = -1;
+        bool levelStartSeen = false;
         while (waitClock.Elapsed.TotalSeconds < WaitBudgetSeconds)
         {
             if (cancelRequested)
                 yield break;
+            long pollMs = _jobClock.ElapsedMilliseconds;
+            if (lastPollMs >= 0 && pollMs - lastPollMs >= 200)
+                LogTiming("gap-wait", (pollMs - lastPollMs) + "ms");
+            lastPollMs = pollMs;
 
             // 编辑器/后台聚焦策略可能暂停全局音频。倒计时与歌曲调度全靠音频时钟，
             // 等待期就把这条按住（捕获循环里同样每帧这么做）
@@ -819,6 +927,11 @@ internal sealed class VideoRenderJob : MonoBehaviour
             // 「已经在跑」的判断补上 Checkpoint，否则从中间起播时回放若始终没接管，
             // 这里会把一次确定的失败拖成 10 秒空转才报超时。
             bool levelRunning = (conductor != null && conductor.hasSongStarted) || counting || inPlay || checkpointing;
+            if (!levelStartSeen && levelRunning)
+            {
+                levelStartSeen = true;
+                LogTiming("level-start");
+            }
             if (!SpectreState.is_playing)
             {
                 if (levelRunning && !string.IsNullOrEmpty(Patch_StartRewind.LastReject))
@@ -839,6 +952,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
                 Debug.Log("[SpectreReplay] render starts during countdown: songposition=" + songNow.ToString("0.000")
                     + "s countdownEnd=" + countdownEnd.ToString("0.000") + "s ticks=" + countdownTickCount
                     + " (state=Countdown)");
+                LogTiming("takeover-countdown");
                 playbackLive = true;
                 yield break;
             }
@@ -850,6 +964,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
                 Debug.Log("[SpectreReplay] render starts at song live: songposition=" + songNow.ToString("0.000")
                     + "s state=" + (controller != null ? controller.state.ToString() : "<无控制器>")
                     + (checkpointing ? " (检查点前导倒计时，非 Countdown 状态)" : ""));
+                LogTiming("takeover-live");
                 playbackLive = true;
                 yield break;
             }
@@ -859,6 +974,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
             {
                 if (sawPositivePosition)
                 {
+                    LogTiming("takeover-play");
                     playbackLive = true;
                     yield break;
                 }
@@ -1466,6 +1582,15 @@ internal sealed class VideoRenderJob : MonoBehaviour
         {
             Debug.Log("[SpectreReplay] teardown: 等待收尾线程失败: " + ex.Message);
         }
+        // 预启动线程若还在构造/Spawn，先等它收尾（最长约一个探测超时）：
+        // 否则它稍后发布的 encoder 会被这里的 encoder?.Dispose() 漏掉，
+        // ffmpeg 进程与帧队列一起泄漏。tornDown 已置位，线程会自己释放。
+        try
+        {
+            if (_encoderPreStart != null && _encoderPreStart.IsAlive)
+                _encoderPreStart.Join(6500);
+        }
+        catch { }
         ReleaseGameControl();
         try { frames?.Dispose(); } catch (Exception ex) { Debug.LogException(ex); }
         try { mixdown?.Dispose(); } catch (Exception ex) { Debug.LogException(ex); }

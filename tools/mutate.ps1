@@ -2367,6 +2367,63 @@ switch ($Which) {
         SetLines 'Features\Replay\Runtime\ReplayPlayer.cs' $lines
     }
 
+    'MUT-CI19' {
+        # Empty-replay regression (2026-11-07): the pump must re-verify the
+        # recording patches mid-run; the before-record check alone loses the
+        # race against JAPatcher rewrites that land after it.
+        Backup 'Features\Replay\Patches\Patch_InputInjection.cs'
+        ReplaceExact 'Features\Replay\Patches\Patch_InputInjection.cs' 'try { RecordPatchWatchdog(); }' 'try { }'
+    }
+
+    'MUT-CI20' {
+        # Empty-replay regression (2026-11-07): a replay that progressed tiles
+        # with zero hits must stay blocked at save time; muting the guard
+        # resurrects the silent unplayable-file mystery.
+        Backup 'State\SpectreState.cs'
+        ReplaceExact 'State\SpectreState.cs' 'data.HitSnapshots.Count == 0 && (data.EndTile ?? 0) > (data.StartTile ?? 0)' 'data.HitSnapshots.Count < 0 && (data.EndTile ?? 0) > (data.StartTile ?? 0)'
+    }
+
+    'MUT-CI21' {
+        # Ledger-present-but-dead regression (2026-11-07): when the HarmonyX
+        # ledger still lists the Hit prefix but it no longer executes, only the
+        # forced unpatch+repatch rebuilds the detour; dropping the probe call
+        # resurrects the all-session empty-replay mystery.
+        Backup 'Features\Replay\Patches\Patch_InputInjection.cs'
+        ReplaceExact 'Features\Replay\Patches\Patch_InputInjection.cs' 'SpectrePatchHub.ForceRebuild(typeof(Patch_Hit));' '// mutated'
+    }
+
+    'MUT-D30' {
+        # Cloud list parity regression (2026-11-07): the cloud row's replay
+        # button must switch to unload once that entry is loaded; reverting the
+        # label to a constant leaves it permanently reading "replay".
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' 'cloudReplayLabel = Loc.T(loaded ? "playback.unload" : "playback.replay")' 'cloudReplayLabel = Loc.T("playback.replay")'
+    }
+
+    'MUT-D31' {
+        # Row-height regression (2026-11-07): the single-line label styles must
+        # disable wordWrap explicitly; inheriting it from the runtime skin wraps
+        # long filenames onto two lines and breaks the button column alignment.
+        Backup 'Ui\Gui.cs'
+        ReplaceExact 'Ui\Gui.cs' '_bold = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, clipping = TextClipping.Clip, wordWrap = false };' '_bold = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, clipping = TextClipping.Clip };'
+    }
+
+    'MUT-D32' {
+        # Freeze-diagnosis regression (2026-11-07): the render start chain must
+        # log stage timings; dropping the level-start observation blinds every
+        # future freeze report.
+        Backup 'Features\VideoRender\Pipeline\VideoRenderJob.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'LogTiming("level-start");' '// mutated'
+    }
+
+    'MUT-D33' {
+        # Render-stutter regression (2026-11-07): the NVENC probe must outlive
+        # the ~5s ffmpeg spawn cost; a 5s timeout kills NVENC before it starts
+        # and every render falls back to CPU x264.
+        Backup 'Features\VideoRender\Pipeline\VideoEncoder.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoEncoder.cs' 'if (!probe.WaitForExit(15000))' 'if (!probe.WaitForExit(5000))'
+    }
+
     'MUT-D14' {
         # ㉔ BPM 回归：官方关卡退回硬写 0（详情面板重新显示成问号）。
         Backup 'Features\Replay\Patches\Patch_Lifecycle.cs'
@@ -2408,8 +2465,10 @@ switch ($Which) {
     }    'MUT-D3' {
         # ㉒b 两段式回归：把「第一次点击只进入待确认」那道早退去掉，
         #      第一次点击就直接删 —— 手滑一次那局回放就没了。
+        #      锚点用 _pendingDelete = path;（if (!pending) 在云端下载/云端
+        #      配置两处同文，2026-11-07 曾因命中 3 次而失效）。
         Backup 'Pages\Pages.cs'
-        ReplaceExact 'Pages\Pages.cs' 'if (!pending)' 'if (false)'
+        ReplaceExact 'Pages\Pages.cs' '_pendingDelete = path;' '// mutated'
     }
     'MUT-D4' {
         # ㉒c 连带卸载回归：删掉当前载入的那份后不清 _loadedPath，
