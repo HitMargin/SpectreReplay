@@ -149,10 +149,15 @@ namespace SpectreReplay.Ui
             // 文件名：它的矩形右缘就贴着「回放」按钮的左缘。输入框那轮已经在
             // TextField 里用 GUI.BeginClip 自剪过一次（同一个根因），这里是把
             // 同一纪律补齐到其余样式。
-            _label = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, clipping = TextClipping.Clip };
-            _labelC = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, clipping = TextClipping.Clip };
-            _bold = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, clipping = TextClipping.Clip };
-            _boldC = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold, clipping = TextClipping.Clip };
+            // wordWrap 也必须显式关死：克隆继承的是**运行时**皮肤 label 的
+            // 全部属性，wordWrap 是否为 false 取决于环境（UMM 就改过 clipping）。
+            // 回放列表的长文件名在 wordWrap=true 的环境里折成两行，把固定 30px
+            // 的行撑开、整列按钮错位（2026-11-07 用户截图实测）。单行样式一律
+            // 不许依赖皮肤默认值。
+            _label = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, clipping = TextClipping.Clip, wordWrap = false };
+            _labelC = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, clipping = TextClipping.Clip, wordWrap = false };
+            _bold = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, clipping = TextClipping.Clip, wordWrap = false };
+            _boldC = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold, clipping = TextClipping.Clip, wordWrap = false };
             _h1 = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, fontSize = 20, clipping = TextClipping.Clip };
             _h2 = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, fontSize = 14, clipping = TextClipping.Clip };
             _small = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontSize = 11, clipping = TextClipping.Clip };

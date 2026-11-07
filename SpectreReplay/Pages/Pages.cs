@@ -707,12 +707,21 @@ namespace SpectreReplay.Pages
                         loaded || ReplayInfoPanel.IsOpenCloud(capturedCloud),
                         "playback.info.tip",
                         () => ReplayInfoPanel.ToggleCloud(capturedCloud));
-                    string cloudReplayLabel = Loc.T("playback.replay");
+                    // 按钮与本地列表同一颗的两种状态：已载入的这一份变成
+                    // 「卸载」，再点退回未装弹状态；卸载清两个来源字段——
+                    // 只换文案不清状态的话，按钮会一直读作「重新装载」。
+                    string cloudReplayLabel = Loc.T(loaded ? "playback.unload" : "playback.replay");
                     if (GUILayout.Button(cloudReplayLabel, Gui.ButtonStyle,
                             GUILayout.Width(Gui.ButtonW(cloudReplayLabel, Gui.ButtonStyle, 110f)),
                             GUILayout.Height(22f)))
                     {
-                        LoadReplayFromCloud(capturedCloud);
+                        if (loaded)
+                        {
+                            PlayActions.UnloadReplay();
+                            _loadedPath = "";
+                            _loadedCloudName = "";
+                        }
+                        else LoadReplayFromCloud(capturedCloud);
                     }
                     // 单份云操作。**与下面那两颗批量按钮不是替代关系**：批量是「存量
                     // 一次性对齐」，而玩家的日常是「我就要这一份——下载它 / 丢它」。
@@ -1071,11 +1080,16 @@ namespace SpectreReplay.Pages
                 DrawUnloadButton();
                 GUILayout.FlexibleSpace();
                 GUILayout.EndHorizontal();
-                DrawExportKeybdButton();
-                // 音量 / 静音 / 偏移紧跟在导出按钮下面：导出与调音操作的是
-                // 同一份回放，玩家调完往往就想导出或存回去，不必去别处找。
-                // 两个状态分支各挂一次——与 DrawExportKeybdButton 同一个理由。
-                DrawKeybdPrefsControls();
+                // 键盘音整块（导出 + 这一份的音量/静音/偏移）只在回放真的带
+                // 键盘音时才出现：没有声音可调可导，画出来是一排死控件。
+                if (HasKeybdSound)
+                {
+                    DrawExportKeybdButton();
+                    // 音量 / 静音 / 偏移紧跟在导出按钮下面：导出与调音操作的是
+                    // 同一份回放，玩家调完往往就想导出或存回去，不必去别处找。
+                    // 两个状态分支各挂一次——与 DrawExportKeybdButton 同一个理由。
+                    DrawKeybdPrefsControls();
+                }
                 return;
             }
             if (is_recording)
@@ -1107,8 +1121,11 @@ namespace SpectreReplay.Pages
                 DrawUnloadButton();
                 GUILayout.FlexibleSpace();
                 GUILayout.EndHorizontal();
-                DrawExportKeybdButton();
-                DrawKeybdPrefsControls();
+                if (HasKeybdSound)
+                {
+                    DrawExportKeybdButton();
+                    DrawKeybdPrefsControls();
+                }
                 DrawTimingSummary();
                 DrawOpenLevelRow();
                 return;
@@ -1648,6 +1665,10 @@ namespace SpectreReplay.Pages
         // ── 视频渲染 ────────────────────────────────────────────
         internal static void DrawRender()
         {
+            // 打开渲染页就后台预热编码器（Locate + NVENC + 文件缓存，内部
+            // 30 秒节流）：spawn 一次 ffmpeg 要 ~5 秒，等用户点「开始渲染」
+            // 时必须已经焐热，否则预启动的 Join 会吃掉开始后的头几秒。
+            Features.VideoRender.VideoEncoder.WarmUp();
             Gui.Section("render.enable", Gui.Accent, () =>
             {
                 // 绑 RenderOn（视频渲染开关）。不能用 ReplayOn：那是录制/回放总开关。
