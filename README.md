@@ -27,9 +27,11 @@ SpectreReplay is a UnityModManager mod (mod id `com.spectre.replay`). While you 
 - **Open the level directly.** A loaded replay knows which chart it came from, so the mod can open that level for you — editor charts and official levels alike — and land on the right floor once it is ready.
 - **Unload.** Drop the armed replay without leaving the level.
 - **Key injection.** Keys are injected into the game's input layer, so the game reacts to them exactly as it reacts to your keyboard. Both the synchronous input path and the asynchronous input path are supported; with async input enabled, timestamps come from the game's own input stamps instead of frame boundaries and are noticeably more accurate.
+- **Key viewers follow the replay.** KeyViewer-family viewers, Quartz and CheryTools all light up with the replay's keys — including rain animations and per-key counters — without system-level key mirroring, and the game window does not have to be focused.
 - **Search the list.** Once replays pile up, type instead of squinting: the list filters by file name as you type, case-insensitively, and Esc clears it. The cloud column has the same box, kept separate — a cloud replay you have not restored locally is never hidden by a local filter.
 - **Per-replay keysounds.** Volume, mute and time offset can each be set for a single replay; they apply as you drag, and only *save to replay file* writes them into the file itself (in place, no copy). Anything left unset keeps following the global settings. A replay's keysounds can also be exported to a wav under `keybdsound` in the save folder.
 - **Play straight from the cloud.** A cloud replay does not have to be downloaded first: Play streams it from the cloud bytes and writes nothing to disk. Clicking a name only expands its details (song, difficulty, judgement spread, per-hit errors) and never displaces the replay you are playing.
+- **Results detail toggle.** The results screen normally hides the *maximum simultaneous keys* stat unless it exceeds 10; a switch makes every result show it.
 
 ### Steam Cloud backup
 
@@ -56,6 +58,7 @@ SpectreReplay is a UnityModManager mod (mod id `com.spectre.replay`). While you 
 - **Applied at chart decode.** Events are dropped from the decoded level data in one place rather than by intercepting each event type at runtime, so nothing is left behind and patching stays out of it.
 - **Does not touch the file on disk.** It edits the in-memory chart only. Saving from the editor is blocked while it is active, so previewing once does not write the stripped chart back over the original; overwriting is a separate switch that is off by default.
 - **Keeps conditional decorations.** Unless you ask for *all* decorations to go, decorations referenced by conditional events are kept — otherwise those branches could never fire and the chart would look broken.
+- **The whole toggle set can be saved as presets.** Snapshot the current strip toggles under a name and re-apply it any time: applying only touches the keys written in the preset file (missing keys keep their value) and never the master switch or the save override. Presets can be renamed, deleted (two-step confirm), uploaded to Steam Cloud and pulled back — pulling never overwrites a local file of the same name. Dropping a `.json` into the presets folder imports it.
 
 ### Audio
 
