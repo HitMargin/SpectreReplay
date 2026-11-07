@@ -31,6 +31,7 @@
     "record.keybd.compact": "Comprimir al máximo el sonido del teclado",
     "record.keybd.compact.tip": "Si se activa, el sonido del teclado se guarda a 8 kHz dentro del archivo de repetición: cerca de la mitad de tamaño y algo más apagado. Por defecto son 16 kHz. Solo afecta a las repeticiones guardadas después.",
     "record.keybd.note": "El sonido de teclado es el toque que se reproduce al pulsar una tecla. El desfase temporal lo calibra en conjunto: negativo si suena pronto, positivo si suena tarde, en milisegundos.",
+    "record.keybd.warn": "El sonido de teclas grabado con esta función puede ser imperfecto; no se recomienda usarla para grabar música de teclado.",
     "record.stop": "Detener grabación",
     "record.specialkeys": "Teclas especiales",
     "record.specialkeys.note": "El juego trata estas teclas como «no cuentan» y nunca llegan a la repetición. Si de verdad juegas con ellas, márcalas aquí y se grabarán como teclas normales.",

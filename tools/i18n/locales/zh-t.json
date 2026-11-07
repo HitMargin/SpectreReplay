@@ -31,6 +31,7 @@
     "record.keybd.compact": "極限壓縮鍵盤音",
     "record.keybd.compact.tip": "勾選後鍵盤音以 8 kHz 存進回放檔案，體積約為預設檔的一半，聽感略悶；預設檔是 16 kHz。只影響之後新儲存的回放。",
     "record.keybd.note": "鍵盤音就是回放時按下去的「嗒嗒」聲。時間偏移用於校準它整體的早晚：聲音偏早就往負調，偏晚就往正調，單位毫秒。",
+    "record.keybd.warn": "此功能錄製的按鍵音可能並不完美，不建議使用此功能錄製鍵盤音樂。",
     "record.stop": "停止錄製",
     "record.specialkeys": "特殊按鍵",
     "record.specialkeys.note": "遊戲預設把這些鍵當作「不算數」的按鍵，按下也不會進回放。你如果確實用它們打譜，就在這裡勾選——勾選的鍵會被當成一般按鍵錄製。",

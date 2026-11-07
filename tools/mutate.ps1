@@ -2432,6 +2432,80 @@ switch ($Which) {
         ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'SpectreReplay.Pages.Pages.NotifyReplayUnloaded();' '// mutated'
     }
 
+    'MUT-D35' {
+        # Horizontal-scrollbar regression (2026-11-07): ScrollArea must not
+        # force a horizontal bar; with alwaysShowHorizontal the default-skin
+        # bar leaks into the custom UI on every list.
+        Backup 'Ui\Gui.cs'
+        ReplaceExact 'Ui\Gui.cs' 'BeginScrollView(pos, false, false, GUILayout.Height(height))' 'BeginScrollView(pos, false, true, GUILayout.Height(height))'
+    }
+
+    'MUT-D36' {
+        # Hash-gate removal regression (2026-11-07 user ruling): the floor/
+        # speed/time hashes must stay out of the playback gate; re-adding the
+        # speed reject resurrects the editor-workflow false rejections.
+        Backup 'Features\Replay\Patches\Patch_Lifecycle.cs'
+        ReplaceExact 'Features\Replay\Patches\Patch_Lifecycle.cs' '// 2026-11-07 用户裁定：楼层/速度/时间三个哈希不再参与播放门。' 'if (data.SpeedHashS.HasValue && data.SpeedHashS.Value != 0) { Reject(LocalizationManager.GetLocalizedText("note.play_error2")); return; }'
+    }
+
+    'MUT-D37' {
+        # Early-keys diagnosis regression (2026-11-07): the first-key deviation
+        # log is the only quantified evidence for early/late key reports;
+        # dropping it blinds every future timing investigation.
+        Backup 'Features\Replay\Runtime\ReplayPlayer.cs'
+        ReplaceExact 'Features\Replay\Runtime\ReplayPlayer.cs' 'Debug.Log("[SpectreReplay] 回放首键注入：键时间 "' 'Debug.Log("mutated"'
+    }
+
+    'MUT-D38' {
+        # Mid-start key timing regression (2026-11-07): the checkpoint lead-in
+        # (States.Checkpoint) must pump too; without it the first injected key
+        # lands ~345ms after the judgment opens and the replay desyncs at once.
+        Backup 'Features\Replay\Patches\Patch_InputInjection.cs'
+        ReplaceExact 'Features\Replay\Patches\Patch_InputInjection.cs' '[SpectrePatch(typeof(scrController), "Checkpoint_Update", PatchType.Prefix, Feature = FeatureKeys.Replay)]' '// mutated'
+    }
+
+    'MUT-D39' {
+        # Mid-start cursor anchor regression (2026-11-07): the key cursor must
+        # anchor at entryTimeAfterExtraBeats (the judgment-open point); anchoring
+        # at entryTime makes pre-judgment presses the "first key" and the replay
+        # injects them 345ms late.
+        Backup 'Features\Replay\Runtime\ReplayPlayer.cs'
+        ReplaceExact 'Features\Replay\Runtime\ReplayPlayer.cs' 'double targetTime = ADOBase.lm.listFloors[targetFloor].entryTimeAfterExtraBeats;' 'double targetTime = ADOBase.lm.listFloors[targetFloor].entryTime;'
+    }
+
+    'MUT-D40' {
+        # Equal-start skip regression (2026-11-07): replaying from the replay's
+        # own start floor must still align the cursor (the lead-in contains
+        # pre-judgment presses); skipping the alignment injects them ~350ms late.
+        Backup 'Features\Replay\Patches\Patch_Lifecycle.cs'
+        $lines = Lines 'Features\Replay\Patches\Patch_Lifecycle.cs'
+        $hit = 0
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Trim() -eq 'if (is_playing)' -and $i + 1 -lt $lines.Count -and $lines[$i + 1].Trim() -eq 'ReplayPlayer.FastForward(GCS.checkpointNum);') {
+                $lines[$i] = '            if (is_playing && GCS.checkpointNum != data.StartTile)'
+                $hit++
+            }
+        }
+        if ($hit -ne 1) { throw "MUT-D40 命中 $hit 次（应为 1）" }
+        SetLines 'Features\Replay\Patches\Patch_Lifecycle.cs' $lines
+    }
+
+    'MUT-D41' {
+        # Horizontal-scrollbar skin regression (2026-11-07): ScrollArea must
+        # restyle the horizontal scrollbar with the custom track/thumb; swapping
+        # back the saved default leaks the native grey bar into the custom UI.
+        Backup 'Ui\Gui.cs'
+        ReplaceExact 'Ui\Gui.cs' 'GUI.skin.horizontalScrollbar = _barH;' 'GUI.skin.horizontalScrollbar = barH;'
+    }
+
+    'MUT-D42' {
+        # Key-sound warning regression (2026-11-07): the record-keybd section
+        # must carry the yellow "may be imperfect" warning; dropping it leaves
+        # players recording keyboard music without knowing the caveat.
+        Backup 'Pages\Pages.cs'
+        ReplaceExact 'Pages\Pages.cs' 'OnGui.Note("record.keybd.warn", Gui.WarnCol);' '// mutated'
+    }
+
     'MUT-D14' {
         # ㉔ BPM 回归：官方关卡退回硬写 0（详情面板重新显示成问号）。
         Backup 'Features\Replay\Patches\Patch_Lifecycle.cs'

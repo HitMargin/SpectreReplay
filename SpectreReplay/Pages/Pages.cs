@@ -224,6 +224,9 @@ namespace SpectreReplay.Pages
                 OnGui.Row("record.keybd.compact", KeybdSoundCompact,
                     v => { KeybdSoundCompact = v; Commit(); }, KeybdSoundRecordActive);
                 OnGui.Note("record.keybd.note");
+                // 录键音的质量告诫（2026-11-07 用户要求）：键音是实时合成/采样的，
+                // 效果未必干净；黄色与普通说明区分，警告意味一眼可辨。
+                OnGui.Note("record.keybd.warn", Gui.WarnCol);
             });
 
             // ── 特殊按键 ────────────────────────────────────────

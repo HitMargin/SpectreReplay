@@ -72,6 +72,18 @@ internal static class Patch_RDInput
         catch (Exception ex) { Debug.LogException(ex); }
     }
 
+    // 检查点前导期也要泵（2026-11-07「中间开始按键提前/晚打」实测）：中间
+    // 开始时游戏走 States.Checkpoint——音乐已 scrub、歌曲位置已从起点起走，
+    // 但 PlayerControl_Update 在前导期不跑，泵挂在它上面会让首键等到状态
+    // 切换后再过 ~345ms 才注入，开局即错位。前导期位置尚未到首键时间，
+    // 提前挂上不会早打；切进 PlayerControl 的那一拍起，按键与判定同帧对齐。
+    [SpectrePatch(typeof(scrController), "Checkpoint_Update", PatchType.Prefix, Feature = FeatureKeys.Replay)]
+    internal static void Checkpoint_Prefix()
+    {
+        try { ReplayPlayer.PumpInput(); }
+        catch (Exception ex) { Debug.LogException(ex); }
+    }
+
     // ── RDInput.GetMain(ButtonState) ──────────────────────────
     // mainPressCount / mainHeldCount 的来源。回放期间整个覆盖。
     [SpectrePatch(typeof(RDInput), "GetMain", PatchType.Postfix, Feature = FeatureKeys.Replay)]

@@ -201,47 +201,12 @@ internal class Patch_StartRewind
                 // 跨运行会误判；这是既有语义，不在旧文件上变卦。
                 if (data.FloorHashS.HasValue)
                 {
-                    int floorHashS = ADOBase.isOfficialLevel
-                        ? 0
-                        : (scnGame.instance.levelData.isOldLevel
-                            ? 0
-                            : ComputeAngleHashS(scnGame.instance.levelData.angleData));
-                    if (floorHashS != data.FloorHashS.Value)
-                    {
-                        Reject(LocalizationManager.GetLocalizedText("note.play_error2"));
-                        Debug.Log("[SpectreReplay]   细节 floorHashS: 录="
-                            + data.FloorHashS.Value + " 现=" + floorHashS);
-                        return;
-                    }
-                    if (data.SpeedHashS.HasValue)
-                    {
-                        var speeds = new System.Collections.Generic.List<double>();
-                        var times = new System.Collections.Generic.List<double>();
-                        for (int i = 0; i < ADOBase.lm.listFloors.Count; i++)
-                        {
-                            if (i > 0) times.Add(ADOBase.lm.listFloors[i].entryTime - ADOBase.lm.listFloors[i - 1].entryTime);
-                            speeds.Add(ADOBase.lm.listFloors[i].speed * (ADOBase.lm.listFloors[i].isCCW ? -1f : 1f));
-                        }
-                        int speedHashS = ComputeDoubleListHashS(speeds);
-                        if (speedHashS != data.SpeedHashS.Value)
-                        {
-                            Reject(LocalizationManager.GetLocalizedText("note.play_error2"));
-                            Debug.Log("[SpectreReplay]   细节 speedHashS: 录="
-                                + data.SpeedHashS.Value + " 现=" + speedHashS);
-                            return;
-                        }
-                        if (data.TimeHashS.HasValue)
-                        {
-                            int timeHashS = ComputeTimeListHashS(times);
-                            if (timeHashS != data.TimeHashS.Value)
-                            {
-                                Reject(LocalizationManager.GetLocalizedText("note.play_error2"));
-                                Debug.Log("[SpectreReplay]   细节 timeHashS: 录="
-                                    + data.TimeHashS.Value + " 现=" + timeHashS);
-                                return;
-                            }
-                        }
-                    }
+                    // 2026-11-07 用户裁定：楼层/速度/时间三个哈希不再参与播放门。
+                    // 编辑器里动过谱面（哪怕只改了速度事件）回放就会被误拦，而
+                    // 「数据异常」的拦截表现比速度对不上导致的按键漂移更难排查。
+                    // 三个哈希仍照录进 HashesV2、信息页照显示，只是不再比对；
+                    // 事件表校验（长按/多压/行星数/自由漫游/倒计时）保留——它拦的
+                    // 是回放根本没法播的结构性差异。
                     if (data.StructureHashS.HasValue)
                     {
                         int structureHashS = ComputeFloorStructureHashS();
@@ -459,7 +424,14 @@ internal class Patch_StartRewind
                     "ApiBlockPlaying set between validation and StartPlaying");
                 return;
             }
-            if (is_playing && GCS.checkpointNum != data.StartTile)
+            // **对齐无条件执行（2026-11-07 修正）**：此前「checkpointNum ==
+            // StartTile 就跳过」——但检查点开始的判定要等
+            // entryTimeAfterExtraBeats（前导淡入结束）才开启，录像里落在
+            // 前导期内的按键游戏本来就不认；游标停在 0 会把它们当首键，
+            // 等判定开始才注入，首键晚 ~350ms（实测）。FastForward 的锚点
+            // 已改到 entryTimeAfterExtraBeats，起点相同也走一遍对齐，
+            // 前导期按键被跳过，首个有效键与判定同拍。
+            if (is_playing)
                 ReplayPlayer.FastForward(GCS.checkpointNum);
             if (is_playing)
                 ResetRejectLog();

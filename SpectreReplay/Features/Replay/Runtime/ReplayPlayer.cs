@@ -15,6 +15,8 @@ internal static class ReplayPlayer
     // 镜像退回互斥只警告一次：这行日志是「开了 MirrorInputToOS 却没效果」时
     // 玩家能拿到的唯一线索（铁律：没挂上必须能看见）。
     private static bool _loggedMirrorFallback;
+    // 首键注入偏差日志的武装位：Start 与 FastForward 各自重新武装
+    private static bool _pendingFirstKeyLog = true;
 
     internal static void Start()
     {
@@ -30,6 +32,7 @@ internal static class ReplayPlayer
             // 见 scrConductor.cs:352-376），用曲中位置去对齐等于直接跳到文件末尾。
             // 检查点/中途开局的对齐由 Patch_Lifecycle 调 FastForward 负责。
             KeyEventIndex = 0;
+            _pendingFirstKeyLog = true;
             is_playing = true;
             is_recording = false;
             HitLocked = true;
@@ -170,7 +173,14 @@ internal static class ReplayPlayer
         // 但按键至少还在。
         if (ADOBase.lm != null && targetFloor >= 0 && targetFloor < ADOBase.lm.listFloors.Count)
         {
-            double targetTime = ADOBase.lm.listFloors[targetFloor].entryTime;
+            // **锚点必须与游戏判定开启点同源。** 检查点开始时游戏走 States.
+            // Checkpoint：音乐淡入、位置从 entryTime 之前起走，判定要等位置
+            // 到达 entryTimeAfterExtraBeats 才开始——期间玩家的按键游戏根本
+            // 不认（判定未开），键游标若锚在 entryTime 会把这段「前导期按键」
+            // 当成有效首键，等判定开始才注入，首键晚 345ms（2026-11-07 实测）。
+            // 锚到 entryTimeAfterExtraBeats：前导期按键跳过，首个有效键与判定
+            // 开启同拍。
+            double targetTime = ADOBase.lm.listFloors[targetFloor].entryTimeAfterExtraBeats;
             KeyEventIndex = data.KeyEvents.Count;
             for (int i = 0; i < data.KeyEvents.Count; i++)
             {
@@ -180,9 +190,23 @@ internal static class ReplayPlayer
                     break;
                 }
             }
+            // 中间开始对齐诊断（2026-11-07「按键提前」排查）：游戏的检查点
+            // 判定要等位置到达 entryTimeAfterExtraBeats（entryTime + extraBeats
+            // 拍的前导）才开始，键游标却锚在 entryTime——两者之差就是「提前量」
+            // 的候选来源，首键时间落在哪一段一看便知。
+            double afterExtra = ADOBase.lm.listFloors[targetFloor].entryTimeAfterExtraBeats;
+            string firstKey = KeyEventIndex < data.KeyEvents.Count
+                ? data.KeyEvents[KeyEventIndex].SongPosition.ToString("0.000")
+                : "无";
+            Debug.Log("[SpectreReplay] FastForward 对齐：floor=" + targetFloor
+                + " entryTime=" + targetTime.ToString("0.000")
+                + " 判定开始=" + afterExtra.ToString("0.000")
+                + " 首键=" + firstKey
+                + " keyIndex=" + KeyEventIndex + "/" + data.KeyEvents.Count);
         }
 
         RebuildHeldInputs();
+        _pendingFirstKeyLog = true;
 
     }
 
@@ -222,6 +246,7 @@ internal static class ReplayPlayer
         KeyEventIndex = keyIndex;
 
         RebuildHeldInputs();
+        _pendingFirstKeyLog = true;
 
         return true;
     }
@@ -435,6 +460,18 @@ internal static class ReplayPlayer
         // 无待办事件时提前返回，避免空 List 分配
         if (songPosition < data.KeyEvents[KeyEventIndex].SongPosition)
             return;
+
+        // 首键注入偏差（与 FastForward 对齐日志配对）：正=比录制时间晚打，
+        // 负=早打。Start 与每次 FastForward 都重新武装一次。
+        if (_pendingFirstKeyLog)
+        {
+            _pendingFirstKeyLog = false;
+            double keyTime = data.KeyEvents[KeyEventIndex].SongPosition;
+            Debug.Log("[SpectreReplay] 回放首键注入：键时间 " + keyTime.ToString("0.000")
+                + "s，当前位置 " + songPosition.ToString("0.000")
+                + "s，偏差 " + ((songPosition - keyTime) * 1000.0).ToString("F0")
+                + "ms（正=晚打，负=早打）");
+        }
 
         const int MaxEventsPerFrame = 64;
         int pumped = 0;

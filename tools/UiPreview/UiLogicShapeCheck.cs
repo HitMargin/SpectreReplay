@@ -688,6 +688,59 @@ namespace UiPreview
                 "渲染成功的卸载必须同步回放页「已载入」标记",
                 "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
                 s => s.Contains("SpectreReplay.Pages.Pages.NotifyReplayUnloaded();", StringComparison.Ordinal));
+            // 中间开始按键提前的排查桩（2026-11-07）：FastForward 对齐日志要
+    //        同时给出 entryTime 与判定开始点（entryTimeAfterExtraBeats），
+    //        首键注入要带偏差毫秒——没有这些数，提前/延迟只能靠猜。
+            fail += Check(projectRoot,
+                "回放首键必须有对齐与偏差诊断（FastForward 锚点 + 注入偏差）",
+                "Features\\Replay\\Runtime\\ReplayPlayer.cs",
+                s => s.Contains("判定开始=", StringComparison.Ordinal)
+                    && s.Contains("double targetTime = ADOBase.lm.listFloors[targetFloor].entryTimeAfterExtraBeats;", StringComparison.Ordinal)
+                    && s.Contains("回放首键注入：键时间 ", StringComparison.Ordinal)
+                    && s.Contains("_pendingFirstKeyLog = true;", StringComparison.Ordinal));
+            fail += Check(projectRoot,
+                "键游标对齐必须无条件执行——起点相同的检查点开始也有前导期按键要跳过",
+                "Features\\Replay\\Patches\\Patch_Lifecycle.cs",
+                s => s.Contains("if (is_playing)\r\n                ReplayPlayer.FastForward(GCS.checkpointNum);", StringComparison.Ordinal)
+                    || s.Contains("if (is_playing)\n                ReplayPlayer.FastForward(GCS.checkpointNum);", StringComparison.Ordinal));
+            // 详情面板的长文本在滚动区里必须换行（2026-11-07 实测：不换行按
+    //        内容宽度排开，撑出一条默认皮肤的水平滚动条）；列表滚动区不开
+    //        alwaysShowHorizontal。
+            fail += Check(projectRoot,
+                "详情面板歌名与文件行必须用换行样式，列表滚动区不开水平条",
+                "Pages\\ReplayInfoPanel.cs",
+                s => s.Contains("Gui.BoldWrapStyle", StringComparison.Ordinal)
+                    && s.Contains("Gui.SmallWrapStyle", StringComparison.Ordinal))
+                + Check(projectRoot,
+                "列表滚动区不强制显示水平滚动条",
+                "Ui\\Gui.cs",
+                s => s.Contains("BeginScrollView(pos, false, false, GUILayout.Height(height))", StringComparison.Ordinal));
+            // 横向滚动条的自定义外观（2026-11-07）：行内容比可视区宽时
+            // alwaysShowHorizontal=false 也会自动出条，不换装就是一条 Unity
+            // 默认灰条插在自绘 UI 里。判据收在 ScrollArea 方法体内：
+            // ModernScrollView 与它共用同一套换装代码形状，整文件搜会把
+            // 「换装加错了函数」也判绿（本轮真实踩过一次）。
+            fail += Check(projectRoot,
+                "横向滚动条必须与竖向同一套自绘外观（ScrollArea 进区换装、出区还原）",
+                "Ui\\Gui.cs",
+                s =>
+                {
+                    string body = MethodBody(s, "ScrollArea") ?? "";
+                    return s.Contains("_barH = new GUIStyle(GUI.skin.horizontalScrollbar)", StringComparison.Ordinal)
+                    && s.Contains("_barHThumb = new GUIStyle(GUI.skin.horizontalScrollbarThumb)", StringComparison.Ordinal)
+                        && body.Contains("GUI.skin.horizontalScrollbar = _barH;", StringComparison.Ordinal)
+                        && body.Contains("GUI.skin.horizontalScrollbarThumb = _barHThumb;", StringComparison.Ordinal)
+                        && body.Contains("GUI.skin.horizontalScrollbarLeftButton = _barBtn;", StringComparison.Ordinal)
+                        && body.Contains("GUI.skin.horizontalScrollbarRightButton = _barBtn;", StringComparison.Ordinal)
+                        && body.Contains("GUI.skin.horizontalScrollbar = barH;", StringComparison.Ordinal)
+                        && body.Contains("GUI.skin.horizontalScrollbarThumb = thumbH;", StringComparison.Ordinal);
+                });
+            // 录键音的质量告诫（2026-11-07 用户要求）：必须存在且用 WarnCol
+            // 黄色——黄色是「这是警告不是说明」的唯一信号，换成普通色就白说了。
+            fail += Check(projectRoot,
+                "录制键盘音必须带黄色警告提示（可能不完美、不建议录键盘音乐）",
+                "Pages\\Pages.cs",
+                s => s.Contains("OnGui.Note(\"record.keybd.warn\", Gui.WarnCol);", StringComparison.Ordinal));
             // ㉓ 回放详情面板（2026-10-18 用户要求「点击回放文件可以看信息」）。
             //
             //    这块最容易出的错不是「没画出来」，而是**为了拿数据把文件装载了**：
@@ -1276,11 +1329,13 @@ namespace UiPreview
                     && s.Contains("data.SpeedHashS = ComputeDoubleListHashS(speeds);", StringComparison.Ordinal)
                     && s.Contains("data.StructureHashS = ComputeFloorStructureHashS();", StringComparison.Ordinal));
             fail += Check(projectRoot,
-                "㊽b 播放必须 HashesV2 在场优先、缺席回落旧字段——只认一头都是错的",
+                "㊽b 播放门 HashesV2 在场优先、缺席回落旧字段；楼层/速度/时间三哈希已按用户裁定退出播放门",
                 "Features\\Replay\\Patches\\Patch_Lifecycle.cs",
                 s => s.Contains("if (data.FloorHashS.HasValue)", StringComparison.Ordinal)
-                    && s.Contains("细节 floorHashS: 录=", StringComparison.Ordinal)
-                    && s.Contains("细节 floorHash: 录=", StringComparison.Ordinal));
+                    && s.Contains("细节 floorHash: 录=", StringComparison.Ordinal)
+                    && !s.Contains("data.SpeedHashS.HasValue", StringComparison.Ordinal)
+                    && !s.Contains("data.TimeHashS.HasValue", StringComparison.Ordinal)
+                    && !s.Contains("floorHashS != data.FloorHashS.Value", StringComparison.Ordinal));
             // ㊾ 内存放大上限（审计 A-F2）：解压上限 64MB（512MB 允许几 MB 的
             //    未加密文件换出 GB 级内存）+ ReadCount 绝对条数上限（比例校验
             //    挡不住大密文体量：8B 最小记录时 64MB 流可声明 800 万条）。
@@ -1363,6 +1418,7 @@ namespace UiPreview
                 s => s.Contains("try { RecordPatchWatchdog(); }", StringComparison.Ordinal)
                     && s.Contains("SpectrePatchHub.EnsureAppliedQuiet(typeof(Patch_Hit)", StringComparison.Ordinal)
                     && s.Contains("if (++_watchdogTick < 30) return;", StringComparison.Ordinal)
+                    && s.Contains("Checkpoint_Update", StringComparison.Ordinal)
                     && s.Contains("if (data.HitSnapshots.Count > 0) return;", StringComparison.Ordinal)
                     && s.Contains("if (controller.currFloor.seqID <= (data.StartTile ?? 0)) return;", StringComparison.Ordinal)
                     && s.Contains("SpectrePatchHub.ForceRebuild(typeof(Patch_Hit));", StringComparison.Ordinal));

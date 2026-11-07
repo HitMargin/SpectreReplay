@@ -31,6 +31,7 @@
     "record.keybd.compact": "Compression maximale du son du clavier",
     "record.keybd.compact.tip": "Activé, le son du clavier est stocké à 8 kHz dans le fichier de replay : environ la moitié de la taille et un peu plus sourd. Par défaut 16 kHz. Ne concerne que les replays enregistrés ensuite.",
     "record.keybd.note": "Le son du clavier est le tap joué lors de l'appui sur une touche. Le décalage temporel le calibre dans son ensemble : négatif s'il est en avance, positif s'il est en retard, en millisecondes.",
+    "record.keybd.warn": "Le son des touches enregistré avec cette fonction peut être imparfait ; il est déconseillé de l'utiliser pour enregistrer de la musique de clavier.",
     "record.stop": "Arrêter l'enregistrement",
     "record.specialkeys": "Touches spéciales",
     "record.specialkeys.note": "Le jeu traite ces touches comme « ne comptant pas » et elles n'atteignent jamais le replay. Si vous jouez réellement avec elles, cochez-les ici et elles seront enregistrées comme des touches normales.",

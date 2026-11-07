@@ -31,6 +31,7 @@
     "record.keybd.compact": "Maximální komprese zvuku klávesnice",
     "record.keybd.compact.tip": "Po zapnutí se zvuk klávesnice ukládá do souboru replaye v 8 kHz — zhruba poloviční velikost a mírně tlumenější. Výchozí je 16 kHz. Týká se jen replayů uložených poté.",
     "record.keybd.note": "Zvuk klávesnice je ťuknutí přehrané při stisku klávesy. Časový posun jej kalibruje jako celek: záporný, pokud je brzy, kladný, pokud pozdě, v milisekundách.",
+    "record.keybd.warn": "Zvuk kláves nahraný touto funkcí nemusí být dokonalý; k nahrávání klávesové hudby se nedoporučuje.",
     "record.stop": "Zastavit nahrávání",
     "record.specialkeys": "Speciální klávesy",
     "record.specialkeys.note": "Hra tyto klávesy považuje za „nepočítané“ a nikdy se nedostanou do záznamu. Pokud s nimi opravdu hrajete, zaškrtněte je zde a budou se nahrávat jako běžné klávesy.",

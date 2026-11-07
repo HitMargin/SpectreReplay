@@ -126,13 +126,15 @@ namespace SpectreReplay.Ui
         private static GUISkin _skin;
         private static Font _font;
         private static GUIStyle _label, _labelC, _bold, _boldC, _h1, _h2, _small, _smallC, _note, _pad, _row, _modernRow, _modernRowHot, _btn, _btnPrimary, _btnQuiet, _btnAccent, _tipStyle;
+        private static GUIStyle _boldWrap, _smallWrap;
         private static GUIStyle _modernTitle, _modernDesc, _modernSubtitle, _modernTab, _modernTabOn, _modernSeg, _modernSegOn;
         private static readonly Dictionary<string, float> _switchAnim = new Dictionary<string, float>();
         private static readonly Dictionary<string, Vector2> _segmentAnim = new Dictionary<string, Vector2>();
 
-        // 内层滚动区专用的滚动条三件套（轨道 / 滑块 / 两端按钮）。
+        // 内层滚动区专用的滚动条样式：竖向 / 横向各一套轨道与滑块，
+        // 加共用的零尺寸端点按钮。
         // 只在本文件的 ScrollArea 里临时挂到 GUI.skin 上，出区立刻还原。
-        private static GUIStyle _bar, _barThumb, _barBtn;
+        private static GUIStyle _bar, _barThumb, _barH, _barHThumb, _barBtn;
 
         private static void Ensure()
         {
@@ -162,6 +164,11 @@ namespace SpectreReplay.Ui
             _h2 = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontStyle = FontStyle.Bold, fontSize = 14, clipping = TextClipping.Clip };
             _small = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleLeft, fontSize = 11, clipping = TextClipping.Clip };
             _smallC = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontSize = 11, fontStyle = FontStyle.Bold, clipping = TextClipping.Clip };
+            // 面板内的长文本（歌名、文件信息行）要**换行**：它们在滚动区里，
+            // 不换行就按内容宽度把滚动区撑出一条水平滚动条（2026-11-07 实测）。
+            // 与 _note 同理显式写 wordWrap=true，不依赖皮肤继承。
+            _boldWrap = new GUIStyle(_bold) { wordWrap = true };
+            _smallWrap = new GUIStyle(_small) { wordWrap = true };
             // 说明文字要**换行**：UMM 把 GUI.skin.label.clipping 改成了 Overflow
             // （decompiled :3509），照抄 Skin.label 的话长句会一路画出窗口外
             // 而不是折行——玩家看到半句话被硬生生截断。
@@ -272,6 +279,29 @@ namespace SpectreReplay.Ui
 
             // 零尺寸的空样式：原生箭头按钮在这里既不占位也不画底。
             _barBtn = new GUIStyle(GUIStyle.none) { fixedWidth = 0f, fixedHeight = 0f };
+
+            // 横向轨道与滑块：竖向的镜像——fixedWidth→fixedHeight、左右
+            // margin→上下 margin，贴图直接复用竖向那套，两根条天生同款。
+            // 列表行比可视区宽时（alwaysShowHorizontal=false 也会自动出条）
+            // 若不换装，滚出来的是一条 Unity 默认灰条，插在自绘 UI 里。
+            _barH = new GUIStyle(GUI.skin.horizontalScrollbar)
+            {
+                fixedHeight = BarW,
+                padding = new RectOffset(0, 0, 0, 0),
+                margin = new RectOffset(0, 0, 10, 0),
+                border = new RectOffset(Radius + 1, Radius + 1, Radius + 1, Radius + 1),
+            };
+            _barH.normal.background = _bar.normal.background;
+
+            _barHThumb = new GUIStyle(GUI.skin.horizontalScrollbarThumb)
+            {
+                fixedHeight = BarW - Pad * 2,
+                border = new RectOffset(Radius, Radius, Radius, Radius),
+                margin = new RectOffset(0, 0, Pad, Pad),
+            };
+            _barHThumb.normal.background = _barThumb.normal.background;
+            _barHThumb.hover.background = _barThumb.hover.background;
+            _barHThumb.active.background = _barThumb.active.background;
         }
 
         /// <summary>
@@ -354,6 +384,10 @@ namespace SpectreReplay.Ui
 
         internal static GUIStyle LabelStyle { get { Ensure(); return _label; } }
         internal static GUIStyle BoldStyle { get { Ensure(); return _bold; } }
+        /// <summary>粗体 + 换行：详情面板的歌名行等长文本用，滚动区里不换行
+        /// 会按内容宽度撑出水平滚动条。</summary>
+        internal static GUIStyle BoldWrapStyle { get { Ensure(); return _boldWrap; } }
+        internal static GUIStyle SmallWrapStyle { get { Ensure(); return _smallWrap; } }
         internal static GUIStyle H2Style { get { Ensure(); return _h2; } }
         internal static GUIStyle NoteStyle { get { Ensure(); return _note; } }
         internal static GUIStyle SmallStyle { get { Ensure(); return _small; } }
@@ -592,7 +626,8 @@ namespace SpectreReplay.Ui
         /// <para><b>滚动条是本区自己的。</b>滚动条样式挂在 <c>GUI.skin</c> 上，
         /// 是全局的：进区前换成 <see cref="BuildScrollbar"/> 那套，出区立刻还原。
         /// 所以 UMM 整页那条滚动条（归它自己管）不会被牵连，两处的观感也
-        /// 不必互相将就。</para>
+        /// 不必互相将就。竖向、横向两根条都换装：横向条平时不出现，但行内容
+        /// 比可视区宽时会自动滚出来，不换装就是一条默认灰条。</para>
         ///
         /// <para><b>为什么 alwaysShowVertical = true。</b>内容不足一屏时若把滚动条
         /// 藏掉，内容区会突然变宽，几十行列表在「刚好放得下」与「放不下」之间
@@ -608,15 +643,23 @@ namespace SpectreReplay.Ui
             GUIStyle thumb = GUI.skin.verticalScrollbarThumb;
             GUIStyle up = GUI.skin.verticalScrollbarUpButton;
             GUIStyle down = GUI.skin.verticalScrollbarDownButton;
+            GUIStyle barH = GUI.skin.horizontalScrollbar;
+            GUIStyle thumbH = GUI.skin.horizontalScrollbarThumb;
+            GUIStyle leftBtn = GUI.skin.horizontalScrollbarLeftButton;
+            GUIStyle rightBtn = GUI.skin.horizontalScrollbarRightButton;
             GUI.skin.verticalScrollbar = _bar;
             GUI.skin.verticalScrollbarThumb = _barThumb;
             GUI.skin.verticalScrollbarUpButton = _barBtn;
             GUI.skin.verticalScrollbarDownButton = _barBtn;
+            GUI.skin.horizontalScrollbar = _barH;
+            GUI.skin.horizontalScrollbarThumb = _barHThumb;
+            GUI.skin.horizontalScrollbarLeftButton = _barBtn;
+            GUI.skin.horizontalScrollbarRightButton = _barBtn;
 
             Vector2 pos = _scrollPos.TryGetValue(key, out Vector2 saved) ? saved : Vector2.zero;
             try
             {
-                pos = GUILayout.BeginScrollView(pos, false, true, GUILayout.Height(height));
+                pos = GUILayout.BeginScrollView(pos, false, false, GUILayout.Height(height));
                 _scrollPos[key] = pos;
                 try
                 {
@@ -633,6 +676,10 @@ namespace SpectreReplay.Ui
                 GUI.skin.verticalScrollbarThumb = thumb;
                 GUI.skin.verticalScrollbarUpButton = up;
                 GUI.skin.verticalScrollbarDownButton = down;
+                GUI.skin.horizontalScrollbar = barH;
+                GUI.skin.horizontalScrollbarThumb = thumbH;
+                GUI.skin.horizontalScrollbarLeftButton = leftBtn;
+                GUI.skin.horizontalScrollbarRightButton = rightBtn;
             }
         }
 

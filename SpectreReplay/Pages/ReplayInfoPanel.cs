@@ -259,7 +259,7 @@ namespace SpectreReplay.Pages
         {
             string song = string.IsNullOrEmpty(info.SongName) ? Loc.T("playback.info.unknown") : info.SongName;
             string artist = string.IsNullOrEmpty(info.ArtistName) ? Loc.T("playback.info.unknown") : info.ArtistName;
-            GUILayout.Label(Loc.F("playback.info.title", song, artist), Gui.BoldStyle,
+            GUILayout.Label(Loc.F("playback.info.title", song, artist), Gui.BoldWrapStyle,
                 GUILayout.ExpandWidth(true));
         }
 
@@ -351,7 +351,7 @@ namespace SpectreReplay.Pages
                 : info.FileTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
             string ver = string.IsNullOrEmpty(info.ModVersionText) ? "?" : info.ModVersionText;
             GUILayout.Label(Loc.F("playback.info.fileline", info.FileName, size, time, enc, ver),
-                Gui.SmallStyle, GUILayout.ExpandWidth(true));
+                Gui.SmallWrapStyle, GUILayout.ExpandWidth(true));
         }
 
         private static string SpeedText(ReplayFileInfo info)

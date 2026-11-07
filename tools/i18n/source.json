@@ -180,6 +180,11 @@
   "en": "Keyboard sound is the tap played back when a key was pressed. Time offset calibrates it as a whole: shift negative if it is early, positive if late, in milliseconds."
  },
  {
+  "key": "record.keybd.warn",
+  "zh": "此功能录制的按键音可能并不完美，不建议使用此功能录制键盘音乐。",
+  "en": "Key sounds recorded with this feature may be imperfect; it is not recommended for recording keyboard music."
+ },
+ {
   "key": "record.stop",
   "zh": "停止录制",
   "en": "Stop recording"

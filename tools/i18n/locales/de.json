@@ -31,6 +31,7 @@
     "record.keybd.compact": "Tastaturklang maximal komprimieren",
     "record.keybd.compact.tip": "Aktiviert wird der Tastaturklang mit 8 kHz in der Replay-Datei gespeichert: etwa halbe Größe und etwas dumpfer. Standard sind 16 kHz. Gilt nur für danach gespeicherte Replays.",
     "record.keybd.note": "Der Tastaturklang ist das Tippgeräusch, das bei einem Tastendruck wiedergegeben wird. Der Zeitversatz kalibriert ihn als Ganzes: negativ, wenn er zu früh kommt, positiv, wenn er zu spät kommt, in Millisekunden.",
+    "record.keybd.warn": "Die mit dieser Funktion aufgenommenen Tastengeräusche sind möglicherweise unvollkommen; für die Aufnahme von Keyboard-Musik wird sie nicht empfohlen.",
     "record.stop": "Aufnahme stoppen",
     "record.specialkeys": "Sondertasten",
     "record.specialkeys.note": "Das Spiel behandelt diese Tasten als „zählen nicht“, und sie landen nie im Replay. Wenn du tatsächlich damit spielst, hake sie hier an, dann werden sie wie normale Tasten aufgezeichnet.",

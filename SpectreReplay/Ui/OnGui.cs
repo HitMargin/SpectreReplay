@@ -1040,6 +1040,13 @@ namespace SpectreReplay.Ui
             NoteText(Loc.T(labelKey));
         }
 
+        /// <summary>带颜色的说明文字。警告类提示（如录键音的质量告诫）用
+        /// <see cref="Gui.WarnCol"/>，与普通灰说明区分开。</summary>
+        internal static void Note(string labelKey, Color color)
+        {
+            NoteText(Loc.T(labelKey), color);
+        }
+
         /// <summary>一段不带标签键的说明文字（内容已经本地化过了）。</summary>
         internal static void NoteText(string text)
         {
@@ -1052,6 +1059,28 @@ namespace SpectreReplay.Ui
             GUILayout.BeginHorizontal();
             GUILayout.Space(LabelW);
             GUILayout.Label(text, Gui.NoteStyle, GUILayout.ExpandWidth(true));
+            GUILayout.EndHorizontal();
+        }
+
+        /// <summary>带颜色的说明文字。染色沿用 Gui.Text 的乘算约定
+        /// （style.normal.textColor × GUI.color），不另建 GUIStyle。</summary>
+        internal static void NoteText(string text, Color color)
+        {
+            if (Gui.ModernMode)
+            {
+                Color old = GUI.color;
+                GUI.color = color * Gui.Tint;
+                GUILayout.Label(text ?? "", Gui.ModernDescStyle,
+                    GUILayout.ExpandWidth(true));
+                GUI.color = old;
+                return;
+            }
+            GUILayout.BeginHorizontal();
+            GUILayout.Space(LabelW);
+            Color oldClassic = GUI.color;
+            GUI.color = color * Gui.Tint;
+            GUILayout.Label(text, Gui.NoteStyle, GUILayout.ExpandWidth(true));
+            GUI.color = oldClassic;
             GUILayout.EndHorizontal();
         }
 

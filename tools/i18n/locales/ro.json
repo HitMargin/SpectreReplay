@@ -31,6 +31,7 @@
     "record.keybd.compact": "Comprimare maximă a sunetului claviaturii",
     "record.keybd.compact.tip": "Când este activat, sunetul claviaturii este salvat la 8 kHz în fișierul de replay — aproximativ jumătate din dimensiune și puțin mai înăbușit. Implicit este 16 kHz. Afectează doar replay-urile salvate ulterior.",
     "record.keybd.note": "Sunetul de tastatură este bătaia redată la apăsarea unei taste. Decalajul de timp îl calibrează în ansamblu: negativ dacă e devreme, pozitiv dacă e târziu, în milisecunde.",
+    "record.keybd.warn": "Sunetul tastelor înregistrat cu această funcție poate fi imperfect; nu este recomandat să o folosiți pentru înregistrarea muzicii de tastatură.",
     "record.stop": "Oprește înregistrarea",
     "record.specialkeys": "Taste speciale",
     "record.specialkeys.note": "Jocul tratează aceste taste ca „nepunctate” și nu ajung niciodată în reluare. Dacă chiar joci cu ele, bifează-le aici și vor fi înregistrate ca taste normale.",

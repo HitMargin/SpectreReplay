@@ -31,6 +31,7 @@
     "record.keybd.compact": "Maksymalna kompresja dźwięku klawiatury",
     "record.keybd.compact.tip": "Po włączeniu dźwięk klawiatury jest zapisywany w pliku powtórki z częstotliwością 8 kHz — około połowy rozmiaru i nieco bardziej przytłumiony. Domyślnie 16 kHz. Dotyczy tylko powtórek zapisanych później.",
     "record.keybd.note": "Dźwięk klawiatury to stuknięcie odtwarzane, gdy klawisz został wciśnięty. Przesunięcie czasu kalibruje go całościowo: ujemne, jeśli jest za wczesny, dodatnie, jeśli za późny, w milisekundach.",
+    "record.keybd.warn": "Dźwięk klawiszy nagrywany tą funkcją może być niedoskonały; nie zaleca się używania jej do nagrywania muzyki klawiaturowej.",
     "record.stop": "Zatrzymaj nagrywanie",
     "record.specialkeys": "Klawisze specjalne",
     "record.specialkeys.note": "Gra traktuje te klawisze jako „nieliczące się” i nigdy nie trafiają do powtórki. Jeśli naprawdę nimi grasz, zaznacz je tutaj, a będą nagrywane jak zwykłe klawisze.",

@@ -31,6 +31,7 @@
     "record.keybd.compact": "Nén tối đa âm thanh bàn phím",
     "record.keybd.compact.tip": "Khi bật, âm thanh bàn phím được lưu ở 8 kHz trong tệp replay — dung lượng khoảng một nửa và âm thanh hơi đục hơn. Mặc định là 16 kHz. Chỉ ảnh hưởng đến replay được lưu sau đó.",
     "record.keybd.note": "Âm thanh bàn phím là tiếng gõ phát khi một phím được nhấn. Độ lệch thời gian hiệu chỉnh toàn bộ: âm nếu sớm, dương nếu muộn, tính bằng mili giây.",
+    "record.keybd.warn": "Âm thanh phím do tính năng này ghi có thể không hoàn hảo; không khuyến nghị dùng tính năng này để ghi âm nhạc bàn phím.",
     "record.stop": "Dừng ghi",
     "record.specialkeys": "Phím đặc biệt",
     "record.specialkeys.note": "Game coi những phím này là \"không tính\" và chúng không bao giờ vào bản phát lại. Nếu bạn thực sự chơi bằng chúng, hãy đánh dấu ở đây — chúng sẽ được ghi như phím thường.",
