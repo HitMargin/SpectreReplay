@@ -18,7 +18,7 @@ SpectreReplay is a UnityModManager mod (mod id `com.spectre.replay`). While you 
 - **Cancel save.** Another hotkey drops the run being recorded — for warm-ups and retries you do not want in the folder.
 - **Protection against junk and lost runs.** Runs can be skipped when the game played itself (auto) or when the run contains misses, and a run can still be saved when you fail a level instead of finishing it. Every skip announces its reason instead of dropping the run silently, and editor playtests are exempt from the auto-run rule.
 - **Backups.** Optionally keep a second copy of every saved replay, so a bad file never costs you the recording. The copy is taken from the finished file rather than saved a second time, and it is skipped when the main save itself failed.
-- **Keyboard sound (optional).** Microphone input is recorded as its own track for the run and re-triggered by the recorded keypresses on playback. It lives **inside** the replay file (16 kHz by default, or 8 kHz for roughly half the size), so a replay carries its keysounds to another machine without a stray wav sitting next to it.
+- **Keyboard sound (optional, off by default).** Microphone input is recorded as its own track for the run and re-triggered by the recorded keypresses on playback. It lives **inside** the replay file (16 kHz by default, or 8 kHz for roughly half the size), so a replay carries its keysounds to another machine without a stray wav sitting next to it.
 
 ### Playback
 

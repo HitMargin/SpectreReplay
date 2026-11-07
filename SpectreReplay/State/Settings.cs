@@ -29,7 +29,10 @@ public static class Settings
 
     public static bool ManualSave = true;
     public static bool CancelSave = true;
-    public static bool KeybdSoundRecordActive = true;
+    // 默认关（2026-11-08 用户要求）：录键盘音要走麦克风、还会让回放体积明显
+    // 变大，不该让只想录按键的玩家默认撞上授权与噪声问题。老 Configs.json
+    // 里存过 true 的玩家保持原值，只有新配置/缺键时才落到这个默认。
+    public static bool KeybdSoundRecordActive = false;
 
     /// <summary>
     /// 回放时把按键**额外**镜像到操作系统（SendInput）。
