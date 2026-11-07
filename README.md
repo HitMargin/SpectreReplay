@@ -16,7 +16,7 @@ SpectreReplay is a UnityModManager mod (mod id `com.spectre.replay`). While you 
 - **Saves automatically.** A completed run is written to disk on its own; nothing to click.
 - **Manual save.** A hotkey saves the current run mid-level, including the runs you abandon on purpose.
 - **Cancel save.** Another hotkey drops the run being recorded — for warm-ups and retries you do not want in the folder.
-- **Protection against junk and lost runs.** Runs can be skipped when the game played itself (auto) or when the run contains misses, and a run can still be saved when you fail a level instead of finishing it.
+- **Protection against junk and lost runs.** Runs can be skipped when the game played itself (auto) or when the run contains misses, and a run can still be saved when you fail a level instead of finishing it. Every skip announces its reason instead of dropping the run silently, and editor playtests are exempt from the auto-run rule.
 - **Backups.** Optionally keep a second copy of every saved replay, so a bad file never costs you the recording. The copy is taken from the finished file rather than saved a second time, and it is skipped when the main save itself failed.
 - **Keyboard sound (optional).** Microphone input is recorded as its own track for the run and re-triggered by the recorded keypresses on playback. It lives **inside** the replay file (16 kHz by default, or 8 kHz for roughly half the size), so a replay carries its keysounds to another machine without a stray wav sitting next to it.
 
@@ -44,6 +44,7 @@ SpectreReplay is a UnityModManager mod (mod id `com.spectre.replay`). While you 
 - **Renders the replay to a file.** The level is replayed frame by frame with every frame captured deliberately, then encoded together with its audio track.
 - **Two frame sources.** *Game view* captures what the game shows, UI included, at window resolution. *Clean camera* renders the game's camera chain into an offscreen texture with no interface at all and at any resolution you like, including supersampling.
 - **Encoder and quality presets.** CPU (libx264) or hardware (NVENC) encoding, four speed/quality tiers, automatic fallback to CPU when no usable hardware encoder is found.
+- **Starting a render no longer stutters.** The encoder is spawned in the background while you confirm the settings and is ready when capture begins; the hardware-encoder probe also waits for ffmpeg to actually start before concluding, so a slow launch no longer falls back to CPU. A finished render consumes the replay and unloads it.
 - **Four containers: mp4, mkv, webm, mov.** Codec and audio codec are chosen to match the container (webm, for instance, re-encodes to VP9 + Opus).
 - **Format conversion.** Every video in the output directory can be batch-converted to another container, independent of the format the next render will use; files already in the target format are skipped.
 - **Tail seconds.** Extra seconds recorded after the chart ends, so the ending animation is not cut off.
