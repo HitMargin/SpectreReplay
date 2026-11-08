@@ -87,6 +87,10 @@ internal sealed class VideoFrameSource
     internal bool ScreenResized
         => surface == VideoSurface.WholeScreen && (Screen.width != screenW || Screen.height != screenH);
 
+    /// <summary>捕获开始时的窗口尺寸（分辨率中止时打印「旧 → 新」用）。</summary>
+    internal int SrcWidth => screenW;
+    internal int SrcHeight => screenH;
+
     // 在途回读按分辨率限制，防止内存失控
     internal int MaxInFlight
     {

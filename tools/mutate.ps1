@@ -2621,6 +2621,14 @@ switch ($Which) {
         ReplaceExact 'Features\VideoRender\Pipeline\RenderOverlayCapture.cs' 'if (rain != null) patched += InstallCallSitePatch(rain, "Update");' '// mutated'
     }
 
+    'MUT-D53' {
+        # Robustness regression (2026-11-08, another user's render log): game
+        # clock stuck at start → 4 re-anchors burned → render kept producing a
+        # frozen black-frame video. The re-anchor loop abort must exist.
+        Backup 'Features\VideoRender\Pipeline\VideoRenderJob.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'if (reAnchors >= 4)' 'if (reAnchors < 0)'
+    }
+
     'MUT-D14' {
         # ㉔ BPM 回归：官方关卡退回硬写 0（详情面板重新显示成问号）。
         Backup 'Features\Replay\Patches\Patch_Lifecycle.cs'

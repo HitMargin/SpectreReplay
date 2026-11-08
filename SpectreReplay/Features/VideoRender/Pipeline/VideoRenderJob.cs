@@ -151,6 +151,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
     private bool sceneExited;
     // 锚点自愈的已重锚次数（见捕获循环里的锚点自愈段）
     private int reAnchors;
+    private int failedReadbacks;
     // AwaitReplayAlive 用：上一帧是否已看到正的 songposition（连续两帧才算稳）
     private bool sawPositivePosition;
 
@@ -476,6 +477,14 @@ internal sealed class VideoRenderJob : MonoBehaviour
         else
         {
             Debug.Log("[SpectreReplay] renderClock: audio-cursor Pin path (transpiler unavailable, fallback)");
+            // **兼容路径必须亮明身份。** 确定性渲染时钟只钉得住 r150 的
+            // scrConductor；r149 等旧版本走音频游标回退，游戏自己的时钟不
+            // 受钉扎——实测会出现游戏时钟停在起点、回放反复死亡/重启。
+            // 不许只留一句玩家看不懂的 fallback 日志（铁律：没挂上要能看见）。
+            Debug.LogWarning("[SpectreReplay] 渲染时钟兼容路径：当前游戏版本没有确定性渲染时钟，"
+                + "回放进度可能无法推进（见后续 re-anchor 日志）");
+            TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.clock_fallback"),
+                extra: 2f, type: NotifType.Warning);
         }
 
         VideoRender.PinTimeline(audioAnchor);
@@ -575,6 +584,9 @@ internal sealed class VideoRenderJob : MonoBehaviour
             // 整屏模式下窗口尺寸变化即中止（帧序列无法延续）
             if (frames.ScreenResized)
             {
+                Debug.LogWarning("[SpectreReplay] 渲染中止：窗口分辨率 "
+                    + frames.SrcWidth + "x" + frames.SrcHeight + " → "
+                    + Screen.width + "x" + Screen.height);
                 NotifyFailed(LocalizationManager.GetLocalizedText("rendervideo.resolution_changed"));
                 yield break;
             }
@@ -610,6 +622,14 @@ internal sealed class VideoRenderJob : MonoBehaviour
                             reAnchors++;
                             Debug.Log("[SpectreReplay] timeline re-anchored: was " + wantPin.ToString("0.000")
                                 + "s, game at " + unpinnedNow.ToString("0.000") + "s (attempt " + reAnchors + ")");
+                            if (reAnchors >= 4)
+                            {
+                                // 顶满重锚次数 = 游戏时钟根本没跟上（实测：音乐源无
+                                // clip 时 songposition 恒 0，回放在起点反复死亡）。
+                                // 继续渲染只会产出冻结画面 + 黑帧的长废片，明确中止。
+                                NotifyFailed(LocalizationManager.GetLocalizedText("rendervideo.reanchor_loop"));
+                                yield break;
+                            }
                         }
                     }
                 }
@@ -1016,6 +1036,12 @@ internal sealed class VideoRenderJob : MonoBehaviour
             if (failed || pixels == null)
             {
                 Debug.LogWarning("[SpectreReplay] readback failed at frame " + index + ", black frame substituted");
+                failedReadbacks++;
+                if (failedReadbacks == 25)
+                {
+                    Debug.LogWarning("[SpectreReplay] 已替换 25 个黑帧：回读多次失败，"
+                        + "建议改用「纯净相机」画面来源，或更新显卡驱动");
+                }
                 encoder.Submit(blackout, blackout.Length, 1, null, () => cancelRequested);
             }
             else
