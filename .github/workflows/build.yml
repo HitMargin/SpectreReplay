@@ -182,7 +182,8 @@ jobs:
       - name: Download ffmpeg
         shell: pwsh
         run: |
-          curl.exe -L --fail -o ffmpeg.zip https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip
+          # BtbN 的 latest 端点偶发 504，加自动重试（10 次退避）。
+          curl.exe -L --fail --retry 10 --retry-delay 5 --retry-all-errors -o ffmpeg.zip https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip
           Expand-Archive -Path ffmpeg.zip -DestinationPath ffmpeg_extract
           Get-ChildItem -Path ffmpeg_extract -Recurse -Filter ffmpeg.exe |
             Select-Object -First 1 | Move-Item -Destination .
