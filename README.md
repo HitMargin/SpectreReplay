@@ -50,6 +50,7 @@ SpectreReplay is a UnityModManager mod (mod id `com.spectre.replay`). While you 
 - **Four containers: mp4, mkv, webm, mov.** Codec and audio codec are chosen to match the container (webm, for instance, re-encodes to VP9 + Opus).
 - **Format conversion.** Every video in the output directory can be batch-converted to another container, independent of the format the next render will use; files already in the target format are skipped.
 - **Tail seconds.** Extra seconds recorded after the chart ends, so the ending animation is not cut off.
+- **JRP key rain follows the render clock.** In rendered video, the rain animation of JipperResourcePack's key viewer moves with song time instead of wall time, so drops fall at their real speed no matter how slow the capture runs.
 - **Deterministic render clock (experimental, off by default).** Replaces the time source the game reads with a frame-index-driven clock, which removes audio-clock jitter from the output.
 
 ### Effect removal
