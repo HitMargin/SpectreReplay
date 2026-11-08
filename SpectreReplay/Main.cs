@@ -147,12 +147,6 @@ namespace SpectreReplay
                 SpectrePatchHub.SetFeatureToggle(FeatureKeys.ReplayManualSave, () => Settings.ReplayOn && Settings.ManualSave);
                 SpectrePatchHub.SetFeatureToggle(FeatureKeys.ReplayCancelSave, () => Settings.ReplayOn && Settings.CancelSave);
                 SpectrePatchHub.SetFeatureToggle(FeatureKeys.ReplayAsyncInput, () => Settings.ReplayOn && Settings.GetDataFromAsyncInput);
-                // 渲染时钟（实验性，默认关）。**必须注册**：未注册的功能其补丁
-                // 按"关闭"处理且日志告警——而这条补丁正是离线渲染拿确定性时钟
-                // 的来源，漏注册会表现为"渲染能用但音画偶有抖动"，很难联想到是接线。
-                // 与 Replay 相乘：回放系统整个关掉时，渲染时钟也没有存在意义。
-                SpectrePatchHub.SetFeatureToggle(FeatureKeys.RenderClock,
-                    () => Settings.ReplayOn && Settings.RenderClockOn);
                 // 去特效。**必须注册**：未注册的功能其补丁按"关闭"处理且日志告警，
                 // 而它的三个补丁分别负责「摘事件 / 禁止存盘 / 刷新按钮」——漏注册时
                 // 表现为"开关拨到开、谱面一点没变"，日志里只有一行未注册告警。

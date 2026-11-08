@@ -129,8 +129,6 @@
     "render.surface.screen": "Tela do jogo (com UI)",
     "render.surface.screen_note": "Inclui UI em tela como a barra de progresso; a resolução segue a janela do jogo (sem superamostragem); recolha a janela do mod ao renderizar ou ela será capturada.",
     "render.surface.clean_note": "Sem nenhuma UI, qualquer resolução de saída (superamostragem permitida); bom para gravações puras ou material de edição.",
-    "render.clock.experimental": "Relógio de renderização determinístico (experimental)",
-    "render.clock.hint": "Substitui a fonte de tempo que o jogo lê por um relógio virtual movido pelo índice de quadro, tornando determinísticos o avanço dos tempos, os eventos de câmera, as contagens regressivas e o agendamento dos sons de tecla — a taxa de quadros de saída fica constante independentemente da carga da máquina. Desativado = fallback pelo cursor de áudio: a renderização ainda funciona, mas a linha do tempo é conduzida pelo cursor de áudio (oscilação de milissegundos) e os fundos de vídeo não são mais sincronizados à taxa de renderização. Observação: isto altera a própria fonte de tempo do jogo, então seu alcance é maior que o de outras opções; quando outro mod de renderização de vídeo está ativado ao mesmo tempo, ambos disputam o mesmo ponto de patch (o primeiro a carregar vence) e esta opção cede automaticamente. Se a renderização falhar ou houver dessincronia de áudio/vídeo, desative isto primeiro.",
     "render.ffmpeg": "ffmpeg",
     "render.ffmpeg.ready": "ffmpeg pronto",
     "render.ffmpeg.missing": "ffmpeg.exe não encontrado; coloque-o na pasta do mod ou na raiz do jogo, ou adicione-o ao PATH",
@@ -398,7 +396,6 @@
     "render.quality.tip": "Qualidade de codificação. Mais alta gera arquivos maiores e renderizações um pouco mais longas.",
     "render.format.tip": "Contêiner do arquivo de saída. mp4 é o mais compatível; webm ocupa menos mas exige recodificação.",
     "render.outdir.tip": "Onde os vídeos finalizados vão. Vazio = RenderVideos na pasta do mod.",
-    "render.clock.experimental.tip": "Substitui a fonte de tempo do jogo por um relógio virtual movido pelo índice de quadro para que a taxa de quadros de saída fique constante independentemente da carga da máquina. Altera a própria fonte de tempo do jogo, então seu alcance é amplo; desative isto primeiro se a renderização falhar ou o áudio dessincronizar.",
     "convert.target.tip": "Converte os vídeos existentes na pasta de saída para este formato, independentemente do formato de renderização acima.",
     "render.start.tip": "Inicia uma renderização com as configurações atuais. Primeiro carregue um replay e entre na fase dele.",
     "render.cancel.tip": "Aborta a renderização atual. O que já foi gravado é mantido.",
@@ -485,7 +482,6 @@
     "subtab.record.basics": "Gravação",
     "subtab.render.start": "Renderização",
     "subtab.render.output": "Saída",
-    "subtab.render.experimental": "Experimental",
     "subtab.about.info": "Informações"
   },
   "subtab.record.basics": {

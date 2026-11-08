@@ -129,8 +129,6 @@
     "render.surface.screen": "Màn hình game (có UI)",
     "render.surface.screen_note": "Bao gồm UI trong không gian màn hình như thanh tiến trình; độ phân giải theo cửa sổ game (không siêu lấy mẫu); khi kết xuất hãy thu gọn cửa sổ mod, nếu không nó sẽ bị ghi vào hình.",
     "render.surface.clean_note": "Không có UI nào, độ phân giải đầu ra tùy ý (cho phép siêu lấy mẫu); phù hợp để làm cảnh thuần hoặc tư liệu dựng.",
-    "render.clock.experimental": "Đồng hồ kết xuất tất định (thử nghiệm)",
-    "render.clock.hint": "Thay nguồn thời gian mà game đọc bằng đồng hồ ảo điều khiển bởi số khung hình, khiến việc tiến nhịp, sự kiện camera, đếm ngược và lên lịch âm phím đều tất định — tốc độ khung hình đầu ra không đổi bất kể máy bận. Tắt = dự phòng theo con trỏ âm thanh: kết xuất vẫn chạy, nhưng trục thời gian do con trỏ âm thanh điều khiển (rung ở mức mili giây) và nền video không còn khớp tốc độ với tốc độ kết xuất. Lưu ý: tùy chọn này đổi chính nguồn thời gian của game nên phạm vi ảnh hưởng rộng hơn các tùy chọn khác; khi một mod kết xuất video khác cùng bật, cả hai tranh cùng một điểm vá (bên tải trước thắng) và tùy chọn này tự nhường. Nếu kết xuất báo lỗi hoặc âm thanh lệch hình, hãy tắt mục này trước.",
     "render.ffmpeg": "ffmpeg",
     "render.ffmpeg.ready": "ffmpeg sẵn sàng",
     "render.ffmpeg.missing": "Không tìm thấy ffmpeg.exe; hãy đặt nó vào thư mục mod hoặc thư mục gốc của game, hoặc thêm vào PATH",
@@ -398,7 +396,6 @@
     "render.quality.tip": "Chất lượng mã hóa. Cao hơn cho tệp lớn hơn và kết xuất lâu hơn một chút.",
     "render.format.tip": "Vật chứa của tệp đầu ra. mp4 tương thích nhất; webm nhỏ hơn nhưng cần mã hóa lại.",
     "render.outdir.tip": "Nơi lưu video thành phẩm. Để trống = RenderVideos trong thư mục mod.",
-    "render.clock.experimental.tip": "Thay nguồn thời gian của game bằng đồng hồ ảo điều khiển bởi số khung hình để tốc độ khung hình đầu ra không đổi bất kể máy bận. Nó đổi chính nguồn thời gian của game nên phạm vi ảnh hưởng rộng; hãy tắt nó trước nếu kết xuất báo lỗi hoặc âm thanh bị lệch.",
     "convert.target.tip": "Chuyển các video có sẵn trong thư mục đầu ra sang định dạng này, độc lập với định dạng kết xuất ở trên.",
     "render.start.tip": "Bắt đầu kết xuất với cài đặt hiện tại. Trước hết hãy tải một bản phát lại và vào màn của nó.",
     "render.cancel.tip": "Dừng lần kết xuất hiện tại. Phần đã ghi vẫn được giữ.",
@@ -485,7 +482,6 @@
     "subtab.record.basics": "Ghi hình",
     "subtab.render.start": "Kết xuất",
     "subtab.render.output": "Đầu ra",
-    "subtab.render.experimental": "Thử nghiệm",
     "subtab.about.info": "Thông tin"
   },
   "subtab.record.basics": {

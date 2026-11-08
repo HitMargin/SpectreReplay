@@ -140,25 +140,6 @@ namespace UiPreview
                 s => s.Contains("Dictionary<Key, Texture2D>", StringComparison.Ordinal)
                     && s.Contains("Cache.TryGetValue", StringComparison.Ordinal)
                     && s.Contains("HideFlags.HideAndDontSave", StringComparison.Ordinal));
-            // ⑦ RenderClock transpiler 必须区分"已被别的 mod 接管"与"目标形状变了"。
-            //
-            //    2026-10-12 真事：Spectre 与 SpectreReplay 同时启用时，Spectre 的
-            //    同类 transpiler 先装，把 scrConductor.Update 的四个时间源调用
-            //    换成了它自己程序集的 RenderClockSource。轮到我们时，Harmony 的
-            //    `Calls` 是 `object.Equals(operand, method)`——精确比 MethodInfo，
-            //    于是一个都不命中 ⇒ replaced == 0 ⇒ 抛
-            //    「no time-source calls found — **game Update likely changed**」。
-            //    **那句诊断是错的**（游戏没变，是被别人抢先了），它把排查方向
-            //    整个带偏到"去比对游戏 IL"。
-            //
-            //    判据三件齐：①探测必须写在 yield 迭代**之前**（否则惰性求值，
-            //    拿到的 replaced 恒为 0，判定永不成立）；②探测看的是
-            //    "指令里有别的 RenderClockSource 调用"；③原诊断文案不许再断言
-            //    "game Update likely changed"。
-            fail += Check(projectRoot,
-                "⑦ RenderClock transpiler 必须识别「已被别的 mod 接管」（不许误报 game changed）",
-                "Features\\VideoRender\\Patches\\VideoRenderClockPatches.cs",
-                s => TranspilerDistinguishesTakeover(s));
             // ⑧ 喂给 AudioRenderer.Render 的原生容器必须**精确等于本帧样本数**。
             //
             //    2026-10-16 真事：上游 c36e7b3（v0.4.1 第 150 轮审计）为消掉每帧
@@ -1309,6 +1290,23 @@ namespace UiPreview
                     && s.Contains("if (reAnchors >= 4)", StringComparison.Ordinal)
                     && s.Contains("rendervideo.reanchor_loop", StringComparison.Ordinal)
                     && s.Contains("failedReadbacks == 25", StringComparison.Ordinal));
+            // 渲染期歌曲排程推迟（2026-11-08 用户实测：画面源冷启动 1.3s 实时
+            // 烧掉剩余倒计时，成片从歌曲 0 拍开始，倒计时整段丢失）。三条硬序：
+            // ① Arm 必须在 SwitchToPlayMode 之前——rewind 链在场景加载中就会调
+            //   StartMusic，晚了第一发就漏掉；
+            // ② Release 必须在 dsp 钉扎与 captureFramerate 之后——排程读到的才是
+            //   虚拟时钟，从释放帧起与原生音频逐帧锁定；
+            // ③ 三者都在，顺序错了等于没做（冷启动窗口照样烧倒计时）。
+            fail += Check(projectRoot,
+                "渲染期 StartMusic 必须推迟到捕获就绪（Arm 先于 SwitchToPlayMode，Release 在钉扎之后）",
+                "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
+                s => s.Contains("Patch_VideoDeferStartMusic.Arm();", StringComparison.Ordinal)
+                    && s.IndexOf("Patch_VideoDeferStartMusic.Arm();", StringComparison.Ordinal)
+                        < s.IndexOf("SpectreState.PlayActions.SwitchToPlayMode();", StringComparison.Ordinal)
+                    && s.IndexOf("UnscaledDeltaPin.InstallDsp();", StringComparison.Ordinal)
+                        < s.IndexOf("Patch_VideoDeferStartMusic.Release();", StringComparison.Ordinal)
+                    && s.IndexOf("Time.captureFramerate = fps;", StringComparison.Ordinal)
+                        < s.IndexOf("Patch_VideoDeferStartMusic.Release();", StringComparison.Ordinal));
             // JRP 雨滴时钟（2026-11-08 用户报「渲染成片雨滴快很多」）：JRP 1.6
             // 的 get_CurrentTicks 带 aggressiveinlining，JIT 可能把值内联进雨滴
             // 循环，只补 getter 管不到内联副本。必须把 RainManager.Update /
@@ -1519,7 +1517,9 @@ namespace UiPreview
                 "㊼b 倒计时期间必须跳过阈值巡检——不在倒计时里烧重锚次数",
                 "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
                 s => s.Contains("bool countingNow = scrController.instance != null", StringComparison.Ordinal)
-                    && s.Contains("if (!countingNow)", StringComparison.Ordinal));
+                    // 钉扎前锚点还不存在（StartMusic 推迟释放后，巡检只在
+                    // timelinePinned 之后才有比较对象），两个条件必须同时在。
+                    && s.Contains("if (!countingNow && timelinePinned)", StringComparison.Ordinal));
             // ㊽ 谱面哈希的跨运行时稳定化（审计 A-F1）：录制必须双写（旧字段保持
             //    运行时哈希供旧构建、稳定四件套进 HashesV2 尾段），播放必须段
             //    优先、缺席回落旧字段——只换算法不迁移，存量回放会被误判
@@ -2628,61 +2628,6 @@ namespace UiPreview
                 || b.Contains("bucket", StringComparison.Ordinal))
                 return false;
             return true;
-        }
-
-        /// <summary>
-        /// RenderClock transpiler 是否区分了"已被别的 mod 接管"与"目标形状变了"。
-        ///
-        /// 三件必须同时成立（缺任何一件都会回到原来的误报）：
-        ///   ① 物化与探测都排在第一个 `yield return` **之前**
-        ///   ② 探测判据是"operand 的声明类型名为 RenderClockSource"——
-        ///      **且该行末尾就是判断的收尾**（`))` 或 `)`），
-        ///      防止有人再加一个恒假合取项让探测失效而结构看着原样
-        ///   ③ 真正的失败文案里不再出现 "game Update likely changed"
-        ///
-        /// ② 的严格形状是 MUT-V10 逼出来的：那个变异给探测条件接了一个
-        /// `&& mi.Name == "NeverMatches"`，三处结构标记全在、行为却已失效，
-        /// 而只查"出现过 DeclaringType?.Name"的判据照样绿。所以必须
-        /// **连判断的收尾一起钉**。
-        /// </summary>
-        private static bool TranspilerDistinguishesTakeover(string code)
-        {
-            string[] lines = code.Replace("\r\n", "\n").Split('\n');
-            int materializeAt = -1, firstYieldAt = -1, probeAt = -1;
-            for (int i = 0; i < lines.Length; i++)
-            {
-                string line = lines[i];
-                if (materializeAt < 0
-                    && (line.Contains("new List<CodeInstruction>", StringComparison.Ordinal)
-                        || line.Contains("body.AddRange", StringComparison.Ordinal)))
-                {
-                    materializeAt = i;
-                }
-                if (probeAt < 0
-                    && line.Contains("DeclaringType?.Name == \"RenderClockSource\"", StringComparison.Ordinal))
-                {
-                    probeAt = i;
-                }
-                if (firstYieldAt < 0 && line.Contains("yield return", StringComparison.Ordinal))
-                {
-                    firstYieldAt = i;
-                }
-            }
-            if (materializeAt < 0 || probeAt < 0 || firstYieldAt < 0) return false;
-            bool beforeYield = materializeAt < firstYieldAt && probeAt < firstYieldAt;
-            // ② 的严格形状：那一行必须以判断收尾结束（Trim 后以 ) 结尾），
-            // 即 `&& (mi.DeclaringType?.Name == "RenderClockSource"))` 这一形态。
-            // 且 RenderClockSource 之后**不再有** && / || 合取——否则就是
-            // 有人接了恒假项让探测失效（MUT-V10 那个形态）。
-            string probeLine = lines[probeAt].TrimEnd();
-            int at = probeLine.IndexOf("RenderClockSource", StringComparison.Ordinal);
-            bool probeIsWhole = probeLine.EndsWith(")", StringComparison.Ordinal)
-                && probeLine.IndexOf("&&", at, StringComparison.Ordinal) < 0
-                && probeLine.IndexOf("||", at, StringComparison.Ordinal) < 0;
-            // ③ 误报文案已移除。注释里可以讨论它（说明为什么不那么写），
-            //    而 Check 统一剥注释，所以这里命中的一定是**真字符串**。
-            bool staleMessage = code.Contains("game Update likely changed", StringComparison.Ordinal);
-            return beforeYield && probeIsWhole && !staleMessage;
         }
 
         /// <summary>

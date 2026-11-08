@@ -102,7 +102,6 @@ public static class ConfigManager
         public int render_capture_mode { get; set; }
         public float render_tail { get; set; }
         public bool render_on { get; set; }
-        public bool render_clock_on { get; set; }
         public bool render_cursor_on { get; set; }
         public bool render_stop_on { get; set; }
         public int render_stop_key { get; set; }
@@ -225,7 +224,6 @@ public static class ConfigManager
                 render_capture_mode = Settings.RenderCaptureMode,
                 render_tail = Settings.RenderTailSeconds,
                 render_on = Settings.RenderOn,
-                render_clock_on = Settings.RenderClockOn,
                 render_cursor_on = Settings.RenderCursorOn,
                 render_stop_on = Settings.RenderStopOn,
                 render_stop_key = Settings.RenderStopKey,
@@ -521,7 +519,6 @@ public static class ConfigManager
                     Settings.RenderCaptureMode = Mathf.Clamp(ints.Value<int?>("render_capture_mode") ?? Settings.RenderCaptureMode, 0, 1);
                     Settings.RenderTailSeconds = Mathf.Clamp(ints.Value<float?>("render_tail") ?? Settings.RenderTailSeconds, 0f, 15f);
                     Settings.RenderOn = ints.Value<bool?>("render_on") ?? Settings.RenderOn;
-                    Settings.RenderClockOn = ints.Value<bool?>("render_clock_on") ?? Settings.RenderClockOn;
                     Settings.RenderCursorOn = ints.Value<bool?>("render_cursor_on") ?? Settings.RenderCursorOn;
                     Settings.RenderStopOn = ints.Value<bool?>("render_stop_on") ?? Settings.RenderStopOn;
                     // 键值不 Clamp：它是 KeyCode 数值域，合法集合由 Enum.IsDefined

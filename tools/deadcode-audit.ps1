@@ -50,7 +50,7 @@ $whitelistClass = @(
     'Patch_MarkFail','Patch_UpdateFreeroam','Patch_Won_Update',
     'Patch_PlayerControlUpdate','Patch_HoldKeysCrashGuard','Patch_Fail2Action',
     'Patch_OnLandOnPortal','Patch_Hit','Patch_UpdateInputConsumeAsync',
-    'Patch_RenderClockConductor','Patch_RenderClockAsyncPosition','Patch_VideoPinSet',
+    'Patch_RenderClockAsyncPosition','Patch_VideoPinSet',
     'Patch_VideoPinGet','Patch_VideoLockAsyncAngle'
 )
 

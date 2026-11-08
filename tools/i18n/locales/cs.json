@@ -129,8 +129,6 @@
     "render.surface.screen": "Obrazovka hry (s UI)",
     "render.surface.screen_note": "Zahrnuje UI v prostoru obrazovky, např. ukazatel průběhu; rozlišení sleduje okno hry (bez supersamplingu); během vykreslování sbalte okno modu, jinak se zachytí.",
     "render.surface.clean_note": "Žádné UI, libovolné výstupní rozlišení (povolen supersampling); vhodné pro čistý záznam nebo materiál pro střih.",
-    "render.clock.experimental": "Deterministické hodiny vykreslování (experimentální)",
-    "render.clock.hint": "Nahrazuje zdroj času, který hra čte, virtuálními hodinami řízenými číslem snímku, takže posun taktů, události kamery, odpočty a plánování zvuků kláves jsou deterministické — výstupní snímková frekvence zůstává konstantní bez ohledu na zatížení stroje. Vypnuto = záložní kurzor zvuku: vykreslování stále funguje, ale časovou osu řídí kurzor zvuku (kolísání v řádu milisekund) a videopozadí už není rychlostně sladěné s tempem vykreslování. Poznámka: mění to samotný zdroj času hry, takže dopad je širší než u jiných možností; když je současně zapnutý jiný mod pro vykreslování videa, oba soupeří o stejný bod záplaty (vyhraje první načtený) a tato možnost automaticky ustoupí. Pokud vykreslování hlásí chyby nebo se zvuk a obraz rozcházejí, nejprve toto vypněte.",
     "render.ffmpeg": "ffmpeg",
     "render.ffmpeg.ready": "ffmpeg připraven",
     "render.ffmpeg.missing": "ffmpeg.exe nenalezen; umístěte jej do složky modu nebo kořene hry, případně přidejte do PATH",
@@ -398,7 +396,6 @@
     "render.quality.tip": "Kvalita kódování. Vyšší dává větší soubory a mírně delší vykreslování.",
     "render.format.tip": "Kontejner výstupního souboru. mp4 je nejkompatibilnější; webm je menší, ale vyžaduje překódování.",
     "render.outdir.tip": "Kam se ukládají hotová videa. Prázdné = RenderVideos ve složce modu.",
-    "render.clock.experimental.tip": "Nahrazuje zdroj času hry virtuálními hodinami řízenými číslem snímku, aby výstupní snímková frekvence byla konstantní bez ohledu na zatížení stroje. Mění samotný zdroj času hry, takže dopad je široký; pokud vykreslování hlásí chyby nebo se zvuk rozchází, nejprve toto vypněte.",
     "convert.target.tip": "Převede existující videa ve výstupní složce do tohoto formátu, nezávisle na formátu vykreslování výše.",
     "render.start.tip": "Spustí vykreslování s aktuálním nastavením. Nejprve načtěte záznam a vstupte do jeho úrovně.",
     "render.cancel.tip": "Přeruší aktuální vykreslování. Co už bylo zapsáno, zůstane.",
@@ -485,7 +482,6 @@
     "subtab.record.basics": "Nahrávání",
     "subtab.render.start": "Vykreslení",
     "subtab.render.output": "Výstup",
-    "subtab.render.experimental": "Experimentální",
     "subtab.about.info": "Informace"
   },
   "subtab.record.basics": {

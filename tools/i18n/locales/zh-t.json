@@ -129,8 +129,6 @@
     "render.surface.screen": "遊戲畫面（含 UI）",
     "render.surface.screen_note": "包含進度條等介面 UI；解析度跟隨遊戲視窗，不可超解析度；渲染時請收起模組視窗，否則會被錄入畫面。",
     "render.surface.clean_note": "不含任何 UI 元素，輸出解析度任意（可超取樣）；適合做成純畫面展示或二次剪輯素材。",
-    "render.clock.experimental": "確定性渲染時鐘（實驗性）",
-    "render.clock.hint": "開啟後會把遊戲讀取的時間源換成「幀號驅動」的虛擬時鐘，遊戲自身的節拍推進、相機事件、倒數計時、按鍵音排程全部自動確定性化，成片幀率恆定、不受機器繁忙影響。關閉則走音訊游標兜底：畫面仍能出片，但時間軸由音訊游標驅動，可能有毫秒級抖動，且影片背景不再隨渲染速率調速。注意：它改的是遊戲時間源本身，影響面較大；與其他影片渲染類模組同時啟用時會爭搶同一個補丁點（先載入者生效），此時本項會自動讓位。若渲染報錯或音畫不同步，請先關掉這一項再試。",
     "render.ffmpeg": "ffmpeg",
     "render.ffmpeg.ready": "ffmpeg 已就緒",
     "render.ffmpeg.missing": "未找到 ffmpeg.exe，請放到模組目錄或遊戲根目錄，或加入系統 PATH",
@@ -398,7 +396,6 @@
     "render.quality.tip": "編碼畫質。越高檔案越大，渲染耗時也略增。",
     "render.format.tip": "成片的封裝格式。mp4 最通用，webm 體積小但需要重編碼。",
     "render.outdir.tip": "成片存放目錄。留空 = 模組目錄下的 RenderVideos。",
-    "render.clock.experimental.tip": "把遊戲讀取的時間源換成幀號驅動的虛擬時鐘，讓成片幀率恆定、不受機器繁忙影響。它改的是遊戲時間源本身，影響面較大；渲染報錯或音畫不同步時先關掉它。",
     "convert.target.tip": "把輸出目錄裡已有的影片轉成這個格式，與上面的渲染格式互相獨立。",
     "render.start.tip": "依目前參數開始渲染。需要先載入回放並進入那一關。",
     "render.cancel.tip": "中止目前的渲染。已經寫入的部分會保留。",
@@ -485,7 +482,6 @@
   "subtab.record.basics": "錄製設定",
   "subtab.render.start": "渲染",
   "subtab.render.output": "輸出",
-  "subtab.render.experimental": "實驗項",
   "subtab.about.info": "資訊"
   }
 }

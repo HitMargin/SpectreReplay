@@ -50,11 +50,6 @@
   "en": "Output"
 },
 {
-  "key": "subtab.render.experimental",
-  "zh": "实验项",
-  "en": "Experimental"
-},
-{
   "key": "subtab.about.info",
   "zh": "信息",
   "en": "Info"
@@ -658,16 +653,6 @@
   "key": "render.surface.clean_note",
   "zh": "不含任何界面元素，输出分辨率任意（可超采样）；适合做成纯画面展示或二次剪辑素材。",
   "en": "No UI at all, any output resolution (supersampling allowed); good for pure footage or editing material."
- },
- {
-  "key": "render.clock.experimental",
-  "zh": "确定性渲染时钟（实验性）",
-  "en": "Deterministic render clock (experimental)"
- },
- {
-  "key": "render.clock.hint",
-  "zh": "打开后把游戏读到的时间源换成「帧号驱动」的虚拟时钟，游戏自己的节拍推进、相机事件、倒计时、按键音调度全部自动确定性化，成片帧率恒定、不受机器繁忙影响。关闭则走音频游标兜底：画面仍能出片，但时间轴由音频游标驱动，可能有毫秒级抖动，且视频背景不再随渲染速率调速。注意：它改的是游戏时间源本身，影响面较大；与其他视频渲染类模组同时启用时会争抢同一个补丁点（先加载者生效），此时本项会自动让位。若渲染报错或音画不同步，请先关掉这一项再试。",
-  "en": "Replaces the time source the game reads with a frame-index-driven virtual clock, making beat advancement, camera events, countdowns and keysound scheduling deterministic — output framerate stays constant regardless of machine load. Off = audio-cursor fallback: rendering still works, but the timeline is driven by the audio cursor (millisecond-level jitter) and video backgrounds are no longer speed-matched to the render rate. Note: this alters the game's own time source, so its blast radius is wider than other options; when another video-rendering mod is enabled at the same time, both contend for the same patch point (first to load wins) and this option yields automatically. If rendering errors or audio/video drift appears, turn this off first."
  },
  {
   "key": "render.ffmpeg",
@@ -2008,11 +1993,6 @@
   "key": "render.outdir.tip",
   "zh": "成片存放目录。留空 = 模组目录下的 RenderVideos。",
   "en": "Where finished videos go. Empty = RenderVideos under the mod folder."
- },
- {
-  "key": "render.clock.experimental.tip",
-  "zh": "把游戏读到的时间源换成帧号驱动的虚拟时钟，让成片帧率恒定、不受机器繁忙影响。它改的是游戏时间源本身，影响面较大；渲染报错或音画不同步时先关掉它。",
-  "en": "Replaces the game's time source with a frame-index-driven virtual clock so the output framerate stays constant regardless of machine load. It alters the game's own time source, so its blast radius is wide; turn it off first if rendering errors or audio drifts."
  },
  {
   "key": "convert.target.tip",

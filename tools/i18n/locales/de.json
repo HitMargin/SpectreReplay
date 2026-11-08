@@ -129,8 +129,6 @@
     "render.surface.screen": "Spielbildschirm (mit UI)",
     "render.surface.screen_note": "Enthält Bildschirm-UI wie die Fortschrittsleiste; die Auflösung folgt dem Spielfenster (kein Supersampling); klappe das Mod-Fenster während des Renderns ein, sonst wird es mit aufgenommen.",
     "render.surface.clean_note": "Überhaupt keine UI, beliebige Ausgabeauflösung (Supersampling erlaubt); gut für reines Filmmaterial oder Schnittmaterial.",
-    "render.clock.experimental": "Deterministische Render-Uhr (experimentell)",
-    "render.clock.hint": "Ersetzt die Zeitquelle, die das Spiel liest, durch eine frameindexgesteuerte virtuelle Uhr und macht damit Beat-Fortschritt, Kameraereignisse, Countdowns und die Tastenklang-Planung deterministisch — die Ausgabebildrate bleibt unabhängig von der Maschinenlast konstant. Aus = Rückfall auf den Audio-Cursor: Das Rendern funktioniert weiterhin, aber die Zeitachse wird vom Audio-Cursor gesteuert (Jitter im Millisekundenbereich) und Video-Hintergründe werden nicht mehr auf die Renderrate abgestimmt. Hinweis: Dies verändert die Zeitquelle des Spiels selbst, daher ist die Reichweite größer als bei anderen Optionen; wenn gleichzeitig ein anderes Video-Render-Mod aktiviert ist, konkurrieren beide um denselben Patch-Punkt (wer zuerst lädt, gewinnt) und diese Option weicht automatisch zurück. Wenn das Rendern fehlschlägt oder Audio/Video auseinanderläuft, schalte dies zuerst aus.",
     "render.ffmpeg": "ffmpeg",
     "render.ffmpeg.ready": "ffmpeg bereit",
     "render.ffmpeg.missing": "ffmpeg.exe nicht gefunden; lege es im Mod-Ordner oder im Spielstammverzeichnis ab oder füge es dem PATH hinzu",
@@ -398,7 +396,6 @@
     "render.quality.tip": "Kodierqualität. Höher ergibt größere Dateien und etwas längere Renderzeiten.",
     "render.format.tip": "Container für die Ausgabedatei. mp4 ist am kompatibelsten; webm ist kleiner, erfordert aber eine Neukodierung.",
     "render.outdir.tip": "Wohin fertige Videos gehen. Leer = RenderVideos im Mod-Ordner.",
-    "render.clock.experimental.tip": "Ersetzt die Zeitquelle des Spiels durch eine frameindexgesteuerte virtuelle Uhr, damit die Ausgabebildrate unabhängig von der Maschinenlast konstant bleibt. Dies verändert die Zeitquelle des Spiels selbst, daher ist die Reichweite groß; schalte es zuerst aus, wenn das Rendern fehlschlägt oder das Audio driftet.",
     "convert.target.tip": "Konvertiert vorhandene Videos im Ausgabeordner in dieses Format, unabhängig vom Renderformat oben.",
     "render.start.tip": "Startet einen Render mit den aktuellen Einstellungen. Lade zuerst ein Replay und betrete dessen Level.",
     "render.cancel.tip": "Bricht den aktuellen Render ab. Was bereits geschrieben wurde, bleibt erhalten.",
@@ -485,7 +482,6 @@
     "subtab.record.basics": "Aufnahme",
     "subtab.render.start": "Rendern",
     "subtab.render.output": "Ausgabe",
-    "subtab.render.experimental": "Experimentell",
     "subtab.about.info": "Info"
   },
   "subtab.record.basics": {

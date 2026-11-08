@@ -129,8 +129,6 @@
     "render.surface.screen": "Écran de jeu (avec UI)",
     "render.surface.screen_note": "Inclut l'UI à l'écran comme la barre de progression ; la résolution suit la fenêtre du jeu (pas de supersampling) ; repliez la fenêtre du mod pendant le rendu, sinon elle sera capturée.",
     "render.surface.clean_note": "Aucune UI, n'importe quelle résolution de sortie (supersampling autorisé) ; idéal pour des images pures ou des rushes de montage.",
-    "render.clock.experimental": "Horloge de rendu déterministe (expérimental)",
-    "render.clock.hint": "Remplace la source de temps lue par le jeu par une horloge virtuelle pilotée par l'indice d'image, rendant déterministes l'avancement des temps, les événements de caméra, les comptes à rebours et la programmation des sons de touche : la fréquence d'images de sortie reste constante quelle que soit la charge de la machine. Désactivé = repli sur le curseur audio : le rendu fonctionne toujours, mais la ligne de temps est pilotée par le curseur audio (gigue de l'ordre de la milliseconde) et les arrière-plans vidéo ne sont plus calés sur la vitesse de rendu. Remarque : cela modifie la source de temps du jeu lui-même, son impact est donc plus large que celui des autres options ; lorsqu'un autre mod de rendu vidéo est activé en même temps, les deux se disputent le même point de patch (le premier chargé gagne) et cette option s'efface automatiquement. Si le rendu échoue ou qu'un décalage audio/vidéo apparaît, désactivez d'abord cette option.",
     "render.ffmpeg": "ffmpeg",
     "render.ffmpeg.ready": "ffmpeg prêt",
     "render.ffmpeg.missing": "ffmpeg.exe introuvable ; placez-le dans le dossier du mod ou à la racine du jeu, ou ajoutez-le au PATH",
@@ -398,7 +396,6 @@
     "render.quality.tip": "Qualité d'encodage. Plus haute donne des fichiers plus gros et des rendus un peu plus longs.",
     "render.format.tip": "Conteneur du fichier de sortie. mp4 est le plus compatible ; webm est plus petit mais nécessite un réencodage.",
     "render.outdir.tip": "Où vont les vidéos terminées. Vide = RenderVideos dans le dossier du mod.",
-    "render.clock.experimental.tip": "Remplace la source de temps du jeu par une horloge virtuelle pilotée par l'indice d'image afin que la fréquence d'images de sortie reste constante quelle que soit la charge de la machine. Cela modifie la source de temps du jeu lui-même, donc son impact est large ; désactivez-la d'abord si le rendu échoue ou que l'audio se désynchronise.",
     "convert.target.tip": "Convertit les vidéos existantes du dossier de sortie vers ce format, indépendamment du format de rendu ci-dessus.",
     "render.start.tip": "Lance un rendu avec les réglages actuels. Chargez d'abord un replay et entrez dans son niveau.",
     "render.cancel.tip": "Interrompt le rendu en cours. Ce qui a déjà été écrit est conservé.",
@@ -485,7 +482,6 @@
     "subtab.record.basics": "Enregistrement",
     "subtab.render.start": "Rendu",
     "subtab.render.output": "Sortie",
-    "subtab.render.experimental": "Expérimental",
     "subtab.about.info": "Infos"
   },
   "subtab.record.basics": {

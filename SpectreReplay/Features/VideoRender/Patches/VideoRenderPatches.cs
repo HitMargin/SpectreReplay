@@ -46,6 +46,79 @@ internal static class Patch_VideoLockAsyncAngle
         => !VideoRender.Active;
 }
 
+// ——— scrConductor.StartMusic 推迟 ————————————————————————
+// 渲染期把歌曲排程整体推迟到捕获就绪。倒计时 tick 与歌曲都是 StartMusic 时按
+// 「调度时刻的 dspTime 绝对值」PlayScheduled 的，而画面源冷启动实测要 1.3s——
+// 这期间游戏实时跑，剩余倒计时会被整段烧掉（2026-11-08 日志：接管时
+// songposition=-1.266s，捕获就绪时锚点已 +0.03s，成片从歌曲 0 拍直接开始）。
+//
+// 推迟之后，排程动作落在捕获循环内、调度域=被钉的虚拟时钟域：dsp 钉扎与
+// captureFramerate 已在 Release 之前装配，从 Release 那一帧起每个 Unity 帧都
+// 被捕获，游戏时钟与原生音频逐帧锁定，倒计时从成片第 0 帧完整播出。
+// 补丁常驻、体内早退（非渲染会话原样放行），与 Patch_VideoPinSet 同款姿态。
+internal static class Patch_VideoDeferStartMusic
+{
+    // 作业在发起回放前置位；StartMusic（含 rewind 重试的多次调用）只存参数
+    // 不执行，以最后一次为准——前几次从未真正排程，最后一次才是真值。
+    internal static bool Armed;
+    private static scrConductor pendingConductor;
+    private static System.Action pendingOnComplete;
+    private static System.Action pendingOnSongScheduled;
+
+    internal static bool Pending => pendingConductor != null;
+
+    internal static void Arm()
+    {
+        pendingConductor = null;
+        pendingOnComplete = null;
+        pendingOnSongScheduled = null;
+        Armed = true;
+    }
+
+    [SpectrePatch(typeof(scrConductor), "StartMusic", PatchType.Prefix)]
+    internal static bool Prefix(scrConductor __instance, Action onComplete, Action onSongScheduled)
+    {
+        if (!VideoRender.Active || !Armed)
+            return true; // 非渲染会话（或已释放）走原版
+        pendingConductor = __instance;
+        pendingOnComplete = onComplete;
+        pendingOnSongScheduled = onSongScheduled;
+        return false;
+    }
+
+    // 捕获就绪时调用（dsp 钉扎 + captureFramerate 已装、捕获循环本帧开跑）：
+    // 重新进入 StartMusic——此时前缀已放行，排程真正发生。
+    internal static void Release()
+    {
+        Armed = false;
+        if (pendingConductor == null) return;
+        scrConductor conductor = pendingConductor;
+        Action onComplete = pendingOnComplete;
+        Action onSongScheduled = pendingOnSongScheduled;
+        pendingConductor = null;
+        pendingOnComplete = null;
+        pendingOnSongScheduled = null;
+        try
+        {
+            conductor.StartMusic(onComplete, onSongScheduled);
+        }
+        catch (Exception ex)
+        {
+            // 排程失败不该带崩渲染收尾：游戏侧状态留给玩家手动重开
+            Debug.LogException(ex);
+        }
+    }
+
+    // 会话收尾兜底：渲染取消/失败时若还没排程，放游戏正常开跑（此时全局
+    // 时钟已还原，走真实时钟，与玩家手动开跑无异），别让关卡卡在无声待起。
+    internal static void ReleaseForTeardown()
+    {
+        if (!Pending) return;
+        Debug.Log("[SpectreReplay] 渲染会话结束仍挂着推迟的 StartMusic，放行游戏正常开跑");
+        Release();
+    }
+}
+
 // ——— scnEditor.RemakePath ————————————————————————————————
 // 渲染期把倍速钉回回放记录值。
 //

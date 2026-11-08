@@ -1025,26 +1025,6 @@ switch ($Which) {
         Backup 'Features\VideoRender\Pipeline\VideoRenderJob.cs'
         ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'UnscaledDeltaPin.InstallDsp();' '/* MUT-U19: dsp pin removed */'
     }
-    'MUT-U16' {
-        # ⑮a：把渲染时钟补丁的 Feature 摘掉——退回上游那种'无条件常开'。
-        #      判据 ⑮a 必须因此变红：开关会变成假的（界面上能拨、补丁却永远挂着）。
-        Backup 'Features\VideoRender\Patches\VideoRenderClockPatches.cs'
-        ReplaceExact 'Features\VideoRender\Patches\VideoRenderClockPatches.cs' 'PatchType.Transpiler, Feature = FeatureKeys.RenderClock)]' 'PatchType.Transpiler)]'
-    }
-    'MUT-U17' {
-        # ⑮b：删掉 Main 里的 SetFeatureToggle 注册（换成注册一个不存在的功能名）。
-        #      未注册的功能其补丁按'关闭'处理 ⇒ 开关永远打不开功能，
-        #      而界面上毫无异常（玩家以为是自己没配对渲染参数）。
-        Backup 'Main.cs'
-        ReplaceExact 'Main.cs' 'SpectrePatchHub.SetFeatureToggle(FeatureKeys.RenderClock,' 'SpectrePatchHub.SetFeatureToggle(FeatureKeys.RenderManualSave,'
-    }
-    'MUT-U18' {
-        # ⑮d：只写不读——保存时写 render_clock_on，读取时不写回 Settings。
-        #      形态：开关能存进 Configs.json，但重启后永远回到默认（关）。
-        #      这正是'⑦c 双向持久化'要抓的一半（另一半是只读不写）。
-        Backup 'State\ConfigManager.cs'
-        ReplaceExact 'State\ConfigManager.cs' 'Settings.RenderClockOn = ints.Value<bool?>' 'Settings.RenderClockOn = Settings.RenderClockOn; if (false) Settings.RenderClockOn = ints.Value<bool?>'
-    }
     'MUT-U15' {
         # ⑪c：输入框丢掉 hover。
         #     把它替换成一个语义等价但不含 Hover( 的写法——注意**不能留未使用变量**
@@ -2099,7 +2079,7 @@ switch ($Which) {
         # ㉚ 鼠标指针开关回归：界面上有这一行、但它写的不是 RenderCursorOn
         # （改成写别的字段），等于界面和字段之间断线——典型「有控件没实现」。
         Backup 'Pages\Pages.cs'
-        ReplaceExact 'Pages\Pages.cs' 'RenderCursorOn = v;' 'RenderClockOn = v;'
+        ReplaceExact 'Pages\Pages.cs' 'RenderCursorOn = v;' 'RenderStopOn = v;'
     }
 
     'MUT-D27' {
@@ -2629,6 +2609,17 @@ switch ($Which) {
         ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'if (reAnchors >= 4)' 'if (reAnchors < 0)'
     }
 
+    'MUT-D54' {
+        # Countdown-loss regression (2026-11-08, user log): the 1.3s frame-source
+        # cold start ran the game in real time and burned the remaining countdown
+        # (takeover at songposition=-1.266s, capture-ready anchor already +0.03s).
+        # Disarming the deferral puts StartMusic back on the real-time clock during
+        # the cold-start window: the countdown burns before capture and the schedule
+        # domain desyncs from the pinned clock.
+        Backup 'Features\VideoRender\Pipeline\VideoRenderJob.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'Patch_VideoDeferStartMusic.Arm();' '/* MUT-D54: deferral disarmed */'
+    }
+
     'MUT-D14' {
         # ㉔ BPM 回归：官方关卡退回硬写 0（详情面板重新显示成问号）。
         Backup 'Features\Replay\Patches\Patch_Lifecycle.cs'
@@ -2721,7 +2712,7 @@ switch ($Which) {
         ReplaceExact 'Pages\Pages.cs' 'DrawDeleteFileButton(captured);' ''
     }
     default {
-        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U16 / MUT-U17 / MUT-U18 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U100）"
+        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U100）"
     }
 }
 

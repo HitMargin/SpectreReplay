@@ -129,8 +129,6 @@
     "render.surface.screen": "Ekran gry (z UI)",
     "render.surface.screen_note": "Zawiera UI w przestrzeni ekranu, np. pasek postępu; rozdzielczość zależy od okna gry (bez supersamplingu); podczas renderowania zwiń okno moda, bo inaczej zostanie uchwycone.",
     "render.surface.clean_note": "Bez żadnego UI, dowolna rozdzielczość wyjściowa (dozwolony supersampling); dobre na czysty materiał albo do dalszego montażu.",
-    "render.clock.experimental": "Deterministyczny zegar renderowania (eksperymentalny)",
-    "render.clock.hint": "Zastępuje źródło czasu czytane przez grę zegarem wirtualnym sterowanym numerem klatki, czyniąc deterministycznym przesuwanie taktów, zdarzenia kamery, odliczania i planowanie dźwięków klawiatury — liczba klatek wyjściowych jest stała niezależnie od obciążenia maszyny. Wyłączone = awaryjnie kursor audio: renderowanie nadal działa, ale osią czasu jest kursor audio (jitter rzędu milisekund), a tła wideo nie są już dopasowane prędkością do tempa renderowania. Uwaga: to zmienia samo źródło czasu gry, więc zasięg skutków jest szerszy niż innych opcji; gdy jednocześnie działa inny mod renderujący wideo, oba walczą o ten sam punkt patcha (wygrywa pierwszy załadowany) i ta opcja ustępuje automatycznie. Jeśli renderowanie daje błędy lub pojawia się rozjazd dźwięku i obrazu, najpierw to wyłącz.",
     "render.ffmpeg": "ffmpeg",
     "render.ffmpeg.ready": "ffmpeg gotowy",
     "render.ffmpeg.missing": "Nie znaleziono ffmpeg.exe; umieść go w folderze moda lub katalogu gry albo dodaj do PATH",
@@ -398,7 +396,6 @@
     "render.quality.tip": "Jakość kodowania. Wyższa daje większe pliki i nieco dłuższe renderowanie.",
     "render.format.tip": "Kontener pliku wyjściowego. mp4 jest najbardziej kompatybilny; webm jest mniejszy, ale wymaga ponownego kodowania.",
     "render.outdir.tip": "Gdzie trafiają gotowe filmy. Puste = RenderVideos w folderze moda.",
-    "render.clock.experimental.tip": "Zastępuje źródło czasu gry zegarem wirtualnym sterowanym numerem klatki, aby liczba klatek wyjściowych była stała niezależnie od obciążenia maszyny. Zmienia samo źródło czasu gry, więc zasięg skutków jest szeroki; najpierw to wyłącz, jeśli renderowanie daje błędy lub dźwięk się rozjeżdża.",
     "convert.target.tip": "Konwertuje istniejące filmy w folderze wyjściowym do tego formatu, niezależnie od formatu renderowania powyżej.",
     "render.start.tip": "Rozpoczyna renderowanie z bieżącymi ustawieniami. Najpierw wczytaj powtórkę i wejdź na jej poziom.",
     "render.cancel.tip": "Przerywa bieżące renderowanie. To, co już zapisano, zostaje.",
@@ -485,7 +482,6 @@
     "subtab.record.basics": "Nagrywanie",
     "subtab.render.start": "Renderowanie",
     "subtab.render.output": "Wyjście",
-    "subtab.render.experimental": "Eksperymentalne",
     "subtab.about.info": "Informacje"
   },
   "subtab.record.basics": {

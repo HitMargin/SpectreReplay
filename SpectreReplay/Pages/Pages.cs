@@ -1867,12 +1867,6 @@ namespace SpectreReplay.Pages
                 DrawEncoderNote();
             }, RenderOn);
 
-            Gui.Section("render.clock.experimental", Gui.WarnCol, () =>
-            {
-                OnGui.Row("render.clock.experimental", RenderClockOn,
-                    v => { RenderClockOn = v; Commit(); });
-                OnGui.Note("render.clock.hint");
-            }, RenderOn);
         }
 
         /// <summary>

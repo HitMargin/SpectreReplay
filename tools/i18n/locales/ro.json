@@ -129,8 +129,6 @@
     "render.surface.screen": "Ecranul jocului (cu UI)",
     "render.surface.screen_note": "Include UI în spațiul ecranului, cum ar fi bara de progres; rezoluția urmează fereastra jocului (fără supersampling); în timpul randării pliază fereastra modului, altfel va fi capturată.",
     "render.surface.clean_note": "Fără niciun UI, rezoluție de ieșire oarecare (supersampling permis); bun pentru material pur sau pentru montaj.",
-    "render.clock.experimental": "Ceas determinist de randare (experimental)",
-    "render.clock.hint": "Înlocuiește sursa de timp citită de joc cu un ceas virtual condus de indexul cadrului, făcând deterministe avansarea tacturilor, evenimentele camerei, numărătorile inverse și programarea sunetelor de tastatură — frecvența cadrelor de ieșire rămâne constantă indiferent de încărcarea mașinii. Oprit = cursor audio de rezervă: randarea funcționează în continuare, dar cronologia este condusă de cursorul audio (variații de milisecunde) și fundalurile video nu mai sunt sincronizate ca viteză cu rata de randare. Notă: modifică însăși sursa de timp a jocului, deci impactul este mai larg decât la alte opțiuni; când alt mod de randare video este activat simultan, ambele concurează pentru același punct de patch (câștigă primul încărcat) și această opțiune cedează automat. Dacă randarea dă erori sau apar decalaje audio/video, oprește mai întâi această opțiune.",
     "render.ffmpeg": "ffmpeg",
     "render.ffmpeg.ready": "ffmpeg pregătit",
     "render.ffmpeg.missing": "ffmpeg.exe nu a fost găsit; pune-l în folderul modului sau în rădăcina jocului, ori adaugă-l în PATH",
@@ -398,7 +396,6 @@
     "render.quality.tip": "Calitatea codificării. Mai ridicată dă fișiere mai mari și randări puțin mai lungi.",
     "render.format.tip": "Containerul fișierului de ieșire. mp4 este cel mai compatibil; webm e mai mic, dar necesită recodificare.",
     "render.outdir.tip": "Unde ajung videoclipurile terminate. Gol = RenderVideos în folderul modului.",
-    "render.clock.experimental.tip": "Înlocuiește sursa de timp a jocului cu un ceas virtual condus de indexul cadrului, ca frecvența cadrelor de ieșire să rămână constantă indiferent de încărcarea mașinii. Modifică însăși sursa de timp a jocului, deci impactul este larg; oprește-l mai întâi dacă randarea dă erori sau sunetul se decalează.",
     "convert.target.tip": "Convertește videoclipurile existente din folderul de ieșire în acest format, independent de formatul de randare de mai sus.",
     "render.start.tip": "Pornește o randare cu setările curente. Încarcă mai întâi o reluare și intră în nivelul ei.",
     "render.cancel.tip": "Oprește randarea curentă. Ce a fost deja scris este păstrat.",
@@ -485,7 +482,6 @@
     "subtab.record.basics": "Înregistrare",
     "subtab.render.start": "Randare",
     "subtab.render.output": "Ieșire",
-    "subtab.render.experimental": "Experimentale",
     "subtab.about.info": "Informații"
   },
   "subtab.record.basics": {

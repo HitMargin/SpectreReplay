@@ -332,6 +332,9 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // 渲染本身必须临时进回放态（SwitchToPlayMode），但不覆盖玩家的原始选择。
         wasPlayModeBeforeRender = SpectreState.PlayMode;
 
+        // 渲染期推迟歌曲排程（见 Patch_VideoDeferStartMusic）：画面源冷启动的
+        // 1.3s 不再实时烧掉倒计时，排程落到捕获循环内的虚拟时钟域。
+        Patch_VideoDeferStartMusic.Arm();
         // 走既有回放启动链：重启关卡后 Start_Rewind 补丁会做完整性校验并自动开始回放
         SpectreState.PlayActions.SwitchToPlayMode();
         Patch_StartRewind.ResetRejectLog();
@@ -471,21 +474,14 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // 时钟 = 基值 + 已捕获帧数/fps，与成片帧号严格锁定；captureFramerate
         // 让 Unity 缩放时间与 AudioRenderer 混音采样按同一步长推进。三类时钟
         // （游戏歌曲、unscaled 动画、离线混音）全部帧驱动，单一权威。
-        // **顺序敏感**：先钉 dsp 再取锚——audioAnchor 与虚拟时钟基值同源同刻，
-        // 重锚巡检恒零漂移；钉早了会把"等待回放"阶段的倒计时冻死，所以
-        // InstallDsp 只能在这里（捕获就绪）调，不能挪进 SaveGlobalState。
-        UnscaledDeltaPin.InstallDsp();
         Time.captureFramerate = fps;
-
-        // 起锚必须取 **dsp 公式值**（音乐实际发声的那条时间轴），不能取
-        // songposition_minusi。两者平时相等，但渲染从倒计时中起锚时
-        // （AwaitReplayAlive 的 Countdown 分支放行），songposition_minusi 走
-        // **压缩的倒计时时间轴**（countdownSpeedMultiplier），dsp 公式才是音频
-        // 的真值——2026-11-01 实测两者差 0.408s，成片音乐比画面恒定快那么多。
-        // 注意渲染期间 songposition_minusi 还被我们自己的 VideoPinSet/PinGet
-        // 钉着，读它是读自己时间轴的回声，更不能当锚。
-        double audioAnchor = (AudioSettings.dspTime - conductor.dspTimeSong
-            - (double)scrConductor.calibration_i) * conductor.song.pitch - conductor.addoffset;
+        UnscaledDeltaPin.InstallDsp();
+        // **顺序敏感**：dsp 钉扎与 captureFramerate 必须先于 Release——排程
+        // （StartMusic 协程）读到的 dspTime 从此就是虚拟时钟，且从本帧起每个
+        // Unity 帧都会被捕获，游戏时钟与原生音频逐帧锁定，倒计时从成片
+        // 第 0 帧完整播出（推迟的缘由见 Patch_VideoDeferStartMusic）。
+        Patch_VideoDeferStartMusic.Release();
+        LogTiming("startmusic-released");
 
         RenderClock clock = new RenderClock(fps);
         clock.AnchorDsp(AudioSettings.dspTime);
@@ -493,20 +489,16 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // 真实 dsp 探针基值：捕获循环用它做"音频系统整体停摆"的早期死检
         // （被钉的 getter 只返回虚拟值，探不出真实 dsp 是否在走）。
         realDspBase = UnscaledDeltaPin.RealDsp();
-        Debug.Log("[SpectreReplay] renderClock: deterministic (dsp getter pinned, captureFramerate="
-            + fps + (RenderClockSource.TranspilerReady
-                ? ", scrConductor transpiler active)"
-                : ", scrConductor reads pinned dspTime)"));
-
-        VideoRender.PinTimeline(audioAnchor);
+        Debug.Log("[SpectreReplay] renderClock: deterministic (dsp getter pinned, captureFramerate=" + fps + ")");
 
         // 接管视频背景（确定性步进，见 PinVideoPlayers 注释）
         PinVideoPlayers();
-        anchorSongPosition = audioAnchor;
         clockSeconds = 0.0;
         delivered = 0;
-        double requestedEndSong = range.Enabled ? range.EndSongPosition : ReplayEndSongPosition();
-        VideoRender.Current.FramesTotal = EstimateFrames(fps, tailSeconds, requestedEndSong);
+        // 进度总数先给宽裕粗估：排程刚释放，songposition 尚未落地，EstimateFrames
+        // 没有可靠起点；时间轴钉扎那一刻（见循环内 timelinePinned 段）按硬事实重算。
+        VideoRender.Current.FramesTotal = Math.Max(fps,
+            Mathf.CeilToInt((float)((ReplayEndSongPosition() + 6.0) * fps)));
         // 回放终点的绝对歌曲时间。**结束判定必须同时看它**，不能只等
         // is_playing 翻假——见循环里 endFrame 的说明。
         double replayEndSong = ReplayEndSongPosition();
@@ -524,21 +516,16 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // （见 Patch_StartRewind → NotifyPlaybackRestarted）。
         VideoRender.CaptureInProgress = true;
         int frameIndex = 0;
-        // hardStop 是防死循环的保险丝，**不能比「跑到回放终点 + 60s」更紧**。
-        // 原先只按 FramesTotal 算，而 FramesTotal 是估算值：估短了就会在
-        // 正常收尾前把渲染判成 overrun 失败。时间轴终点是硬事实，以它为准。
-        double endSongForLimit = replayEndSongPosition;
-        double anchorForLimit = anchorSongPosition;
-        double pitchForLimit = conductor != null && conductor.song != null
-            ? Math.Abs(conductor.song.pitch) : 1.0;
-        if (pitchForLimit < 0.01) pitchForLimit = 1.0;
-        int timelineStop = endSongForLimit > anchorForLimit
-            ? Mathf.CeilToInt((float)((endSongForLimit - anchorForLimit) / pitchForLimit * fps))
-            : 0;
-        int hardStop = Math.Max(VideoRender.Current.FramesTotal, timelineStop) + 60 * fps;
+        // hardStop 是防死循环的保险丝。粗估总数 + 60s 起步，时间轴钉扎那一刻
+        // 会按「锚点 → 回放终点」的硬事实收紧重算（见循环内 timelinePinned 段）。
+        int hardStop = VideoRender.Current.FramesTotal + 60 * fps;
         int tailFrames = Mathf.CeilToInt(tailSeconds * fps);
         int endFrame = -1;
         bool wasPlaying = SpectreState.is_playing;
+        // 时间轴钉扎状态：StartMusic 推迟后，锚点要等排程协程写定最终
+        // dspTimeSong（fastTakeoff/skipOffset 修正也在那之后）才能取。
+        bool timelinePinned = false;
+        double pinnedElapsed = 0.0;
 
         while (frameIndex < hardStop && !cancelRequested && !sceneExited)
         {
@@ -643,6 +630,41 @@ internal sealed class VideoRenderJob : MonoBehaviour
                 double elapsed = clock.Time;
                 double pitch = conductor.song.pitch;
 
+                // ── 时间轴钉扎（等排程真正落地后的第一个游玩态帧）──────────
+                // StartMusic 推迟释放后，它的协程还要等 0.1s 缩放时间才写定最终
+                // dspTimeSong（fastTakeoff/skipOffset 的修正也在那之后），此刻起锚
+                // 才是游戏最终时间轴。起锚必须取 **dsp 公式值**（音乐实际发声的
+                // 那条时间轴），不能取 songposition_minusi——倒计时里它走压缩
+                // 时间轴，且渲染期还被我们自己的 Pin 补丁钉着（读它=读回声，
+                // 2026-11-01 实测差 0.408s）。锚定同时把进度总数与死循环保险丝
+                // 从粗估换成「锚点 → 回放终点」的硬事实。
+                if (!timelinePinned && scrController.instance != null
+                    && (scrController.instance.state == States.Countdown
+                        || scrController.instance.state == States.Checkpoint
+                        || scrController.instance.state == States.PlayerControl
+                        || conductor.hasSongStarted))
+                {
+                    double audioAnchor = (AudioSettings.dspTime - conductor.dspTimeSong
+                        - (double)scrConductor.calibration_i) * conductor.song.pitch - conductor.addoffset;
+                    VideoRender.PinTimeline(audioAnchor);
+                    anchorSongPosition = audioAnchor;
+                    pinnedElapsed = elapsed;
+                    timelinePinned = true;
+                    int timelineStop = replayEndSongPosition > audioAnchor
+                        ? Mathf.CeilToInt((float)((replayEndSongPosition - audioAnchor) / pitch * fps))
+                        : 0;
+                    VideoRender.Current.FramesTotal = Mathf.Max(1,
+                        Mathf.CeilToInt((float)(pinnedElapsed * fps)) + timelineStop + tailFrames);
+                    hardStop = Math.Max(hardStop, frameIndex + timelineStop + 60 * fps);
+                    int countdownTickCount = Mathf.Max(1, conductor.countdownTicks);
+                    float countdownSpeed = Mathf.Max(0.01f, conductor.countdownSpeedMultiplier);
+                    double countdownEnd = (countdownTickCount - 1) * conductor.crotchetAtStart / countdownSpeed;
+                    Debug.Log("[SpectreReplay] render timeline pinned: anchor=" + audioAnchor.ToString("0.000")
+                        + "s countdownEnd=" + countdownEnd.ToString("0.000") + "s ticks=" + countdownTickCount
+                        + " (倒计时从成片完整播出)");
+                    LogTiming("timeline-pinned");
+                }
+
                 if (frameIndex < fps * 10 && reAnchors < 4)
                 {
                     // **倒计时期间跳过阈值巡检。** 起锚已取 dsp 公式（音频真值），
@@ -652,7 +674,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
                     // 正片就没了保险）。
                     bool countingNow = scrController.instance != null
                         && scrController.instance.state == States.Countdown;
-                    if (!countingNow)
+                    if (!countingNow && timelinePinned)
                     {
                         double unpinnedNow = (AudioSettings.dspTime - conductor.dspTimeSong
                             - (double)scrConductor.calibration_i) * pitch - conductor.addoffset;
@@ -681,7 +703,8 @@ internal sealed class VideoRenderJob : MonoBehaviour
                 // 随后与阈值巡检打架（attempt 2 又拉回去）。正确的修法是起锚直接
                 // 取 dsp 公式值（见 audioAnchor），锚对了就不再需要任何进拍修正。
 
-                VideoRender.PinnedSongPosition = anchorSongPosition + elapsed * pitch;
+                if (timelinePinned)
+                    VideoRender.PinnedSongPosition = anchorSongPosition + (elapsed - pinnedElapsed) * pitch;
                 // 视频背景确定性化：按渲染时钟/真实耗时比值连续调速（VideoPlayer
                 // 原生走实时时钟，渲染慢于实时时背景视频会跑 ahead）
                 StepPinnedVideos(clock.Time);
@@ -986,7 +1009,10 @@ internal sealed class VideoRenderJob : MonoBehaviour
             // 检查点开局没有 States.Countdown 这一段（见下方 ② 的说明），把关卡
             // 「已经在跑」的判断补上 Checkpoint，否则从中间起播时回放若始终没接管，
             // 这里会把一次确定的失败拖成 10 秒空转才报超时。
-            bool levelRunning = (conductor != null && conductor.hasSongStarted) || counting || inPlay || checkpointing;
+            // 推迟排程也算"关卡已启动"：rewind 链已接受回放、StartMusic 只是被
+            // 存而未发——校验拒绝要能照常走下面的早退分支，不能拖成超时。
+            bool levelRunning = (conductor != null && conductor.hasSongStarted) || counting || inPlay || checkpointing
+                || Patch_VideoDeferStartMusic.Pending;
             if (!levelStartSeen && levelRunning)
             {
                 levelStartSeen = true;
@@ -1013,6 +1039,17 @@ internal sealed class VideoRenderJob : MonoBehaviour
                     + "s countdownEnd=" + countdownEnd.ToString("0.000") + "s ticks=" + countdownTickCount
                     + " (state=Countdown)");
                 LogTiming("takeover-countdown");
+                playbackLive = true;
+                yield break;
+            }
+
+            if (Patch_VideoDeferStartMusic.Pending)
+            {
+                // StartMusic 已被推迟存储：rewind 链已接受回放，排程等捕获就绪
+                // 才发生。此刻倒计时还没开始——成片将从倒计时第一拍完整录制，
+                // 画面源冷启动的 1.3s 不再实时烧掉它（2026-11-08 用户实测：
+                // 接管时 songposition=-1.266s，捕获就绪时锚点已 +0.03s）。
+                LogTiming("takeover-deferred");
                 playbackLive = true;
                 yield break;
             }
@@ -1180,16 +1217,6 @@ internal sealed class VideoRenderJob : MonoBehaviour
         return songEnd;
     }
 
-    private int EstimateFrames(int fps, float tailSeconds, double endSongPosition)
-    {
-        double songEnd = endSongPosition;
-        if (songEnd <= 0.0) songEnd = 60.0;
-        float pitch = ADOBase.conductor?.song != null ? ADOBase.conductor.song.pitch : 1f;
-        double start = ADOBase.conductor != null ? ADOBase.conductor.songposition_minusi : 0.0;
-        double gameSeconds = Math.Max(1.0, (songEnd - start) / Math.Max(0.01f, pitch)) + tailSeconds + 0.5;
-        return Math.Max(1, Mathf.CeilToInt((float)gameSeconds * fps));
-    }
-
     private string BuildOutputPath(VideoEncoder.OutContainer container)
     {
         string dir = string.IsNullOrEmpty(Settings.RenderOutputDir)
@@ -1335,6 +1362,10 @@ internal sealed class VideoRenderJob : MonoBehaviour
         Try("runInBackground", () => Application.runInBackground = savedRunInBackground);
         Try("audioPause", () => AudioListener.pause = savedAudioPause);
         Try("checkpointNum", () => GCS.checkpointNum = savedCheckpointNum);
+        // 推迟的 StartMusic 最后放行：此时全局时钟已全部还原，游戏在真实时钟上
+        // 正常开跑（倒计时照走、歌曲照响），与玩家手动开跑无异。成功路径不会
+        // 走到这里——排程早已在捕获就绪时释放。
+        Try("deferred-startmusic", () => Patch_VideoDeferStartMusic.ReleaseForTeardown());
     }
 
     private void SetPhase(VideoRender.Phase phase, string stageKey, string detail)
