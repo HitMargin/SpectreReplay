@@ -64,15 +64,19 @@ internal static class Patch_VideoSpeedOverride
         => VideoRender.ApplySpeedOverrideTo(__instance);
 }
 
-// 渲染期把 unscaled 时间族整体钉到虚拟时钟：captureFramerate 只钉缩放时间，unscaled 系
-// 按设计走真实耗时——离线渲染每帧真实耗时近似恒定（瓶颈在回读/编码），用它驱动的
-// 动画在成片里会按 帧率×真实帧耗时 变速（120fps≈2 倍）。
+// 渲染期把 unscaled 时间族与 AudioSettings.dspTime 整体钉到虚拟时钟：
+// captureFramerate 只钉缩放时间，unscaled 系按设计走真实耗时——离线渲染每帧真实
+// 耗时近似恒定（瓶颈在回读/编码），用它驱动的动画在成片里会按 帧率×真实帧耗时
+// 变速（120fps≈2 倍）。
 //
-// 覆盖五个 getter：unscaledDeltaTime（增量）+ unscaledTime / realtimeSinceStartup 及
-// 其 AsDouble 变体（绝对值）。绝对值必须一并钉：DOTween 独立 tween（SetUpdate(true)，
-// 游戏 Notification 弹窗等）取绝对时钟差驱动，只钉增量时它们仍按真实速率跑。
-// 绝对值实现为"安装时读原始基值 + 每帧推进 1/captureFramerate"的虚拟时钟，
-// 由渲染循环每帧调用 TickFrame 推进。
+// 覆盖六个 getter：unscaledDeltaTime（增量）+ unscaledTime / realtimeSinceStartup 及
+// 其 AsDouble 变体（绝对值）+ AudioSettings.dspTime（游戏歌曲时钟）。绝对值必须一并钉：
+// DOTween 独立 tween（SetUpdate(true)，游戏 Notification 弹窗等）取绝对时钟差驱动，
+// 只钉增量时它们仍按真实速率跑。dspTime 是 scrConductor 计算歌曲位置的权威时钟
+// （任何游戏版本都读它），getter 钉死后游戏时钟 = 基值 + 已捕获帧数/fps，与成片帧号
+// 严格锁定——这是 ADOFAIRenderer 同款思路，r149/r150 无差别，不再依赖 Transpiler。
+// 虚拟时钟统一为"安装时读原始基值 + 每帧推进 1/armedFps"，由渲染循环每帧调用
+// TickFrame 推进；真实 dspTime 经 trampoline 探针保留给诊断（见 RealDsp）。
 //
 // Time.* 均为引擎 icall，Harmony 打不了（生成托管包装必得非法 IL），用其底层
 // MonoMod.Core 的原生 detour，只在渲染会话内安装、结束即卸载：正常游玩期
@@ -88,6 +92,15 @@ internal static class UnscaledDeltaPin
     private static double baseUnscaled;    // Time.unscaledTime 安装时基值
     private static double baseRealtime;    // Time.realtimeSinceStartup 安装时基值
     private static double virtualElapsed;  // 安装后累计的虚拟时间
+    private static double baseDsp;         // AudioSettings.dspTime 安装时基值
+
+    // dspTime 的 detour 独立于 unscaled 列表管理：它在捕获就绪时才装（等待回放/
+    // 倒计时阶段游戏必须继续走真实时钟，提前钉住会把倒计时冻死），失败姿态是
+    // 放行 Unity 原生行为（captureFramerate 下原生 dspTime 也按帧推进，仍可用）。
+    private static IDisposable dspDetour;
+    // 真实 dspTime 探针（原 getter 的 trampoline）：钉扎期混音静默诊断要区分
+    // "dsp 没推进"与"有 dsp 没混音"，读被钉的 getter 只会读到自己的回声。
+    private static Func<double> realDspProbe;
 
     // 钉扎期使用的帧率快照。**不能直接读 Time.captureFramerate 做除数。**
     // 收尾时 RestoreGlobalState 会把它还原成安装前的值（通常是 0），而
@@ -95,7 +108,7 @@ internal static class UnscaledDeltaPin
     // 灌进星球位置后整个画面变 NaN。快照一旦定下来就不再跟随后续还原。
     private static int armedFps = 60;
 
-    internal static void Install()
+    internal static void Install(int fps)
     {
         if (detours.Count > 0)
         {
@@ -134,9 +147,10 @@ internal static class UnscaledDeltaPin
             baseUnscaled = Time.unscaledTime;
             baseRealtime = Time.realtimeSinceStartup;
             virtualElapsed = 0.0;
-            // 先把帧率快照定死再装 detour。装完之后 PinnedDelta 只认这个快照，
-            // 不再读 Time.captureFramerate——它会在收尾时被还原成 0。
-            armedFps = Time.captureFramerate > 0 ? Time.captureFramerate : 60;
+            // 帧率快照由调用方显式传入：安装点（SaveGlobalState）先于
+            // captureFramerate 设置，读 Time.captureFramerate 只会拿到上一局的
+            // 残值（通常 0 → 60），自定义帧率下 unscaled 虚拟时钟就会走错步长。
+            armedFps = Math.Max(1, fps);
 
             // 增量是关键项（雨滴等逐帧动画），绝对值为尽力项（个别 Unity 版本缺 AsDouble）
             TryMake(nameof(Time.unscaledDeltaTime), nameof(PinnedDelta), critical: true);
@@ -164,8 +178,104 @@ internal static class UnscaledDeltaPin
     internal static float CurrentUnscaledF => (float)(baseUnscaled + virtualElapsed);
     internal static float CurrentDelta => 1f / armedFps;
 
+    // 捕获就绪时调用一次：把 AudioSettings.dspTime getter 钉到虚拟时钟。
+    // 必须晚于"等待回放"阶段（倒计时走真实时钟），早于任何捕获帧的游戏更新。
+    internal static void InstallDsp()
+    {
+        if (dspDetour != null) return; // 已装（理论不可达：会话内只调一次）
+        try
+        {
+            if (createDetour == null || factory == null)
+            {
+                Debug.LogWarning("[SpectreReplay] dsp time pin unavailable: MonoMod.Core detour API not found"
+                    + "（游戏时钟将走 Unity 原生 captureFramerate 行为）");
+                return;
+            }
+            // 安装前读原始基值：虚拟 dspTime 从此刻的真实值起连续推进，游戏侧
+            // 无时间跳变。之后所有托管读取（任意游戏版本的 scrConductor、音频
+            // 调度、诊断）都拿到 base + 已捕获帧数/fps。
+            baseDsp = AudioSettings.dspTime;
+            System.Reflection.MethodBase orig = PatchManager.GetPropertyGetter(typeof(AudioSettings), "dspTime");
+            System.Reflection.MethodBase pin = typeof(UnscaledDeltaPin).GetMethod(nameof(PinnedDsp),
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            object detour = createDetour.Invoke(null, new object[] { factory, orig, pin, true });
+            realDspProbe = MakeRealDspProbe(detour);
+            dspDetour = (IDisposable)detour;
+            Debug.Log("[SpectreReplay] dsp time pinned to render clock: base=" + baseDsp.ToString("0.000")
+                + " fps=" + armedFps + (realDspProbe != null ? " (real-dsp probe ready)" : ""));
+        }
+        catch (Exception ex)
+        {
+            dspDetour = null;
+            realDspProbe = null;
+            Debug.LogWarning("[SpectreReplay] dsp time pin failed: " + ex.Message
+                + "（游戏时钟将走 Unity 原生 captureFramerate 行为）");
+        }
+    }
+
+    // 从 detour 对象上取原 getter 的 trampoline（MonoMod.Core.IDetour.GenerateTrampoline<T>）。
+    // 探针只服务诊断，取不到就退化为 NaN（调用方按"无法探真实 dsp"降级）。
+    private static Func<double> MakeRealDspProbe(object detour)
+    {
+        try
+        {
+            const System.Reflection.BindingFlags All
+                = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic
+                | System.Reflection.BindingFlags.Instance;
+            foreach (System.Reflection.MethodInfo m in detour.GetType().GetMethods(All))
+            {
+                if (!m.IsGenericMethod || m.Name != "GenerateTrampoline") continue;
+                return (Func<double>)m.MakeGenericMethod(typeof(Func<double>)).Invoke(detour, null);
+            }
+        }
+        catch
+        {
+            // trampoline 生成失败不影响钉扎本身
+        }
+        return null;
+    }
+
+    // 钉扎期的真实 dspTime（诊断专用）。探针自毁：调用失败一次就置空，
+    // 不让坏 trampoline 在静默诊断路径里反复抛异常。
+    internal static double RealDsp()
+    {
+        Func<double> probe = realDspProbe;
+        if (probe == null) return double.NaN;
+        try
+        {
+            return probe();
+        }
+        catch
+        {
+            realDspProbe = null;
+            return double.NaN;
+        }
+    }
+
     internal static void Uninstall()
     {
+        // dsp detour 撤销失败时保留引用：PinnedDsp 在会话外会走 trampoline 回
+        // 原值（探针在则游戏时钟不受影响），下一次 InstallDsp 会先重试撤销。
+        if (dspDetour != null)
+        {
+            bool dspUndone = false;
+            try { dspDetour.Dispose(); dspUndone = true; }
+            catch (Exception ex)
+            {
+                Debug.Log("[SpectreReplay] dsp time pin undo failed: " + ex.Message + "（重试一次）");
+                try { dspDetour.Dispose(); dspUndone = true; }
+                catch (Exception ex2)
+                {
+                    Debug.LogError("[SpectreReplay] dsp time pin undo keeps failing: " + ex2.Message
+                        + "（保留引用以便下次再试）");
+                }
+            }
+            if (dspUndone)
+            {
+                dspDetour = null;
+                realDspProbe = null;
+            }
+        }
         // 撤不掉的 detour **必须留在列表里**，不能连同 Clear 一起丢掉。
         //
         // 后果链是这样的：取消渲染发生在场景切换途中（渲染第一步就是 SwitchToPlayMode
@@ -228,4 +338,11 @@ internal static class UnscaledDeltaPin
     private static double PinnedUnscaledD() => baseUnscaled + virtualElapsed;
     private static float PinnedRealtime() => (float)(baseRealtime + virtualElapsed);
     private static double PinnedRealtimeD() => baseRealtime + virtualElapsed;
+
+    // dspTime 的钉扎体。会话外（detour 泄漏未撤成）且探针可用时回原值，
+    // 保证残留 detour 不再把正常游玩的时钟冻死；会话内一律虚拟时钟。
+    private static double PinnedDsp()
+        => dspDetour != null && realDspProbe != null && !VideoRender.Active
+            ? realDspProbe()
+            : baseDsp + virtualElapsed;
 }

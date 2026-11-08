@@ -21,8 +21,10 @@ namespace SpectreReplay.Features.VideoRender;
 // 效果：游戏自己的节拍推进/相机事件/倒计时/hitsound 调度链全部自动确定性化。
 // 补丁常驻但体内早退（渲染时钟不存在时原样返回真实值），不渲染时零开销。
 //
-// Transpiler 匹配失败时（游戏改了 Update 方法体）SpectrePatch 探针报失败，
-// VideoRenderJob 降级回旧 Pin 方案——双轨保留不断功能。
+// 时钟权威兜底由 UnscaledDeltaPin.InstallDsp 完成：AudioSettings.dspTime 的
+// getter 被原生 detour 钉到同一虚拟时钟，任何版本、任何方法体的托管读取都
+// 拿到一致的值——Transpiler 在 r150 上是同一值的"直连版"，游戏改了 Update
+// 方法体也不再需要降级路径（实验性开关关掉时同样由 getter 钉扎兜住）。
 
 /// <summary>Transpiler 替换的时间源入口（全部静态方法，被 IL 直接 call）</summary>
 internal static class RenderClockSource

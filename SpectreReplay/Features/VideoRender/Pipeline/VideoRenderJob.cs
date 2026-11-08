@@ -152,9 +152,10 @@ internal sealed class VideoRenderJob : MonoBehaviour
     // 锚点自愈的已重锚次数（见捕获循环里的锚点自愈段）
     private int reAnchors;
     private int failedReadbacks;
-    private double audioCursorBaseDsp = double.NaN;
-    private bool audioCursorDspAdvanced;
-    private double nextCaptureTimeline;
+    // 捕获就绪时的真实 dspTime（trampoline 探针基值）与是否已确认推进。
+    // 游戏时钟被钉成虚拟值后，只有探针能回答"音频系统整体是否停摆"。
+    private double realDspBase = double.NaN;
+    private bool realDspAdvanced;
     // AwaitReplayAlive 用：上一帧是否已看到正的 songposition（连续两帧才算稳）
     private bool sawPositivePosition;
 
@@ -458,6 +459,24 @@ internal sealed class VideoRenderJob : MonoBehaviour
         frames.SetSparePoolLimit(encoder.QueueCapacity + frames.MaxInFlight);
         LogTiming("pool", setupSw.ElapsedMilliseconds + "ms");
 
+        // ── 确定性渲染时钟（ADOFAIRenderer 同款机制，不再有兼容/兜底路径）──
+        //
+        // 旧架构：Transpiler 只能钉 r150 的 scrConductor.Update 一处，r149 等
+        // 版本匹配不到就退回"音频游标自节奏"——游戏实时跑、捕获按音频游标
+        // 凑帧，游戏时钟/unscaled 动画（JRP 雨滴）/成片时间轴三方各走各的钟，
+        // 实测雨滴与画面彻底脱钩。
+        //
+        // 新架构：把 AudioSettings.dspTime 的 getter 本身钉到虚拟时钟（原生
+        // detour，不经游戏方法体，任何版本、任何托管调用点一律生效），游戏
+        // 时钟 = 基值 + 已捕获帧数/fps，与成片帧号严格锁定；captureFramerate
+        // 让 Unity 缩放时间与 AudioRenderer 混音采样按同一步长推进。三类时钟
+        // （游戏歌曲、unscaled 动画、离线混音）全部帧驱动，单一权威。
+        // **顺序敏感**：先钉 dsp 再取锚——audioAnchor 与虚拟时钟基值同源同刻，
+        // 重锚巡检恒零漂移；钉早了会把"等待回放"阶段的倒计时冻死，所以
+        // InstallDsp 只能在这里（捕获就绪）调，不能挪进 SaveGlobalState。
+        UnscaledDeltaPin.InstallDsp();
+        Time.captureFramerate = fps;
+
         // 起锚必须取 **dsp 公式值**（音乐实际发声的那条时间轴），不能取
         // songposition_minusi。两者平时相等，但渲染从倒计时中起锚时
         // （AwaitReplayAlive 的 Countdown 分支放行），songposition_minusi 走
@@ -468,45 +487,21 @@ internal sealed class VideoRenderJob : MonoBehaviour
         double audioAnchor = (AudioSettings.dspTime - conductor.dspTimeSong
             - (double)scrConductor.calibration_i) * conductor.song.pitch - conductor.addoffset;
 
-        RenderClock clock = null;
-        bool useRenderClock = RenderClockSource.TranspilerReady && Settings.RenderClockOn;
-        if (useRenderClock)
-        {
-            clock = new RenderClock(fps);
-            clock.AnchorDsp(AudioSettings.dspTime);
-            RenderClockSource.ActiveClock = clock;
-            // captureFramerate 只在确定性路径设：它让 dspTime 按「每帧 1/fps」
-            // 推进——确定性路径上这正是我们自己的时钟，没问题；但兼容路径上
-            // 游戏时钟就是 dspTime，设了它 dsp 与音频设备脱钩冻住（实测 5 秒
-            // 只走 0.005s），游戏整体 0.1% 速度，渲染必然废。
-            Time.captureFramerate = fps;
-            Debug.Log("[SpectreReplay] renderClock: deterministic RenderClock path (transpiler active)");
-        }
-        else
-        {
-            Debug.Log("[SpectreReplay] renderClock: audio-cursor Pin path (transpiler unavailable, fallback)");
-            // **兼容路径必须亮明身份。** 确定性渲染时钟只钉得住 r150 的
-            // scrConductor；r149 等旧版本走音频游标回退，游戏自己的时钟不
-            // 受钉扎——实测会出现游戏时钟停在起点、回放反复死亡/重启。
-            // 不许只留一句玩家看不懂的 fallback 日志（铁律：没挂上要能看见）。
-            Debug.LogWarning("[SpectreReplay] 渲染时钟兼容路径：当前游戏版本没有确定性渲染时钟，"
-                + "回放进度可能无法推进（见后续 re-anchor 日志）");
-            TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.clock_fallback"),
-                extra: 2f, type: NotifType.Warning);
-            // 兼容路径不设 captureFramerate：dsp 按真实时间走，游戏实时运行。
-            // 帧的节奏改用「时间轴走了 1/fps 才采一帧」的自 pacing（捕获循环里）。
-            nextCaptureTimeline = 0.0;
-            // 音频游标路径的时间轴完全依赖 AudioSettings.dspTime 推进。它一旦
-            // 冻结（输出设备被独占/停摆、音频系统没跑），重锚循环 45 秒后才
-            // 中止——这里记下起点，捕获循环 2 秒内没见它走 0.25s 就明确失败。
-            audioCursorBaseDsp = AudioSettings.dspTime;
-        }
+        RenderClock clock = new RenderClock(fps);
+        clock.AnchorDsp(AudioSettings.dspTime);
+        RenderClockSource.ActiveClock = clock;
+        // 真实 dsp 探针基值：捕获循环用它做"音频系统整体停摆"的早期死检
+        // （被钉的 getter 只返回虚拟值，探不出真实 dsp 是否在走）。
+        realDspBase = UnscaledDeltaPin.RealDsp();
+        Debug.Log("[SpectreReplay] renderClock: deterministic (dsp getter pinned, captureFramerate="
+            + fps + (RenderClockSource.TranspilerReady
+                ? ", scrConductor transpiler active)"
+                : ", scrConductor reads pinned dspTime)"));
 
         VideoRender.PinTimeline(audioAnchor);
 
         // 接管视频背景（确定性步进，见 PinVideoPlayers 注释）
-        if (useRenderClock)
-            PinVideoPlayers();
+        PinVideoPlayers();
         anchorSongPosition = audioAnchor;
         clockSeconds = 0.0;
         delivered = 0;
@@ -576,23 +571,28 @@ internal sealed class VideoRenderJob : MonoBehaviour
             // 编辑器/后台聚焦策略可能暂停全局音频，渲染期间强制开启（离线混音依赖它）
             AudioListener.pause = false;
 
-            // **音频游标路径的早期死检。** dsp 冻结 = 时间轴必然停摆（2026-11-08
-            // 他人日志：5 秒只走 0.005s，混音全静音，138 个黑帧后还被分辨率
-            // 中止）。确定性路径不依赖 dsp，不适用。给 120 帧窗（正常远超
-            // 0.25s），没达标就是环境问题，早死早清楚。
-            if (!useRenderClock && !audioCursorDspAdvanced && !double.IsNaN(audioCursorBaseDsp))
+            // **真实 dsp 早期死检。** 游戏时钟已被钉成虚拟值，从被钉的 getter
+            // 探不出音频系统是否整体停摆（2026-11-08 他人日志：5 秒只走
+            // 0.005s，混音全静音）；真实 dsp 走 trampoline 探针。探针不可用
+            // （NaN）就不判死——交给 mixdown.Dead 的静默兜底。给 120 帧窗
+            // （正常远超 0.25s），没达标就是环境问题，早死早清楚。
+            if (!realDspAdvanced && !double.IsNaN(realDspBase))
             {
-                if (AudioSettings.dspTime - audioCursorBaseDsp > 0.25)
+                double realNow = UnscaledDeltaPin.RealDsp();
+                if (!double.IsNaN(realNow))
                 {
-                    audioCursorDspAdvanced = true;
-                }
-                else if (frameIndex >= 120)
-                {
-                    Debug.LogWarning("[SpectreReplay] 渲染中止：音频游标路径 dsp 冻结（起点 "
-                        + audioCursorBaseDsp.ToString("0.000") + "，现在 "
-                        + AudioSettings.dspTime.ToString("0.000") + "）");
-                    NotifyFailed(LocalizationManager.GetLocalizedText("rendervideo.dsp_frozen"));
-                    yield break;
+                    if (realNow - realDspBase > 0.25)
+                    {
+                        realDspAdvanced = true;
+                    }
+                    else if (frameIndex >= 120)
+                    {
+                        Debug.LogWarning("[SpectreReplay] 渲染中止：真实 dsp 冻结（起点 "
+                            + realDspBase.ToString("0.000") + "，现在 "
+                            + realNow.ToString("0.000") + "）");
+                        NotifyFailed(LocalizationManager.GetLocalizedText("rendervideo.dsp_frozen"));
+                        yield break;
+                    }
                 }
             }
 
@@ -632,9 +632,15 @@ internal sealed class VideoRenderJob : MonoBehaviour
             // "提前收尾"处理，不当作致命错误；这一帧照常推进时钟与捕获，画面已是结算。
             if (conductor != null && conductor.song != null)
             {
-                if (useRenderClock)
-                    clock.Advance();
-                double elapsed = useRenderClock ? clock.Time : clockSeconds;
+                // 虚拟时钟推进：每个捕获帧一次，且必须发生在本帧游戏更新之前
+                // ——游戏在本帧读到的 dsp/unscaled 时间 = 上一帧 + 1/fps，与
+                // Unity captureFramerate 对缩放时间的推进语义一致（先步进后更新）。
+                // TickFrame 与 Advance 必须同点同频：前者驱动被钉的 dspTime/unscaled
+                // getter，后者驱动 RenderClock（Transpiler 换入的调用点），错拍
+                // 就是同一帧内两套时间。
+                UnscaledDeltaPin.TickFrame();
+                clock.Advance();
+                double elapsed = clock.Time;
                 double pitch = conductor.song.pitch;
 
                 if (frameIndex < fps * 10 && reAnchors < 4)
@@ -678,27 +684,17 @@ internal sealed class VideoRenderJob : MonoBehaviour
                 VideoRender.PinnedSongPosition = anchorSongPosition + elapsed * pitch;
                 // 视频背景确定性化：按渲染时钟/真实耗时比值连续调速（VideoPlayer
                 // 原生走实时时钟，渲染慢于实时时背景视频会跑 ahead）
-                if (useRenderClock)
-                    StepPinnedVideos(clock.Time);
+                StepPinnedVideos(clock.Time);
             }
             else
             {
                 if (endFrame < 0)
                     endFrame = frameIndex + Mathf.Min(tailFrames, fps);
-                if (useRenderClock)
-                    clock.Advance();
+                // conductor 已销毁（结算转场）也要推进：这一帧照样被捕获，
+                // 虚拟时钟停在旧值会让下一帧的游戏更新读到倒退的时间。
+                UnscaledDeltaPin.TickFrame();
+                clock.Advance();
             }
-
-            // **兼容路径自 pacing。** 没了 captureFramerate，游戏按真实速度跑
-            // （可能 1000+fps），只有时间轴走了 1/fps 才采一帧——下一条帧时间
- //           与上一条严格间隔 1/fps 的歌曲时间，成片时长 = 歌曲时长。
-            if (!useRenderClock && endFrame < 0 && clockSeconds < nextCaptureTimeline)
-            {
-                Flush();
-                yield return null;
-                continue;
-            }
-            nextCaptureTimeline += 1.0 / fps;
 
             mixdown.CaptureFrame();
             frames.Grab(frameIndex);
@@ -713,8 +709,6 @@ internal sealed class VideoRenderJob : MonoBehaviour
             else if (audioSeconds < clockSeconds - 0.25)
                 audioSeconds = clockSeconds;
             clockSeconds = Math.Max(clockSeconds, audioSeconds);
-
-            UnscaledDeltaPin.TickFrame(); // 虚拟时钟推进（见 VideoRenderPatches.UnscaledDeltaPin）
 
             if (frameIndex % (fps * 5) == 0)
             {
@@ -1308,11 +1302,11 @@ internal sealed class VideoRenderJob : MonoBehaviour
         savedCheckpointNum = GCS.checkpointNum;
 
         // 解除垂直同步 + 后台继续运行（渲染耗时较长，切窗口不中断）。
-        // captureFramerate **不在这里设**：它让 dspTime 按「每帧 1/fps」推进。
-        // 确定性路径需要它（时钟由我们驱动），兼容路径必须让 dsp 走真实时间
-        // （游戏时钟就是 dspTime）——两种路径的分歧在 useRenderClock 判定后
-        // 分叉（见 capture-ready 附近的设/不设）。
-        UnscaledDeltaPin.Install(); // unscaledDeltaTime 钉到虚拟帧长（见 VideoRenderPatches）
+        // captureFramerate **不在这里设**：设了它倒计时也按 1/fps 每帧推进，
+        // 而"等待回放"阶段每帧真实耗时极短，倒计时会被瞬间烧完。它连同
+        // dspTime 钉扎一起在捕获就绪时装配（见 capture-ready 段的顺序说明）。
+        // fps 显式传入：安装点先于 captureFramerate，读不到正确值。
+        UnscaledDeltaPin.Install(fps); // unscaledDeltaTime 钉到虚拟帧长（见 VideoRenderPatches）
         QualitySettings.vSyncCount = 0;
         Application.targetFrameRate = Math.Max(1000, fps * 4);
         Application.runInBackground = true;

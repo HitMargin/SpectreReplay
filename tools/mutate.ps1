@@ -1018,12 +1018,12 @@ switch ($Which) {
         ReplaceExact 'Pages\Pages.cs' 'OpenReplayLevel.GoOfficial();' 'Noop();'
     }
     'MUT-U19' {
-        # ⑮f：就绪判断退回只看 TranspilerReady（= 上游形状）。
-        #      这是本轮真修过的 bug：TranspilerReady 只置 true 不置回 false，
-        #      补丁卸载不清它 ⇒ '开→渲染→关→再渲染' 仍走确定性轨，
-        #      一边帧号算 PinnedSongPosition、一边游戏读真实 dspTime，两条时间轴混用。
+        # ⑮f：确定性装配被拆掉（InstallDsp 缺席）。
+        #      2026-11-08 重构后确定性的权威是 dspTime getter 钉扎（不依赖开关），
+        #      装配必须无条件存在。它一旦缺席，游戏时钟退回 Unity 原生行为，
+        #      歌曲时间轴与成片帧号脱锁——雨滴/画面脱钩的一类根因。
         Backup 'Features\VideoRender\Pipeline\VideoRenderJob.cs'
-        ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'bool useRenderClock = RenderClockSource.TranspilerReady && Settings.RenderClockOn;' 'bool useRenderClock = RenderClockSource.TranspilerReady;'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'UnscaledDeltaPin.InstallDsp();' '/* MUT-U19: dsp pin removed */'
     }
     'MUT-U16' {
         # ⑮a：把渲染时钟补丁的 Feature 摘掉——退回上游那种'无条件常开'。

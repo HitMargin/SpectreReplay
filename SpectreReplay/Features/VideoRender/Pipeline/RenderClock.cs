@@ -13,6 +13,8 @@ namespace SpectreReplay.Features.VideoRender;
 /// 使用方式：
 ///   渲染开始 → AnchorDsp(当前真实 dspTime) → 每帧 Advance()
 ///   scrConductor.Update 的 Transpiler 把 AudioSettings.dspTime 换成 DspTime
+///   （其余所有托管读取方由 UnscaledDeltaPin.InstallDsp 钉住的 getter 覆盖，
+///   两条通道由渲染循环同点推进，同一帧内读数一致）
 ///   → 游戏自己的节拍推进/相机/hitsound 全部确定性化，无需拦截 songposition
 /// </summary>
 internal sealed class RenderClock

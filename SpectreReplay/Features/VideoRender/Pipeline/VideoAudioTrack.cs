@@ -164,14 +164,16 @@ internal sealed class VideoAudioTrack : IDisposable
     private void OnSilence(int perChannel)
     {
         // 采样诊断：只在静默期记账，正常帧（:88 的 silentFrames = 0）不会走到这里。
+        // dsp 一律走 RealDsp 探针：渲染期 getter 被钉成虚拟时钟，读它会看到
+        // "永远在推进"的回声，区分不出音频系统是否真的停摆。
         if (firstSilentSampleCount < 0)
         {
             firstSilentSampleCount = perChannel;
-            firstSilentDsp = AudioSettings.dspTime;
+            firstSilentDsp = UnscaledDeltaPin.RealDsp();
         }
         if (perChannel > maxSilentSampleCount)
             maxSilentSampleCount = perChannel;
-        double now = AudioSettings.dspTime;
+        double now = UnscaledDeltaPin.RealDsp();
         if (!double.IsNaN(firstSilentDsp) && now - firstSilentDsp > 0.001)
             dspAdvanced = true;
         lastSilentDsp = now;

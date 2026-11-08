@@ -1297,18 +1297,17 @@ namespace UiPreview
                     && cleanup.Contains("RestoreTargets()", StringComparison.Ordinal)
                     && cleanup.Contains("texture.Release()", StringComparison.Ordinal));
             // 渲染健壮性（2026-11-08 他人日志）：① 分辨率中止必须打印新旧尺寸，
-            // 否则无法定位是谁改了窗口；② 兼容路径（r149 等）开始渲染必须亮明
-            // 身份——游戏时钟不受钉扎，实测会停在起点反复死亡；③ 重锚顶满 4 次
-            // = 游戏时钟没跟上，继续渲染只会产出冻结画面+黑帧，必须明确中止；
-            // ④ 黑帧攒到 25 个要给「改用纯净相机」的建议。
+            // 否则无法定位是谁改了窗口；② 重锚顶满 4 次 = 游戏时钟没跟上，继续
+            // 渲染只会产出冻结画面+黑帧，必须明确中止；③ 黑帧攒到 25 个要给
+            // 「改用纯净相机」的建议。④ 旧"兼容路径警告"子句已随确定性时钟
+            // 重构移除（不再有 fallback 路径），由 ⑮f 钉装配不变量。
             fail += Check(projectRoot,
-                "渲染健壮性：分辨率中止带新旧尺寸、兼容路径警告、重对齐循环中止、黑帧建议",
+                "渲染健壮性：分辨率中止带新旧尺寸、重对齐循环中止、黑帧建议",
                 "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
                 s => s.Contains("渲染中止：窗口分辨率 ", StringComparison.Ordinal)
                     && s.Contains("frames.SrcWidth + \"x\" + frames.SrcHeight", StringComparison.Ordinal)
                     && s.Contains("if (reAnchors >= 4)", StringComparison.Ordinal)
                     && s.Contains("rendervideo.reanchor_loop", StringComparison.Ordinal)
-                    && s.Contains("rendervideo.clock_fallback", StringComparison.Ordinal)
                     && s.Contains("failedReadbacks == 25", StringComparison.Ordinal));
             // JRP 雨滴时钟（2026-11-08 用户报「渲染成片雨滴快很多」）：JRP 1.6
             // 的 get_CurrentTicks 带 aggressiveinlining，JIT 可能把值内联进雨滴

@@ -317,22 +317,20 @@ namespace UiPreview
             fail += Check(projectRoot, "⑮e 渲染页要有该开关的控件",
                 new[] { "Pages\\Pages.cs" },
                 new[] { "render.clock.experimental" });
-            // ⑮f 渲染作业的就绪判断必须**同时**看开关，不能只看 TranspilerReady。
+            // ⑮f 确定性渲染时钟的装配必须**无条件存在**（ADOFAIRenderer 同款）。
             //
-            //    这是 2026-10-17 加开关时自己引进来的真 bug：`TranspilerReady`
-            //    全仓只有置 true、没有置回 false 的地方（补丁卸载不会清它）。
-            //    开关拨关后补丁已卸载、scrConductor.Update 恢复读真实 dspTime，
-            //    而 TranspilerReady 仍是旧 true ⇒ 作业继续走确定性轨：
-            //    一边用帧号算 PinnedSongPosition，一边游戏内部用真实 dspTime，
-            //    **两条时间轴混用**，比纯净兜底更糟。
-            //    坏序是「开→渲染→关→再渲染」，只看单次渲染永远发现不了。
+            //    2026-11-08 重构：旧判据盯的 `TranspilerReady && 开关` 与判断已废——
+            //    确定性的权威不再是 Transpiler（只钉得住 r150 的 scrConductor.Update
+            //    一处），而是 AudioSettings.dspTime getter 的原生钉扎：游戏任何版本、
+            //    任何托管调用点都读到「基值 + 已捕获帧数/fps」，与帧号锁定。开关从此
+            //    只控制 Transpiler 直连这一冗余通道，拨关不再产生混轨。
             //
-            //    判据：那一行必须写成 `RenderClockSource.TranspilerReady && Settings.RenderClockOn`。
-            //    只查 "TranspilerReady" 出现过是没用的（它本来就该出现）；
-            //    必须钉住"它后面还 AND 了开关"这个形状。
-            fail += Check(projectRoot, "⑮f 渲染作业的就绪判断必须与开关一起判（否则关掉后仍走确定性轨）",
+            //    判据：`UnscaledDeltaPin.InstallDsp();` 与 `Time.captureFramerate = fps;`
+            //    必须出现在渲染作业里。钉扎缺席 = 游戏时钟退回 Unity 原生行为，
+            //    歌曲时间轴不再与成片帧号锁定（正是雨滴/画面脱钩的一类根因）。
+            fail += Check(projectRoot, "⑮f 确定性渲染时钟必须无条件装配（dsp getter 钉扎 + captureFramerate）",
                 new[] { "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs" },
-                new[] { "RenderClockSource.TranspilerReady && Settings.RenderClockOn" });
+                new[] { "UnscaledDeltaPin.InstallDsp();", "Time.captureFramerate = fps;" });
             // ⑯ 去特效总开关必须**默认关**（2026-10-17 用户裁决）。
             //
             //    上游 `Settings.EffectRemoverOn = true`，我们有意偏离。理由不是
