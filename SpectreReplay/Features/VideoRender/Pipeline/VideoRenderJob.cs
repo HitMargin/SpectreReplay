@@ -482,6 +482,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
         // 第 0 帧完整播出（推迟的缘由见 Patch_VideoDeferStartMusic）。
         Patch_VideoDeferStartMusic.Release();
         LogTiming("startmusic-released");
+        ResetCountdownTextGate();
 
         RenderClock clock = new RenderClock(fps);
         clock.AnchorDsp(AudioSettings.dspTime);
@@ -1316,6 +1317,38 @@ internal sealed class VideoRenderJob : MonoBehaviour
         {
             Debug.Log("[SpectreReplay] 枚举旧渲染临时目录失败: "
                 + ex.GetType().Name + ": " + ex.Message);
+        }
+    }
+
+    // ── 倒计时文本门复位 ─────────────────────────────────────────────
+    // scrCountdown.Update 的三段文本逻辑（GET READY / 3-2-1 / GO）全部要求
+    // !controller.goShown。常规开局走 press-to-start 的 ShowGetReady() 复位，
+    // 而渲染的自动启动不经过它——上一局留下的 goShown=true 会让整段倒计时
+    // 一个字都不显示：GO 只会在开拍前的装载窗口里闪一次（那时 dspTimeSong
+    // 还是上一局的旧域，num2 > GetCountdownTime 瞬间满足、GO 闪完即清），
+    // 成片里连 GO 都看不到（2026-11-08 用户实测）。这里显式复位文本门，
+    // 只作用于从第 0 块起播的正常倒计时（检查点前导的数字走 goShown||fastTakeoff
+    // 的另一条分支，复位反而会杀掉它）。
+    private void ResetCountdownTextGate()
+    {
+        try
+        {
+            if (GCS.checkpointNum != 0)
+                return; // 检查点起播：前导文本走另一条分支，不能复位
+            scrController controller = scrController.instance;
+            if (controller == null)
+                return;
+            bool wasShown = controller.goShown;
+            controller.goShown = false;
+            controller.curCountdown = 0;
+            scrUIController.instance?.txtCountdown?.GetComponent<scrCountdown>()?.ShowGetReady();
+            if (wasShown)
+                Debug.Log("[SpectreReplay] 倒计时文本门已复位（上一局遗留的 goShown=true 会让成片整段无字）");
+        }
+        catch (Exception ex)
+        {
+            // 文本门复位失败只影响显示，绝不能带崩渲染装配
+            Debug.LogWarning("[SpectreReplay] 倒计时文本门复位失败: " + ex.GetType().Name + ": " + ex.Message);
         }
     }
 
