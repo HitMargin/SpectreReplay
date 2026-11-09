@@ -66,9 +66,10 @@ namespace UiPreview
                 }
             }
 
-            // ② UnscaledDeltaPin 钉的五个 Time 属性 getter（UnityEngine.CoreModule）
+            // ② UnscaledDeltaPin 钉的六个 Time 属性 getter（UnityEngine.CoreModule）
             string[] timeProps =
             {
+                "deltaTime",
                 "unscaledDeltaTime", "unscaledTime", "unscaledTimeAsDouble",
                 "realtimeSinceStartup", "realtimeSinceStartupAsDouble",
             };

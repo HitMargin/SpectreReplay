@@ -225,7 +225,14 @@ internal static class UnscaledDeltaPin
             // 残值（通常 0 → 60），自定义帧率下 unscaled 虚拟时钟就会走错步长。
             armedFps = Math.Max(1, fps);
 
-            // 增量是关键项（雨滴等逐帧动画），绝对值为尽力项（个别 Unity 版本缺 AsDouble）
+            // 增量是关键项（雨滴等逐帧动画），绝对值为尽力项（个别 Unity 版本缺 AsDouble）。
+            // **deltaTime 必须一并钉**：planet 拖尾等 ParticleSystem 由 Unity 按缩放
+            // deltaTime 自动模拟（PlanetRed.prefab: useUnscaledTime=0、
+            // rateOverTime≈501/s）。不钉它时 captureFramerate 下每帧 dt = 真实帧耗时
+            // ——离线渲染慢于实时时一帧跨几十毫秒，粒子一帧补发一堆并统一推进，
+            // 拖尾挤成「一坨」（ADOFAIRenderer 同款：deltaTime getter 也返回
+            // 1/RenderFPS，见其 RenderEnvironmentPatches.DeltaTimePatch）。
+            TryMake(nameof(Time.deltaTime), nameof(PinnedDelta), critical: true);
             TryMake(nameof(Time.unscaledDeltaTime), nameof(PinnedDelta), critical: true);
             TryMake(nameof(Time.unscaledTime), nameof(PinnedUnscaled), critical: true);
             TryMake(nameof(Time.unscaledTimeAsDouble), nameof(PinnedUnscaledD), critical: false);
