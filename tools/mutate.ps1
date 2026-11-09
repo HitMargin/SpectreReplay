@@ -963,6 +963,13 @@ switch ($Which) {
         if ($n -ne 1) { throw ('MUT-U106 unexpected count=' + $n) }
         SetLines 'Features\Replay\Patches\Patch_Lifecycle.cs' $ls
     }
+    'MUT-U107' {
+        # ⑬c18：窗口投影退回空背景——9-slice 阴影判据必须变红。
+        Backup 'Ui\ModernSettingsWindow.cs'
+        ReplaceExact 'Ui\ModernSettingsWindow.cs' `
+            'normal.background = RoundedTex.Shadow();' `
+            'normal.background = null;'
+    }
     'MUT-U25' {
         # ⑫i：把已删除的「界面语言跟随游戏」开关加回来（防回归变异）。
         #      用单引号字符串拼出双引号，避免在 here-string 外层写转义。

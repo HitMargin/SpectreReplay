@@ -308,6 +308,14 @@ namespace UiPreview
                     // 玻璃只在打开时抓一次；移动/缩放靠 UV 裁剪，不再重抓。
                     && s.Contains("StartCoroutine(CaptureGlass(true))", StringComparison.Ordinal));
             fail += Check(projectRoot,
+                "⑬c18 独立窗口投影必须走 9-slice 样式绘制",
+                "Ui\\\\ModernSettingsWindow.cs",
+                s => s.Contains("private GUIStyle ModernShadowStyle()", StringComparison.Ordinal)
+                    && s.Contains("normal.background = RoundedTex.Shadow()", StringComparison.Ordinal)
+                    && s.Contains("border = new RectOffset(48, 48, 48, 48)", StringComparison.Ordinal)
+                    && s.Contains("ModernShadowStyle().Draw(", StringComparison.Ordinal)
+                    && s.Contains("false, false, false, false)", StringComparison.Ordinal));
+            fail += Check(projectRoot,
                 "⑬c5 独立 IMGUI 窗口内容必须复用 OnGui.DrawPanel，不许复制页面状态机",
                 "Ui\\\\ModernSettingsWindow.cs",
                 // DrawPanel 带上了 fixedSubTabs 命名参数——仍是复用页面状态机，

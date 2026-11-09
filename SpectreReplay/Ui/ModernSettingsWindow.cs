@@ -328,11 +328,10 @@ namespace SpectreReplay.Ui
                     GUI.color = new Color(1f, 1f, 1f, ease);
                     // 窗口外圈柔和投影：左右各 34、上 22、下 48。没有这一层，
                     // 窗口只有 1px 描边，远看像贴在屏幕上的一张贴纸。
-                    GUI.color = new Color(1f, 1f, 1f, 1f);
-                    GUI.DrawTexture(new Rect(_windowRect.x - 34f, _windowRect.y - 22f,
+                    ModernShadowStyle().Draw(new Rect(
+                        _windowRect.x - 34f, _windowRect.y - 22f,
                         _windowRect.width + 68f, _windowRect.height + 70f),
-                        RoundedTex.Shadow(), ScaleMode.StretchToFill, true, 0f,
-                        new Color(1f, 1f, 1f, ease), 34f, 34f);
+                        false, false, false, false);
 
                     // **玻璃层在窗口背景下面，不是上面。**
                     // 正确顺序是：投影 → 裁剪模糊的游戏画面（100% 不透明）→
@@ -353,10 +352,20 @@ namespace SpectreReplay.Ui
         }
 
         private GUIStyle _style;
+        private GUIStyle _shadowStyle;
         private GUIStyle _bodyBgStyle;
 
         private GUIStyle ModernWindowStyle()
         {
+            if (_shadowStyle == null)
+            {
+                _shadowStyle = new GUIStyle
+                {
+                    border = new RectOffset(48, 48, 48, 48),
+                    margin = new RectOffset(0, 0, 0, 0),
+                };
+                _shadowStyle.normal.background = RoundedTex.Shadow();
+            }
             if (_style != null) return _style;
             _style = new GUIStyle(GUI.skin.window)
             {
@@ -380,6 +389,12 @@ namespace SpectreReplay.Ui
             _style.onActive.background = bg;
             _style.onFocused.background = bg;
             return _style;
+        }
+
+        private GUIStyle ModernShadowStyle()
+        {
+            if (_shadowStyle == null) ModernWindowStyle();
+            return _shadowStyle;
         }
 
         private GUIStyle BodyBgStyle()
