@@ -221,6 +221,18 @@ internal sealed class VideoFrameSource
         // 第三方画布重建就重新套用切模式（仅纯净相机生效，时钟换轨与会话
         // 同生命周期无需每帧管）；空查每帧一次，代价可忽略。
         RenderOverlayCapture.ReapplyIfNeeded();
+        // **每帧夺回渲染目标。** scrCamera.Update 在 camRTNeedsRecreation（分辨率
+        // 变化、StutterFix 自动分辨率切换、全屏切换）时重建 camRT 并调
+        // SetupRTCam(true)——三台相机被重新绑回游戏自己的 RT，我们的捕获纹理
+        // 从此没人写：帧号照走、音频照播、成片从那一刻起一路冻结帧
+        // （2026-11-08 实测：freezedetect 自 3s 起全冻，日志同期出现分辨率
+        // 降低/提升各一次）。每帧校验一次，被抢走立刻夺回。
+        if (surface == VideoSurface.CleanCamera)
+        {
+            if (camStatic != null && camStatic.targetTexture != texture) camStatic.targetTexture = texture;
+            if (camBackground != null && camBackground.targetTexture != texture) camBackground.targetTexture = texture;
+            if (camMain != null && camMain.targetTexture != texture) camMain.targetTexture = texture;
+        }
         AsyncGPUReadbackRequest request = AsyncGPUReadback.Request(
             texture, 0, TextureFormat.RGBA32, _ => { });
         Flight flight = new Flight { Index = index, Request = request };
