@@ -109,6 +109,18 @@ internal sealed class VideoAudioTrack : IDisposable
         int floats = Math.Max(0, perChannel) * Channels;
         if (floats == 0)
         {
+            // Unity 要求 0 样本帧也必须 Render 一次（传零长度缓冲），否则
+            // 采集不再产出样本。高输出帧率下每帧可能不足一个 DSP buffer，
+            // 正是“从第 1 帧起恒为 0”的来源。
+            NativeArray<float> zeroRenderBuffer = new NativeArray<float>(0, Allocator.Temp);
+            bool zeroRendered = AudioRenderer.Render(zeroRenderBuffer);
+            zeroRenderBuffer.Dispose();
+            if (!zeroRendered)
+            {
+                Dead = true;
+                DeathReason = "AudioRenderer.Render returned false on zero-length capture frame " + frameNo;
+                return;
+            }
             OnSilence(perChannel);
             return;
         }

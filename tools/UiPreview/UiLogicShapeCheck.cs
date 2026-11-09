@@ -166,6 +166,14 @@ namespace UiPreview
                 "⑧ 混音轨 Render 容器必须精确（分桶会让捕获静默停住）",
                 "Features\\VideoRender\\Pipeline\\VideoAudioTrack.cs",
                 s => MixdownRenderBufferIsExact(s));
+            // ⑧b Unity 文档明确要求：AudioRenderer.Render 必须**每帧**调用，
+            //    包括 GetSampleCountForCaptureFrame()==0 的帧（传零长度缓冲）。
+            //    否则采集停止产出样本。240fps 下每帧 200 样本 < dspBuffer 256，
+            //    0 样本帧是常态；漏掉 Render 就是“从第 1 帧起恒为 0”的根因。
+            fail += Check(projectRoot,
+                "⑧b 零样本帧必须 Render 零长度缓冲（漏掉会让采集停摆）",
+                "Features\\VideoRender\\Pipeline\\VideoAudioTrack.cs",
+                s => MixdownRendersZeroSampleFrames(s));
             // ⑨ 分组卡片**不许用 GUI.backgroundColor 染色**（它乘算，会抹平按钮 hover）。
             //
             //    2026-10-16 真事：用户报「打开编辑器按钮鼠标放上去没有颜色变化」。
@@ -2628,6 +2636,23 @@ namespace UiPreview
                 || b.Contains("bucket", StringComparison.Ordinal))
                 return false;
             return true;
+        }
+
+        /// <summary>
+        /// 零样本帧是否按 Unity 要求调 <c>AudioRenderer.Render</c>：
+        /// 先拿到长度为 0 的缓冲，再调用 Render，最后释放。
+        ///
+        /// 这是 240fps 渲染的必要形状：<c>48000 / 240 = 200</c> 样本帧，
+        /// 小于 <c>dspBufferSize=256</c>，会有大量 0 样本帧。漏掉 Render
+        /// 会让 Unity 停止产出样本，表现为 mixdown 恒静音。
+        /// </summary>
+        private static bool MixdownRendersZeroSampleFrames(string code)
+        {
+            return code.Contains("if (floats == 0)", StringComparison.Ordinal)
+                && code.Contains("NativeArray<float> zeroRenderBuffer = new NativeArray<float>(0, Allocator.Temp);", StringComparison.Ordinal)
+                && code.Contains("AudioRenderer.Render(zeroRenderBuffer)", StringComparison.Ordinal)
+                && code.IndexOf("AudioRenderer.Render(zeroRenderBuffer)", StringComparison.Ordinal)
+                    < code.IndexOf("OnSilence(perChannel)", StringComparison.Ordinal);
         }
 
         /// <summary>

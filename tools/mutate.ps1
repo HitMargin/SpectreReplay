@@ -1425,6 +1425,14 @@ switch ($Which) {
         Backup 'State\Settings.cs'
         ReplaceExact 'State\Settings.cs' '        BuildKeyCodeConvertTable();' '        BuildKeyCodeConvertTable();`n        for (ushort num = 0; num < 256; num++)`n        {`n            if (key_code_convert[num] == 0xFFFF)`n                key_code_convert[num] = num;`n        }'
     }
+    'MUT-AUDIO1' {
+        # ⑧b：零样本帧漏掉 Render。Unity 要求 0 样本帧也必须 Render 一次
+        #      （传零长度缓冲），否则 AudioRenderer 停止产出样本。240fps 下
+        #      每帧 200 样本 < dspBuffer 256，0 样本帧是常态，漏掉就是日志里
+        #      “mixdown 恒静音”的根因。
+        Backup 'Features\VideoRender\Pipeline\VideoAudioTrack.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoAudioTrack.cs' 'bool zeroRendered = AudioRenderer.Render(zeroRenderBuffer);' 'bool zeroRendered = true;'
+    }
     'MUT-PIN1' {
         # ① 撤销失败时把 detour 一起丢掉（原实现的形状）。
         #
