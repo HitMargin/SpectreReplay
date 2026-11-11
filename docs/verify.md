@@ -42,7 +42,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify.ps1
 **只读审计**（7 个离线审计脚本）、线上 dll 与构建产物的 sha256 一致、
 `D:\Projects\Spectre` 工作区干净。（后两项只在本地跑，`-Ci` 跳过。）
 
-> **当前打印 168 条断言 0 失败**（2026-11-09 实测；10-30 记录是 155，其间键盘音
+> **当前打印 188 条断言 0 失败**（2026-11-12 实测；11-09 记录是 168，本轮音画偏移
+> `MuxOffsetCheck` 加 20 行；10-30 记录是 155，其间键盘音
 > 覆盖值等轮次加了行级判据）。这个数字会随轮次变，
 > 引用前先跑一遍 `verify.ps1` 看真实条数。**注意它是「✓ 行数」而不是判据数**
 > ——`UiLogicShapeCheck` 现有 176 条判据只印 1 行，所以加判据这个数字不变。
@@ -78,6 +79,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify.ps1
 | CrossPlatformInputCheck | 回放输入是**真注入**而不是占位：`RDInput` 三入口（GetMain / GetState / GetStateKeys）都补上、补丁体真并进返回值、**去重绝不许看「另一条路的状态」**（`KeyboardSimulation.Available` / `Application.isFocused` 都不得出现在 `ManagedInput.Active` 里）、`holdKeys` 必须是真实 `AsyncKeyCode`（不许 `AnyKeyCode(null)`、也不许 `KeyCode`——装箱判等恒不等，每帧被剥光）、**原生异步链可用时三个覆盖点必须整体放行**（否则帧粒度抹平事件的 tick 粒度，一次按键被重复消费）、**「一瞬间全部模拟完」必须钉死**（注入侧的 `dspTimeSong` 未就绪不得入队、`evTicks` 必须落在 `nowTicks` 的 ±2 秒窗口内；回放侧 `Start` 必须按当前歌曲时间对齐游标、`PumpInput` 必须有单帧事件上限并在触顶后重新对齐）、**放行的判据必须是「实际入队成功」（`Healthy`）而不是「看起来可用」（`Usable`）**——`Inject` 的每条失败分支都要记到失败帧上，否则 conductor 未建好 / pitch 为 0 / keyQueue 被换掉时，游戏那条链读到永远空的 `keyMask`，而托管层已经放行，两条路同时失效、**广播判据与「游戏是否出队」必须分开**（`Injectable` 只看钩子活着，`Usable` 额外要求 `asyncKeyboard.isActive`；后者只在 PlayerControl 为真，混用会让直接订阅 `SkyHookManager.KeyUpdated` 的键位显示模组在非 PlayerControl 状态整段失明，`MUT-CI10` 守这条）、原生接管时 `holdKeys` 必须与 `ValidInputWasReleased` 比对的那份数据同源、按下集合逐帧过期、开始/停止/跳转三处清理、非 Windows 不碰 user32 |
 | CursorTrackCheck | 指针轨迹段（容器尾部可选段）：往返（含倒计时负区间）、旧文件无轨迹段→空轨迹且旧段完好、未知尾部整体忽略、段版本上界、count 走 ReadCount 防护、插值/夹取/单样本/空表行为 |
 | LogPrefixCheck | 全部日志用 `[SpectreReplay]` 前缀（真实 Spectre 模组也装着会跑，前缀是区分来源的唯一依据） |
+| MuxOffsetCheck | 音画偏移（2026-11-12 加，20 行）：mux 侧 `-itsoffset` 正负两分支都存在且由偏移参数驱动（负向必须走视频侧，对音频用负 itsoffset 会把起始 PTS 推到负数被 muxer 拒收）、零偏移命令行与历史版本逐字一致、itsoffset 注入点恰好各 2 处（编码器与抢救命令）、快照必须带「-1 跟随校准」语义且在主线程落值、设置项四件套（字段/落盘/读取/界面）、抢救命令与 `MuxWith` 同参。变异 `MUT-MUX1`（正偏移分支失效）/`MUT-MUX2`（跟随分支读成 0）守 |
 
 **总数 111 个 ✓ 行**（2026-10-24 实测；10-22 记录是 110，本轮加 `ReplayCheck` 的 ⑹「v1 旧回放仍能解码」1 行。再往后的 ⑳c **不增行**（它折叠进 `UiLogicShapeCheck` 的汇总行，判据 67→68）。更早的沿革：删掉旧上游格式回落的 ⑥/⑦ 两条后从 69 降到 67，界面扩到 14 语言后升到 83，此后又加过检查到 86，加录制鼠标指针的 5 条到 91，加跨平台回放输入 1 行到 98）。这个数字会随轮次变，
 引用前先跑一遍 `verify.ps1` 看真实条数。
