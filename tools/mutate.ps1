@@ -2726,6 +2726,19 @@ switch ($Which) {
         Backup 'Pages\Pages.cs'
         ReplaceExact 'Pages\Pages.cs' 'DrawDeleteFileButton(captured);' ''
     }
+    'MUT-MUX1' {
+        # 音画偏移回归：正偏移分支失效（audioPrefix 恒空串）。实机滞后不再
+        # 生效——用户校准（inputOffset=120ms）原样烧进成片，音频比画面提前。
+        # MuxOffsetCheck ②b/③b/④ 钉的就是这个形态：命令行退回无偏移。
+        Backup 'Features\VideoRender\Pipeline\VideoEncoder.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoEncoder.cs' 'string audioPrefix = offset > 0 ? "-itsoffset " + offset.ToString("0.###", CultureInfo.InvariantCulture) + " " : "";' 'string audioPrefix = "";'
+    }
+    'MUT-MUX2' {
+        # 音画偏移回归：跟随分支读成 0。全新会话的第一次渲染拿不到校准，
+        # 偏移恒 0，玩家以为跟随模式在工作、实际是死的。MuxOffsetCheck ⑤ 钉的形态。
+        Backup 'Features\VideoRender\Pipeline\VideoRenderJob.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' '? (double)scrConductor.calibration_i' '? 0.0'
+    }
     default {
         throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U100）"
     }

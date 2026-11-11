@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -345,7 +346,18 @@ internal sealed class VideoEncoder : IDisposable
     // 文件末尾——ffmpeg 只能把整个成片重写一遍搬过去。对本地文件它毫无收益：
     // faststart 是为「边下边播」的 HTTP 场景服务的，播放器从本地磁盘读不需要它。
     // 代价却是实打实的：几百 MB 的成片多一趟全量读写，而合成本身已经要读一遍写一遍了。
-    internal void MuxWith(string wavPath)
+    //
+    // audioOffsetSec：**音画偏移**（秒，正值 = 音频延后）。实机游玩时视觉时间轴比音频
+    // 滞后玩家校准量（inputOffset，扬声器硬件延迟已被系统补偿抵消）；离线渲染没有那道
+    // 补偿，校准会被原样烧进成片 —— 音频比画面提前校准那么多。把整条混音轨平移校准量
+    // 即可对齐（歌曲/键盘音/打击音一起动，相对关系不变）：
+    //   offset > 0 → 音频延后：音频 -i 前插 -itsoffset。
+    //   offset < 0 → 音频提前 = 视频延后：视频 -i 前插 -itsoffset。**不许对音频用负
+    //                itsoffset**：那会把起始 PTS 推到负数，多数 muxer 直接拒绝或丢掉
+    //                首段；两条路径都保持正时间戳起步。
+    //   offset == 0 → 不加任何参数，命令行与无偏移时逐字一致（用户拿到与历史版本
+    //                 bit 级相同的合成命令）。
+    internal void MuxWith(string wavPath, double audioOffsetSec)
     {
         if (!File.Exists(wavPath))
             throw new InvalidOperationException("mixdown file missing: " + wavPath);
@@ -354,7 +366,12 @@ internal sealed class VideoEncoder : IDisposable
         // **-shortest**：视频与音频长度由两条独立采集链决定，正常只差几十毫秒，
         // 但音频采集重启/丢帧后可能明显短于视频。没有它时 ffmpeg 会把短的一轨
         // 补静音/黑帧到另一轨长度，成片尾部出现一段无声空转；有它则按短轨收尾。
-        string args = "-y -i " + Quote(rawVideoPath) + " -i " + Quote(wavPath)
+        // itsoffset 平移会一并平移 -shortest 的比较基准：尾部最多被裁掉一个偏移量，
+        // 换取的是音画整体对齐，可接受。
+        double offset = Math.Round(audioOffsetSec, 3);
+        string videoPrefix = offset < 0 ? "-itsoffset " + (-offset).ToString("0.###", CultureInfo.InvariantCulture) + " " : "";
+        string audioPrefix = offset > 0 ? "-itsoffset " + offset.ToString("0.###", CultureInfo.InvariantCulture) + " " : "";
+        string args = "-y " + videoPrefix + "-i " + Quote(rawVideoPath) + " " + audioPrefix + "-i " + Quote(wavPath)
             + " -map 0:v:0 -map 1:a:0 -c:v copy " + audio + " -ac 2 -shortest"
             + " " + Quote(finalVideoPath);
         try

@@ -203,6 +203,15 @@ public static class Settings
     // 它们，也避开游戏常用的字母区与 Esc（Esc 是各处的取消键）。
     public static int RenderStopKey = 292;
     public static string RenderOutputDir = ""; // 留空 = SavePath/RenderVideos
+    // 音画偏移（毫秒）：-1 = 跟随游戏校准，≥0 = 显式覆盖（0..500，与界面滑条同域）。
+    //
+    // **为什么要跟着校准走。** 实机游玩时游戏内部视觉时间轴比音频时间轴滞后校准量
+    // （inputOffset）——这个滞后已被玩家的扬声器/耳机延迟补偿抵消，所以实机看起来
+    // 是准的。离线渲染没有那道硬件补偿，校准会原样烧进成片：音频比画面提前校准那么
+    // 多（用户实测 inputOffset=120ms，第一击的处理帧比预期晚 ~150ms）。合成时把混音
+    // 轨平移校准量（歌曲/键盘音/打击音一起动，保持相对关系）即可复现实机观感；
+    // 显式覆盖留给不想跟随校准的玩家（0 = 完全对齐，不要实机滞后）。
+    public static int RenderAudioOffsetMs = -1;
 
     // 键位重映射：list 为持久化 JSON 源（KeyCodeConvert），array 为运行时映射表
     internal static List<KeyValuePair<ushort, ushort>> key_code_convert_list = new List<KeyValuePair<ushort, ushort>>();

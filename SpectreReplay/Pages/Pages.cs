@@ -1833,6 +1833,15 @@ namespace SpectreReplay.Pages
                     v => ((int)v) + " fps", v => { RenderFps = (int)v; Commit(); });
                 OnGui.RowSlider("render.tail", RenderTailSeconds, 0f, 15f,
                     v => v.ToString("0.#") + " s", v => { RenderTailSeconds = v; Commit(); });
+                // 音画偏移：实机画面比音频滞后玩家校准量（扬声器延迟已被系统补偿），
+                // 离线渲染没有那道补偿，校准会被原样烧进成片。默认跟随游戏校准复现
+                // 实机观感；关闭后滑条给显式毫秒覆盖（0 = 完全对齐，不要实机滞后）。
+                // 跟随态滑条灰显（值由游戏校准决定，拖动无意义），显示当前生效值 0。
+                OnGui.Row("render.audio.offset.follow", RenderAudioOffsetMs < 0,
+                    v => { if (v) RenderAudioOffsetMs = -1; else if (RenderAudioOffsetMs < 0) RenderAudioOffsetMs = 0; Commit(); });
+                OnGui.RowSlider("render.audio.offset", Mathf.Max(0, RenderAudioOffsetMs), 0f, 500f,
+                    v => ((int)v) + " ms", v => { RenderAudioOffsetMs = (int)v; Commit(); },
+                    RenderAudioOffsetMs >= 0);
                 OnGui.Row("render.stop.enable", RenderStopOn,
                     v => { RenderStopOn = v; Commit(); });
                 OnGui.RowHotkey("render.stop.key", () => RenderStopKey,

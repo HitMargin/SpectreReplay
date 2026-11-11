@@ -59,6 +59,10 @@ internal sealed class VideoRenderJob : MonoBehaviour
     // 失败发生在 mux 阶段还是排空阶段：两者的补救方式不同（mux 失败时视频流已完整，
     // 值得把 raw 流抢救出来；排空失败则没有可救的成品）
     private volatile bool finalizeErrorFromMux;
+    // 音画偏移快照（秒）：合成时把整条混音轨平移这个量，复现实机音画关系。
+    // 主线程 Phases 里落值（校准读游戏静态属性），工作线程只读 —— Thread.Start
+    // 自带 happens-before，无需 volatile（double 也没有 volatile 可用）。
+    private double muxAudioOffsetSec;
 
     // 保存并恢复的全局状态
     private int savedCaptureFramerate;
@@ -282,6 +286,17 @@ internal sealed class VideoRenderJob : MonoBehaviour
         if (range.Enabled)
             requestedStartFloor = ResolveRangeStartFloor(range);
         float tailSeconds = Mathf.Clamp(Settings.RenderTailSeconds, 0f, 15f);
+        // 音画偏移快照：-1 = 跟随游戏校准，≥0 = 显式毫秒覆盖。
+        //
+        // **为什么跟随校准。** 实机游玩时视觉时间轴比音频滞后校准量
+        // （scrConductor.calibration_i = currentPreset.inputOffset/1000），这个滞后
+        // 已被玩家的扬声器/耳机延迟补偿抵消，所以实机看起来是准的；离线渲染没有
+        // 那道硬件补偿，校准会原样烧进成片 —— 音频比画面提前校准那么多。合成时
+        // 平移整条混音轨即可复现实机观感（见 VideoEncoder.MuxWith）。
+        // 校准是计算属性、随时读都新鲜，但必须在主线程快照：收尾线程不碰游戏状态。
+        muxAudioOffsetSec = Settings.RenderAudioOffsetMs < 0
+            ? (double)scrConductor.calibration_i
+            : Settings.RenderAudioOffsetMs / 1000.0;
         var container = (VideoEncoder.OutContainer)Mathf.Clamp(Settings.RenderOutputFormat, 0, 3);
         string outputPath = BuildOutputPath(container);
         VideoRender.Current.Output = outputPath;
@@ -910,6 +925,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
         finalizeErrorFromMux = false;
         VideoEncoder enc = encoder;
         string wav = wavPath;
+        double audioOffset = muxAudioOffsetSec;
         finalizeWorker = new System.Threading.Thread(() =>
         {
             try
@@ -917,7 +933,7 @@ internal sealed class VideoRenderJob : MonoBehaviour
                 enc.FinishVideo();
                 try
                 {
-                    enc.MuxWith(wav);
+                    enc.MuxWith(wav, audioOffset);
                 }
                 catch (Exception muxEx)
                 {
@@ -956,12 +972,23 @@ internal sealed class VideoRenderJob : MonoBehaviour
             // 手动合成命令必须与 MuxWith 的实际参数一致：
             // · webm 只认 Vorbis/Opus，照抄 aac 会让用户拿到 "Could not find tag for codec aac"
             // · 用实际定位到的编码器路径，而不是假定 ffmpeg 在 PATH 上
+            // · 音画偏移同样带上（与 MuxWith 同参）：漏掉它，照抄命令合出来的
+            //   成片就退回「没有实机对齐」的状态，偏移设置白改。
+            double offset = Math.Round(muxAudioOffsetSec, 3);
+            string videoInput = offset < 0
+                ? "-itsoffset " + (-offset).ToString("0.###", CultureInfo.InvariantCulture)
+                    + " -i \"" + videoCopy + "\""
+                : "-i \"" + videoCopy + "\"";
+            string audioInput = offset > 0
+                ? "-itsoffset " + offset.ToString("0.###", CultureInfo.InvariantCulture)
+                    + " -i \"" + audioCopy + "\""
+                : "-i \"" + audioCopy + "\"";
             bool webm = string.Equals(Path.GetExtension(target), ".webm",
                 StringComparison.OrdinalIgnoreCase);
             string audio = webm ? "libopus -b:a 192k -ar 48000" : "aac -b:a 320k";
             Debug.Log("[SpectreReplay] mux 失败但已抢救原始流: " + videoCopy + "\n  " + audioCopy
-                + "\n  手动合成: \"" + encoderPath + "\" -i \"" + videoCopy + "\" -i \"" + audioCopy
-                + "\" -c:v copy -c:a " + audio + " -ac 2 -shortest \"" + target + "\""
+                + "\n  手动合成: \"" + encoderPath + "\" " + videoInput + " " + audioInput
+                + " -c:v copy -c:a " + audio + " -ac 2 -shortest \"" + target + "\""
                 + "\n  失败原因: " + cause.Message);
         }
         catch (Exception ex)

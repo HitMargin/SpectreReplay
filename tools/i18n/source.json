@@ -695,6 +695,26 @@
   "en": "Extra tail seconds"
  },
  {
+  "key": "render.audio.offset",
+  "zh": "音频偏移",
+  "en": "Audio offset"
+ },
+ {
+  "key": "render.audio.offset.follow",
+  "zh": "跟随校准",
+  "en": "Follow calibration"
+ },
+ {
+  "key": "render.audio.offset.follow.tip",
+  "zh": "打开时偏移量取自游戏内校准（当前校准多少，成片音频就延后多少）；关闭后用下面的滑条手动指定毫秒值。",
+  "en": "When on, the offset comes from the in-game calibration (the video delays the audio by exactly that amount). Turn off to set a manual millisecond value with the slider below."
+ },
+ {
+  "key": "render.audio.offset.tip",
+  "zh": "合成时把整条混音轨平移校准量：实机画面比音频滞后校准量（扬声器延迟已被系统补偿），离线渲染没有那道补偿，校准会被原样烧进成片。默认跟随游戏校准复现实机观感；关闭后可手动指定毫秒值。",
+  "en": "Shifts the entire mixed audio track at mux time. On-device, the visual timeline lags the audio by your calibration offset, hidden by speaker-latency compensation; offline rendering has no such compensation, so the calibration gets baked into the video. Follows the game calibration by default; turn off to set a manual millisecond value."
+ },
+ {
   "key": "render.stop.enable",
   "zh": "允许中途结束渲染",
   "en": "Stop rendering early"

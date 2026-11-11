@@ -105,6 +105,8 @@ public static class ConfigManager
         public bool render_cursor_on { get; set; }
         public bool render_stop_on { get; set; }
         public int render_stop_key { get; set; }
+        /// <summary>音画偏移毫秒（见 Settings.RenderAudioOffsetMs）。</summary>
+        public int render_audio_offset_ms { get; set; }
         /// <summary>提示条停留秒数（见 Settings.NotificationSeconds）。</summary>
         public float notification_seconds { get; set; }
         public int notification_pos { get; set; }
@@ -227,6 +229,7 @@ public static class ConfigManager
                 render_cursor_on = Settings.RenderCursorOn,
                 render_stop_on = Settings.RenderStopOn,
                 render_stop_key = Settings.RenderStopKey,
+                render_audio_offset_ms = Settings.RenderAudioOffsetMs,
                 notification_seconds = Settings.NotificationSeconds,
                 notification_pos = Settings.NotificationPos,
             },
@@ -525,6 +528,9 @@ public static class ConfigManager
                     // 在轮询处把关（见 VideoRenderJob.StopRequestedByHotkey）。
                     // Clamp 到某个区间反而会把手改配置里的怪值悄悄改成另一个**看似正常**的键。
                     Settings.RenderStopKey = ints.Value<int?>("render_stop_key") ?? Settings.RenderStopKey;
+                    // -1 = 跟随游戏校准，0..500 = 显式毫秒；手改的越界值夹回合法域，
+                    // 避免「配置里写 99999、滑条显示不出」的悬空状态。
+                    Settings.RenderAudioOffsetMs = Mathf.Clamp(ints.Value<int?>("render_audio_offset_ms") ?? Settings.RenderAudioOffsetMs, -1, 500);
                     Settings.NotificationSeconds = Mathf.Clamp(ints.Value<float?>("notification_seconds") ?? Settings.NotificationSeconds, 1f, 10f);
                     // 0-5 对应 Toast.Pos 的六个锚点；追加新位置时同步扩展上界。
                     Settings.NotificationPos = Mathf.Clamp(ints.Value<int?>("notification_pos") ?? Settings.NotificationPos, 0, 5);

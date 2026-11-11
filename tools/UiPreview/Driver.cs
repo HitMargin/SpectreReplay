@@ -111,9 +111,14 @@ namespace UiPreview
             // 「不持久化 + 必须改源码才显示分区」接线，判据钉住别退化回配置项。
             int debugFail = DebugSwitchCheck.Run(
                 ProjectDir);
+            // 音画偏移：mux 侧 -itsoffset 注入分支、跟随校准的快照语义、
+            // 设置项四件套与抢救命令同参 —— 缺陷只在成片里可见（音频提前），
+            // 离线钉住接线形状。
+            int muxOffsetFail = MuxOffsetCheck.Run(
+                ProjectDir);
             int orphanFail = PortedCompletenessCheck.NoOrphanChecks(
                 ProjectDir);
-            int total = locFail + hardFail + replayFail + timelineFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + locLangFail + pinStateFail + injectFail + logPrefixFail + scatterFail + cursorFail + cursorTrackFail + keybdAudioFail + keybdPrefsFail + crossInputFail + saveToastFail + cloudFail + debugFail + orphanFail;
+            int total = locFail + hardFail + replayFail + timelineFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + locLangFail + pinStateFail + injectFail + logPrefixFail + scatterFail + cursorFail + cursorTrackFail + keybdAudioFail + keybdPrefsFail + crossInputFail + saveToastFail + cloudFail + debugFail + muxOffsetFail + orphanFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"
