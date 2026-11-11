@@ -38,3 +38,16 @@
 - Identified the reusable UGUI pieces in `SpectreReplay/Ui/Timeline`.
 - Confirmed StutterFix patterns for hit blocking, pooled graphics, and runtime sprite creation.
 - Next: implement the settings window skeleton and shared UGUI controls.
+
+## Session: 2026-11-12
+
+### Current Status
+- **Task:** 渲染成片音画偏移修复（方案 A：mux 侧 -itsoffset）
+- **Result:** 已完成并实机验证对齐
+
+### Actions Taken
+- 根因确认：实机画面比音频滞后校准量（inputOffset），离线渲染没有扬声器延迟补偿，校准被烧进成片。
+- MuxWith 增加音频偏移参数：正值音频侧 itsoffset、负值视频侧（避开负 PTS）、零值命令行与历史一致；抢救命令同步。
+- 新增设置 RenderAudioOffsetMs（默认 -1 跟随 scrConductor.calibration_i，0..500ms 显式覆盖），界面开关+滑条，i18n 4 键 × 14 语。
+- 新增 MuxOffsetCheck（20 行断言）+ MUT-MUX1/MUT-MUX2 变异，闸门 188 条全绿（commit 4140e18），文档同步（bdfeb2f）。
+- 实机重渲 Starlight Ignition：tick 整体 +0.124s，第一击视觉锚点 2.767s 与音乐首响 2.741s 残差 ≈26ms（修复前 ≈150ms），对齐确认。

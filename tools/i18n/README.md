@@ -1,6 +1,6 @@
 # 界面文案的翻译源
 
-`LocData.cs`（14 语言 × 325 键）由本目录的文件生成，**不要手改那个 .cs**。
+`LocData.cs`（14 语言 × 486 键）由本目录的文件生成，**不要手改那个 .cs**。
 
 ```
 tools/i18n/
@@ -20,7 +20,8 @@ tools/i18n/
 3. 跑生成器：
 
    ```
-   python tools/i18n/gen-locdata.py
+   python tools/i18n/gen-locdata.py      # 有 Python 的机器
+   powershell -File tools/i18n/gen-locdata.ps1   # 没有 Python 时（本机就是这种）
    ```
 
 4. 跑闸门 `pwsh -NoProfile -File tools/verify.ps1`。
