@@ -216,6 +216,8 @@ internal static class ManagedInput
     internal static int Append(List<AnyKeyCode> keys, ButtonState state)
     {
         if (keys == null) return 0;
+        // 空闲段短路（仅 IsDown——不能用于 WentDown，理由见 Count）
+        if (state == ButtonState.IsDown && _heldCount == 0) { return 0; }
         int frame = Time.frameCount;
         int added = 0;
         for (int vk = 0; vk < Held.Length; vk++)
@@ -239,6 +241,10 @@ internal static class ManagedInput
     /// <summary>本帧满足 <paramref name="state"/> 的回放键数量。</summary>
     internal static int Count(ButtonState state)
     {
+        // 空闲段短路：IsDown 只读 Held[]，零键时必为 0。**不能对 WentDown 用
+        // 同一早退**——同帧内按下又抬起会把 _heldCount 送回 0，而 PressedFrame
+        // 已写入该帧，早退会吞掉这个合法的按下沿（240fps 下快节拍常见）。
+        if (state == ButtonState.IsDown && _heldCount == 0) return 0;
         int frame = Time.frameCount;
         int count = 0;
         for (int vk = 0; vk < Held.Length; vk++)
@@ -303,24 +309,10 @@ internal static class ManagedInput
     /// </summary>
     private static int ToNativeVk(KeyCode k)
     {
-        // SkyHook 的 KeyLabel 目前没有 Menu/VK_APPS；Unity 的 KeyCode.Menu 在
-        // 本引擎版本（6000.3.25f1，实测反射）是 319。不在这里补映射的话，
-        // 查询会落到 Held[319]，而录制数据在 93。
-        // **只在 SkyHook 仍缺 Menu 时兜底**：未来引擎补上该键后，
-        // UnityKeyToSkyHookKey 能正常映射，这段就自动失效。
-        if (k == KeyCode.Menu && SkyHook.SkyHookKeyMapper.UnityKeyToSkyHookKey(k)
-            == SkyHook.KeyLabel.Unknown)
-            return 93;
-        try
-        {
-            SkyHook.KeyLabel label = SkyHook.SkyHookKeyMapper.UnityKeyToSkyHookKey(k);
-            if (label == SkyHook.KeyLabel.Unknown) return (int)k;
-            return SkyHook.SkyHookKeyMapper.KeyLabelToNativeKeyCode(label);
-        }
-        catch
-        {
-            return (int)k;
-        }
+        // 换算走 KeyViewerBridge 的静态缓存（构建一次，见其注释）：Unknown(-1)
+        // 退回原值——调用方会因越界返回 false，不会误判成「按住」。
+        int vk = KeyViewerBridge.CachedNativeVk(k);
+        return vk < 0 ? (int)k : vk;
     }
 
     private static bool Any(ButtonState state, int frame, KeyCode vk)

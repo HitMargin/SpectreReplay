@@ -141,24 +141,63 @@ internal static class KeyViewerBridge
         if (index != 0 && ManagedInput.IsHeldVk(index)) __result = true;
     }
 
+    // ── KeyCode → 原生 VK 静态缓存 ───────────────────────────────
+    // 每次换算原本要走 SkyHook 的托管字典查找 + KeyLabelToNativeKeyCode 的
+    // **native P/Invoke**（SkyHookNative.GetKeyCode，extern 实证），而回放期
+    // 每帧有 30-100 次换算：游戏每帧多次 RDInput 查询按键表逐键换算
+    // （scrPlayer 的 GetMain/GetStateKeys/GetState），KeyViewer/CheryTools
+    // 每帧轮询每键各一次；240fps 渲染时全部 ×4（估 7k-24k 次 P/Invoke/秒）。
+    // 映射表是静态的：一次构建、纯数组读取（全部调用点都在主线程）。
+    //
+    // **-1 = Unknown，fallback 语义留在各调用点**（KeyViewerBridge→0 /
+    // ManagedInput→(int)k），不要合并进缓存——两处调用方对 Unknown 的处置
+    // 不同，合并会把其中一方的语义带歪。
+    private static int[] _vkByCode;
+    private static bool _vkBuilt;
+
+    /// <summary>KeyCode → 原生 VK 的缓存读取；-1 = Unknown（含越界）。</summary>
+    internal static int CachedNativeVk(KeyCode code)
+    {
+        if (!_vkBuilt)
+        {
+            var table = new int[512];
+            for (int i = 0; i < table.Length; i++) table[i] = -1;
+            foreach (KeyCode k in Enum.GetValues(typeof(KeyCode)))
+            {
+                int ci = (int)k;
+                if (ci < 0 || ci >= table.Length) continue;
+                try
+                {
+                    // Menu 特判在构建时完成：SkyHook KeyLabel 缺 Menu/VK_APPS，
+                    // 真实钩子/回放数据使用 Win32 VK_APPS=93（本引擎 6000.3.25f1
+                    // 实测 KeyCode.Menu=319，与两套编码都不巧合）。引擎将来补上
+                    // Menu 后 UnityKeyToSkyHookKey 正常返回，本分支自动失效。
+                    if (k == KeyCode.Menu && SkyHook.SkyHookKeyMapper.UnityKeyToSkyHookKey(k)
+                        == SkyHook.KeyLabel.Unknown)
+                    {
+                        table[ci] = 93;
+                        continue;
+                    }
+                    SkyHook.KeyLabel label = SkyHook.SkyHookKeyMapper.UnityKeyToSkyHookKey(k);
+                    if (label == SkyHook.KeyLabel.Unknown) continue;
+                    table[ci] = SkyHook.SkyHookKeyMapper.KeyLabelToNativeKeyCode(label);
+                }
+                catch
+                {
+                    // 单键换算失败按 Unknown 处理——与旧逐调用 try/catch 等价
+                }
+            }
+            _vkByCode = table;
+            _vkBuilt = true;
+        }
+        int idx = (int)code;
+        return idx >= 0 && idx < _vkByCode.Length ? _vkByCode[idx] : -1;
+    }
+
     /// <summary>KeyCode → 原生虚拟键码（**不查重映射表**）；无法换算时返回 0。</summary>
     internal static ushort ToNativeVk(KeyCode code)
     {
-        // KeyViewer 用 Unity KeyCode 查询。Menu 键在 SkyHook KeyLabel 里目前缺失，
-        // 但真实钩子/回放数据使用 Win32 VK_APPS=93；不补映射会显示成没按。
-        // 只在 SkyHook 仍返回 Unknown 时兜底；引擎将来加上 Menu 后自动走原生路径。
-        if (code == KeyCode.Menu && SkyHook.SkyHookKeyMapper.UnityKeyToSkyHookKey(code)
-            == SkyHook.KeyLabel.Unknown)
-            return 93;
-        try
-        {
-            SkyHook.KeyLabel label = SkyHook.SkyHookKeyMapper.UnityKeyToSkyHookKey(code);
-            if (label == SkyHook.KeyLabel.Unknown) return 0;
-            return SkyHook.SkyHookKeyMapper.KeyLabelToNativeKeyCode(label);
-        }
-        catch
-        {
-            return 0;
-        }
+        int vk = CachedNativeVk(code);
+        return vk < 0 ? (ushort)0 : (ushort)vk;
     }
 }

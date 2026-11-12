@@ -394,17 +394,17 @@ namespace UiPreview
             fail += Check(projectRoot,
                 "5d Menu 键兜底必须先探测 SkyHook，不能再无条件覆盖",
                 "Features\\Replay\\Runtime\\KeyViewerBridge.cs",
-                s => { string b = MethodBody(s, "ToNativeVk"); return b != null
-                    && b.Contains("code == KeyCode.Menu && SkyHook.SkyHookKeyMapper.UnityKeyToSkyHookKey(code)", StringComparison.Ordinal)
-                    && b.Contains("== SkyHook.KeyLabel.Unknown", StringComparison.Ordinal)
-                    && b.Contains("return 93;", StringComparison.Ordinal); });
-            fail += Check(projectRoot,
-                "5e 托管输入的 Menu 兜底同样必须先探测 SkyHook",
-                "Features\\\\Replay\\\\Runtime\\\\ManagedInput.cs",
-                s => { string b = MethodBody(s, "ToNativeVk"); return b != null
+                s => { string b = MethodBody(s, "CachedNativeVk"); return b != null
                     && b.Contains("k == KeyCode.Menu && SkyHook.SkyHookKeyMapper.UnityKeyToSkyHookKey(k)", StringComparison.Ordinal)
                     && b.Contains("== SkyHook.KeyLabel.Unknown", StringComparison.Ordinal)
-                    && b.Contains("return 93;", StringComparison.Ordinal); });
+                    && b.Contains("table[ci] = 93;", StringComparison.Ordinal)
+                    && (MethodBody(s, "ToNativeVk") ?? "").IndexOf("Menu", StringComparison.Ordinal) < 0; });
+            fail += Check(projectRoot,
+                "5e 托管输入的 Menu 兜底已集中进共享缓存（本地无 Menu 分支，纯委托）",
+                "Features\\\\Replay\\\\Runtime\\\\ManagedInput.cs",
+                s => { string b = MethodBody(s, "ToNativeVk"); return b != null
+                    && b.Contains("KeyViewerBridge.CachedNativeVk(k)", StringComparison.Ordinal)
+                    && b.IndexOf("Menu", StringComparison.Ordinal) < 0; });
             fail += Check(projectRoot,
                 "⑬c7 现代模式不得重复画 Section 标题",
                 "Ui\\\\Gui.cs",

@@ -349,8 +349,66 @@ namespace UiPreview
                 "⑬ 命中推进没有挡 ±Infinity —— Infinity 让 `angle >= CurrAngle` 恒真");
             // ⑫a 的就绪判据现在在 CurrentSongPosition 里（PumpInput 已不再自行算时钟）。
 
+            // ⑭ 键码换算缓存（2026-11-13 性能审查）：Unity KeyCode → 原生 VK 每次
+            //    调用都走 SkyHook 托管字典 + KeyLabelToNativeKeyCode 的 native
+            //    P/Invoke（extern 实证），回放期每帧 30-100 次（RDInput 查询逐键 ×
+            //    键表、KV 每帧每键轮询），240fps 渲染 ×4。映射表静态 → 一次构建、
+            //    纯数组读取。判据：
+            //    ⑭a 构建在 KeyViewerBridge（Enum.GetValues 全量 + Menu→93 特判），
+            //       P/Invoke 全文件只许出现 1 次（构建处）；
+            //    ⑭b 两个调用点都走缓存、fallback 各自保留（KB→0 / MI→(int)k），
+            //       ManagedInput 不再直接触碰 SkyHook（fallback 合并 = 语义带歪）。
+            string keybridge = SrcUtil.Source(projectRoot, "Features/Replay/Runtime/KeyViewerBridge.cs");
+            int CountOf(string s, string sub)
+            {
+                int n = 0, i = 0;
+                while ((i = s.IndexOf(sub, i, StringComparison.Ordinal)) >= 0) { n++; i += sub.Length; }
+                return n;
+            }
+            int before14a = fail;
+            Expect(keybridge.Contains("_vkByCode", StringComparison.Ordinal)
+                && keybridge.Contains("Enum.GetValues(typeof(KeyCode))", StringComparison.Ordinal)
+                && keybridge.Contains("table[ci] = 93;", StringComparison.Ordinal)
+                && keybridge.Contains("internal static int CachedNativeVk(KeyCode code)", StringComparison.Ordinal)
+                && CountOf(keybridge, "KeyLabelToNativeKeyCode") == 1,
+                "⑭a 换算缓存构建不完整 —— 必须全量枚举 + Menu→93 特判，P/Invoke 只许在构建处出现一次");
+            if (fail == before14a)
+                Console.WriteLine("    ✓ ⑭a 键码换算缓存：全量构建 + Menu 特判 + P/Invoke 收进构建处");
+            int before14b = fail;
+            Expect(keybridge.Contains("return vk < 0 ? (ushort)0 : (ushort)vk;", StringComparison.Ordinal)
+                && input.Contains("KeyViewerBridge.CachedNativeVk(k)", StringComparison.Ordinal)
+                && input.Contains("return vk < 0 ? (int)k : vk;", StringComparison.Ordinal)
+                && !input.Contains("SkyHook", StringComparison.Ordinal),
+                "⑭b 两个调用点没有都走缓存 —— 直调 SkyHook 会让 P/Invoke 回到每帧热路径；fallback 合并会把 Unknown 语义带歪");
+            if (fail == before14b)
+                Console.WriteLine("    ✓ ⑭b 缓存接线齐全，fallback 语义各归各（KB→0 / MI→原值）");
+
+            // ⑮ Count/Append 空闲段早退（2026-11-13 性能审查）：零键帧不再全表扫
+            //    256 项。**只许 IsDown 早退**——同帧按下又抬起会把 _heldCount 送回
+            //    0 而 PressedFrame 帧戳仍有效，WentDown 早退会吞掉合法按下沿。
+            int before15 = fail;
+            int appendAt = input.IndexOf("internal static int Append(List<AnyKeyCode> keys, ButtonState state)", StringComparison.Ordinal);
+            int countAt = input.IndexOf("internal static int Count(ButtonState state)", StringComparison.Ordinal);
+            int matchesAt = input.IndexOf("private static bool Matches(ButtonState state, int vk, int frame)", StringComparison.Ordinal);
+            Expect(appendAt >= 0 && countAt > appendAt && matchesAt > countAt,
+                "⑮ 找不到 Append/Count/Matches 的方法序（被挪走/改名？）");
+            if (appendAt >= 0 && countAt > appendAt && matchesAt > countAt)
+            {
+                string appendBody = input.Substring(appendAt, countAt - appendAt);
+                string countBody = input.Substring(countAt, matchesAt - countAt);
+                const string IdleExit = "if (state == ButtonState.IsDown && _heldCount == 0)";
+                Expect(countBody.Contains(IdleExit + " return 0;", StringComparison.Ordinal)
+                    && countBody.IndexOf(IdleExit, StringComparison.Ordinal) < countBody.IndexOf("int frame = Time.frameCount", StringComparison.Ordinal),
+                    "⑮ Count 的空闲段早退丢了或没在扫描之前 —— 无按键帧照旧全表扫描 256 项");
+                Expect(appendBody.Contains(IdleExit + " { return 0; }", StringComparison.Ordinal)
+                    && appendBody.IndexOf(IdleExit, StringComparison.Ordinal) < appendBody.IndexOf("int frame = Time.frameCount", StringComparison.Ordinal),
+                    "⑮ Append 的空闲段早退丢了或没在扫描之前 —— 无按键帧照旧全表扫描 256 项");
+            }
+            if (fail == before15)
+                Console.WriteLine("    ✓ ⑮ Count/Append 空闲段早退：仅 IsDown、在扫描之前");
+
             if (fail == 0)
-                Console.WriteLine("    ✓ 跨平台输入的 15 组判据都成立");
+                Console.WriteLine("    ✓ 跨平台输入的 18 组判据都成立");
             return fail;
         }
     }

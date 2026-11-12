@@ -878,14 +878,16 @@ switch ($Which) {
         ReplaceExact 'Ui\ModernSettingsWindow.cs' '_tabRailX = Mathf.Lerp(_tabRailX, selX, k);' '_tabRailX = selX;'
     }
     'MUT-U91' {
-        # 5d：KeyViewer 的 Menu 兜底去掉探测——先探测 SkyHook 判据必须变红。
+        # 5d：缓存构建里的 Menu 兜底去掉探测——先探测 SkyHook 判据必须变红
+        #     （2026-11-13 起兜底集中在 CachedNativeVk 构建处）。
         Backup 'Features\Replay\Runtime\KeyViewerBridge.cs'
-        ReplaceExact 'Features\Replay\Runtime\KeyViewerBridge.cs' ('if (code == KeyCode.Menu && SkyHook.SkyHookKeyMapper.UnityKeyToSkyHookKey(code)') ('if (code == KeyCode.Menu && true')
+        ReplaceExact 'Features\Replay\Runtime\KeyViewerBridge.cs' ('if (k == KeyCode.Menu && SkyHook.SkyHookKeyMapper.UnityKeyToSkyHookKey(k)') ('if (k == KeyCode.Menu && true')
     }
     'MUT-U92' {
-        # 5e：托管输入的 Menu 兜底去掉探测——先探测判据必须变红。
+        # 5e：托管输入侧加回本地无条件 Menu 覆盖——历史上「无条件覆盖」的原
+        #     缺陷形状（兜底已集中进共享缓存，本地任何 Menu 分支都是回归）。
         Backup 'Features\Replay\Runtime\ManagedInput.cs'
-        ReplaceExact 'Features\Replay\Runtime\ManagedInput.cs' ('if (k == KeyCode.Menu && SkyHook.SkyHookKeyMapper.UnityKeyToSkyHookKey(k)') ('if (k == KeyCode.Menu && true')
+        ReplaceExact 'Features\Replay\Runtime\ManagedInput.cs' ('int vk = KeyViewerBridge.CachedNativeVk(k);') ('if (k == KeyCode.Menu) return 93; int vk = KeyViewerBridge.CachedNativeVk(k);')
     }
     'MUT-U93' {
         # ⑬c11：关闭动画期间重新铺输入挡板——热键关窗后鼠标失效判据必须变红。
@@ -1008,6 +1010,27 @@ switch ($Which) {
         # 性能回归：WAV 写缓冲退回默认 4KB——240fps 下几乎每帧一次内核写。
         Backup 'Features\VideoRender\Pipeline\VideoAudioTrack.cs'
         ReplaceExact 'Features\VideoRender\Pipeline\VideoAudioTrack.cs' 'FileShare.Read, 65536' 'FileShare.Read'
+    }
+    'MUT-U114' {
+        # 性能回归（2026-11-13 回放热路径审查）：ManagedInput.ToNativeVk 不再走
+        # 静态缓存——每帧 30-100 次 SkyHook P/Invoke（240fps 渲染 ×4）原样回来。
+        # CrossPlatformInputCheck ⑭b 钉的形状。
+        Backup 'Features\Replay\Runtime\ManagedInput.cs'
+        ReplaceExact 'Features\Replay\Runtime\ManagedInput.cs' 'int vk = KeyViewerBridge.CachedNativeVk(k);' 'int vk = -1;'
+    }
+    'MUT-U115' {
+        # 性能回归（同上轮）：缓存构建丢掉 Menu→93 特判——Menu 键按 Unknown
+        # 处理，键位显示与 ManagedInput 的 Menu 查询全部落空（VK_APPS=93 的
+        # 录制数据对不上）。CrossPlatformInputCheck ⑭a 钉的形状。
+        Backup 'Features\Replay\Runtime\KeyViewerBridge.cs'
+        ReplaceExact 'Features\Replay\Runtime\KeyViewerBridge.cs' 'table[ci] = 93;' '_ = ci;'
+    }
+    'MUT-U116' {
+        # 性能回归（同上轮）：Count 的空闲段早退丢失——无按键帧照旧全表扫描
+        # 256 项。**只许删 Count 这条**（Append 的带花括号，锚点互不污染）。
+        # CrossPlatformInputCheck ⑮ 钉的形状。
+        Backup 'Features\Replay\Runtime\ManagedInput.cs'
+        ReplaceExact 'Features\Replay\Runtime\ManagedInput.cs' 'if (state == ButtonState.IsDown && _heldCount == 0) return 0;' ''
     }
     'MUT-U25' {
         # ⑫i：把已删除的「界面语言跟随游戏」开关加回来（防回归变异）。
@@ -2822,7 +2845,7 @@ switch ($Which) {
         ReplaceExact 'Features\Replay\Runtime\ReplayInputBridge.cs' 'started.Add(t.Origin);' ''
     }
     default {
-        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U100 / MUT-MUX1 / MUT-MUX2 / MUT-API1 / MUT-API2 / MUT-API3 / MUT-RI1 / MUT-RI2 / MUT-RI3 / MUT-U108 / MUT-U109 / MUT-U110 / MUT-U111 / MUT-U112 / MUT-U113）"
+        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U100 / MUT-MUX1 / MUT-MUX2 / MUT-API1 / MUT-API2 / MUT-API3 / MUT-RI1 / MUT-RI2 / MUT-RI3 / MUT-U108 / MUT-U109 / MUT-U110 / MUT-U111 / MUT-U112 / MUT-U113 / MUT-U114 / MUT-U115 / MUT-U116）"
     }
 }
 
