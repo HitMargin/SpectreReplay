@@ -286,18 +286,13 @@ internal sealed class VideoFrameSource
         flights.Dequeue();
         index = head.Index;
         if (head.Request.hasError)
-        {
-            failed = true;
-            return true;
-        }
+            return SubstituteLastGood(out pixels, out failed);
         NativeArray<byte> data = head.Request.GetData<byte>();
         if (data.Length != frameBytes)
-        {
-            failed = true;
-            return true;
-        }
+            return SubstituteLastGood(out pixels, out failed);
         pixels = Rent();
         data.CopyTo(pixels);
+        RetainLastGood(pixels);
         // 指针最后画：此时像素已拷进托管数组，且位置是 Grab 那一帧记下的。
         // rowsBottomUp 照 NeedsRowFlip——编码器只对 CleanCamera 做 vflip。
         if (head.CursorDrawn)
@@ -317,6 +312,47 @@ internal sealed class VideoFrameSource
             }
         }
         return true;
+    }
+
+    // **上一个成功帧的常驻副本**（含指针叠加后的最终画面）。回读失败时复制它
+    // 顶替——240fps 下重复上一帧不可见，远好于黑帧。只在成功帧上更新；尺寸
+    // 突变（frameBytes 变了）时立即丢弃，防止 BlockCopy 越界。
+    private byte[] lastGood;
+    // 顶替计数（供作业收尾写进完成日志：黑帧为 0 时这一行不打）
+    internal int SubstituteCount => substituteCount;
+    internal int SubstituteMissing => substituteMissing;
+    private int substituteCount;
+    private int substituteMissing;
+
+    // 回读失败的顶替出口（hasError 与尺寸突变共用）：**用上一个成功帧顶替，
+    // 不再黑帧。**（2026-11-12 他人日志：Intel Iris Xe + 240fps 下回读间歇
+    // hasError，439/18081 帧（2.43%）被黑帧顶替——正常画面里每隔几十帧插一个
+    // 全黑，就是「一闪一闪」。失败是驱动层偶发（帧号稀疏随机、无相邻簇），
+    // 240fps 帧间隔仅 4ms，重复上一帧在画面上完全不可见；行序/字节序与正常帧
+    // 100% 一致（就是它的拷贝），零 GPU 开销、完全确定性。）上个成功帧缺位
+    // （开局连败）才回落黑帧，由作业端 failedReadbacks 计数并提示。
+    private bool SubstituteLastGood(out byte[] pixels, out bool failed)
+    {
+        if (lastGood != null)
+        {
+            pixels = Rent();
+            Buffer.BlockCopy(lastGood, 0, pixels, 0, frameBytes);
+            failed = false;
+            substituteCount++;
+            return true;
+        }
+        pixels = null;
+        failed = true;
+        substituteMissing++;
+        return true;
+    }
+
+    private void RetainLastGood(byte[] pixels)
+    {
+        if (frameBytes <= 0 || pixels.Length < frameBytes) return;
+        if (lastGood == null || lastGood.Length != frameBytes)
+            lastGood = new byte[frameBytes];
+        Buffer.BlockCopy(pixels, 0, lastGood, 0, frameBytes);
     }
 
     // 由渲染作业在编码器启动后调用：上限只升不降，避免时序竞争下缩池

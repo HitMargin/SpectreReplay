@@ -903,6 +903,14 @@ internal sealed class VideoRenderJob : MonoBehaviour
         if (cancelRequested) { NotifyCanceled(); yield break; }
 
         TriggerMessage(LocalizationManager.GetLocalizedText("rendervideo.done") + "\n" + outputPath, extra: 2f);
+        // 顶替统计进完成日志：上一帧顶替（hasError 兜底）不进提示条（它不该被
+        // 感知到），但排查「画面有微顿」时这是第一现场。黑帧只剩开局连败形态。
+        if (frames.SubstituteCount > 0 || frames.SubstituteMissing > 0 || failedReadbacks > 0)
+        {
+            Debug.Log("[SpectreReplay] 回读顶替统计：重复上一帧 "
+                + frames.SubstituteCount + " 帧，黑帧 " + (failedReadbacks + frames.SubstituteMissing)
+                + " 帧（回读 hasError 共 " + (frames.SubstituteCount + frames.SubstituteMissing + failedReadbacks) + " 次）");
+        }
         Debug.Log("[SpectreReplay] replay video complete: " + outputPath);
         ReportEnd(SpectreAPI.RenderEndStatus.Completed, outputPath, null);
     }
@@ -1133,19 +1141,21 @@ internal sealed class VideoRenderJob : MonoBehaviour
             + " blocks=" + (blockText.Length == 0 ? "无" : blockText.ToString()));
     }
 
-    // 按序交付已完成的帧；失败的帧用黑帧顶替
+    // 按序交付已完成的帧。回读失败由帧源用「上一个成功帧」顶替（VideoFrameSource
+    // TryTake），这里只剩真正的最后防线：上个成功帧缺位（开局连败）时才黑帧。
     private void Flush()
     {
         while (frames.TryTake(out int index, out byte[] pixels, out bool failed))
         {
             if (failed || pixels == null)
             {
-                Debug.LogWarning("[SpectreReplay] readback failed at frame " + index + ", black frame substituted");
+                Debug.LogWarning("[SpectreReplay] readback failed at frame " + index
+                    + ", and no previous frame to repeat — black frame substituted");
                 failedReadbacks++;
-                if (failedReadbacks == 25)
+                if (failedReadbacks == 10)
                 {
-                    Debug.LogWarning("[SpectreReplay] 已替换 25 个黑帧：回读多次失败，"
-                        + "建议改用「纯净相机」画面来源，或更新显卡驱动");
+                    Debug.LogWarning("[SpectreReplay] 已替换 10 个黑帧（开局连败形态）："
+                        + "回读反复失败，建议改用「纯净相机」画面来源、降低渲染帧率，或更新显卡驱动");
                 }
                 encoder.Submit(blackout, blackout.Length, 1, null, () => cancelRequested);
             }

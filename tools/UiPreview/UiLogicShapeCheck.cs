@@ -1295,9 +1295,10 @@ namespace UiPreview
                     && cleanup.Contains("texture.Release()", StringComparison.Ordinal));
             // 渲染健壮性（2026-11-08 他人日志）：① 分辨率中止必须打印新旧尺寸，
             // 否则无法定位是谁改了窗口；② 重锚顶满 4 次 = 游戏时钟没跟上，继续
-            // 渲染只会产出冻结画面+黑帧，必须明确中止；③ 黑帧攒到 25 个要给
-            // 「改用纯净相机」的建议。④ 旧"兼容路径警告"子句已随确定性时钟
-            // 重构移除（不再有 fallback 路径），由 ⑮f 钉装配不变量。
+            // 渲染只会产出冻结画面+黑帧，必须明确中止；③ 黑帧攒到 10 个要给
+            // 「改用纯净相机」的建议（2026-11-12 起黑帧只剩开局连败形态，
+            // 正常失败已由帧源用上一帧顶替，阈值相应收紧）。④ 旧"兼容路径警告"
+            // 子句已随确定性时钟重构移除（不再有 fallback 路径），由 ⑮f 钉装配不变量。
             fail += Check(projectRoot,
                 "渲染健壮性：分辨率中止带新旧尺寸、重对齐循环中止、黑帧建议",
                 "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
@@ -1305,7 +1306,27 @@ namespace UiPreview
                     && s.Contains("frames.SrcWidth + \"x\" + frames.SrcHeight", StringComparison.Ordinal)
                     && s.Contains("if (reAnchors >= 4)", StringComparison.Ordinal)
                     && s.Contains("rendervideo.reanchor_loop", StringComparison.Ordinal)
-                    && s.Contains("failedReadbacks == 25", StringComparison.Ordinal));
+                    && s.Contains("failedReadbacks == 10", StringComparison.Ordinal));
+            // 回读失败顶替（2026-11-12 他人日志：Intel Iris Xe + 240fps 下
+            // AsyncGPUReadback 间歇 hasError，439/18081 帧（2.43%）被黑帧顶替
+            // ——正是「成片一闪一闪」的根因）。修复 = 帧源保留上一个成功帧，
+            // 失败帧复制它顶替（240fps 下重复上一帧不可见，行序/字节序与正常
+            // 帧 100% 一致）；上个成功帧缺位才黑帧。判据钉三处：
+            // ① TryTake 的 hasError 分支必须有 lastGood 顶替路径；
+            // ② lastGood 只在成功帧上更新（RetainLastGood 在 data.CopyTo 之后）；
+            // ③ 完成日志必须带顶替统计（排查「画面微顿」的第一现场）。
+            fail += Check(projectRoot,
+                "回读失败必须用上一帧顶替而非黑帧，完成日志带顶替统计",
+                "Features\\VideoRender\\Pipeline\\VideoFrameSource.cs",
+                s => s.Contains("if (lastGood != null)", StringComparison.Ordinal)
+                    && s.Contains("Buffer.BlockCopy(lastGood, 0, pixels, 0, frameBytes);", StringComparison.Ordinal)
+                    && IndexBefore(s, "data.CopyTo(pixels);", "RetainLastGood(pixels);"));
+            fail += Check(projectRoot,
+                "回读顶替统计必须进完成日志",
+                "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
+                s => s.Contains("回读顶替统计：重复上一帧 ", StringComparison.Ordinal)
+                    && s.Contains("frames.SubstituteCount", StringComparison.Ordinal)
+                    && IndexBefore(s, "回读顶替统计：重复上一帧 ", "replay video complete"));
             // 渲染期歌曲排程推迟（2026-11-08 用户实测：画面源冷启动 1.3s 实时
             // 烧掉剩余倒计时，成片从歌曲 0 拍开始，倒计时整段丢失）。三条硬序：
             // ① Arm 必须在 SwitchToPlayMode 之前——rewind 链在场景加载中就会调
