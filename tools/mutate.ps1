@@ -1729,7 +1729,7 @@ switch ($Which) {
         # 跳过 ⇒ 它根本不去下载版本清单 ⇒ NewestVersion 永远 null，
         # 而"字段还在"会让只判存在的弱判据照样绿——所以判据必须判非空。
         Backup 'info.json'
-        ReplaceExact 'info.json' '"Repository": "https://raw.githubusercontent.com/HitMargin/SpectreReplay/master/repo.json"' '"Repository": ""'
+        ReplaceExact 'info.json' '"Repository": "https://raw.githubusercontent.com/adofaiex/SpectreReplay/master/repo.json"' '"Repository": ""'
     }
     'MUT-K3' {
         # LocRuntimeCheck 反向判据（表里不许有没人取的键）的自证。

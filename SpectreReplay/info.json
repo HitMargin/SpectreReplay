@@ -7,6 +7,6 @@
   "AssemblyName": "SpectreReplay.dll",
   "EntryMethod": "SpectreReplay.Main.Load",
   "GameVersion": "3.3.1",
-  "HomePage": "https://github.com/HitMargin/SpectreReplay",
-  "Repository": "https://raw.githubusercontent.com/HitMargin/SpectreReplay/master/repo.json"
+  "HomePage": "https://github.com/adofaiex/SpectreReplay",
+  "Repository": "https://raw.githubusercontent.com/adofaiex/SpectreReplay/master/repo.json"
 }
