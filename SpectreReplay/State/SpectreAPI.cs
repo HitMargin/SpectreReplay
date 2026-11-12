@@ -14,7 +14,7 @@ namespace SpectreReplay.API;
 public static class SpectreAPI
 {
     /// <summary>API 版本；软依赖 mod 反射探测能力用。新增成员 = 次版本号 +1。</summary>
-    public const string ApiVersion = "0.5";
+    public const string ApiVersion = "0.6";
 
     // ── 生命周期事件 ─────────────────────────────────────────────
 
@@ -34,6 +34,54 @@ public static class SpectreAPI
     internal static void RaisePlaybackStarted() => Raise(PlaybackStarted);
     internal static void RaisePlaybackStopped() => Raise(PlaybackStopped);
     internal static void RaiseReplaySaved(string path) => Raise(ReplaySaved, path);
+
+    // ── 回放按键查询（KeyViewer 拉取接口） ──────────────────────
+    // 供其他键位显示模组主动查询回放按键状态，替代被动的补丁桥接。
+    // 所有查询都是纯只读快照，不改任何回放内部状态。
+
+    /// <summary>
+    /// 回放是否正在进行。任意线程可读。<br/>
+    /// 游戏内暂停菜单不会翻假：暂停只是歌曲时间不走、不再消费新按键，
+    /// 已按住的键保持按住状态（没有任何暂停钩子会停回放——已核实）。
+    /// </summary>
+    public static bool IsReplayActive => SpectreState.is_playing;
+
+    /// <summary>
+    /// 指定虚拟键码此刻是否被回放按住。<br/>
+    /// 键码域是 Win32 VK（与 <see cref="KeyViewerBridge.ToNativeVk"/> 同一套编码）。
+    /// </summary>
+    public static bool IsReplayKeyHeld(ushort vk) => ManagedInput.IsHeldVk(vk);
+
+    /// <summary>
+    /// 指定虚拟键码是否在**本帧**产生了按下沿。<br/>
+    /// 帧戳语义与 <see cref="ManagedInput.WasPressedThisFrame"/> 一致。
+    /// </summary>
+    public static bool WasReplayKeyPressedThisFrame(ushort vk) => ManagedInput.WasPressedThisFrame(vk);
+
+    /// <summary>
+    /// 当前所有被回放按住的虚拟键码快照。<br/>
+    /// 无回放或未按键时返回空数组（不返回 null）。
+    /// </summary>
+    public static ushort[] GetHeldReplayKeys()
+    {
+        if (!SpectreState.is_playing) return new ushort[0];
+        List<ushort> held = ManagedInput.SnapshotHeld();
+        return held.ToArray();
+    }
+
+    /// <summary>
+    /// 回放按键状态变化事件：回放期间每次有键按下或抬起时触发。<br/>
+    /// 参数：(vk 虚拟键码, pressed 是否按下)。主线程触发，逐订阅者异常隔离。
+    /// </summary>
+    public static event Action<ushort, bool> ReplayKeyChanged;
+
+    internal static void RaiseReplayKeyChanged(ushort vk, bool pressed) => Raise(ReplayKeyChanged, vk, pressed);
+
+    /// <summary>
+    /// 把 Unity KeyCode 换算成 Win32 虚拟键码（与回放数据所用编码一致）。<br/>
+    /// 无法换算时返回 0。与 <see cref="KeyViewerBridge.ToNativeVk"/> 同源。
+    /// </summary>
+    public static ushort UnityKeyToVk(KeyCode code) => KeyViewerBridge.ToNativeVk(code);
 
     private static void Raise(Action evt)
     {
@@ -56,6 +104,19 @@ public static class SpectreAPI
             foreach (Action<T> d in evt.GetInvocationList())
             {
                 try { d(arg); }
+                catch (Exception ex) { LogSubscriberError(nameof(Raise), d, ex); }
+            }
+        });
+    }
+
+    private static void Raise<T1, T2>(Action<T1, T2> evt, T1 arg1, T2 arg2)
+    {
+        if (evt == null) return;
+        RunOnMain(() =>
+        {
+            foreach (Action<T1, T2> d in evt.GetInvocationList())
+            {
+                try { d(arg1, arg2); }
                 catch (Exception ex) { LogSubscriberError(nameof(Raise), d, ex); }
             }
         });

@@ -42,9 +42,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify.ps1
 **只读审计**（7 个离线审计脚本）、线上 dll 与构建产物的 sha256 一致、
 `D:\Projects\Spectre` 工作区干净。（后两项只在本地跑，`-Ci` 跳过。）
 
-> **当前打印 188 条断言 0 失败**（2026-11-12 实测；11-09 记录是 168，本轮音画偏移
-> `MuxOffsetCheck` 加 20 行；10-30 记录是 155，其间键盘音
-> 覆盖值等轮次加了行级判据）。这个数字会随轮次变，
+> **当前打印 202 条断言 0 失败**（2026-11-12 实测；本轮加了回放按键 API 契约
+> `ApiSurfaceCheck` 与 RainingKeys 推桥接线 `RainingKeysBridgeCheck` 各 7 行，
+> 之前是 188；11-09 记录是 168，音画偏移 `MuxOffsetCheck` 加 20 行；
+> 10-30 记录是 155，其间键盘音覆盖值等轮次加了行级判据）。
+> 这个数字会随轮次变，
 > 引用前先跑一遍 `verify.ps1` 看真实条数。**注意它是「✓ 行数」而不是判据数**
 > ——`UiLogicShapeCheck` 现有 176 条判据只印 1 行，所以加判据这个数字不变。
 
@@ -80,6 +82,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\verify.ps1
 | CursorTrackCheck | 指针轨迹段（容器尾部可选段）：往返（含倒计时负区间）、旧文件无轨迹段→空轨迹且旧段完好、未知尾部整体忽略、段版本上界、count 走 ReadCount 防护、插值/夹取/单样本/空表行为 |
 | LogPrefixCheck | 全部日志用 `[SpectreReplay]` 前缀（真实 Spectre 模组也装着会跑，前缀是区分来源的唯一依据） |
 | MuxOffsetCheck | 音画偏移（2026-11-12 加，20 行）：mux 侧 `-itsoffset` 正负两分支都存在且由偏移参数驱动（负向必须走视频侧，对音频用负 itsoffset 会把起始 PTS 推到负数被 muxer 拒收）、零偏移命令行与历史版本逐字一致、itsoffset 注入点恰好各 2 处（编码器与抢救命令）、快照必须带「-1 跟随校准」语义且在主线程落值、设置项四件套（字段/落盘/读取/界面）、抢救命令与 `MuxWith` 同参。变异 `MUT-MUX1`（正偏移分支失效）/`MUT-MUX2`（跟随分支读成 0）守 |
+| ApiSurfaceCheck | 回放按键查询 API 对外契约（2026-11-12 加）：`SpectreAPI` 六个成员在位且委托同源（拉取接口必须与补丁桥同一套键码换算）、`ReplayKeyChanged` 事件与 raiser 同在、`ManagedInput.Note` 在**状态写入之后**发事件、`GetHeldReplayKeys` 无回放分支永不返回 null、两参 Raise 走主线程封送 + 逐订阅者异常隔离、`ApiVersion` 随成员升级。变异 `MUT-API1`（Note 不再发事件）/`MUT-API2`（无回放分支返回 null）/`MUT-API3`（事件成员删除）守 |
+| ReplayInputBridgeCheck | ReplayInput 推桥接线（2026-11-12 加，跨 KV 通用约定）：Start/Stop/PumpInput 边沿/Rebuild 重播种/Main 复位五处在位、**按类型名 `ReplayInput` 扫描全部程序集（不许绑死某一家程序集——同类 mod 多、接口通用）**、四方法全解析、VK→KeyCode 走 SkyHook 逆链（与 `KeyViewerBridge.ToNativeVk` 互逆）且保留 VK_APPS=93 ↔ KeyCode.Menu 特判。这类 KV 受控模式只认显式调用，桥断在游戏里毫无异常。变异 `MUT-RI1`（不喂边沿）/`MUT-RI2`（不发 OnEndInputs）守 |
 
 **总数 111 个 ✓ 行**（2026-10-24 实测；10-22 记录是 110，本轮加 `ReplayCheck` 的 ⑹「v1 旧回放仍能解码」1 行。再往后的 ⑳c **不增行**（它折叠进 `UiLogicShapeCheck` 的汇总行，判据 67→68）。更早的沿革：删掉旧上游格式回落的 ⑥/⑦ 两条后从 69 降到 67，界面扩到 14 语言后升到 83，此后又加过检查到 86，加录制鼠标指针的 5 条到 91，加跨平台回放输入 1 行到 98）。这个数字会随轮次变，
 引用前先跑一遍 `verify.ps1` 看真实条数。

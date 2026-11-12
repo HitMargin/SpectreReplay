@@ -53,6 +53,11 @@ internal static class ReplayPlayer
             // CheryTools（CT）键位显示只轮询 Unity Input，没有外部驱动；
             // 桥在它每帧轮询之后改写结果，同样不依赖镜像开关与窗口聚焦。
             CheryToolsKvBridge.TryInstall();
+            // ReplayInput 外部驱动契约（跨 KV 通用约定，RainingKeys 等同类模组
+            // 都公开这个类型）：回放开始时发 OnStartInputs 进入受控模式
+            // （停物理轮询、只认外部按键调用），结束时 OnEndInputs 还原。
+            // 按类型名扫描全部程序集，找到几个驱动几个，不绑某一家。
+            ReplayInputBridge.TryInstall();
         }
     }
 
@@ -101,6 +106,9 @@ internal static class ReplayPlayer
         }
         // Quartz 实时桥收尾：补发抬起、卸兜底源、把输入通道还给 Quartz 自己。
         QuartzLiveBridge.Shutdown();
+        // ReplayInput 契约收尾：OnEndInputs 清容器并还原玩家的普通键位显示。
+        // 漏了它会卡在受控模式——物理轮询已停，画面永远停在最后一次按键。
+        ReplayInputBridge.Shutdown();
         // 场景已卸时 instance 为 null：noFail 无从复原，但后续清理（键盘音停播、
         // CachedNoFail/IgnoreMarkFail 复位）必须照常跑到尾
         var controller = scrController.instance;
@@ -313,6 +321,10 @@ internal static class ReplayPlayer
         // 无条件对齐让它从检查点开局扩大到了每次 0:00 开局）。显示层只关心
         // 「此刻什么还按着」，所以等净态算完再一次性播种。
         QuartzLiveBridge.SeedHeld();
+        // ReplayInput 契约没有状态播种接口，只有边沿：重发 OnStartInputs 把容器
+        // 重建回干净受控态，再按净按住态逐键补 Down。跳过段的历史边沿不喂
+        // ——与上面 Quartz「只喂净按住态」同一取舍。
+        ReplayInputBridge.Reseed();
 
         // Keep the SendInput mirror in sync so Stop() releases exactly the keys
         // that remain held after the rebuild.
@@ -553,6 +565,8 @@ internal static class ReplayPlayer
                 // here so its rain animation and key highlights share the replay clock.
                 Features.VideoRender.RenderOverlayCapture.QuartzKey(num, ev.IsPressed);
                 QuartzLiveBridge.Edge(num, ev.IsPressed);
+                // ReplayInput 契约同理：受控模式只认显式按键调用，VK→KeyCode 后转发。
+                ReplayInputBridge.Edge(num, ev.IsPressed);
                 if (asyncInject && AsyncInputInjector.Healthy)
                 {
                     try { AsyncInputInjector.Inject(num, ev.IsPressed, ev.SongPosition); }

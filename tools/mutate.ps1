@@ -2739,8 +2739,43 @@ switch ($Which) {
         Backup 'Features\VideoRender\Pipeline\VideoRenderJob.cs'
         ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' '? (double)scrConductor.calibration_i' '? 0.0'
     }
+    'MUT-API1' {
+        # 回放按键 API 回归：Note 不再发 ReplayKeyChanged。事件是外部键位显示
+        # 订阅方唯一的推信号，删一行就断，而判定链毫无异常——典型的
+        # 「无异常失效」。ApiSurfaceCheck ③ 钉的形态。
+        Backup 'Features\Replay\Runtime\ManagedInput.cs'
+        ReplaceExact 'Features\Replay\Runtime\ManagedInput.cs' 'API.SpectreAPI.RaiseReplayKeyChanged(vk, pressed);' ''
+    }
+    'MUT-API2' {
+        # 回放按键 API 回归：GetHeldReplayKeys 无回放分支返回 null。XML 注释
+        # 承诺「不返回 null」，调用方 foreach 不判 null——NullReference 全在
+        # 别人进程里炸。ApiSurfaceCheck ④ 钉的形态。
+        Backup 'State\SpectreAPI.cs'
+        ReplaceExact 'State\SpectreAPI.cs' 'if (!SpectreState.is_playing) return new ushort[0];' 'if (!SpectreState.is_playing) return null;'
+    }
+    'MUT-API3' {
+        # 回放按键 API 回归：事件成员从对外面里删除。软依赖 mod 靠反射订阅，
+        # 成员被删=订阅方静默失能，本模组无任何告警。ApiSurfaceCheck ② 钉的形态；
+        # 同时证明 ① 的 Contains 型成员判据真的会咬。
+        Backup 'State\SpectreAPI.cs'
+        ReplaceExact 'State\SpectreAPI.cs' 'public static event Action<ushort, bool> ReplayKeyChanged;' ''
+    }
+    'MUT-RI1' {
+        # ReplayInput 推桥回归：PumpInput 不再喂边沿。这类 KV 受控模式只认
+        # 显式 ReplayInput 调用（RainingKeys 0.5.0 反编译实证），断喂=回放期间
+        # 键位显示全程不亮，判定链毫无异常。ReplayInputBridgeCheck ③ 钉的形态。
+        Backup 'Features\Replay\Runtime\ReplayPlayer.cs'
+        ReplaceExact 'Features\Replay\Runtime\ReplayPlayer.cs' 'ReplayInputBridge.Edge(num, ev.IsPressed);' ''
+    }
+    'MUT-RI2' {
+        # ReplayInput 推桥回归：Stop 不再发 OnEndInputs。回放结束后这类 KV
+        # 卡死在受控模式——物理轮询已停（Key.Update 见 controlled 直接 return），
+        # 画面永远停在最后一次按键。ReplayInputBridgeCheck ② 钉的形态。
+        Backup 'Features\Replay\Runtime\ReplayPlayer.cs'
+        ReplaceExact 'Features\Replay\Runtime\ReplayPlayer.cs' 'ReplayInputBridge.Shutdown();' ''
+    }
     default {
-        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U100）"
+        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U100 / MUT-MUX1 / MUT-MUX2 / MUT-API1 / MUT-API2 / MUT-API3 / MUT-RI1 / MUT-RI2）"
     }
 }
 

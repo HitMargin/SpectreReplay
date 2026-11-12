@@ -116,9 +116,19 @@ namespace UiPreview
             // 离线钉住接线形状。
             int muxOffsetFail = MuxOffsetCheck.Run(
                 ProjectDir);
+            // 回放按键查询 API（SpectreAPI 的 KeyViewer 拉取接口）：成员名是
+            // 软依赖 mod 的反射探测面，事件接线与 never-null 契约断在游戏里
+            // 毫无异常（调用方静默收不到键）。离线钉住源码形状。
+            int apiSurfaceFail = ApiSurfaceCheck.Run(
+                ProjectDir);
+            // ReplayInput 推桥（跨 KV 通用约定，按类型名扫描程序集发现目标）：
+            // 受控模式只认显式 ReplayInput 调用，桥断在游戏里毫无异常
+            // （KV 全程不亮 / 结束后卡死在受控模式）。离线钉住五处接线与通用扫描。
+            int rkBridgeFail = ReplayInputBridgeCheck.Run(
+                ProjectDir);
             int orphanFail = PortedCompletenessCheck.NoOrphanChecks(
                 ProjectDir);
-            int total = locFail + hardFail + replayFail + timelineFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + locLangFail + pinStateFail + injectFail + logPrefixFail + scatterFail + cursorFail + cursorTrackFail + keybdAudioFail + keybdPrefsFail + crossInputFail + saveToastFail + cloudFail + debugFail + muxOffsetFail + orphanFail;
+            int total = locFail + hardFail + replayFail + timelineFail + wavFail + runtimeFail + portedFail + shapeFail + missingKeyFail + keybdFail + cfgFail + patchFail + reflectFail + levelFail + xthreadFail + cryptoFail + enumFail + loadMarkerFail + locFallbackFail + locLangFail + pinStateFail + injectFail + logPrefixFail + scatterFail + cursorFail + cursorTrackFail + keybdAudioFail + keybdPrefsFail + crossInputFail + saveToastFail + cloudFail + debugFail + muxOffsetFail + apiSurfaceFail + rkBridgeFail + orphanFail;
             Console.WriteLine();
             Console.WriteLine(total == 0
                 ? "  全部通过"

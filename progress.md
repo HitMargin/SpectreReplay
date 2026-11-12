@@ -51,3 +51,16 @@
 - 新增设置 RenderAudioOffsetMs（默认 -1 跟随 scrConductor.calibration_i，0..500ms 显式覆盖），界面开关+滑条，i18n 4 键 × 14 语。
 - 新增 MuxOffsetCheck（20 行断言）+ MUT-MUX1/MUT-MUX2 变异，闸门 188 条全绿（commit 4140e18），文档同步（bdfeb2f）。
 - 实机重渲 Starlight Ignition：tick 整体 +0.124s，第一击视觉锚点 2.767s 与音乐首响 2.741s 残差 ≈26ms（修复前 ≈150ms），对齐确认。
+
+## Session: 2026-11-12 (2)
+
+### Current Status
+- **Task:** 对外按键接口（KeyViewer 拉取 API + ReplayInput 通用推桥）
+- **Result:** 已完成，已部署
+
+### Actions Taken
+- SpectreAPI 新增按键查询面（ApiVersion 0.5→0.6）：IsReplayActive / IsReplayKeyHeld / WasReplayKeyPressedThisFrame / GetHeldReplayKeys（never-null）/ ReplayKeyChanged 事件（主线程封送 + 逐订阅者隔离）/ UnityKeyToVk；ManagedInput.Note 翻转即发事件。
+- 反编译 RainingKeys 0.5.0：确认 ReplayInput 推式契约（OnStartInputs/OnKeyPressed/OnKeyReleased/OnEndInputs，受控模式停物理轮询）为跨模组通用约定；按用户要求按类型名扫描全部程序集，找到几个驱动几个，不绑某一家。
+- ReplayInputBridge 五处接线（Start/Stop/PumpInput 边沿/Rebuild 重播种/Main 复位）；VK→Unity KeyCode 走 SkyHook 逆链 + VK_APPS=93 互逆特判；Reseed 用「重建容器 + 净按住态补 Down」。
+- 实测修正三处事实错误：KeyCode.Menu 实为 319（反射实测，旧注释 276/文档 277 均错）；文档版本探测改成员反射（字符串比较在 0.10 会误判）；暂停语义核实（无暂停钩子停回放，IsReplayActive 保持 true）。
+- 新增 ApiSurfaceCheck（7 行）+ MUT-API1/2/3、ReplayInputBridgeCheck（7 行，含「不许绑死一家」反向判据）+ MUT-RI1/RI2，全部实测变红。闸门 202 条全绿，已部署。

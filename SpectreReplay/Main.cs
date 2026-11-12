@@ -125,6 +125,9 @@ namespace SpectreReplay
                 // CT 键位桥同理：它的补丁也随 UnpatchAll 卸掉，静态「已安装」
                 // 标志不跟着翻假，不在这里复位就会永久失联且无日志。
                 Features.Replay.CheryToolsKvBridge.Reset();
+                // ReplayInput 契约桥是纯反射直调（无补丁），但「已解析/受控中」的
+                // 会话状态同样要在重装配时归零，与另几座桥同一纪律。
+                Features.Replay.ReplayInputBridge.Reset();
                 // Steam 云探测同理：编辑器 Play 会话之间模组域不重载，上一个
                 // Play 留下的接口指针指向已随 SteamClient.Shutdown 销毁的
                 // Steam 上下文，不清就是拿悬空句柄开路（见 ResetProbe 注释）。
