@@ -1161,7 +1161,9 @@ internal sealed class VideoRenderJob : MonoBehaviour
             }
             else
             {
-                encoder.Submit(pixels, pixels.Length, 1, frames.Recycle, () => cancelRequested);
+                // RecycleOrHold：保留帧（回读失败的顶替源）在泵写完后不回池，
+                // 其余照常回池——见 VideoFrameSource.RecycleOrHold 的时序说明。
+                encoder.Submit(pixels, pixels.Length, 1, frames.RecycleOrHold, () => cancelRequested);
             }
             VideoRender.Current.FramesDone = ++delivered;
             // 剩余时间 = 未交付帧数 ÷ 捕获以来平均交付速率；

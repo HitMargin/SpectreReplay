@@ -290,9 +290,13 @@ internal sealed class VideoFrameSource
         NativeArray<byte> data = head.Request.GetData<byte>();
         if (data.Length != frameBytes)
             return SubstituteLastGood(out pixels, out failed);
+        // 上一份保留帧先归队（顶替职责已由本帧接棒）。归队后 Rent 可能取回
+        // 同一个缓冲，CopyTo 覆盖没有问题——本帧成功即不再需要它的内容。
+        RetireHeld();
         pixels = Rent();
         data.CopyTo(pixels);
-        RetainLastGood(pixels);
+        heldFrame = pixels;
+        heldWritten = false;
         // 指针最后画：此时像素已拷进托管数组，且位置是 Grab 那一帧记下的。
         // rowsBottomUp 照 NeedsRowFlip——编码器只对 CleanCamera 做 vflip。
         if (head.CursorDrawn)
@@ -314,29 +318,64 @@ internal sealed class VideoFrameSource
         return true;
     }
 
-    // **上一个成功帧的常驻副本**（含指针叠加后的最终画面）。回读失败时复制它
-    // 顶替——240fps 下重复上一帧不可见，远好于黑帧。只在成功帧上更新；尺寸
-    // 突变（frameBytes 变了）时立即丢弃，防止 BlockCopy 越界。
-    private byte[] lastGood;
-    // 顶替计数（供作业收尾写进完成日志：黑帧为 0 时这一行不打）
+    // **回读失败的顶替源：引用保留的上一成功帧。**（2026-11-12 他人日志：Intel
+    // Iris Xe + 240fps 下回读间歇 hasError，439/18081 帧（2.43%）被黑帧顶替——
+    // 正常画面里每隔几十帧插一个全黑，就是「一闪一闪」。）首版用常驻副本实现，
+    // 每帧一次整帧 BlockCopy（1080p ≈ 8MB，240fps 下 ~10% 帧预算烧在拷贝上），
+    // 而顶替只在 2.4% 的帧发生——改为引用保留：heldFrame 持有最近成功帧的
+    // 缓冲（池外），交付下一帧时由 RetireHeld 归还；归还与复用的时序由
+    // RecycleOrHold（编码器写完才回调）保证，无数据竞争。失败帧复制一份租借
+    // 缓冲提交——顶替帧画面滞后 ≤MaxInFlight 帧（240fps 下 ≤25ms），不可感知，
+    // 行序/字节序与正常帧 100% 一致。上个成功帧缺位（开局连败）才回落黑帧。
+    private byte[] heldFrame;
+    // 曾是保留帧、泵尚未写完的缓冲：写完的回调会把它回池（pendingReturn 被
+    // 新值覆盖时，旧缓冲的回调走默认分支照常回池，无泄漏）。
+    private byte[] pendingReturn;
+    private bool heldWritten;
+    // 顶替计数（供作业收尾写进完成日志）
     internal int SubstituteCount => substituteCount;
     internal int SubstituteMissing => substituteMissing;
     private int substituteCount;
     private int substituteMissing;
 
-    // 回读失败的顶替出口（hasError 与尺寸突变共用）：**用上一个成功帧顶替，
-    // 不再黑帧。**（2026-11-12 他人日志：Intel Iris Xe + 240fps 下回读间歇
-    // hasError，439/18081 帧（2.43%）被黑帧顶替——正常画面里每隔几十帧插一个
-    // 全黑，就是「一闪一闪」。失败是驱动层偶发（帧号稀疏随机、无相邻簇），
-    // 240fps 帧间隔仅 4ms，重复上一帧在画面上完全不可见；行序/字节序与正常帧
-    // 100% 一致（就是它的拷贝），零 GPU 开销、完全确定性。）上个成功帧缺位
-    // （开局连败）才回落黑帧，由作业端 failedReadbacks 计数并提示。
+    // 编码器泵写完一帧后的回收口。保留帧不回池（它还是顶替源），写完只置位；
+    // 滞留帧写完即回池；其余照常回池。**必须替代成功帧路径上的裸 Recycle**：
+    // 保留帧若被提前复用，顶替读到的就是被覆盖后的新画面。
+    internal void RecycleOrHold(byte[] pixels)
+    {
+        if (pixels == null) return;
+        if (pixels == heldFrame)
+        {
+            heldWritten = true;
+            return;
+        }
+        if (pixels == pendingReturn)
+        {
+            spares.Enqueue(pixels);
+            pendingReturn = null;
+            return;
+        }
+        spares.Enqueue(pixels);
+    }
+
+    // 卸任当前保留帧：已写完直接回池；未写完挂滞留位，等写完的回调回池。
+    private void RetireHeld()
+    {
+        if (heldFrame == null) return;
+        if (heldWritten) spares.Enqueue(heldFrame);
+        else pendingReturn = heldFrame;
+        heldFrame = null;
+        heldWritten = false;
+    }
+
+    // 回读失败的顶替出口（hasError 与尺寸突变共用）：复制保留帧顶替，
+    // 缺位（开局连败）才回落黑帧，由作业端 failedReadbacks 计数并提示。
     private bool SubstituteLastGood(out byte[] pixels, out bool failed)
     {
-        if (lastGood != null)
+        if (heldFrame != null)
         {
             pixels = Rent();
-            Buffer.BlockCopy(lastGood, 0, pixels, 0, frameBytes);
+            Buffer.BlockCopy(heldFrame, 0, pixels, 0, frameBytes);
             failed = false;
             substituteCount++;
             return true;
@@ -345,14 +384,6 @@ internal sealed class VideoFrameSource
         failed = true;
         substituteMissing++;
         return true;
-    }
-
-    private void RetainLastGood(byte[] pixels)
-    {
-        if (frameBytes <= 0 || pixels.Length < frameBytes) return;
-        if (lastGood == null || lastGood.Length != frameBytes)
-            lastGood = new byte[frameBytes];
-        Buffer.BlockCopy(pixels, 0, lastGood, 0, frameBytes);
     }
 
     // 由渲染作业在编码器启动后调用：上限只升不降，避免时序竞争下缩池

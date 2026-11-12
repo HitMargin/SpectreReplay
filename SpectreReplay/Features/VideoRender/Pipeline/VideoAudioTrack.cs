@@ -27,6 +27,8 @@ internal sealed class VideoAudioTrack : IDisposable
     private byte[] bytes;
     private long written;
     private int silentFrames;
+    private int silentSeen;            // 静音帧累计（孤立静音限流后仍可从判死汇总看到密度）
+    private int lastSilentLogFrame = int.MinValue;
     private int restarts;
     private bool capturing;
     private int frameNo;
@@ -64,7 +66,9 @@ internal sealed class VideoAudioTrack : IDisposable
         giveUpFrames = Math.Max(1, fps * GiveUpAfterSeconds);
         SampleRate = AudioSettings.outputSampleRate;
         Channels = ChannelsOf(AudioSettings.speakerMode);
-        file = new FileStream(wavPath, FileMode.Create);
+        // **64KB 写缓冲**（默认 4096）：240fps 下每帧只产出 ~1.6KB 音频，
+        // 默认缓冲几乎每帧一次内核写；64KB 把它压到每 ~40 帧一次。
+        file = new FileStream(wavPath, FileMode.Create, FileAccess.Write, FileShare.Read, 65536);
         WriteHeader(0); // 占位，结束时回写真实长度
         if (!AudioRenderer.Start())
         {
@@ -191,12 +195,25 @@ internal sealed class VideoAudioTrack : IDisposable
         lastSilentDsp = now;
 
         silentFrames++;
-        if (silentFrames == 1 || silentFrames % fps == 0)
+        silentSeen++;
+        // **日志限流。** 240fps 下帧长（4.16ms）短于 dsp 缓冲（256 样本 ≈ 5.3ms），
+        // 约 1/5 的帧天然拿 0 样本（数据不丢，只是分帧不均）——孤立静音逐条打
+        // 会刷出几千条日志（实测 3956 条），每条 Debug.Log 都带堆栈捕获与 IO。
+        // 孤立静音每 0.5s 最多一条；连续静音的可见性照旧（满 1 秒的采样点）。
+        bool isolated = silentFrames == 1;
+        bool shouldLog = isolated
+            ? frameNo - lastSilentLogFrame >= System.Math.Max(1, fps / 2)
+            : silentFrames % fps == 0;
+        if (shouldLog)
+        {
+            lastSilentLogFrame = frameNo;
             Debug.Log("[SpectreReplay] mixdown silent. frame=" + frameNo
                 + " consecutive=" + silentFrames
+                + (isolated ? " (isolated, throttled; seen=" + silentSeen + ")" : "")
                 + " samples=" + perChannel
                 + " dsp=" + now.ToString("0.0000")
                 + " dspAdvancing=" + dspAdvanced);
+        }
         // 每静默满 1 秒重启一次，预算内不判死
         if (silentFrames >= fps && restarts < RestartBudget)
         {
@@ -239,6 +256,7 @@ internal sealed class VideoAudioTrack : IDisposable
         sb.Append("; samples=").Append(firstSilentSampleCount < 0 ? 0 : firstSilentSampleCount);
         if (maxSilentSampleCount > 0)
             sb.Append("(max ").Append(maxSilentSampleCount).Append(')');
+        sb.Append(" silentTotal=").Append(silentSeen);
         sb.Append(" channels=").Append(Channels);
         sb.Append(" rate=").Append(SampleRate);
         sb.Append(" dspAdvancing=").Append(dspAdvanced);

@@ -1307,26 +1307,50 @@ namespace UiPreview
                     && s.Contains("if (reAnchors >= 4)", StringComparison.Ordinal)
                     && s.Contains("rendervideo.reanchor_loop", StringComparison.Ordinal)
                     && s.Contains("failedReadbacks == 10", StringComparison.Ordinal));
+            // 混音静音日志限流 + WAV 写缓冲（2026-11-12 性能审查）：240fps 下
+            // 帧长短于 dsp 缓冲，约 1/5 的帧天然 0 样本（数据无损、分帧不均），
+            // 孤立静音逐条打在他人日志里刷出 3956 条（每条 Debug.Log 都带堆栈
+            // 捕获与 IO）。判据：①孤立静音必须限流（isolated 采样，0.5s 预算）；
+            // ②静音累计必须进判死汇总（限流后密度信息只在这里可见）；
+            // ③WAV 写缓冲必须显式放大（默认 4KB 在 240fps 下几乎每帧进内核）。
+            fail += Check(projectRoot,
+                "混音静音日志限流、累计进汇总、WAV 写缓冲放大",
+                "Features\\VideoRender\\Pipeline\\VideoAudioTrack.cs",
+                s => s.Contains("bool isolated = silentFrames == 1;", StringComparison.Ordinal)
+                    && s.Contains("frameNo - lastSilentLogFrame >= System.Math.Max(1, fps / 2)", StringComparison.Ordinal)
+                    && s.Contains("silentSeen++", StringComparison.Ordinal)
+                    && s.Contains("\" silentTotal=\"", StringComparison.Ordinal)
+                    && s.Contains("FileShare.Read, 65536", StringComparison.Ordinal));
             // 回读失败顶替（2026-11-12 他人日志：Intel Iris Xe + 240fps 下
             // AsyncGPUReadback 间歇 hasError，439/18081 帧（2.43%）被黑帧顶替
-            // ——正是「成片一闪一闪」的根因）。修复 = 帧源保留上一个成功帧，
-            // 失败帧复制它顶替（240fps 下重复上一帧不可见，行序/字节序与正常
-            // 帧 100% 一致）；上个成功帧缺位才黑帧。判据钉三处：
-            // ① TryTake 的 hasError 分支必须有 lastGood 顶替路径；
-            // ② lastGood 只在成功帧上更新（RetainLastGood 在 data.CopyTo 之后）；
-            // ③ 完成日志必须带顶替统计（排查「画面微顿」的第一现场）。
+            // ——正是「成片一闪一闪」的根因）。修复 = 帧源**引用保留**上一个
+            // 成功帧（首版常驻副本每帧一次 8MB BlockCopy，240fps 下烧掉 ~10%
+            // 帧预算，2026-11-12 性能审查撤换），失败帧复制它顶替；上个成功帧
+            // 缺位才黑帧。判据钉四处：
+            // ① heldFrame 赋值在 data.CopyTo 之后（顶替源必须跟随最新成功帧）；
+            // ② RetireHeld 必须在 Rent 之前（先归队再租，Rent 才可能复用旧缓冲）；
+            // ③ 泵写完保留帧必须 hold（RecycleOrHold 的 ==heldFrame 分支）；
+            // ④ 完成日志必须带顶替统计（排查「画面微顿」的第一现场）。
             fail += Check(projectRoot,
-                "回读失败必须用上一帧顶替而非黑帧，完成日志带顶替统计",
+                "回读失败必须引用保留上一帧顶替而非黑帧（零每帧拷贝）",
                 "Features\\VideoRender\\Pipeline\\VideoFrameSource.cs",
-                s => s.Contains("if (lastGood != null)", StringComparison.Ordinal)
-                    && s.Contains("Buffer.BlockCopy(lastGood, 0, pixels, 0, frameBytes);", StringComparison.Ordinal)
-                    && IndexBefore(s, "data.CopyTo(pixels);", "RetainLastGood(pixels);"));
+                s => IndexBefore(s, "data.CopyTo(pixels);", "heldFrame = pixels;")
+                    && IndexBefore(s, "RetireHeld();", "pixels = Rent();")
+                    && s.Contains("if (pixels == heldFrame)", StringComparison.Ordinal)
+                    && s.Contains("Buffer.BlockCopy(heldFrame, 0, pixels, 0, frameBytes);", StringComparison.Ordinal));
             fail += Check(projectRoot,
                 "回读顶替统计必须进完成日志",
                 "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
                 s => s.Contains("回读顶替统计：重复上一帧 ", StringComparison.Ordinal)
                     && s.Contains("frames.SubstituteCount", StringComparison.Ordinal)
                     && IndexBefore(s, "回读顶替统计：重复上一帧 ", "replay video complete"));
+            // 成功帧的回收必须走 RecycleOrHold：裸 Recycle 会把保留帧提前回池，
+            // 被复用覆盖后顶替读到的就是新画面（顶替语义被静默破坏）。
+            fail += Check(projectRoot,
+                "成功帧回收必须走 RecycleOrHold（保留帧不提前回池）",
+                "Features\\VideoRender\\Pipeline\\VideoRenderJob.cs",
+                s => s.Contains("encoder.Submit(pixels, pixels.Length, 1, frames.RecycleOrHold, () => cancelRequested);", StringComparison.Ordinal)
+                    && !s.Contains("frames.Recycle,", StringComparison.Ordinal));
             // 渲染期歌曲排程推迟（2026-11-08 用户实测：画面源冷启动 1.3s 实时
             // 烧掉剩余倒计时，成片从歌曲 0 拍开始，倒计时整段丢失）。三条硬序：
             // ① Arm 必须在 SwitchToPlayMode 之前——rewind 链在场景加载中就会调

@@ -979,18 +979,35 @@ switch ($Which) {
             'normal.background = null;'
     }
     'MUT-U109' {
-        # 回读顶替回归（2026-11-12 他人日志的根因形态）：TryTake 的 hasError
-        # 分支退回黑帧——把「上一帧顶替」整段删掉，恢复 failed=true 直通。
-        # 成片回到「每隔几十帧一个黑帧」的一闪一闪。UiLogicShapeCheck
-        # 「回读失败必须用上一帧顶替」钉的就是这个形状。
+        # 回读顶替回归（2026-11-12 他人日志的根因形态）：TryTake 不再把成功帧
+        # 交接给保留位（heldFrame 恒 null）——顶替永久走黑帧，成片回到「每隔
+        # 几十帧一个黑帧」的一闪一闪。UiLogicShapeCheck「引用保留上一帧」钉的形状。
         Backup 'Features\VideoRender\Pipeline\VideoFrameSource.cs'
-        ReplaceExact 'Features\VideoRender\Pipeline\VideoFrameSource.cs' ('        if (lastGood != null)') ('        if (false)')
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoFrameSource.cs' ('        heldFrame = pixels;') ('        _ = pixels;')
     }
     'MUT-U110' {
-        # 回读顶替回归：lastGood 不再随成功帧更新——顶替帧永远是陈旧画面
-        # （甚至开局前的空缓冲），与「顶替=上一帧」的语义脱钩。
+        # 回读顶替回归：泵写完保留帧后照常回池——保留帧被 Rent 复用覆盖，
+        # 顶替读到的已是新画面（顶替语义静默破坏，玩家看到画面跳变）。
         Backup 'Features\VideoRender\Pipeline\VideoFrameSource.cs'
-        ReplaceExact 'Features\VideoRender\Pipeline\VideoFrameSource.cs' ('        RetainLastGood(pixels);') ('')
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoFrameSource.cs' ('        if (pixels == heldFrame)') ('        if (false)')
+    }
+    'MUT-U111' {
+        # 性能回归：成功帧回收退回裸 Recycle——保留帧被提前回池复用覆盖，
+        # 与 U110 同害，但缺陷位置在作业端的提交口（改动时漏改的第二处）。
+        Backup 'Features\VideoRender\Pipeline\VideoRenderJob.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoRenderJob.cs' 'frames.RecycleOrHold, () => cancelRequested' 'frames.Recycle, () => cancelRequested'
+    }
+    'MUT-U112' {
+        # 性能回归：混音静音日志退回逐条打（孤立静音不限流）——240fps 下
+        # 每帧 ~1.6KB 音频、1/5 帧 0 样本，实测刷 3956 条日志（每条带堆栈
+        # 捕获与 IO）。UiLogicShapeCheck「混音静音日志限流」钉的形状。
+        Backup 'Features\VideoRender\Pipeline\VideoAudioTrack.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoAudioTrack.cs' ('        bool isolated = silentFrames == 1;') ('        bool isolated = false;')
+    }
+    'MUT-U113' {
+        # 性能回归：WAV 写缓冲退回默认 4KB——240fps 下几乎每帧一次内核写。
+        Backup 'Features\VideoRender\Pipeline\VideoAudioTrack.cs'
+        ReplaceExact 'Features\VideoRender\Pipeline\VideoAudioTrack.cs' 'FileShare.Read, 65536' 'FileShare.Read'
     }
     'MUT-U25' {
         # ⑫i：把已删除的「界面语言跟随游戏」开关加回来（防回归变异）。
@@ -2805,7 +2822,7 @@ switch ($Which) {
         ReplaceExact 'Features\Replay\Runtime\ReplayInputBridge.cs' 'started.Add(t.Origin);' ''
     }
     default {
-        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U100 / MUT-MUX1 / MUT-MUX2 / MUT-API1 / MUT-API2 / MUT-API3 / MUT-RI1 / MUT-RI2 / MUT-RI3 / MUT-U108 / MUT-U109 / MUT-U110）"
+        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U100 / MUT-MUX1 / MUT-MUX2 / MUT-API1 / MUT-API2 / MUT-API3 / MUT-RI1 / MUT-RI2 / MUT-RI3 / MUT-U108 / MUT-U109 / MUT-U110 / MUT-U111 / MUT-U112 / MUT-U113）"
     }
 }
 
