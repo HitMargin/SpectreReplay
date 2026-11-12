@@ -99,8 +99,18 @@ namespace UiPreview
                 "⑥ 丢了 VK_APPS=93 → KeyCode.Menu 特判——正向表对 Menu 特判 93，反向丢了它 Menu 键永远映射失败");
             Item(6, "桥本体：通用扫描/四方法/逆链/Menu 特判/不绑死一家", b6);
 
+            // ⑦ 接管日志必须一次性列出全部目标名。2026-11-12 用户实测误诊：
+            //    旧版 _loggedFirst 只打第一个目标名，「扫描到 2 个驱动目标」
+            //    后面跟一句单名日志，读起来就像 RainingKeys 没被接管。
+            int b7 = fail;
+            Expect(bridge.Contains("started.Add(t.Origin);", StringComparison.Ordinal),
+                "⑦ 接管日志不再收集目标名——接管动作退化成静默（铁律 1）");
+            Expect(bridge.Contains("string.Join(\"、\", started.ToArray())", StringComparison.Ordinal),
+                "⑦ 接管日志没有一次性列出全部目标——只打首个或逐目标连打都会误导排查");
+            Item(7, "接管日志列出全部目标", b7);
+
             if (fail == 0)
-                Console.WriteLine("    ✓ ReplayInput 推桥：五处接线/通用扫描/逆链/特判 全部钉住");
+                Console.WriteLine("    ✓ ReplayInput 推桥：五处接线/通用扫描/逆链/特判/全量日志 全部钉住");
             return fail;
         }
     }

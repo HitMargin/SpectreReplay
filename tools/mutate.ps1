@@ -732,6 +732,14 @@ switch ($Which) {
         Backup 'Patch\Shared\SpectrePatchHub.cs'
         ReplaceExact 'Patch\Shared\SpectrePatchHub.cs' ('                if (!ReaderCanSeeOurWrite(a, m)) continue;') ('')
     }
+    'MUT-U108' {
+        # ㊸g：同账跳过被删——没装 MelonLoader 的环境里，候选命中我们自己
+        #     绑定的 0Harmony，「双 Harmony 桥」告警照打，玩家被误导去排查
+        #     不存在的加载器（2026-11-12 实测误诊的根因）。同账没有信息增量，
+        #     必须跳过；告警文案也不得写死 MelonLoader 来历。
+        Backup 'Patch\Shared\SpectrePatchHub.cs'
+        ReplaceExact 'Patch\Shared\SpectrePatchHub.cs' ('                if (ReferenceEquals(a, ourHarmony)) continue;') ('')
+    }
     'MUT-U73' {
         # ㊼a：起锚混入 songposition_minusi——倒计时里它是压缩时间轴值，
         #     锚被污染，0.408s 恒偏回潮（单行锚点保持可编译，值变错）。
@@ -2774,8 +2782,16 @@ switch ($Which) {
         Backup 'Features\Replay\Runtime\ReplayPlayer.cs'
         ReplaceExact 'Features\Replay\Runtime\ReplayPlayer.cs' 'ReplayInputBridge.Shutdown();' ''
     }
+    'MUT-RI3' {
+        # ReplayInput 推桥回归：接管日志不再收集目标名（started 列表恒空，
+        # 整条「已接管」日志消失）。2026-11-12 用户实测的误诊源头是它的近亲
+        # ——只打第一个目标名，读起来像第二个 KV 没被接管。
+        # ReplayInputBridgeCheck ⑦ 钉的形态。
+        Backup 'Features\Replay\Runtime\ReplayInputBridge.cs'
+        ReplaceExact 'Features\Replay\Runtime\ReplayInputBridge.cs' 'started.Add(t.Origin);' ''
+    }
     default {
-        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U100 / MUT-MUX1 / MUT-MUX2 / MUT-API1 / MUT-API2 / MUT-API3 / MUT-RI1 / MUT-RI2）"
+        throw "未知变异 $Which（可用：MUT-P0…P11 / MUT-U1 / U2 / U3 / U4 / U5 / MUT-K1 / MUT-A1 / A2 / A3 / A4 / A5 / A6 / MUT-C1 / C2 / C3 / MUT-T1 / MUT-R1 / MUT-L1 / MUT-L2 / MUT-V1 / MUT-V2 / MUT-V3 / MUT-V4 / MUT-V5 / MUT-V6 / MUT-V7 / MUT-V8 / MUT-V9 / MUT-V10 / MUT-V11 / MUT-V12 / MUT-V13 / MUT-X1 / MUT-X2 / MUT-E1 / MUT-N1 / MUT-N2 / MUT-D1 / MUT-F1 / MUT-I1 / MUT-G1 / MUT-W1 / MUT-K2 / MUT-D2 / MUT-P12 / MUT-P13 / MUT-U6 / MUT-U7 / MUT-U8 / MUT-U9 / MUT-U10 / MUT-U11 / MUT-U12 / MUT-U13 / MUT-U14 / MUT-U15 / MUT-U19 / MUT-U20 / MUT-U21 / MUT-U22 / MUT-U23 / MUT-U24 / MUT-U25 / MUT-U26 / MUT-U27 / MUT-U28 / MUT-U29 / MUT-U30 / MUT-U31 / MUT-U32…MUT-U100 / MUT-MUX1 / MUT-MUX2 / MUT-API1 / MUT-API2 / MUT-API3 / MUT-RI1 / MUT-RI2 / MUT-RI3 / MUT-U108）"
     }
 }
 

@@ -848,7 +848,7 @@ internal static class SpectrePatchHub
         return remounted;
     }
 
-    // ── UMMBridge 双 Harmony 世界 ────────────────────────────────
+    // ── 另一本 0Harmony 账（UMMBridge / MelonLoader / JAPatcher 类重写器）──
     // 本机 MelonLoader 与 UMM 双加载器共存时，Plugins\UMMBridge.dll 在装载
     // mod 程序集时做 IL 重写：所有 Harmony.Patch 调用 → Bridge.ProxyPatch →
     // 落在 MelonLoader 的 HarmonyX（0Harmony 2.10.2，存储 = PatchManager.
@@ -857,12 +857,19 @@ internal static class SpectrePatchHub
     // 互不相通的账**（2026-11-01 取证实锤：写→读 roundtrip ★分裂，
     // GetAllPatchedMethods 28 条全在 0Harmony_UMM 账本，HarmonyX 账本查不到）。
     //
-    // 后果与修法：核对「补丁在不在」必须查 HarmonyX 的账——否则每次录制/
-    // 回放启动都误判缺失并经 ProxyPatch 重复挂载：同一前缀在同一 owner
-    // （UMMBridge.Proxy.<类型名>）下按次追加、无去重，N 次启动 = 每帧执行
-    // N 遍（快照消费加倍 = 回放快进；隔离/落账翻倍）。转译补丁例外：桥接
-    // 禁用转译桥时 ProxyPatch 走 InvokeNativePatch 落回 0Harmony_UMM 世界，
-    // 所以 presence 判定两本账都查、命中任一即可。
+    // **账本的认定只认行为，不认名字与来历。** 候选读者必须看得见我们的
+    // 探针写（见 ReaderCanSeeOurWrite）；**不按类型名猜布局**：同一版本号的
+    // 不同构建（net35/net472）里 PatchManager 的命名空间都不一样
+    // （HarmonyLib vs Public.Patching），猜名字必翻车（2026-11-01 实测：
+    // 探测静默落空，心跳退化回误判）。写落在哪个世界，哪个世界就是该查的账。
+    //
+    // **同账要跳过（2026-11-12 用户实测误诊）。** 没装 MelonLoader 的环境里，
+    // 名叫 "0Harmony" 的候选很可能就是我们自己绑定的那本账：探针当然看得见
+    // 自己的写，行为无害，但旧的告警文案会无条件宣称「UMMBridge 双 Harmony
+    // 桥（MelonLoader HarmonyX 与 0Harmony_UMM 各一本账）」——玩家被误导去
+    // 排查一个不存在的加载器。读者与我们绑定的是同一程序集时没有信息增量，
+    // 直接跳过（核对走原生路径读同一本账，结果相同）。
+    //
     private static MethodInfo _harmonyXGetPatchInfo;
     private static bool _harmonyXProbed;
 
@@ -871,24 +878,34 @@ internal static class SpectrePatchHub
         if (!_harmonyXProbed)
         {
             _harmonyXProbed = true;
+            // 我们自己绑定/落账的世界：不桥接时 Patch 调用就写进它。
+            Assembly ourHarmony = typeof(Harmony).Assembly;
             foreach (Assembly a in AppDomain.CurrentDomain.GetAssemblies())
             {
                 // 只考虑**别的世界**的 0Harmony：桥接环境里我们的世界叫
                 // 0Harmony_UMM（UMM 改名内嵌），名字恰好是 "0Harmony" 的就是
                 // MelonLoader 的 HarmonyX；vanilla UMM 环境唯一的 0Harmony 就是
-                // 我们的绑定目标——行为验证通过也只是重复检查，无害。
-                // **不按类型名猜布局**：同一版本号的不同构建（net35/net472）里
-                // PatchManager 的命名空间都不一样（HarmonyLib vs Public.Patching），
-                // 猜名字必翻车（2026-11-01 实测：探测静默落空，心跳退化回误判）。
-                // 唯一可靠的判据是**行为**：拿自己的空方法经正常 Patch 写一圈，
-                // 候选读者读得到才认——写落在哪个世界，哪个世界就是该查的账。
-                if (a.GetName().Name != "0Harmony") continue;
+                // 我们的绑定目标。
+                // **同账直接跳过（2026-11-12 用户实测误诊）。** 读者若就是我们
+                // 自己绑定的程序集，这个「外部读者」没有任何信息增量：核对走
+                // 原生路径读的是同一本账，结果完全相同。不跳过的话行为虽然
+                // 无害，但那条「双 Harmony 桥」告警会照打——没装 MelonLoader
+                // 的玩家被文案误导，以为真有第二个加载器（实测日志即此形态）。
+                // 只有「别的程序集 + 探针看得见我们的写」才是真双账。
+                if (ReferenceEquals(a, ourHarmony)) continue;
                 MethodInfo m = a.GetType("HarmonyLib.Harmony")
                     ?.GetMethod("GetPatchInfo", new[] { typeof(MethodBase) });
                 if (m == null) continue;
                 if (!ReaderCanSeeOurWrite(a, m)) continue;
                 _harmonyXGetPatchInfo = m;
-                AsyncLog.Warning("[" + LogTag + "] 检测到 UMMBridge 双 Harmony 桥（MelonLoader HarmonyX 与 0Harmony_UMM 各一本账）——补丁核对改查 HarmonyX 账本");
+                // 告警文本必须如实：命中来源不一定是 MelonLoader——JALib 的
+                // JAPatcher 等补丁重写器同样可能建出第二本账。写清程序集身份
+                // 与版本，MelonLoader/UMMBridge 只作为常见来源提示。
+                AsyncLog.Warning("[" + LogTag + "] 检测到第二本 0Harmony 账（"
+                    + a.GetName().Name + " " + a.GetName().Version
+                    + "，探针写入落在该账）——补丁核对改查该账本"
+                    + "（常见来源：MelonLoader/UMMBridge/JAPatcher 类补丁重写器；"
+                    + "若你确认没装这些，报一下这条日志）");
                 break;
             }
         }

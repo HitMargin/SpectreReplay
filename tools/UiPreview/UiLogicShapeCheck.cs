@@ -1464,6 +1464,20 @@ namespace UiPreview
                 s => s.Contains("if (!ReaderCanSeeOurWrite(a, m)) continue;", StringComparison.Ordinal)
                     && s.Contains("nameof(ProbeTarget)", StringComparison.Ordinal)
                     && !s.Contains("GetType(\"HarmonyLib.PatchManager\")", StringComparison.Ordinal));
+            // ㊸g 同账必须跳过、告警不得断言 MelonLoader（2026-11-12 用户实测
+            //    误诊）：没装 MelonLoader 的环境，名叫 0Harmony 的候选很可能就
+            //    是我们自己绑定落账的那本——探针看得见自己的写，行为无害，但
+            //    旧文案无条件宣称「UMMBridge 双 Harmony 桥（MelonLoader…）」，
+            //    玩家被误导去排查不存在的加载器。判据钉两半：①读者=我们绑定的
+            //    程序集时必须 continue；②告警文本必须带程序集身份且不得再写死
+            //    「检测到 UMMBridge 双 Harmony 桥」。
+            fail += Check(projectRoot,
+                "㊸g 同账候选必须跳过，双账告警不得写死 MelonLoader 来历",
+                "Patch\\Shared\\SpectrePatchHub.cs",
+                s => s.Contains("if (ReferenceEquals(a, ourHarmony)) continue;", StringComparison.Ordinal)
+                    && s.Contains("Assembly ourHarmony = typeof(Harmony).Assembly;", StringComparison.Ordinal)
+                    && s.Contains("检测到第二本 0Harmony 账（", StringComparison.Ordinal)
+                    && !s.Contains("检测到 UMMBridge 双 Harmony 桥", StringComparison.Ordinal));
             // ㊸d JALib 在场探测：在场与否都必须落日志（缺任何一条，日志里
             //    「没有在场行」都无法区分「没探测」与「不在场」），且必须挂在
             //    EnsureApplied 内（首次核对时点 = 所有 mod 已加载，Load() 时

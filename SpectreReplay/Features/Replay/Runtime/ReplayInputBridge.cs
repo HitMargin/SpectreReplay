@@ -57,7 +57,6 @@ internal static class ReplayInputBridge
     // 已解析且至少命中一个目标：不再每局重扫（程序集集在会话内不变）。
     // 零命中时不置位——同类 KV 可能比我们晚加载，下一局回放再试。
     private static bool _resolved;
-    private static bool _loggedFirst;
 
     /// <summary>
     /// 模组重新装配时复位。桥不是 Harmony 补丁（纯反射直调），不存在卸载问题，
@@ -67,7 +66,6 @@ internal static class ReplayInputBridge
     internal static void Reset()
     {
         _resolved = false;
-        _loggedFirst = false;
         Targets.Clear();
     }
 
@@ -88,23 +86,29 @@ internal static class ReplayInputBridge
             _resolved = true;
         }
 
+        var started = new List<string>();
         foreach (DriverTarget t in Targets)
         {
             try
             {
                 t.Start.Invoke(null, null);
                 t.Active = true;
-                if (!_loggedFirst)
-                {
-                    _loggedFirst = true;
-                    Debug.Log("[SpectreReplay] 已接管 ReplayInput 键位显示（" + t.Origin + "）");
-                }
+                started.Add(t.Origin);
             }
             catch (Exception ex)
             {
                 Debug.LogWarning("[SpectreReplay] ReplayInput[" + t.Origin
                     + "] 进入受控模式失败: " + ex.Message);
             }
+        }
+        // **必须一次性列出全部目标名。**（2026-11-12 用户实测误诊：旧版用
+        // _loggedFirst 只打第一个目标名，「扫描到 2 个驱动目标」后面跟一句
+        // 单名日志，读起来就像 RainingKeys 没被接管。）每次回放开始都打
+        // 全量名单，与 FastForward/首键注入的每局日志同一节奏。
+        if (started.Count > 0)
+        {
+            Debug.Log("[SpectreReplay] 已接管 ReplayInput 键位显示（"
+                + string.Join("、", started.ToArray()) + "）");
         }
     }
 
