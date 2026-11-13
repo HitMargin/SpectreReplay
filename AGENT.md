@@ -333,6 +333,14 @@ tools/i18n/gen-locdata.ps1 生成 SpectreReplay/Ui/LocData.cs（.py 等价副本
 - 所有帧状态字段在每趟绘制开头归零；原生对话框延后一拍。
 - 布局核对用 `tools/UiPreview` 的导出图；那里不能调游戏 API。
 
+### 7.8 版本发布
+
+1. **版本号三处一起改**：`SpectreReplay/info.json`、`repo.json`、`SpectreReplay/AssemblyInfo.cs`（Assembly/FileVersion 四段 + InformationalVersion 三段）。`repo.json` 的 `DownloadUrl` 固定指 `releases/latest`，不嵌版本号，发布时不改。
+2. 构建 0 警告 → `tools/verify.ps1` 全绿再动 git；纯发版不新增断言，就不需要新变异。
+3. 一行式提交信息：`版本：X.Y.Z——<本版主题摘要>`（照 35c8e60 / 64f2d80）。功能工作已单独提交时，版本提交**只含三处版本文件**（0.3.1 的 64f2d80 就是纯版本提交）；同批交付的功能改动也可以并进版本提交（0.3.0 的 35c8e60 就是打包提交）。记录、文档类改动宜单独走 `文档：` 提交。
+4. **打 tag 必须带 `-a -m`**：`git tag -a vX.Y.Z -m "X.Y.Z：<主题>"`。裸 `git tag` 会因全局 `tag.gpgSign=true` 升级为附注+SSH 签名并弹编辑器挂起（真事：2026-11-13 发 0.3.1 时挂了两次）。tag 形态 = SSH 签名附注 tag，tagger HitMargin。
+5. 推送 `git push origin master vX.Y.Z` 是对外动作，**先向用户确认**再推。
+
 ## 8. 不许破坏的不变量
 
 ### 8.1 补丁与开关
