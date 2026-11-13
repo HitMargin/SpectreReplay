@@ -2,7 +2,7 @@
   "Releases": [
     {
       "Id": "com.spectre.replay",
-      "Version": "0.3.0",
+      "Version": "0.3.1",
       "DownloadUrl": "https://github.com/adofaiex/SpectreReplay/releases/latest"
     }
   ]
