@@ -6,7 +6,7 @@
     移植 Spectre 的 replay + video render 之后，可链接的纯逻辑真源码是
     Features\Replay 下的编解码/数据类（不碰引擎 / 只依赖 System）：
       ReplayEncoder / ReplayDecoder / ReplayCrypto /
-      ReplayKeys / ReplayConstants / Replay.cs
+      ReplayConstants / Replay.cs
       （ReplayBinaryIO / ReplayDataModels 随旧回放格式于 2026-10-18 删除）
       以及 Features\VideoRender\Pipeline\VideoEncoder.cs（ffmpeg 参数拼装，纯 .NET）。
   -->
@@ -37,7 +37,6 @@
     <Compile Include="..\..\SpectreReplay\Ui\LocData.cs" Link="Real\LocData.cs" />
     <!-- 回放文件格式编解码：纯 System，可直接跑往返测试 -->
     <Compile Include="..\..\SpectreReplay\Features\Replay\Data\Replay.cs" Link="Real\Replay.cs" />
-    <Compile Include="..\..\SpectreReplay\Features\Replay\Data\ReplayKeys.cs" Link="Real\ReplayKeys.cs" />
     <Compile Include="..\..\SpectreReplay\Features\Replay\Data\ReplayConstants.cs" Link="Real\ReplayConstants.cs" />
     <!-- 嵌入键盘音的压缩块与编解码器：纯 System，不碰引擎，因此能真的在闸门里跑往返。
          ReplayData.cs 上有 KeybdAudioBlob 属性，漏链就是把“编译失败”留给下游。 -->

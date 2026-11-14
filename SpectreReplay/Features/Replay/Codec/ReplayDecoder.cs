@@ -1,6 +1,5 @@
 using System;
 using System.Globalization;
-using static SpectreReplay.Features.Replay.ReplayKeys;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;

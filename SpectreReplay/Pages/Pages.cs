@@ -11,7 +11,6 @@ using UnityFileDialog;
 using UnityEngine;
 using static SpectreReplay.Settings;
 using static SpectreReplay.SpectreState;
-using static SpectreReplay.Features.Replay.ReplayKeys;
 
 namespace SpectreReplay.Pages
 {

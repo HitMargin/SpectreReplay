@@ -8,7 +8,6 @@ using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
 using static SpectreReplay.SpectreState;
-using static SpectreReplay.Features.Replay.ReplayKeys;
 
 namespace SpectreReplay.Features.Replay;
 

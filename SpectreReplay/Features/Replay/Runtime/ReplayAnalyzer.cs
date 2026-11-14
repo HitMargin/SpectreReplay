@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using SpectreReplay.Features.Compat;
-using static SpectreReplay.Features.Replay.ReplayKeys;
 
 namespace SpectreReplay.Features.Replay;
 

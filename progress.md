@@ -92,3 +92,22 @@
 |-------|------------|
 | 裸 `git tag v0.3.1` 弹 Vim 挂起（先吃满 run_code 120s 墙钟，再 60s 超时） | 全局 `tag.gpgSign=true` 把 tag 升级为附注+SSH 签名；改用 `git tag -a v0.3.1 -m "…"`，教训写入 AGENT.md §7.8 |
 | bash 末尾 Remove-Item 被硬安全策略整条拦截，连带 git add/commit 未执行 | 删除类命令不与关键命令混排；临时提交信息文件留在 `.git/` 内不删 |
+
+## Session: 2026-11-14
+
+### Current Status
+- **Task:** 清理审计 A-F7 死代码（ReplayKeys 常量类）
+- **Result:** 已完成
+
+### Actions Taken
+- 按审计 A-F7 整套删除：`Features/Replay/Data/ReplayKeys.cs`（33 个旧字典格式键名常量，全仓 0 引用）+ 12 个文件里的 `using static` / `using K` 死引用（ReplayDecoder / ReplayFileInfo / Patch_Lifecycle / Patch_Playback / Patch_Recording / ReplayAnalyzer / ReplayManager / ReplayRecorder / VideoRender / VideoRenderJob / Pages / SpectreState）。
+- UiPreview.csproj 同步清理：移除 ReplayKeys.cs 的 Compile 项与头部清单注释行。
+- 审计文档 A-replay-core.md 的 F7 条目标注已修。
+- 注意区分：SpectreAPI.GetHeldReplayKeys() 是活的对外按键查询 API，与被删常量类无关，未动。
+
+### Test Results
+| Test | Expected | Actual | Status |
+|------|----------|--------|--------|
+| Release 构建 | 0 警告 0 错误 | 0 警告 0 错误（3.6s） | pass |
+| verify -Ci | 非 0 断言且 0 失败 | 206 条断言，0 失败，全部通过（含死代码审计 6 项） | pass |
+| 残留检查 | SpectreReplay 源码内 ReplayKeys 仅剩 GetHeldReplayKeys API | 仅 SpectreAPI.cs 一处 | pass |

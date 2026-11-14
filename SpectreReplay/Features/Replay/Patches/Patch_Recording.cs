@@ -8,7 +8,6 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using SpectreReplay.API;
 using static SpectreReplay.SpectreState;
-using static SpectreReplay.Features.Replay.ReplayKeys;
 
 namespace SpectreReplay.Features.Replay;
 

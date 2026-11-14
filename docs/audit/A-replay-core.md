@@ -283,6 +283,9 @@ CursorSample / HitSnapshot / keyEvent）共 12 个文件，全部逐行读过。
   否则它只是一份自称有兼容能力的死表。
 - 置信度：高（引用数已穷举；`tools/deadcode-audit.ps1` 只查静态方法，查不到常量，
   所以这条不是重复报闸门）
+- **2026-11-14 已修**：整套删除（类本体 + 11 处 `using static` + `ReplayFileInfo`
+  的 `K` 别名 + `UiPreview.csproj` 的 Compile 项与清单注释）。Release 构建 0 警告
+  0 错误，verify 闸门 206 条全绿（含死代码审计）。
 
 ### F8 [P3] 加密失败用 `null` 表示，调用方直接 `.Length` → NRE，日志被两条矛盾消息淹没
 

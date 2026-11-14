@@ -9,7 +9,6 @@ using SpectreReplay.API;
 using SpectreReplay.Features.Cloud;
 using SpectreReplay.Features.Compat;
 using SpectreReplay.Features.Replay;
-using static SpectreReplay.Features.Replay.ReplayKeys;
 using HarmonyLib;
 using MonsterLove.StateMachine;
 using SkyHook;
